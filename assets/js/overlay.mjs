@@ -129,7 +129,7 @@ export default class Overlay {
   //
   // A column named in `dropped` that the server sent no value back for is left as the base holds
   // it: the value lost, and the server doesn't say what stands there to someone whose rule couldn't
-  // judge it, so the winner's frame is what brings it.
+  // judge it, or who may not read the row, so the winner's frame is what brings it.
   //
   // Given `fillPending`, a whole fill is on its way, so a create filed here is one nothing has
   // vouched for yet (see LocalDatabase.markPromoted). Past its type's marker it is a batch the fill
@@ -152,8 +152,9 @@ export default class Overlay {
       // names nothing kept is one this client simply cannot show early.
       const keptEntry = kept?.[String(index)];
 
-      // A resent batch's grant the server no longer stands behind: revoked since, or hidden from
-      // this user. Applying the write would file its own version of a row no frame ever corrects.
+      // A row the server doesn't show this user: one they may not read, or a resent batch's grant
+      // revoked or hidden from them since. Applying the write would file its own version of a row
+      // no frame ever corrects, or take away a row the sync never said went.
       if (keptEntry?.$withheld === true) {
         return;
       }

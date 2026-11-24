@@ -14,6 +14,8 @@ defmodule HologramFeatureTests.SyncTest do
   alias HologramFeatureTests.Entities.Message
   alias HologramFeatureTests.SyncPage
 
+  @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
+
   # Every entity table truncates, not only the documents: the client's pot is app-wide, so a row
   # left in ANY synced table by an earlier test file would arrive in this client's initial fill
   # and make "the first deltas frame" mean different things on different runs.
@@ -32,8 +34,12 @@ defmodule HologramFeatureTests.SyncTest do
   # it connected reaches it a second time: filled from the rows, then patched with what the log
   # says moved. Idempotent by design, and never a reason for the frame a test is waiting on to
   # arrive first - so a test names what it is waiting for rather than taking the next one.
+  #
+  # The wait is the suite's own limit: a live change is sent only once every transaction older
+  # than it has ended, anywhere on the database server, and then at the dispatcher's next round,
+  # which can be its 5-second poll (#1878).
   defp await_deltas_carrying(client, text) do
-    await_deltas_carrying(client, text, System.monotonic_time(:millisecond) + 5_000)
+    await_deltas_carrying(client, text, System.monotonic_time(:millisecond) + @max_wait_time)
   end
 
   defp await_deltas_carrying(client, text, deadline) do
@@ -123,11 +129,16 @@ defmodule HologramFeatureTests.SyncTest do
     drain_initial_sync(filling_client)
   end
 
+  # The log is settled before the client connects, here and in the two features below: a create
+  # the server hasn't read yet goes out with the update, and a frame built from both carries the whole
+  # row, not a patch (see `await_log_settled/0`).
   feature "delivers a change as a patch carrying the fresh value", %{session: _session} do
     document =
       %{public: true, title: "before_patch"}
       |> Document.new()
       |> DB.create!()
+
+    await_log_settled()
 
     client = drain_initial_sync(connect())
 
@@ -143,14 +154,15 @@ defmodule HologramFeatureTests.SyncTest do
   # one. A column the framework stamps itself - the id and the timestamps - has no revision, so a
   # patch naming one carries no entry for it.
   #
-  # The create and the patch can be read from the log in one batch, and a patch built from that
-  # batch names every column - so the frame is waited for by the value it carries and the entries
-  # are checked against the columns it names, whichever those turn out to be.
+  # The frame is waited for by the value it carries, and the entries are checked against the
+  # columns the patch names.
   feature "carries the revisions of a patched column", %{session: _session} do
     document =
       %{public: true, title: "before_revision_patch"}
       |> Document.new()
       |> DB.create!()
+
+    await_log_settled()
 
     client = drain_initial_sync(connect())
 
@@ -191,6 +203,8 @@ defmodule HologramFeatureTests.SyncTest do
     %{folder_id: folder.id, public: true, title: "reaches_the_folder"}
     |> Document.new()
     |> DB.create!()
+
+    await_log_settled()
 
     client = drain_initial_sync(connect())
 
@@ -354,10 +368,17 @@ defmodule HologramFeatureTests.SyncTest do
   # with cannot come from its fill - mid-fill it holds some types and not others, and a place
   # handed over then is a claim it could not honour. Hence the write before it leaves: it is there
   # to produce a frame after the store is complete, which is the first frame carrying a place.
+  #
+  # The log is settled before the client connects, here and in the three features below this one.
+  # A place is taken from the oldest transaction still running, when the session starts and again
+  # when a batch is read, so without the wait the place this client leaves with can be below the
+  # row it was filled with (see `await_log_settled/0`).
   feature "tells a returning client only what moved while it was away", %{session: _session} do
     %{public: true, title: "held_across_the_gap"}
     |> Document.new()
     |> DB.create!()
+
+    await_log_settled()
 
     filled_client = drain_initial_sync(connect())
 
@@ -405,6 +426,8 @@ defmodule HologramFeatureTests.SyncTest do
       %{folder_id: folder.id, public: false, title: "held_through_its_folder"}
       |> Document.new()
       |> DB.create!()
+
+    await_log_settled()
 
     # Awaited BEFORE draining, since drain_initial_sync/1 passes over the deltas frames and drops
     # them - the fill's own content can be read here and nowhere after. Its arrival is what proves
@@ -465,6 +488,8 @@ defmodule HologramFeatureTests.SyncTest do
     |> Document.new()
     |> DB.create!()
 
+    await_log_settled()
+
     # The anchor is the positive artifact beside the negative one: this is the frame the document
     # WOULD have travelled in, so its absence there is the client never having held it - which is
     # what makes the put_entity below a row being revealed rather than one being sent again.
@@ -514,6 +539,8 @@ defmodule HologramFeatureTests.SyncTest do
       %{body: "labelled_while_away", position: 0}
       |> Message.new()
       |> DB.create!()
+
+    await_log_settled()
 
     filled_client = drain_initial_sync(connect())
 

@@ -291,8 +291,8 @@ defmodule Hologram.MutationTest do
     end
   end
 
-  # A counter row anyone may update - Module20's allow lines are bare, so its writes are granted
-  # with or without an actor, which is what a delta test needs and no other fixture offers.
+  # A counter row anyone may update or delete - Module20's allow lines are bare, so its writes are
+  # granted with or without an actor, which is what a delta test needs and no other fixture offers.
   defp create_counter(count) do
     %{count: count}
     |> Module20.new()
@@ -463,7 +463,7 @@ defmodule Hologram.MutationTest do
 
     test "drops a column the row holds a newer revision of, naming what lost and what stands" do
       user = create_user("outrun@example.com")
-      row = create_authored(user, priority: 5)
+      row = create_authored(user, priority: 5, public: true)
       newer = row.__meta__.revisions.priority + 1_000_000
 
       set_revisions(MutationModule1, row.id, %{"priority" => newer})
@@ -488,7 +488,7 @@ defmodule Hologram.MutationTest do
 
     test "names a big integer that lost and the one that stands as the browser reads them" do
       user = create_user("outrun_big@example.com")
-      row = create_authored(user, priority: 9_007_199_254_740_993)
+      row = create_authored(user, priority: 9_007_199_254_740_993, public: true)
       newer = row.__meta__.revisions.priority + 1_000_000
 
       set_revisions(MutationModule1, row.id, %{"priority" => newer})
@@ -503,6 +503,102 @@ defmodule Hologram.MutationTest do
 
       assert answer["dropped"] == %{"0" => %{"priority" => "9007199254740995"}}
       assert answer["kept"]["0"]["priority"] == "9007199254740993"
+    end
+
+    # Mutation.Module1's author may update the row but read it only while it's public.
+    test "answers no value that stands in a lost column of a row its user may not read" do
+      user = create_user("outrun_hidden@example.com")
+      row = create_authored(user, priority: 5)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      write =
+        update_write(MutationModule1, row.id, %{"priority" => 9},
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      assert {:ok, answer} = run(envelope([write]), server(user.id))
+
+      assert answer["dropped"] == %{"0" => %{"priority" => 9}}
+      assert answer["kept"] == %{}
+
+      assert EntityOperations.get(MutationModule1, row.id).priority == 5
+    end
+
+    test "answers no value that stands in a lost column once the same write hides the row" do
+      user = create_user("outrun_hiding@example.com")
+      row = create_authored(user, priority: 5, public: true)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      write =
+        update_write(MutationModule1, row.id, %{"priority" => 9, "public" => false},
+          based_on: %{
+            "priority" => row.__meta__.revisions.priority,
+            "public" => row.__meta__.revisions.public
+          },
+          stamp: newer - 1
+        )
+
+      assert {:ok, answer} = run(envelope([write]), server(user.id))
+
+      assert answer["dropped"] == %{"0" => %{"priority" => 9}}
+      assert answer["kept"] == %{}
+
+      assert %{priority: 5, public: false} = EntityOperations.get(MutationModule1, row.id)
+    end
+
+    test "names what stands in a lost column once the same write shows the row" do
+      user = create_user("outrun_showing@example.com")
+      row = create_authored(user, priority: 5)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      write =
+        update_write(MutationModule1, row.id, %{"priority" => 9, "public" => true},
+          based_on: %{
+            "priority" => row.__meta__.revisions.priority,
+            "public" => row.__meta__.revisions.public
+          },
+          stamp: newer - 1
+        )
+
+      assert {:ok, answer} = run(envelope([write]), server(user.id))
+
+      assert answer["kept"]["0"]["priority"] == 5
+      assert answer["kept"]["0"]["$revisions"]["priority"] == newer
+    end
+
+    # The 5 stood only while the row was hidden. The row its user may read holds the 0 a later
+    # write of the batch put there, so that's what stands in the lost column.
+    test "names what stands in a lost column as the batch leaves the row" do
+      user = create_user("outrun_later@example.com")
+      row = create_authored(user, priority: 5)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      losing =
+        update_write(MutationModule1, row.id, %{"priority" => 9},
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      showing =
+        update_write(MutationModule1, row.id, %{"priority" => 0, "public" => true},
+          based_on: %{"priority" => newer, "public" => row.__meta__.revisions.public},
+          stamp: newer + 1
+        )
+
+      assert {:ok, answer} = run(envelope([losing, showing]), server(user.id))
+
+      assert answer["dropped"] == %{"0" => %{"priority" => 9}}
+      assert answer["kept"]["0"]["priority"] == 0
+      assert answer["kept"]["0"]["$revisions"]["priority"] == newer + 1
     end
 
     # Nothing changed on the server, so its update time says the row last changed when it did. A
@@ -589,6 +685,81 @@ defmodule Hologram.MutationTest do
       assert EntityOperations.get(Module20, row.id).count == 3
     end
 
+    # The browser adds the later delta to whatever this answer files, so a count answered as it
+    # stands would show 5 until the frame lands.
+    test "answers a lost counter less what a later write of the batch moves it by" do
+      row = create_counter(1)
+      stale = row.__meta__.revisions.count - 1
+
+      put = update_write(Module20, row.id, %{"count" => 9}, stamp: stale)
+      moved = update_write(Module20, row.id, nil, deltas: %{"count" => 2}, stamp: stale)
+
+      assert {:ok, answer} = run(envelope([put, moved]), server())
+
+      reloaded = EntityOperations.get(Module20, row.id)
+
+      assert reloaded.count == 3
+
+      assert answer["kept"] == %{
+               "0" => %{
+                 "count" => 1,
+                 "$revisions" => %{"count" => reloaded.__meta__.revisions.count}
+               }
+             }
+    end
+
+    test "answers each lost counter less only what the writes after it move it by" do
+      row = create_counter(1)
+      stale = row.__meta__.revisions.count - 1
+
+      writes = [
+        update_write(Module20, row.id, %{"count" => 9}, stamp: stale),
+        update_write(Module20, row.id, nil, deltas: %{"count" => 2}, stamp: stale),
+        update_write(Module20, row.id, %{"count" => 7}, stamp: stale),
+        update_write(Module20, row.id, nil, deltas: %{"count" => 3}, stamp: stale)
+      ]
+
+      assert {:ok, answer} = run(envelope(writes), server())
+
+      assert EntityOperations.get(Module20, row.id).count == 6
+
+      assert answer["kept"]["0"]["count"] == 1
+      assert answer["kept"]["2"]["count"] == 3
+    end
+
+    # The browser adds the delta to the answered 18 and skips the set, whose stamp the revision
+    # answered with already covers.
+    test "answers a lost counter less a later move under a later set of the batch" do
+      row = create_counter(1)
+      stale = row.__meta__.revisions.count - 1
+
+      writes = [
+        update_write(Module20, row.id, %{"count" => 9}, stamp: stale),
+        update_write(Module20, row.id, nil, deltas: %{"count" => 2}, stamp: stale),
+        update_write(Module20, row.id, %{"count" => 20}, stamp: stamp_above(row) + 1_000)
+      ]
+
+      assert {:ok, answer} = run(envelope(writes), server())
+
+      assert EntityOperations.get(Module20, row.id).count == 20
+
+      assert answer["kept"]["0"]["count"] == 18
+    end
+
+    test "answers the row a dropped delete lost to less what a later write of the batch moves it by" do
+      row = create_counter(1)
+      stale = row.__meta__.revisions.count - 1
+
+      delete = delete_write(Module20, row.id, stamp: stale)
+      moved = update_write(Module20, row.id, nil, deltas: %{"count" => 2}, stamp: stale)
+
+      assert {:ok, answer} = run(envelope([delete, moved]), server())
+
+      assert EntityOperations.get(Module20, row.id).count == 3
+
+      assert answer["kept"]["0"]["count"] == 1
+    end
+
     test "adds up deltas from two batches authored against one value" do
       row = create_counter(1)
 
@@ -659,7 +830,7 @@ defmodule Hologram.MutationTest do
 
     test "drops a delete when a column moved past it, naming every column and the row that stands" do
       user = create_user("blocked@example.com")
-      row = create_authored(user, priority: 5)
+      row = create_authored(user, priority: 5, public: true)
       newer = row.__meta__.revisions.priority + 1_000_000
 
       set_revisions(MutationModule1, row.id, %{"priority" => newer})
@@ -681,6 +852,106 @@ defmodule Hologram.MutationTest do
       assert answer["kept"]["0"]["$revisions"]["priority"] == newer
 
       assert EntityOperations.get(MutationModule1, row.id) != nil
+    end
+
+    test "withholds the row a dropped delete lost to from a user who may not read it" do
+      user = create_user("blocked_hidden@example.com")
+      row = create_authored(user, priority: 5)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      write =
+        delete_write(MutationModule1, row.id,
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      assert {:ok, answer} = run(envelope([write]), server(user.id))
+
+      assert answer["kept"] == %{"0" => %{"$withheld" => true}}
+
+      assert EntityOperations.get(MutationModule1, row.id) != nil
+    end
+
+    test "withholds the row a dropped delete lost to once a later write of the batch hides it" do
+      user = create_user("blocked_hiding@example.com")
+      row = create_authored(user, priority: 5, public: true)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      delete =
+        delete_write(MutationModule1, row.id,
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      hiding =
+        update_write(MutationModule1, row.id, %{"public" => false},
+          based_on: %{"public" => row.__meta__.revisions.public},
+          stamp: newer + 1
+        )
+
+      assert {:ok, answer} = run(envelope([delete, hiding]), server(user.id))
+
+      assert answer["kept"] == %{"0" => %{"$withheld" => true}}
+
+      assert EntityOperations.get(MutationModule1, row.id).public == false
+    end
+
+    test "answers a dropped delete of a row a later write of the batch deletes as one that won" do
+      user = create_user("blocked_then_gone@example.com")
+      row = create_authored(user, priority: 5, public: true)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      stale =
+        delete_write(MutationModule1, row.id,
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      winning =
+        delete_write(MutationModule1, row.id,
+          based_on: %{"priority" => newer},
+          stamp: newer + 1
+        )
+
+      assert {:ok, answer} = run(envelope([stale, winning]), server(user.id))
+
+      assert answer["dropped"] == %{"0" => %{"priority" => nil}}
+      assert answer["kept"] == %{}
+
+      assert EntityOperations.get(MutationModule1, row.id) == nil
+    end
+
+    test "answers an update that lost a column of a row a later write of the batch deletes as one that won" do
+      user = create_user("lost_then_gone@example.com")
+      row = create_authored(user, priority: 5, public: true)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      stale =
+        update_write(MutationModule1, row.id, %{"priority" => 1},
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      winning =
+        delete_write(MutationModule1, row.id,
+          based_on: %{"priority" => newer},
+          stamp: newer + 1
+        )
+
+      assert {:ok, answer} = run(envelope([stale, winning]), server(user.id))
+
+      assert answer["dropped"] == %{"0" => %{"priority" => 1}}
+      assert answer["kept"] == %{}
+
+      assert EntityOperations.get(MutationModule1, row.id) == nil
     end
 
     test "treats a delete of a row that is not there as done" do
@@ -1404,6 +1675,26 @@ defmodule Hologram.MutationTest do
       assert Auth.can?(holder.id, :read, EntityOperations.get(RoleGrant, write["id"]))
     end
 
+    # Answered with nothing, the browser would file the grant for a row that isn't there.
+    test "withholds a repeated grant a later write of the batch revokes" do
+      %{holder: holder, resource: resource, user: user, write: grant} = repeated_grant()
+
+      row = EntityOperations.get(RoleGrant, grant["id"])
+
+      revocation =
+        revocation_write(user.id, resource, :member,
+          based_on: based_on(row),
+          stamp: stamp_above(row)
+        )
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} =
+               run(envelope([grant, revocation]), server(holder.id))
+
+      assert kept == %{"0" => %{"$withheld" => true}}
+
+      assert EntityOperations.get(RoleGrant, row.id) == nil
+    end
+
     test "answers a resent repeated grant with the row as it stands" do
       %{batch: batch, holder: holder, resource: resource, user: user} = answered_repeat()
 
@@ -1579,7 +1870,7 @@ defmodule Hologram.MutationTest do
     test "withholds only the grant among what a resent batch kept" do
       %{holder: holder, resource: resource, user: user, write: grant} = repeated_grant()
 
-      row = create_authored(holder, priority: 5)
+      row = create_authored(holder, priority: 5, public: true)
       newer = row.__meta__.revisions.priority + 1_000_000
 
       set_revisions(MutationModule1, row.id, %{"priority" => newer})
@@ -1792,6 +2083,81 @@ defmodule Hologram.MutationTest do
 
       assert kept["0"]["id"] == first_row.id
       assert EntityOperations.get(RoleGrant, first_row.id) != nil
+    end
+
+    # The member reads other users' grants on the resource by holding the role there, and the
+    # batch's own second write gives it up.
+    test "withholds the grant a stale revocation lost to once the batch takes its user's read" do
+      member = create_user("stale-leaver@example.com")
+      user = create_user("regranted-stayer@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, :member, resource)
+      Auth.grant_role(user, :member, resource)
+
+      first_row = EntityOperations.get(RoleGrant, grant_id(user.id, resource, :member))
+      first_stamp = first_row.__meta__.revisions.role
+
+      Auth.revoke_role(user, :member, resource)
+      Auth.grant_role(user, :member, resource)
+
+      stale =
+        revocation_write(user.id, resource, :member,
+          based_on: based_on(first_row),
+          stamp: first_stamp + 1
+        )
+
+      member_row = EntityOperations.get(RoleGrant, grant_id(member.id, resource, :member))
+
+      leaving =
+        revocation_write(member.id, resource, :member,
+          based_on: based_on(member_row),
+          stamp: stamp_above(member_row)
+        )
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} =
+               run(envelope([stale, leaving]), server(member.id))
+
+      assert kept == %{"0" => %{"$withheld" => true}}
+
+      assert EntityOperations.get(RoleGrant, first_row.id) != nil
+      assert EntityOperations.get(RoleGrant, member_row.id) == nil
+    end
+
+    test "answers a stale revocation of a grant a later write of the batch revokes as one that won" do
+      member = create_user("stale-then-current@example.com")
+      user = create_user("regranted-leaving@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, :member, resource)
+      Auth.grant_role(user, :member, resource)
+
+      first_row = EntityOperations.get(RoleGrant, grant_id(user.id, resource, :member))
+      first_stamp = first_row.__meta__.revisions.role
+
+      Auth.revoke_role(user, :member, resource)
+      Auth.grant_role(user, :member, resource)
+
+      current_row = EntityOperations.get(RoleGrant, first_row.id)
+
+      stale =
+        revocation_write(user.id, resource, :member,
+          based_on: based_on(first_row),
+          stamp: first_stamp + 1
+        )
+
+      current =
+        revocation_write(user.id, resource, :member,
+          based_on: based_on(current_row),
+          stamp: stamp_above(current_row)
+        )
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} =
+               run(envelope([stale, current]), server(member.id))
+
+      assert kept == %{}
+
+      assert EntityOperations.get(RoleGrant, first_row.id) == nil
     end
 
     # A grant's id is derivable from its grant, so a delete of it is something anyone can send -

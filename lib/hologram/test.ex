@@ -3,6 +3,7 @@ defmodule Hologram.Test do
   alias Hologram.DB
   alias Hologram.DB.SchemaReconciler
   alias Hologram.MisuseError
+  alias Hologram.Test.DatabaseBootstrap
 
   @doc """
   Runs the rest of the calling process as the given user and returns that user unchanged,
@@ -70,11 +71,18 @@ defmodule Hologram.Test do
 
   Runs the Hologram compiler, restarts the application with the full supervisor
   tree, and converges the database schema to the app's model. Call this in your
-  `test_helper.exs` before running tests that need Hologram pages served in the
-  browser.
+  `test_helper.exs`, after `ExUnit.start()`, before running tests that need Hologram
+  pages served in the browser.
 
       # test_helper.exs
+      ExUnit.start()
       Hologram.Test.setup()
+
+  When the app declares entities, every test run gets a fresh database of its own, named after
+  the configured test database with a suffix of the run's own, so two runs against one server
+  never touch each other's tables, and the configured database itself is never created or
+  written to. The configured role must be allowed to create databases. Each run drops the
+  databases earlier runs left behind that nothing is connected to anymore.
   """
   @spec setup() :: :ok
   def setup do
@@ -84,22 +92,14 @@ defmodule Hologram.Test do
     Mix.Tasks.Compile.Hologram.run(force?: true)
 
     Application.stop(:hologram)
+
+    # While the app is stopped, so no pool is connected when the config is pointed at the run's
+    # database, and the start connects there.
+    DatabaseBootstrap.run_once!()
+
     {:ok, _started} = Application.ensure_all_started(:hologram)
 
     converge_schema()
-  end
-
-  # The test env starts the pool and nothing else - dev converges at boot and every other env
-  # applies the migration history, while a test app's schema is its helper's to manage. The
-  # database bootstrap gives each run a fresh database before this runs, so a run converges from
-  # scratch, and this is the only thing that builds the layout. A no-op when the app declares no
-  # entities, which leaves the database unstarted.
-  defp converge_schema do
-    if Process.whereis(DB) do
-      SchemaReconciler.reconcile(DB.reconciliation_context())
-    end
-
-    :ok
   end
 
   # A bare nil asks for a signed-out visitor deliberately, but a user struct carrying a nil id asks
@@ -114,4 +114,16 @@ defmodule Hologram.Test do
   defp actor_user_id(%{id: id}), do: id
 
   defp actor_user_id(id), do: id
+
+  # The test env starts the pool and nothing else - dev converges at boot and every other env
+  # applies the migration history, while a test app's schema is its helper's to manage. The run's
+  # database is fresh, so a run converges from scratch, and this is the only thing that builds the
+  # layout. A no-op when the app declares no entities, which leaves the database unstarted.
+  defp converge_schema do
+    if Process.whereis(DB) do
+      SchemaReconciler.reconcile(DB.reconciliation_context())
+    end
+
+    :ok
+  end
 end

@@ -1,10 +1,11 @@
-Hologram.Test.setup()
-
 if System.get_env("GITHUB_ACTIONS") == "true" do
   ExUnit.configure(max_cases: 1)
 end
 
 ExUnit.start()
+
+# After ExUnit.start, so the env is recognized as test even when MIX_ENV is unset.
+Hologram.Test.setup()
 
 # The endpoint listens on port 0, so the OS gave it a free port, and runs that overlap on one
 # machine never share one. Its URL still says port 0, so the port the listener got is put into

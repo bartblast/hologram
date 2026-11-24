@@ -40,14 +40,6 @@ exclude_opts = if windows?, do: [:skip_on_windows], else: []
 
 ExUnit.start(exclude: exclude_opts)
 
-# Boot the feature test database before the app starts: the feature app declares
-# entities, which activates the Hologram database - the database itself must exist
-# before the pool connects. Each run gets a fresh database of its own, so every run
-# converges from scratch and runs that overlap leave each other's tables alone.
-# Positioned after ExUnit.start - the env guard recognizes the test env by the running
-# ExUnit server.
-Hologram.Test.DatabaseBootstrap.run!()
-
 Hologram.Test.setup()
 
 # The endpoint listens on port 0, so the OS gave it a free port, and runs that overlap on one

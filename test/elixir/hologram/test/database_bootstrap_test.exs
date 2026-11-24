@@ -1,6 +1,6 @@
 defmodule Hologram.Test.DatabaseBootstrapTest do
-  # async: false - the tests mutate the HOLOGRAM_ENV variable and the :hologram app's
-  # :database config, both BEAM-global.
+  # async: false - the tests mutate the HOLOGRAM_ENV variable, the :hologram app's :database
+  # config, the record of the bootstrap having run and the cached data model, all BEAM-global.
   use Hologram.Test.ScratchDatabaseCase, async: false
 
   import ExUnit.CaptureLog
@@ -9,6 +9,8 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
   alias Hologram.DB.Config
   alias Hologram.DB.Mapper
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.Entity.Model
+  alias Hologram.Test.DatabaseBootstrap
 
   @claim %{
     otp_app: "hologram",
@@ -519,6 +521,73 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
           "is recognized by the running ExUnit server, so call run!/1 after ExUnit.start()."
 
       assert_error RuntimeError, expected_msg, fn -> run!() end
+    end
+  end
+
+  describe "run_once!/0" do
+    # The suite's helper ran the bootstrap, so the record of it is put back for the tests after.
+    setup do
+      ran_key = {DatabaseBootstrap, :ran}
+      original_ran = :persistent_term.get(ran_key, nil)
+
+      on_exit(fn ->
+        if original_ran do
+          :persistent_term.put(ran_key, original_ran)
+        else
+          :persistent_term.erase(ran_key)
+        end
+      end)
+
+      %{ran_key: ran_key}
+    end
+
+    test "creates the run's database when the app declares entities and this VM has none yet",
+         %{ran_key: ran_key, scratch: scratch, scratch_opts: scratch_opts} do
+      :persistent_term.erase(ran_key)
+
+      assert run_once!() == :ok
+
+      run_database = Config.connection_opts()[:database]
+      drop_database_on_exit(scratch_opts, run_database)
+
+      assert String.starts_with?(run_database, scratch_opts[:database] <> "_run_")
+      assert database_exists?(scratch, run_database)
+    end
+
+    test "keeps the run's databases when this VM made them already", %{scratch_opts: scratch_opts} do
+      run_and_drop!(scratch_opts)
+      Application.put_env(:hologram, :database, database: scratch_opts[:database])
+
+      assert run_once!() == :ok
+
+      assert Application.get_env(:hologram, :database) == [database: scratch_opts[:database]]
+    end
+
+    test "creates no database when the app declares no entities", %{
+      ran_key: ran_key,
+      scratch_opts: scratch_opts
+    } do
+      :persistent_term.erase(ran_key)
+      Model.put_facts([], [], nil)
+      on_exit(&Model.reset_caches/0)
+
+      assert run_once!() == :ok
+
+      assert Application.get_env(:hologram, :database) == [database: scratch_opts[:database]]
+    end
+
+    test "refuses to run outside the test env, naming setup/0", %{ran_key: ran_key} do
+      :persistent_term.erase(ran_key)
+      System.put_env("HOLOGRAM_ENV", "dev")
+
+      expected_msg =
+        "Hologram.Test.setup/0 gives an app with entities a database of its own for the test " <>
+          "run, which it creates and points the database config at, so it runs in the test env " <>
+          "only - the current env is :dev. When neither HOLOGRAM_ENV nor MIX_ENV is set, the " <>
+          "test env is recognized by the running ExUnit server, so call setup/0 after " <>
+          "ExUnit.start()."
+
+      assert_error RuntimeError, expected_msg, fn -> run_once!() end
     end
   end
 end
