@@ -9,6 +9,7 @@ import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Model from "./model.mjs";
 import Replica from "./replica.mjs";
+import Sse from "./sse.mjs";
 import Tabs from "./tabs.mjs";
 
 // The sync half of the realtime stream: what the client greets the server with, the five sync
@@ -196,13 +197,22 @@ export default class SyncStream {
 
       $.awaitingIdentity = false;
 
-      Hologram.dataLayer?.followIdentity({
+      // Read before the follow, which takes a tab whose store stopped out of its group and opens
+      // that tab's new stream itself.
+      const inGroup = Tabs.name !== null;
+
+      const moved = Hologram.dataLayer?.followIdentity({
         actorEntityId: frame.actor_entity_id,
         actorUserId: frame.actor_user_id,
         identityTag: frame.identity_tag,
-        replica: frame.replica,
         userRow: frame.user_row,
       });
+
+      // The event names no pair, and a tab in a group gets one from its move (see
+      // DataLayer.followIdentity). One in no group gets it from a new stream's handshake.
+      if (moved && !inGroup && Sse.isStarted) {
+        Sse.reconnect();
+      }
 
       Batches.flush();
     });
@@ -633,9 +643,9 @@ export default class SyncStream {
   // Whether this tab has to hold its writes: the server would refuse them. That is a stop over the
   // model rather than the protocol, because the write endpoint compares only the model - under a
   // protocol stop, writes still land. Or the tab moved to another user and has no pair for them yet.
-  // Any pair it holds after the move ends the wait: the event's, the one the store keeps for the
-  // new user, the one the new user's group hands it, or the handshake's. All are the new user's,
-  // since the move dropped the previous user's. Or the session's cookie still names the previous
+  // Any pair it holds after the move ends the wait: the one the store keeps for the new user, the
+  // one the new user's group hands it, or a handshake's. All are the new user's, since the move
+  // dropped the previous user's. Or the session's cookie still names the previous
   // user (see laggingCookie).
   static holdsWrites() {
     return (

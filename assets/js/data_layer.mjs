@@ -634,18 +634,17 @@ export default class DataLayer {
   // that tags no responses has no new period to move to, so the one lasting now counts as ended
   // (see LocalDatabase.reset).
   //
-  // The same user keeps everything, and only takes the pair the event may bring: a visitor whose
-  // session id changed needs one that the new session verifies.
-  //
-  // A tab in no group takes no pair from the event. The server mints one per change and sends it
-  // to every tab of the browser, and tabs in no group each number their batches from their own
-  // counter, so two of them sending under one pair would take each other's numbers. It holds none
-  // and opens a new stream, whose handshake hands it a pair of its own (see takeHandshake).
+  // The same user keeps everything. Another user's tab holds no pair until a handshake hands it
+  // one, which mints a pair for that tab alone (see takeHandshake): the server's event names none,
+  // since two groups of one user on builds that differ only in protocol version or storage layout
+  // would each send under it from their own counter.
   //
   // `heldSync` is whether the stream the tab is leaving held a sync session, which a tab that ends
   // up following has to close (see #moveGroup).
+  //
+  // Answers whether the tab moved to another user.
   static followIdentity(
-    {actorEntityId, actorUserId, identityTag, replica, userRow},
+    {actorEntityId, actorUserId, identityTag, userRow},
     {heldSync = SyncStream.heldSync} = {},
   ) {
     // This stream's server side has moved to an identity this tab can't take for the latest, so
@@ -655,7 +654,7 @@ export default class DataLayer {
       SyncStream.awaitingIdentity = true;
       Client.settleIdentity().then(() => Sse.reconnect());
 
-      return;
+      return false;
     }
 
     const owner = actorUserId ?? null;
@@ -684,54 +683,19 @@ export default class DataLayer {
       Batches.releaseForeign(owner);
       SyncStream.scheduleRender();
 
-      // The pair goes with the user. One a mount moved the tab with brings none, and the previous
-      // user's would be written into the new user's slot, or sent under the new user's session:
-      // the tab holds none until the store or the server gives it the new user's (see
-      // SyncStream.awaitingPair). The page's offer was minted for the previous user too.
+      // The pair goes with the user. The previous user's would be written into the new user's
+      // slot, or sent under the new user's session: the tab holds none until the store, its group
+      // or a handshake gives it the new user's (see SyncStream.awaitingPair). The page's offer was
+      // minted for the previous user too.
       Replica.owner = owner;
-
-      if (!replica) {
-        Replica.id = null;
-        Replica.token = null;
-        Replica.fresh = null;
-        SyncStream.awaitingPair = true;
-      }
-    }
-
-    if (replica && Tabs.name === null) {
       $.#holdNoPair();
-
-      if (Sse.isStarted) {
-        Sse.reconnect();
-      }
-    } else if (replica) {
-      // Not kept as the fresh pair: every tab of the browser was handed this one, and a tab that
-      // leaves its group switches to the fresh pair to send under a pair of its own (see
-      // Tabs.dissolve). The next handshake hands it one.
-      Replica.adopt(replica);
-      Replica.fresh = null;
-      SyncStream.awaitingPair = false;
-
-      // Only into this user's own slot. Another user's is written by the move below, once the tab
-      // leads that user's group.
-      //
-      // And not while a lead is being settled, which is also the whole of a move: a tab reading
-      // the store again takes the pair it finds there over this one, and a write landing after that
-      // read would leave the slot holding another pair than the one the tab sends under. The lead
-      // writes the pair it holds once it settles (see Tabs.ready and Tabs.#lead).
-      if (
-        isSameUser &&
-        Tabs.leader &&
-        !Tabs.takingLead &&
-        Replica.owner === owner
-      ) {
-        Durability.persistReplica(Replica.current());
-      }
     }
 
     if (!isSameUser && Tabs.name !== null) {
       $.#moveGroup(owner, heldSync);
     }
+
+    return !isSameUser;
   }
 
   // Takes in what a stream's handshake says of the session, before the stream is greeted, and
@@ -825,14 +789,10 @@ export default class DataLayer {
     // A tab whose store already stopped has nothing to share with the new user's tabs, and joined,
     // it could lead them from memory. So it leaves the group it was in and goes on as a replica of
     // its own. It keeps its batches, as a tab that leads does when its store stops: the ones it
-    // made since were never stored, and it is the only tab that can send them.
-    //
-    // The pair goes with the group: any it holds is the event's, which every tab of the browser got,
-    // and counted from this tab's own number it would collide with a leader's. The reconnect's
-    // handshake hands it one of its own (see takeHandshake).
+    // made since were never stored, and it is the only tab that can send them. The reconnect's
+    // handshake hands it a pair of its own (see takeHandshake).
     if (Durability.mode !== "indexeddb") {
       Tabs.leave();
-      $.#holdNoPair();
 
       if (Sse.isStarted) {
         Sse.reconnect();
@@ -865,8 +825,9 @@ export default class DataLayer {
     // the two apart. The other tabs are told nothing, since the store failed only for this one.
     //
     // Its stream is a replica's of its own from here, served sync from no place, and it holds no
-    // pair until that stream's handshake hands it one, for the reason the store-stopped case above
-    // gives.
+    // pair until that stream's handshake hands it one. Any fresh pair a handshake handed it while
+    // it read goes too, so it switches to none: the reconnect below hands one for the stream it
+    // goes on with.
     if (Durability.mode !== "indexeddb") {
       await Batches.recorded();
 

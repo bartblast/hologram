@@ -82,8 +82,16 @@ defmodule Hologram.Runtime.Session do
   """
   @spec identity_tag(Plug.Conn.t()) :: String.t()
   def identity_tag(conn) do
-    session_id = get_session_id(conn)
-    data = :erlang.term_to_binary({session_id, get_user_id(conn)}, [:deterministic])
+    identity_tag(conn, get_session_id(conn), get_user_id(conn))
+  end
+
+  # The tag of the given identity, under the stamp the conn's session holds: the tag a response
+  # will name, told before the response persists the identity (see
+  # `Hologram.Controller.announce_identity_change/3`).
+  @doc false
+  @spec identity_tag(Plug.Conn.t(), String.t() | nil, Server.identity_id() | nil) :: String.t()
+  def identity_tag(conn, session_id, user_id) do
+    data = :erlang.term_to_binary({session_id, user_id}, [:deterministic])
 
     digest =
       :sha256

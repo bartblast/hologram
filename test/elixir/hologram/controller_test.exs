@@ -2055,7 +2055,36 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
       |> handle_command_request()
 
-      assert_receive {:identity_changed, ^session_id, 7}
+      assert_receive {:identity_changed, ^session_id, 7, _identity_tag}
+    end
+
+    # A client hearing the announcement and the response both, in either order, follows one change.
+    test "announces the tag the response names" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      session = Map.put(@session, :hologram_session_id, session_id)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_changing_user_id,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert_receive {:identity_changed, ^session_id, 7, identity_tag}
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [identity_tag]
     end
 
     test "does not broadcast {:identity_changed, ...} when the handler leaves identity unchanged" do
@@ -2081,7 +2110,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
       |> handle_command_request()
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "does not broadcast {:identity_changed, ...} when the handler changes identity but raises" do
@@ -2109,7 +2138,7 @@ defmodule Hologram.ControllerTest do
         |> handle_command_request()
       end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when the handler sets the user id to false directly" do
@@ -2139,7 +2168,7 @@ defmodule Hologram.ControllerTest do
                      |> handle_command_request()
                    end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "broadcasts {:identity_changed, ...} on the pre session's announce topic when middleware changes identity and terminates" do
@@ -2165,7 +2194,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
       |> handle_command_request()
 
-      assert_receive {:identity_changed, ^session_id, 7}
+      assert_receive {:identity_changed, ^session_id, 7, _identity_tag}
     end
 
     test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when middleware sets the user id to false directly and terminates" do
@@ -2195,7 +2224,7 @@ defmodule Hologram.ControllerTest do
                      |> handle_command_request()
                    end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "does not broadcast {:identity_changed, ...} when middleware terminates without changing identity" do
@@ -2221,7 +2250,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
       |> handle_command_request()
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "persists the changed user_id into the session when the handler changes identity" do
@@ -3725,7 +3754,32 @@ defmodule Hologram.ControllerTest do
         replica_id: @replica_id
       )
 
-      assert_receive {:identity_changed, ^session_id, 7}
+      assert_receive {:identity_changed, ^session_id, 7, _identity_tag}
+    end
+
+    test "announces the tag the page's response names" do
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+        |> Plug.Conn.fetch_cookies()
+        |> handle_page_request(Module21, %{}, [],
+          csp_nonce: @csp_nonce,
+          csp_nonced_elements: @csp_nonced_elements,
+          initial_page?: true,
+          instance_id: "test-instance-id",
+          csrf_token: @masked_csrf_token,
+          replica_id: @replica_id
+        )
+
+      assert_receive {:identity_changed, ^session_id, 7, identity_tag}
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [identity_tag]
     end
 
     test "does not broadcast {:identity_changed, ...} when init/3 leaves identity unchanged" do
@@ -3748,7 +3802,7 @@ defmodule Hologram.ControllerTest do
         replica_id: @replica_id
       )
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "does not broadcast {:identity_changed, ...} when init/3 changes identity but raises" do
@@ -3773,7 +3827,7 @@ defmodule Hologram.ControllerTest do
         )
       end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when init/3 sets the user id to false directly" do
@@ -3800,7 +3854,7 @@ defmodule Hologram.ControllerTest do
                      )
                    end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when page middleware sets the user id to false directly and terminates" do
@@ -3825,7 +3879,7 @@ defmodule Hologram.ControllerTest do
                      )
                    end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "broadcasts {:identity_changed, ...} on the pre session's announce topic when page middleware changes identity and terminates" do
@@ -3846,7 +3900,7 @@ defmodule Hologram.ControllerTest do
         replica_id: @replica_id
       )
 
-      assert_receive {:identity_changed, ^session_id, 7}
+      assert_receive {:identity_changed, ^session_id, 7, _identity_tag}
     end
 
     test "does not broadcast {:identity_changed, ...} when page middleware terminates without changing identity" do
@@ -3867,7 +3921,7 @@ defmodule Hologram.ControllerTest do
         replica_id: @replica_id
       )
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "persists the changed user_id into the session when init/3 changes identity" do

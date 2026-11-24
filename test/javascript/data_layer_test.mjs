@@ -1236,7 +1236,6 @@ describe("DataLayer", () => {
           actorEntityId: "entity-2",
           actorUserId: "u2",
           identityTag: "2.tag-2",
-          replica: pair,
           ...fields,
         },
         options,
@@ -1313,25 +1312,22 @@ describe("DataLayer", () => {
         assert.isFalse(Overlay.names(TASK, "t2"));
       });
 
-      // Not as the fresh pair: every tab of the browser was handed it, and a tab leaving its group
-      // switches to the fresh pair to send under one of its own.
-      it("takes the pair the server minted", () => {
+      it("answers that it moved the tab", () => {
+        assert.isTrue(followToSecondUser());
+      });
+
+      // The store or the new user's group hands it the new user's pair once the move settles.
+      it("holds no pair in a group", () => {
+        Replica.fresh = {id: "replica-1", token: "token-1"};
+
         inGroup(() => followToSecondUser());
 
-        assert.deepStrictEqual(Replica.current(), pair);
+        assert.isNull(Replica.id);
         assert.isNull(Replica.fresh);
+        assert.isTrue(SyncStream.holdsWrites());
       });
 
-      it("ends a wait for a pair", () => {
-        SyncStream.awaitingPair = true;
-
-        inGroup(() => followToSecondUser());
-
-        assert.isFalse(SyncStream.awaitingPair);
-      });
-
-      // Tabs in no group each number their batches from their own counter, and every tab of the
-      // browser was handed this pair.
+      // The stream's listener opens a new one, whose handshake hands the tab a pair of its own.
       describe("in no group", () => {
         let reconnecting, wasStarted;
 
@@ -1346,7 +1342,7 @@ describe("DataLayer", () => {
           Sse.isStarted = wasStarted;
         });
 
-        it("takes no pair the event brings", () => {
+        it("holds no pair", () => {
           Replica.fresh = {id: "replica-1", token: "token-1"};
 
           followToSecondUser();
@@ -1357,29 +1353,8 @@ describe("DataLayer", () => {
           assert.isTrue(SyncStream.holdsWrites());
         });
 
-        it("opens a new stream, whose handshake hands it a pair", () => {
-          followToSecondUser();
-
-          sinon.assert.calledOnce(reconnecting);
-        });
-
-        it("takes no pair the event brings for the same user", () => {
-          DataLayer.followIdentity({
-            actorEntityId: "entity-1",
-            actorUserId: "u1",
-            identityTag: "2.tag-2",
-            replica: pair,
-          });
-
-          assert.isNull(Replica.id);
-          assert.isTrue(SyncStream.holdsWrites());
-          sinon.assert.calledOnce(reconnecting);
-          sinon.assert.notCalled(persisting);
-        });
-
-        it("opens no stream before the page has", () => {
-          Sse.isStarted = false;
-
+        // Left to the caller: a handshake's follow opens the stream it was made for.
+        it("opens no stream itself", () => {
           followToSecondUser();
 
           sinon.assert.notCalled(reconnecting);
@@ -1436,46 +1411,37 @@ describe("DataLayer", () => {
         }
       });
 
-      it("goes on waiting when the event brings no pair", () => {
+      it("goes on waiting for a pair", () => {
         SyncStream.awaitingPair = true;
 
-        followToSecondUser({replica: undefined});
+        followToSecondUser();
 
         assert.isTrue(SyncStream.awaitingPair);
       });
 
       // The previous user's pair would be sent under the new user's session, or written into
       // their slot, and the page offered it for the previous user too.
-      it("holds no pair when the event brings none", () => {
+      it("holds no pair", () => {
         Replica.fresh = {id: "replica-1", token: "token-1"};
 
-        followToSecondUser({replica: undefined});
+        followToSecondUser();
 
         assert.isNull(Replica.id);
         assert.isNull(Replica.token);
         assert.isNull(Replica.fresh);
       });
 
-      it("holds the pair it has for the new user", () => {
-        Replica.owner = "u1";
-
-        inGroup(() => followToSecondUser());
-
-        assert.equal(Replica.owner, "u2");
-        assert.deepStrictEqual(Replica.current(), pair);
-      });
-
       // With no pair a send could only be refused.
-      it("waits for a pair when the event brings none", () => {
-        followToSecondUser({replica: undefined});
+      it("waits for a pair", () => {
+        followToSecondUser();
 
         assert.isTrue(SyncStream.holdsWrites());
       });
 
-      it("holds no pair for the new user when the event brings none", () => {
+      it("holds the pair slot for the new user", () => {
         Replica.owner = "u1";
 
-        followToSecondUser({replica: undefined});
+        followToSecondUser();
 
         assert.equal(Replica.owner, "u2");
       });
@@ -1723,7 +1689,8 @@ describe("DataLayer", () => {
             sinon.assert.calledOnce(reconnecting);
           });
 
-          // The event's pair is every tab's, and the new user's leader sends under it too.
+          // It left its group, so the group's pair isn't its to send under: its reconnect's
+          // handshake hands it one of its own.
           it("holds no pair until its own stream hands it one", async () => {
             followToSecondUser();
             await settle();
@@ -1894,6 +1861,11 @@ describe("DataLayer", () => {
           assert.equal(IdentityTracker.tag, "5.tag");
         });
 
+        // The settle opens the stream, so the caller mustn't open another.
+        it("answers that it didn't move the tab", () => {
+          assert.isFalse(followBehind());
+        });
+
         // The stream's server side has moved to that identity all the same.
         it("takes nothing more from this stream", () => {
           followBehind();
@@ -1946,58 +1918,15 @@ describe("DataLayer", () => {
         sinon.assert.notCalled(rendering);
       });
 
-      it("keeps the pair when the event brings none", () => {
+      it("keeps the pair", () => {
         followToSameUser();
 
         assert.equal(Replica.id, "replica-1");
         sinon.assert.notCalled(persisting);
       });
 
-      // A visitor's pair is bound to the session id, which is what changed.
-      it("takes a pair the event brings, and the leader stores it", () => {
-        Replica.owner = "u1";
-
-        inGroup(() => followToSameUser({replica: pair}));
-
-        assert.deepStrictEqual(Replica.current(), pair);
-        sinon.assert.calledOnceWithExactly(persisting, pair);
-      });
-
-      // A follow a mount started leaves the store the previous user's until the tab has moved.
-      it("doesn't store the pair in another user's slot", () => {
-        Replica.owner = "u0";
-
-        inGroup(() => followToSameUser({replica: pair}));
-
-        assert.deepStrictEqual(Replica.current(), pair);
-        sinon.assert.notCalled(persisting);
-      });
-
-      it("leaves storing the pair to the leader", () => {
-        Replica.owner = "u1";
-        Tabs.leader = false;
-
-        inGroup(() => followToSameUser({replica: pair}));
-
-        assert.deepStrictEqual(Replica.current(), pair);
-        sinon.assert.notCalled(persisting);
-      });
-
-      // The tab moved to this user's group and is still reading the store, whose pair wins over
-      // the event's: written now, the slot would hold another pair than the one the tab sends
-      // under. The lead writes the pair it holds once it settles.
-      it("leaves storing the pair to a lead still being settled", () => {
-        Replica.owner = "u1";
-        Tabs.takingLead = true;
-
-        try {
-          inGroup(() => followToSameUser({replica: pair}));
-        } finally {
-          Tabs.takingLead = false;
-        }
-
-        assert.deepStrictEqual(Replica.current(), pair);
-        sinon.assert.notCalled(persisting);
+      it("answers that it didn't move the tab", () => {
+        assert.isFalse(followToSameUser());
       });
     });
 

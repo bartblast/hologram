@@ -151,11 +151,10 @@ export default class Tabs {
       Batches.disown();
 
       // A tab with no fresh pair has nothing of its own to switch to: a tab that followed to
-      // another user, or followed the server's event in its group, keeps none (see
-      // DataLayer.followIdentity). One whose fresh pair is the one in use has none left either, and
-      // doesn't keep it on a guess that no other tab sends under it: two senders under one pair is
-      // the thing leaving has to end. So it holds none, and its writes wait for the pair its next
-      // handshake hands it (see DataLayer.takeHandshake).
+      // another user keeps none (see DataLayer.followIdentity). One whose fresh pair is the one in
+      // use has none left either, and doesn't keep it on a guess that no other tab sends under it:
+      // two senders under one pair is the thing leaving has to end. So it holds none, and its
+      // writes wait for the pair its next handshake hands it (see DataLayer.takeHandshake).
       if (!Replica.refresh()) {
         Replica.id = null;
         Replica.token = null;

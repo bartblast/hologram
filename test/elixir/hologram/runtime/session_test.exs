@@ -145,6 +145,26 @@ defmodule Hologram.Runtime.SessionTest do
     end
   end
 
+  describe "identity_tag/3" do
+    # What the response will name, once it persists the identity the run ended with.
+    test "is the tag the conn's session would have with the given identity" do
+      conn = conn_with_session(%{@identity_stamp_key => 123, @session_id_key => "session-1"})
+
+      assert identity_tag(conn, "session-1", 42) ==
+               identity_tag_of(%{
+                 @identity_stamp_key => 123,
+                 @session_id_key => "session-1",
+                 @user_id_key => 42
+               })
+    end
+
+    test "starts with none for no session ID, whatever stamp the conn's session holds" do
+      conn = conn_with_session(%{@identity_stamp_key => 123})
+
+      assert identity_tag(conn, nil, nil) =~ ~r/\Anone\./
+    end
+  end
+
   describe "stamp_identity/1" do
     test "stamps the session with the current time" do
       before_ms = System.system_time(:millisecond)

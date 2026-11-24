@@ -240,8 +240,8 @@ describe("Tabs", () => {
       }
     });
 
-    // It followed the server to a pair every tab of the browser was handed, which the group's
-    // leader goes on sending under.
+    // It led the group under the pair its handshake handed it, and the leader that took over goes
+    // on sending under it.
     it("holds no identity in a tab that was following whose fresh one is the group's", async () => {
       const group = nextGroup();
 

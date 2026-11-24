@@ -15,6 +15,7 @@ import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 import Replica from "../../assets/js/replica.mjs";
+import Sse from "../../assets/js/sse.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -1439,22 +1440,30 @@ describe("SyncStream", () => {
       actor_entity_id: "entity-2",
       actor_user_id: "u2",
       identity_tag: "2.tag-2",
-      replica: {id: "replica-2", token: "token-2"},
       user_row: {put_entity: {"MyApp.User": [{id: "entity-2"}]}},
     };
 
-    let flushing, following, originalDataLayer;
+    let flushing, following, originalDataLayer, originalName, reconnecting;
+    let wasStarted;
 
     beforeEach(() => {
       originalDataLayer = Hologram.dataLayer;
-      following = sinon.spy();
+      originalName = Tabs.name;
+      wasStarted = Sse.isStarted;
+
+      following = sinon.stub().returns(false);
       flushing = sinon.stub(Batches, "flush");
+      reconnecting = sinon.stub(Sse, "reconnect");
 
       Hologram.dataLayer = {followIdentity: following};
+      Sse.isStarted = true;
+      Tabs.name = null;
     });
 
     afterEach(() => {
       Hologram.dataLayer = originalDataLayer;
+      Sse.isStarted = wasStarted;
+      Tabs.name = originalName;
     });
 
     it("follows the identity the stream names", () => {
@@ -1464,9 +1473,57 @@ describe("SyncStream", () => {
         actorEntityId: "entity-2",
         actorUserId: "u2",
         identityTag: "2.tag-2",
-        replica: frame.replica,
         userRow: frame.user_row,
       });
+    });
+
+    // The event names no pair, and a new stream's handshake hands one to this tab alone.
+    it("opens a new stream when it moved a tab in no group to another user", () => {
+      following.returns(true);
+
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      sinon.assert.calledOnce(reconnecting);
+    });
+
+    it("opens no stream when it left the tab with the user it holds", () => {
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    // The move opens the stream once the tab knows whether it leads the new user's group.
+    it("opens no stream for a tab in a group", () => {
+      following.returns(true);
+      Tabs.name = "hologram.1.model.u1";
+
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    // That tab's move opens its stream.
+    it("opens no stream for a tab the follow took out of its group", () => {
+      following.callsFake(() => {
+        Tabs.name = null;
+
+        return true;
+      });
+
+      Tabs.name = "hologram.1.model.u1";
+
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    it("opens no stream before the page has", () => {
+      following.returns(true);
+      Sse.isStarted = false;
+
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      sinon.assert.notCalled(reconnecting);
     });
 
     it("ends the wait a mount started", () => {
@@ -1477,7 +1534,7 @@ describe("SyncStream", () => {
       assert.isFalse(SyncStream.awaitingIdentity);
     });
 
-    // What a wait held back can go now, under the pair the event brought.
+    // What a wait held back can go now, under the pair the tab holds for the user it follows.
     it("wakes the sender after following", () => {
       eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
 

@@ -1028,15 +1028,21 @@ defmodule Hologram.Controller do
   end
 
   # Stamped ahead of the announcement, so that the streams hearing of a change and the response
-  # making it name the same tag.
+  # making it name the same tag. The response persists the new identity only later, so the tag is
+  # made from the identity the run ends with.
   defp announce_identity_change(conn, pre_server, post_server) do
-    Realtime.maybe_announce_identity_change(pre_server, post_server)
-
     if {pre_server.session_id, pre_server.user_id} ==
          {post_server.session_id, post_server.user_id} do
       conn
     else
-      Session.stamp_identity(conn)
+      stamped_conn = Session.stamp_identity(conn)
+
+      identity_tag =
+        Session.identity_tag(stamped_conn, post_server.session_id, post_server.user_id)
+
+      Realtime.maybe_announce_identity_change(pre_server, post_server, identity_tag)
+
+      stamped_conn
     end
   end
 
