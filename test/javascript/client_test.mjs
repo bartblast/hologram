@@ -1110,13 +1110,14 @@ describe("Client", () => {
           }),
         );
 
-        try {
-          await Client.sendCommand(command);
-        } catch {
-          // The failure is the command's own.
-        }
+        const error = await Client.sendCommand(command).catch((error) => {
+          // Caught up by the time the caller hears of the failure.
+          sinon.assert.calledOnce(catchingUp);
 
-        sinon.assert.calledOnce(catchingUp);
+          return error;
+        });
+
+        assert.instanceOf(error, HologramRuntimeError);
       });
 
       // Turned away because the stream serves the previous user, it names the tag the client
@@ -1128,13 +1129,14 @@ describe("Client", () => {
           .stub(globalThis, "fetch")
           .resolves(reply({ok: false, status: 403}));
 
-        try {
-          await Client.sendCommand(command);
-        } catch {
-          // The failure is the command's own.
-        }
+        const error = await Client.sendCommand(command).catch((error) => {
+          // Caught up by the time the caller hears of the failure.
+          sinon.assert.calledOnce(catchingUp);
 
-        sinon.assert.calledOnce(catchingUp);
+          return error;
+        });
+
+        assert.instanceOf(error, HologramRuntimeError);
       });
 
       // The answer can move the identity the client knows.
@@ -1197,13 +1199,14 @@ describe("Client", () => {
           .stub(globalThis, "fetch")
           .resolves(reply({json: sinon.stub().rejects(new Error("cut off"))}));
 
-        try {
-          await Client.sendCommand(command);
-        } catch {
-          // The failure is the command's own.
-        }
+        const error = await Client.sendCommand(command).catch((error) => {
+          // Caught up by the time the caller hears of the failure.
+          sinon.assert.calledOnce(catchingUp);
 
-        sinon.assert.calledOnce(catchingUp);
+          return error;
+        });
+
+        assert.instanceOf(error, HologramRuntimeError);
       });
     });
 
