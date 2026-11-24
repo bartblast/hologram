@@ -235,10 +235,16 @@ defmodule HologramFeatureTests.TaskRulesPage do
     |> visibility()
   end
 
+  # Only the refusal of request work counts, so another misuse fails the test.
   defp refusing(fun) do
     fun.()
   rescue
-    MisuseError -> "refused"
+    error in MisuseError ->
+      if error.message =~ "started for a request's work" do
+        "refused"
+      else
+        reraise error, __STACKTRACE__
+      end
   end
 
   defp sign_in(server, email, result) do
