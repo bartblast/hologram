@@ -401,6 +401,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Exception, :format_stacktrace, 1},
     {FunctionClauseError, :message, 1},
     {Hologram.Auth, :can?, 3},
+    {Hologram.Auth, :can?, 4},
     # The grant verbs and the role checks, hand-written for the client the way the data verbs below
     # are: one spelling on both tiers. A role check asks the grant store on the server and the grant
     # rows it holds in the browser. A grant verb differs at the end - the server writes the store,

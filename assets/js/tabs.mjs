@@ -311,7 +311,7 @@ export default class Tabs {
   static receive(message) {
     switch (message.kind) {
       // What the server said about a batch, on its way to every tab that is holding one. A tab
-      // that holds it promotes or rolls it back; a tab that does not has nothing to do.
+      // that holds it promotes or rolls it back; a tab that does not only keeps its number.
       case "answered":
         Batches.settle(message.seq, message.answer);
 
@@ -432,6 +432,13 @@ export default class Tabs {
       // What a message's getter threw can be something a string can't hold, like a Symbol, so even
       // saying it failed can throw.
       .catch(() => {});
+  }
+
+  // Says something to the other tabs at once, ahead of anything `post` has waiting. For the tab
+  // sending a batch, announcing it: that has to reach them before any frame or answer about it, and
+  // it vouches for nothing waiting ahead of it, since the batch is already in the store.
+  static postNow(message) {
+    Tabs.#channel?.postMessage(message);
   }
 
   // This tab has everything it starts with - the rows its own page carried, and what a previous
@@ -574,12 +581,13 @@ export default class Tabs {
   // opened together, a succession, an identity switch. Found by CodeRabbit on PR #1169.)
   //
   // An ANSWER names a batch this tab takes up in the same breath: settling before the batch is
-  // there settles nothing, and the batch is then folded for ever - nothing answers it twice.
+  // there settles nothing, what it says about those writes is lost, and the batch is then passed
+  // over as answered.
   //
   // A BATCH another tab filed is taken up into a queue the store has not handed over yet. Taken
   // before the mount, it is passed over for a signed-in user, since the mount is what says whose
-  // batches this page takes up, and nothing takes it up later: the restore takes up only what its
-  // read of the store found. And in a tab that leads, taking one up wakes the sender, which would
+  // batches this page takes up, and a tab that follows may not hear of it again: the restore takes
+  // up only what its read of the store found. And in a tab that leads, taking one up wakes the sender, which would
   // send the stored queue under the page's own identity rather than the one it was numbered under.
   //
   // A tab ASKING for the group's state is asking for an identity and a place, which this tab holds

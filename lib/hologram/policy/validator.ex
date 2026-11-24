@@ -37,6 +37,10 @@ defmodule Hologram.Policy.Validator do
 
     validate_via_cycles!(entity_types)
 
+    # Before the chains are followed: a can() is no via line for the cycle check to see, and one it
+    # could close a cycle through has to reach a rule using new(), which this refuses.
+    validate_new_row_delegations!(entity_types)
+
     # After the cycle check: the chains follow delegation to its end.
     validate_readable_chains!(entity_types)
   end
@@ -97,8 +101,8 @@ defmodule Hologram.Policy.Validator do
   defp actor_line_where(entity_type) do
     entity_type.__policies__()
     |> Enum.zip(entity_type.__policy_sources__())
-    |> Enum.find_value(fn {{_operation, _to, _via, predicates, _name, _fields} = policy, source} ->
-      clauses = Stage.predicate_triples!(entity_type, predicates)
+    |> Enum.find_value(fn {{operation, _to, _via, predicates, _name, _fields} = policy, source} ->
+      clauses = Policy.condition_clauses(entity_type, operation, predicates)
 
       if Stage.names_actor?(clauses), do: line_where(entity_type, policy, source)
     end)
@@ -419,6 +423,133 @@ defmodule Hologram.Policy.Validator do
     all_to_one?
   end
 
+  # The names of the row after the change the given clauses read outside any quantifier, each
+  # judged as the same name of the stored row is, and a stored name compared with one written
+  # first: the stored row's names are read from the comparisons each starts, so it would go
+  # unread.
+  defp new_row_names(clauses) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} -> Enum.flat_map(alternatives, &new_row_names/1)
+      {check, {_asked, _chain}} when check in [:can, :has_role] -> []
+      {quantifier, {_source, _inner}} when quantifier in [:all, :any, :none] -> []
+      {{:outer, 1, name}, _operator, {:attribute, other}} -> [name | compared_name(other)]
+      {name, _operator, {:attribute, other}} -> new_row_name(name) ++ new_row_name(other)
+      {name, _operator, _value} -> new_row_name(name)
+    end)
+  end
+
+  defp compared_name({:outer, 1, name}), do: [name]
+
+  defp compared_name(name), do: [name]
+
+  defp new_row_name({:outer, 1, name}), do: [name]
+
+  defp new_row_name(_name), do: []
+
+  # A role asked of the row a change leads to is one that row's type declares, along to-one
+  # relationships, and an operation one it can be asked about - judged the way a to: reference and
+  # a delegation are.
+  defp validate_new_row_check!(entity_type, {:has_role, {role_name, chain}} = check, where) do
+    target_type = validate_chain!(entity_type, chain, new_row_check_context(check, where))
+    declared_names = declared_role_names(target_type)
+
+    if role_name not in declared_names do
+      declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "unknown role #{inspect(role_name)} in #{describe_new_row_check(check)} of #{where} - declared roles of #{inspect(target_type)} are: #{declared_roles}"
+    end
+  end
+
+  defp validate_new_row_check!(entity_type, {:can, {operation, chain}} = check, where) do
+    target_type = validate_chain!(entity_type, chain, new_row_check_context(check, where))
+
+    # A field's or a role's operation tuple reaches rules no refusal of a delegation looks at.
+    if not is_atom(operation) or operation in [nil, true, false] do
+      raise Hologram.CompileError,
+        message:
+          "invalid when option #{describe_new_row_check(check)} for #{where} - can names an operation with an atom"
+    end
+
+    Policy.validate_operation!(target_type, operation)
+  rescue
+    error in [MisuseError] ->
+      message =
+        "invalid when option #{describe_new_row_check(check)} for #{where} - #{Exception.message(error)}"
+
+      reraise Hologram.CompileError, [message: message], __STACKTRACE__
+  end
+
+  defp new_row_check_context({word, _asked_and_chain} = check, where) do
+    %{
+      option: "when",
+      requirement: "#{word} requires a to-one relationship",
+      where: where,
+      written: describe_new_row_check(check)
+    }
+  end
+
+  defp describe_new_row_check({word, {asked, chain}}) do
+    "#{word}(#{inspect(asked)}, new(#{Enum.join(chain, ".")}))"
+  end
+
+  # A delegation and a can() ask a related row's rules about that row as it stands, and this write
+  # changes nothing there, so a rule of it judging a change has nothing to judge. Refused rather
+  # than read one way or the other: taken as could-pass it would grant, and with new() read as the
+  # stored value a transition rule would silently never hold.
+  defp validate_new_row_delegations!(entity_types) do
+    for entity_type <- Enum.sort(entity_types),
+        {policy, source} <- Enum.zip(entity_type.__policies__(), entity_type.__policy_sources__()),
+        delegation <- line_delegations(entity_type, policy) do
+      validate_new_row_delegation!(entity_type, policy, source, delegation)
+    end
+
+    :ok
+  end
+
+  defp validate_new_row_delegation!(entity_type, policy, source, {word, operation, chain}) do
+    target_type = Entity.path_target(entity_type, chain)
+
+    judges_a_change? =
+      target_type
+      |> Policy.build()
+      |> Map.get(operation, [])
+      |> Enum.any?(&Map.has_key?(&1, :exact))
+
+    if judges_a_change? do
+      spelled_chain = Enum.join(chain, ".")
+
+      asked =
+        case word do
+          :can -> "can(:edit, new(#{spelled_chain}))"
+          :via -> "via: {:edit, #{spelled_chain}}"
+        end
+
+      raise Hologram.CompileError,
+        message:
+          "#{line_where(entity_type, policy, source)} asks #{describe_key(target_type, operation)} in #{inspect(target_type)} through #{spelled_chain}, whose rules read the row after a change with new(), but nothing changes that row here - give it a line without new() and ask that one, like allow :update, as: :edit, except: [:field], ... with #{asked}"
+    end
+  end
+
+  # What a line asks of related rows: its delegation, and each can() of its condition.
+  defp line_delegations(entity_type, {operation, _to, via, predicates, _name, _fields}) do
+    via_delegation =
+      case Policy.delegation(operation, via) do
+        nil -> []
+        {delegated_operation, chain} -> [{:via, delegated_operation, chain}]
+      end
+
+    can_delegations =
+      for {:can, {delegated_operation, chain}} <-
+            entity_type
+            |> Policy.condition_clauses(operation, predicates)
+            |> Policy.new_row_checks(),
+          do: {:can, delegated_operation, chain}
+
+    via_delegation ++ can_delegations
+  end
+
   # The given data-form predicates without their quantifiers, in a disjunction's alternatives too -
   # a quantifier's source and condition are judged when the predicates are read as a filter.
   defp unquantified_predicates(predicates) do
@@ -665,9 +796,19 @@ defmodule Hologram.Policy.Validator do
     |> Stage.written_names()
     |> Enum.each(&validate_set_free_name!(entity_type, &1))
 
-    clauses = Stage.predicate_triples!(entity_type, predicates, hints)
+    clauses = Policy.condition_clauses(entity_type, operation, predicates, hints)
 
-    validate_server_only_predicates!(entity_type, {operation, name}, clauses, where)
+    clauses
+    |> new_row_names()
+    |> Enum.each(&validate_set_free_name!(entity_type, &1))
+
+    stored_clauses = Policy.stored_spelling(clauses)
+
+    validate_server_only_predicates!(entity_type, {operation, name}, stored_clauses, where)
+
+    clauses
+    |> Policy.new_row_checks()
+    |> Enum.each(&validate_new_row_check!(entity_type, &1, where))
 
     :ok
   rescue
@@ -690,9 +831,10 @@ defmodule Hologram.Policy.Validator do
   # rule, so its own chains stay checked, while the delegated read rules are answered by the read
   # verdict on the row it delegates to. The chains a deciding item reads are not checked, since the
   # server's verdict answers the operation over the rows as stored (see
-  # Hologram.Policy.held_chains/2). Like any verdict, it answers no in a browser while a write it
-  # has not answered names a type the operation reads, until the server's answer brings the verdict
-  # anew.
+  # Hologram.Policy.held_chains/2), or, for a clause reading the row after a change, which no verdict
+  # speaks for, the server's check of the write, a browser leaving it unknown. Like any verdict, it
+  # answers no in a browser while a write it has not answered names a type the operation reads,
+  # until the server's answer brings the verdict anew.
   defp validate_readable_chains!(entity_types) do
     unreadable_hops =
       for entity_type <- Enum.sort(entity_types),

@@ -41,7 +41,7 @@ defmodule Hologram.Page do
 
         use Hologram.Middleware.Builder
 
-        import Hologram.Auth, only: [can?: 3, has_role?: 2, has_role?: 3]
+        import Hologram.Auth, only: [can?: 3, can?: 4, has_role?: 2, has_role?: 3]
 
         import Hologram.Component,
           only:

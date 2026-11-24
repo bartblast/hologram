@@ -316,28 +316,40 @@ describe("Durability", () => {
     Replica.offer({id: "r-fresh", token: "statement-fresh"});
   };
 
-  describe("batchesAbove()", () => {
-    it("answers the records above the number, oldest first", async () => {
+  describe("queuedBatches()", () => {
+    it("answers the whole queue, oldest first", async () => {
       await Durability.open();
       await Durability.load();
       await writeBatches([batchRecord(9), batchRecord(2), batchRecord(5)]);
 
-      assert.deepStrictEqual(await Durability.batchesAbove(2), [
+      assert.deepStrictEqual(await Durability.queuedBatches(), [
+        batchRecord(2),
         batchRecord(5),
         batchRecord(9),
       ]);
     });
 
-    it("answers nothing for a number nothing was filed above", async () => {
+    it("answers only the records below a number, oldest first", async () => {
+      await Durability.open();
+      await Durability.load();
+      await writeBatches([batchRecord(9), batchRecord(2), batchRecord(5)]);
+
+      assert.deepStrictEqual(await Durability.queuedBatches(9), [
+        batchRecord(2),
+        batchRecord(5),
+      ]);
+    });
+
+    it("answers nothing for a number nothing was filed below", async () => {
       await Durability.open();
       await Durability.load();
       await writeBatches([batchRecord(2), batchRecord(5)]);
 
-      assert.deepStrictEqual(await Durability.batchesAbove(5), []);
+      assert.deepStrictEqual(await Durability.queuedBatches(2), []);
     });
 
     it("answers nothing in memory mode", async () => {
-      assert.deepStrictEqual(await Durability.batchesAbove(0), []);
+      assert.deepStrictEqual(await Durability.queuedBatches(), []);
       assert.equal(Durability.mode, "memory");
     });
 
@@ -348,16 +360,9 @@ describe("Durability", () => {
       await Durability.load();
       await writeBatches([batchRecord(2)]);
 
-      const range = globalThis.IDBKeyRange;
+      sinon.stub(FDBObjectStore.prototype, "getAll").throws(new Error("read"));
 
-      try {
-        globalThis.IDBKeyRange = undefined;
-
-        assert.deepStrictEqual(await Durability.batchesAbove(0), []);
-      } finally {
-        globalThis.IDBKeyRange = range;
-      }
-
+      assert.deepStrictEqual(await Durability.queuedBatches(), []);
       assert.equal(Durability.mode, "indexeddb");
     });
   });
@@ -1830,7 +1835,7 @@ describe("Durability", () => {
 
       await Durability.fileBatch(batch);
 
-      const [record] = await Durability.batchesAbove(0);
+      const [record] = await Durability.queuedBatches();
 
       assert.strictEqual(record.writes[0].deltas.n, 9007199254740993n);
     });
@@ -2717,6 +2722,62 @@ describe("Durability", () => {
       Durability.restore(true);
 
       assert.isNull(Durability.restore(true));
+    });
+  });
+
+  describe("wasAnswered()", () => {
+    const restored = async () => {
+      await seedPreviousLoad();
+      await writeBatches([batchRecord(7), batchRecord(9)]);
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+    };
+
+    it("answers true for a number spent before the read and gone from the queue", async () => {
+      await restored();
+
+      assert.isTrue(Durability.wasAnswered(8));
+      assert.isTrue(Durability.wasAnswered(41));
+    });
+
+    it("answers false for a number still in the queue", async () => {
+      await restored();
+
+      assert.isFalse(Durability.wasAnswered(7));
+      assert.isFalse(Durability.wasAnswered(9));
+    });
+
+    it("answers false for a number above what the read saw", async () => {
+      await restored();
+
+      assert.isFalse(Durability.wasAnswered(42));
+    });
+
+    it("answers false before any restore", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.isFalse(Durability.wasAnswered(8));
+    });
+
+    // The restore runs again on every client-side navigation, and takes up nothing after the first.
+    it("answers the same after a later restore that takes up nothing", async () => {
+      await restored();
+
+      assert.isNull(Durability.restore(true));
+
+      assert.isTrue(Durability.wasAnswered(8));
+      assert.isFalse(Durability.wasAnswered(9));
+    });
+
+    it("forgets what the read saw on reset", async () => {
+      await restored();
+      await Durability.reset();
+
+      assert.isFalse(Durability.wasAnswered(8));
     });
   });
 

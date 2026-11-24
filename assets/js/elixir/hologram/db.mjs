@@ -8,12 +8,13 @@ import Erlang from "../../erlang/erlang.mjs";
 import Elixir_Hologram_Query_Stage from "./query/stage.mjs";
 // A cycle - auth.mjs takes currentBatch from here - and a safe one: neither module calls the
 // other while it is being evaluated, so both bindings are in place by the time a verb runs.
-import {grantEntry, grantId} from "./auth.mjs";
+import {grantEntry, grantId, refuseDeniedChange} from "./auth.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
 import QueryCheck from "../../query_check.mjs";
 import QueryKernel from "../../query_kernel.mjs";
+import StringOrder from "../../string_order.mjs";
 import Type from "../../type.mjs";
 
 // The data verbs, hand-written for the client the way the query stages are.
@@ -89,7 +90,7 @@ function basedOn(held, changes) {
 
   return Object.fromEntries(
     Object.keys(changes)
-      .filter((name) => name in revisions)
+      .filter((name) => Object.hasOwn(revisions, name))
       .map((name) => [name, revisions[name]]),
   );
 }
@@ -309,11 +310,9 @@ function putValues(entity) {
 }
 
 function changeValues(changes) {
-  const pairs = Type.isList(changes)
-    ? changes.data.map((pair) => pair.data)
-    : Object.values(changes.data);
-
-  return Object.fromEntries(pairs.map(([name, value]) => [name.value, value]));
+  return Object.fromEntries(
+    mapNewPairs(changes).map(([name, value]) => [name.value, value]),
+  );
 }
 
 // The create every creating verb shares. Job.create reaches it directly, past DB.create/1's job
@@ -384,7 +383,13 @@ export function writeRefusal(entityType, violations, values) {
   return refusalLines(entityType, violations, values);
 }
 
-export {currentBatch, isServerOnlySentinel, raiseWriteError, structValues};
+export {
+  currentBatch,
+  isServerOnlySentinel,
+  raiseWriteError,
+  structValues,
+  validateChangeNames,
+};
 
 function raiseWriteError(message, reason) {
   Erlang["error/1"](
@@ -396,35 +401,79 @@ function raiseWriteError(message, reason) {
   );
 }
 
-// The names a type-indexed update was given, or nothing when the changes are neither a map nor a
-// keyword list - a shape the stage explains better than this can.
-function changeNames(changes) {
-  const pairs = Type.isList(changes)
-    ? Type.isKeywordList(changes) && changes.data.map((pair) => pair.data)
-    : Type.isMap(changes) && Object.values(changes.data);
+// The pairs Map.new/1 makes of the given term, which is what the server reads an update's changes
+// through: a list by :maps.from_list/1, refused as that refuses it and with the last of a repeated
+// key winning, a struct or any other enumerable as the list it enumerates to, and a map as it is.
+function mapNewPairs(term) {
+  if (
+    Type.isMap(term) &&
+    !Object.hasOwn(term.data, Type.encodeMapKey(Type.atom("__struct__")))
+  ) {
+    return Object.values(term.data);
+  }
 
-  return pairs && pairs.every(([name]) => Type.isAtom(name))
-    ? pairs.map(([name]) => name.value)
-    : null;
+  const list = Type.isList(term) ? term : Elixir_Enum["to_list/1"](term);
+
+  const pairs =
+    Type.isProperList(list) &&
+    list.data.every((item) => Type.isTuple(item) && item.data.length === 2);
+
+  if (!pairs) {
+    Interpreter.raiseBifError("badarg", "maps", "from_list", [list]);
+  }
+
+  return [
+    ...new Map(
+      list.data.map(({data}) => [Type.encodeMapKey(data[0]), data]),
+    ).values(),
+  ];
+}
+
+// A key or an id as a refusal prints it, with maps sorted so the text doesn't depend on their order.
+// A map key the runtime can't sort prints as it stands.
+function printedKey(key) {
+  const sortMaps = Type.keywordList([
+    [
+      Type.atom("custom_options"),
+      Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
+    ],
+  ]);
+
+  try {
+    return Interpreter.inspect(key, sortMaps);
+  } catch {
+    return Interpreter.inspect(key);
+  }
 }
 
 // The type-indexed form does its own name checking rather than leaning on put_attribute's,
-// because the server's does too and says something different: it names EVERY offending field at
-// once, where a stage refuses the first one it meets. A system attribute is among them - it is
-// not a settable column, so it is "not something that can be updated" rather than "managed
-// automatically", which is what the struct form says about the same name.
-function validateChangeNames(entityType, names) {
-  if (names.length === 0) {
+// because the server's does too and says something different: it names EVERY offending key at
+// once, in the order of their printed text, where a stage refuses the first one it meets. A system
+// attribute is among them - it is not a settable column, so it is "not something that can be
+// updated" rather than "managed automatically", which is what the struct form says about the same
+// name.
+//
+// WARNING: must match validate_changes!/4 in Hologram.DB.EntityOperations.
+function validateChangeNames(entityType, pairs) {
+  if (pairs.length === 0) {
     Interpreter.raiseMisuseError(
       `invalid changes for ${entityType} - at least one declared attribute or to-one relationship must be changed`,
     );
   }
 
+  const keys = pairs
+    .map(([key]) => ({key, text: printedKey(key)}))
+    .sort((left, right) => StringOrder.compare(left.text, right.text));
+
+  const atomNames = keys
+    .filter(({key}) => Type.isAtom(key))
+    .map(({key}) => key.value);
+
   // A derived field has no column - it's computed from its definition - so it is refused in the
   // words the stages refuse it, before it would be called something that can't be updated.
-  const derivedName = [...names]
-    .sort()
-    .find((name) => Object.hasOwn(Model.derived(entityType), name));
+  const derivedName = atomNames.find((name) =>
+    Object.hasOwn(Model.derived(entityType), name),
+  );
 
   if (derivedName !== undefined) {
     Interpreter.raiseMisuseError(
@@ -432,14 +481,14 @@ function validateChangeNames(entityType, names) {
     );
   }
 
-  const settable = settableFieldNames(entityType);
-  const unknown = names.filter((name) => !settable.includes(name));
+  const settable = atomNames.length === 0 ? [] : settableFieldNames(entityType);
+
+  const unknown = keys.filter(
+    ({key}) => !Type.isAtom(key) || !settable.includes(key.value),
+  );
 
   if (unknown.length > 0) {
-    const listed = unknown
-      .sort()
-      .map((name) => `:${name}`)
-      .join(", ");
+    const listed = unknown.map(({text}) => text).join(", ");
 
     Interpreter.raiseMisuseError(
       `invalid changes for ${entityType} - only declared attributes and to-one relationships can be updated: ${listed}`,
@@ -476,7 +525,6 @@ function refusedAmounts(deltas) {
 // Judges where the moves would land from the value this client holds. That value can be out of
 // date, so the answer is never grounds for refusing a write: only the server judges a move, on
 // what its statement returns.
-// eslint-disable-next-line no-unused-vars
 function validateMoves(entityType, held, deltas) {
   const moved = Object.entries(deltas).map(([name, amount]) => [
     Type.atom(name),
@@ -489,6 +537,27 @@ function validateMoves(entityType, held, deltas) {
         Type.alias(entityType),
         Type.map(moved),
       );
+}
+
+// The counters whose amount no column holds, or whose move lands on a value failing its declaration.
+// One this client holds no value for has nowhere to land, so it says nothing here.
+function unmovableCounters(entityType, held, deltas) {
+  const refused = refusedAmounts(deltas).map(([name]) => name.value);
+
+  const movable = Object.fromEntries(
+    Object.entries(deltas).filter(
+      ([name]) => !refused.includes(name) && (held[name] ?? null) !== null,
+    ),
+  );
+
+  const validation = validateMoves(entityType, held, movable);
+
+  return [
+    ...refused,
+    ...(Type.isAtom(validation)
+      ? []
+      : Object.values(validation.data[1].data).map(([name]) => name.value)),
+  ];
 }
 
 function validateEntityType(query) {
@@ -603,9 +672,9 @@ function storedEntity(entity, entityType, stamp) {
 }
 
 function validateId(id) {
-  if (!Type.isBitstring(id) || !ID_PATTERN.test(Bitstring.toText(id))) {
+  if (!Type.isBinary(id) || !ID_PATTERN.test(Bitstring.toText(id))) {
     Interpreter.raiseMisuseError(
-      `invalid id ${Interpreter.inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
+      `invalid id ${printedKey(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
     );
   }
 }
@@ -789,6 +858,8 @@ const Elixir_Hologram_DB = {
       );
     }
 
+    validateId(structField(entity, "id"));
+
     const id = Bitstring.toText(structField(entity, "id"));
     const held = LocalDatabase.getRow(entityType, id);
 
@@ -811,6 +882,18 @@ const Elixir_Hologram_DB = {
     ]);
 
     const batch = currentBatch("update");
+
+    // Before the values are judged, as on the server: a rule reads an invalid value as the stored
+    // one, and someone it refuses is told that rather than what's wrong with the value.
+    refuseDeniedChange(
+      entityType,
+      id,
+      changes,
+      deltas,
+      Object.values(relationshipOps.data).map(([key]) => key.data[0].value),
+      () => unmovableCounters(entityType, held, deltas),
+    );
+
     const boxedChanges = Object.entries(changes).map(([name, value]) => [
       Type.atom(name),
       value,
@@ -853,24 +936,30 @@ const Elixir_Hologram_DB = {
       );
     }
 
+    // The changes are judged before the row is looked up, as the server judges them. A type the
+    // build carries no entry for has no names to judge them by.
+    const pairs = mapNewPairs(changes);
+
+    if (Object.hasOwn(globalThis.Hologram.sync?.model ?? {}, type)) {
+      validateChangeNames(type, pairs);
+    }
+
+    validateId(id);
+
     const rowId = Bitstring.toText(id);
     const held = LocalDatabase.getRow(type, rowId);
 
+    // Whoever is signed in, a browser write is a client's, which the server locks the row for
+    // before it judges a value - the answer Writer.update/3 gives under an acting user.
     if (held === null) {
       Interpreter.raiseMisuseError(
         `cannot update ${type} - no entity with id "${rowId}"`,
       );
     }
 
-    const names = changeNames(changes);
-
-    if (names !== null) {
-      validateChangeNames(type, names);
-    }
-
     const entity = Elixir_Hologram_Query_Stage["put_attribute/2"](
       Model.box(type, held),
-      changes,
+      Type.map(pairs),
     );
 
     return Elixir_Hologram_DB["update/1"](entity);

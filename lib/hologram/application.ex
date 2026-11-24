@@ -4,6 +4,7 @@ defmodule Hologram.Application do
   use Application
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Auth.SpawnMark
   alias Hologram.Entity.Model
   alias Hologram.Policy
   alias Hologram.Policy.Edges
@@ -19,6 +20,10 @@ defmodule Hologram.Application do
     Policy.reset_model_facts_cache()
     Edges.reset_index_cache()
     Rules.reset_cache()
+
+    # An earlier start in the same VM that ran a tracer leaves its handle behind, and with that
+    # tracer gone every session would be refused. A start that runs a tracer puts a new one.
+    SpawnMark.forget()
 
     # Before anything starts, so a policy no page could be served under fails the boot of the app
     # rather than its first request.
@@ -73,9 +78,13 @@ defmodule Hologram.Application do
   # entity types, with no host-app ceremony. The database and the query cache start as a
   # restart-ordered unit - what the cache holds describes the model the database serves, so it
   # must repopulate whenever the database restarts.
+  #
+  # The spawn mark stays outside that unit: it holds the marks telling work a request moved to
+  # another process from server code, and a restart storm in the unit would otherwise clear them
+  # while those processes go on running.
   defp database_children do
     if Model.exists?() do
-      [Hologram.DB.Supervisor]
+      [SpawnMark, Hologram.DB.Supervisor]
     else
       []
     end
