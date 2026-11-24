@@ -124,6 +124,122 @@ defmodule Hologram.Auth.ContextTest do
     end
   end
 
+  describe "capture/1" do
+    test "runs the function as the user who captured it, in another process" do
+      fun = with_actor("user_id_41", fn -> capture(fn -> {actor_user_id(), session?()} end) end)
+
+      assert in_spawned(fun) == {"user_id_41", true}
+    end
+
+    test "runs the function as a signed-out visitor when one captured it" do
+      fun = with_actor(nil, fn -> capture(fn -> {actor_user_id(), session?()} end) end)
+
+      assert in_spawned(fun) == {nil, true}
+    end
+
+    test "runs the function with no session when captured with none" do
+      fun = capture(fn -> {actor_user_id(), session?()} end)
+
+      assert in_spawned(fun) == {nil, false}
+      assert with_actor("user_id_51", fun) == {nil, false}
+    end
+
+    test "runs the function with no session when captured inside without_session/1" do
+      fun =
+        with_actor("user_id_42", fn ->
+          without_session(fn -> capture(fn -> {actor_user_id(), session?()} end) end)
+        end)
+
+      assert in_spawned(fun) == {nil, false}
+      assert with_actor("user_id_52", fun) == {nil, false}
+    end
+
+    # Errs toward refusing: clearing the record when the function ends would leave a task started
+    # inside it trusted, and such a task usually makes its first call after the function returned.
+    test "leaves a process that ran the function counted as having served a session" do
+      supervisor = start_supervised!(Task.Supervisor)
+      fun = with_actor("user_id_53", fn -> capture(fn -> :ok end) end)
+
+      fun.()
+
+      assert supervisor
+             |> Task.Supervisor.async(&started_by_request?/0)
+             |> Task.await()
+    end
+
+    test "keeps the user after the capturing process moves to another user's session" do
+      test_pid = self()
+
+      fun = with_actor("user_id_43", fn -> capture(fn -> actor_user_id() end) end)
+
+      with_actor("user_id_44", fn ->
+        assert in_spawned(fun) == "user_id_43"
+        send(test_pid, :checked)
+      end)
+
+      assert_received :checked
+    end
+
+    test "keeps the user after the capturing process has ended" do
+      test_pid = self()
+
+      starter =
+        spawn(fn ->
+          send(test_pid, {:fun, with_actor("user_id_45", fn -> capture(&actor_user_id/0) end)})
+        end)
+
+      assert_receive {:fun, fun}
+      await_down(starter)
+
+      assert in_spawned(fun) == "user_id_45"
+    end
+
+    test "keeps the arity of a one-argument function" do
+      fun = with_actor("user_id_46", fn -> capture(fn arg -> {arg, actor_user_id()} end) end)
+
+      assert in_spawned(fn -> fun.(:arg_1) end) == {:arg_1, "user_id_46"}
+    end
+
+    test "works as the function of Task.async_stream/3" do
+      fun = with_actor("user_id_47", fn -> capture(fn arg -> {arg, actor_user_id()} end) end)
+
+      result =
+        [:arg_2]
+        |> Task.async_stream(fun)
+        |> Enum.to_list()
+
+      assert result == [ok: {:arg_2, "user_id_47"}]
+    end
+
+    test "marks what the wrapped function starts" do
+      fun =
+        with_actor("user_id_48", fn -> capture(fn -> in_spawned(&started_by_request?/0) end) end)
+
+      assert in_spawned(fun)
+    end
+
+    test "puts the running process' own session back afterwards" do
+      fun = with_actor("user_id_49", fn -> capture(&actor_user_id/0) end)
+
+      with_actor("user_id_50", fn ->
+        assert fun.() == "user_id_49"
+        assert actor_user_id() == "user_id_50"
+      end)
+    end
+
+    test "raises Hologram.MisuseError for a function of two arguments" do
+      assert_error Hologram.MisuseError,
+                   ~r/^as_current_user takes a function of no arguments or of one, got: /,
+                   fn -> capture(fn _arg_1, _arg_2 -> :ok end) end
+    end
+
+    test "raises Hologram.MisuseError for a value that isn't a function" do
+      assert_error Hologram.MisuseError,
+                   "as_current_user takes a function of no arguments or of one, got: :abc",
+                   fn -> capture(:abc) end
+    end
+  end
+
   describe "started_by_request?/0" do
     test "is false for a process no session started" do
       refute started_by_request?()

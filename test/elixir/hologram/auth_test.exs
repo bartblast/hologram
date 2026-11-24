@@ -148,6 +148,98 @@ defmodule Hologram.AuthTest do
     EntityOperations.get(RoleGrant, grant_id(user_id))
   end
 
+  describe "as_current_user/1" do
+    # Runs the function in a Task on the test's sandboxed connection.
+    defp in_sandboxed_task(fun) do
+      test_pid = self()
+
+      fn ->
+        :ok = DBConnection.Ownership.ownership_allow(DB.pool_name(), test_pid, self(), [])
+        Connection.enter_sandbox()
+
+        fun.()
+      end
+      |> Task.async()
+      |> Task.await()
+    end
+
+    test "gives the work the user's access in another process" do
+      user = create_user("user_as_current_1@example.com")
+
+      private_row =
+        %{public: false}
+        |> Module1.new()
+        |> DB.create!()
+
+      public_row =
+        %{public: true}
+        |> Module1.new()
+        |> DB.create!()
+
+      fun =
+        Context.with_actor(user.id, fn ->
+          as_current_user(fn ->
+            {DB.read(Module1, private_row.id), DB.read(Module1, public_row.id).id}
+          end)
+        end)
+
+      assert in_sandboxed_task(fun) == {nil, public_row.id}
+    end
+
+    test "refuses the work a write the user's rules refuse" do
+      user = create_user("user_as_current_2@example.com")
+
+      row =
+        %{priority: 5, public: true}
+        |> Module1.new()
+        |> DB.create!()
+
+      fun =
+        Context.with_actor(user.id, fn ->
+          as_current_user(fn ->
+            row
+            |> Hologram.Query.put_attribute(:priority, 7)
+            |> DB.update()
+          end)
+        end)
+
+      result =
+        in_sandboxed_task(fn ->
+          try do
+            fun.()
+          rescue
+            Hologram.AccessDeniedError -> :denied
+          end
+        end)
+
+      assert result == :denied
+      assert DB.read(Module1, row.id).priority == 5
+    end
+
+    test "lets the work write what the user's rules allow" do
+      user = create_user("user_as_current_3@example.com")
+
+      row =
+        %{author_id: user.id, public: true}
+        |> Module1.new()
+        |> DB.create!()
+
+      other_user = create_user("user_as_current_4@example.com")
+
+      fun =
+        Context.with_actor(user.id, fn ->
+          as_current_user(fn ->
+            row
+            |> Hologram.Query.put_attribute(:author_id, other_user.id)
+            |> DB.update()
+          end)
+        end)
+
+      assert in_sandboxed_task(fun) == :ok
+      assert DB.read(Module1, row.id).author_id == other_user.id
+    end
+  end
+
   # What a check asks is whether a grant EXISTS, so nothing it reads can be gathered - the
   # questions are gathered and answered here, as the session user, so the client's first render
   # can evaluate the same checks against rows rather than waiting for the fill.

@@ -129,6 +129,31 @@ defmodule Hologram.Auth.Context do
   end
 
   @doc """
+  Returns a function that runs the given one in the calling process' current state, whichever
+  process calls it and whatever the calling process has moved on to by then. Backs
+  Hologram.Auth.as_current_user/1. Takes a function of arity 0 or 1 and keeps its arity.
+  """
+  @spec capture((-> result)) :: (-> result) when result: any
+  @spec capture((arg -> result)) :: (arg -> result) when arg: any, result: any
+  def capture(fun) when is_function(fun, 0) do
+    state = captured_state()
+
+    fn -> run_in_state(state, fun) end
+  end
+
+  def capture(fun) when is_function(fun, 1) do
+    state = captured_state()
+
+    fn arg -> run_in_state(state, fn -> fun.(arg) end) end
+  end
+
+  def capture(other) do
+    raise Hologram.MisuseError,
+      message:
+        "as_current_user takes a function of no arguments or of one, got: #{inspect(other)}"
+  end
+
+  @doc """
   Runs the given function with no session, as server code outside Hologram's request handling, and
   returns its result. The session set before the call is restored afterwards, raised exceptions
   included.
@@ -136,6 +161,13 @@ defmodule Hologram.Auth.Context do
   @spec without_session((-> any)) :: any
   def without_session(fun) do
     run_in_state(:server, fun)
+  end
+
+  defp captured_state do
+    case Process.get(@actor_key) do
+      {:session, _user_id} = session -> session
+      _no_session -> :server
+    end
   end
 
   # The mark goes first: when it can't be set, the process is left as it was.
