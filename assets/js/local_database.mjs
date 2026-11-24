@@ -817,8 +817,10 @@ export default class LocalDatabase {
   //
   // The final point comes in with the records, since it was written down with them, and so do the
   // numbers they wait for. A row the page brought takes a stored number only when it is newer than
-  // the one the row holds, which a number the page's render could not call final yet is. A stored
-  // row can hold a number the stored point doesn't reach, which goes back beside it (see
+  // the one the row holds, which a number the page's render could not call final yet is, and a
+  // created number the stored copy of the row holds where the page's holds none (see
+  // #takeStoredCreated).
+  // A stored row can hold a number the stored point doesn't reach, which goes back beside it (see
   // #holdStoredAbove).
   static restore(records, finalSeq = null) {
     LocalDatabase.raiseFinal(finalSeq);
@@ -838,6 +840,7 @@ export default class LocalDatabase {
         LocalDatabase.putRow(type, row);
       } else {
         LocalDatabase.unmarkCarried(type, id);
+        LocalDatabase.#takeStoredCreated(type, id, row);
       }
 
       LocalDatabase.#takeWaiting(type, id, record.waiting);
@@ -1275,6 +1278,40 @@ export default class LocalDatabase {
     if (shown === undefined || BigInt(number) > BigInt(shown)) {
       entry.shown ??= {};
       entry.shown[field] = number;
+    }
+  }
+
+  // Takes the created number a stored row holds where the page's copy of it holds none, as a number
+  // it waits for. The page's render can hide a number its pin didn't reach - on a node behind this
+  // one, or one that just restarted - and the change that gave it can lie at or below the place
+  // this page resumes from, so nothing sends it again.
+  //
+  // Only the created number, because it never changes for a row: a stored updated number can be an
+  // older version's, which filed under the page's version would pass comparisons that version's own
+  // number fails, and a timestamp can't tell two writes in the same millisecond apart. A number the
+  // page showed beside the row is the page's, so a stored one no newer than it adds nothing.
+  static #takeStoredCreated(type, id, stored) {
+    const field = "server_created_seq";
+    const number = stored[field] ?? null;
+
+    if (
+      number === null ||
+      (LocalDatabase.baseRow(type, id)[field] ?? null) !== null
+    ) {
+      return;
+    }
+
+    const shown = LocalDatabase.#waiting[type]?.[id]?.shown?.[field];
+
+    if (shown !== undefined && BigInt(shown) >= BigInt(number)) {
+      return;
+    }
+
+    const entry = LocalDatabase.#waitingEntry(type, id);
+    const waiting = entry.numbers[field];
+
+    if (waiting === undefined || BigInt(waiting) < BigInt(number)) {
+      entry.numbers[field] = number;
     }
   }
 
