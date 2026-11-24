@@ -8,7 +8,9 @@ import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
 import ManuallyPortedElixirHologramDB from "./elixir/hologram/db.mjs";
-import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
+import ManuallyPortedElixirHologramEntity, {
+  defineStructFunctions,
+} from "./elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "./elixir/hologram/query/stage.mjs";
 import Model from "./model.mjs";
@@ -185,8 +187,11 @@ export default class DataLayer {
 
   // Defines the hand-written client versions of the Hologram.Auth, Hologram.DB, Hologram.Entity,
   // Hologram.Job and Hologram.Query.Stage functions as the functions of their modules. No bundle
-  // carries their Elixir originals.
+  // carries their Elixir originals. With them, the struct functions of the model's entity types,
+  // before any chunk's definitions run, so that a chunk's own functions replace them.
   static defineManuallyPortedFunctions() {
+    defineStructFunctions();
+
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Auth",
       "can?/3",

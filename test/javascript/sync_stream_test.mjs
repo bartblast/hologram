@@ -1602,6 +1602,25 @@ describe("SyncStream", () => {
       delete globalThis.Hologram.sync;
     });
 
+    it("defines the struct functions of the types the rules hold", () => {
+      const original = globalThis.Elixir_MyApp_Doc;
+      delete globalThis.Elixir_MyApp_Doc;
+
+      try {
+        eventSource.listeners.sync_rules({data: envelope()});
+
+        assert.isTrue(
+          globalThis.Elixir_MyApp_Doc.__exports__.has("__struct__/0"),
+        );
+      } finally {
+        delete globalThis.Elixir_MyApp_Doc;
+
+        if (original !== undefined) {
+          globalThis.Elixir_MyApp_Doc = original;
+        }
+      }
+    });
+
     // A tab joining the group answers by the rules the group syncs under, which the stream handed
     // over to this tab alone.
     it("keeps the frame for the tabs joining later", () => {

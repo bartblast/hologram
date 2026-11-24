@@ -2,6 +2,7 @@
 
 import Batches from "./batches.mjs";
 import Deltas from "./deltas.mjs";
+import {defineStructFunctions} from "./elixir/hologram/entity.mjs";
 import Durability from "./durability.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -360,6 +361,9 @@ export default class SyncStream {
         $.rules = frame;
 
         Model.replaceRules(frame.rules);
+
+        // Rules can bring a type this bundle never carried, whose rows can arrive with them.
+        defineStructFunctions();
 
         globalThis.Hologram.sync.policyHash = frame.policy_hash;
 

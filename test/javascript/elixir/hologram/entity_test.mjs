@@ -8,7 +8,9 @@ import {
 } from "../../support/helpers.mjs";
 
 import Bitstring from "../../../../assets/js/bitstring.mjs";
-import Elixir_Hologram_Entity from "../../../../assets/js/elixir/hologram/entity.mjs";
+import Elixir_Hologram_Entity, {
+  defineStructFunctions,
+} from "../../../../assets/js/elixir/hologram/entity.mjs";
 import HologramRuntimeError from "../../../../assets/js/errors/runtime_error.mjs";
 import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
@@ -274,6 +276,233 @@ describe("Elixir_Hologram_Entity", () => {
       assert.match(
         Bitstring.toText(result),
         /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    });
+  });
+
+  describe("defineStructFunctions()", () => {
+    const moduleJsName = (type) => `Elixir_${type.replaceAll(".", "_")}`;
+
+    const MODEL_MODULES = [
+      ACCOUNT,
+      CHANNEL,
+      DOC,
+      EMPTY,
+      ITEM,
+      NOTIFY,
+      POST,
+    ].map(moduleJsName);
+
+    let originalEnum;
+    let originals;
+
+    beforeEach(() => {
+      originals = Object.fromEntries(
+        MODEL_MODULES.map((name) => [name, globalThis[name]]),
+      );
+
+      MODEL_MODULES.forEach((name) => delete globalThis[name]);
+      defineStructFunctions();
+
+      originalEnum = globalThis.Elixir_Enum;
+
+      globalThis.Elixir_Enum = {
+        "to_list/1": (term) =>
+          Type.isMap(term)
+            ? Type.list(
+                Object.values(term.data).map((pair) => Type.tuple(pair)),
+              )
+            : term,
+      };
+    });
+
+    afterEach(() => {
+      globalThis.Elixir_Enum = originalEnum;
+
+      MODEL_MODULES.forEach((name) => {
+        if (originals[name] === undefined) {
+          delete globalThis[name];
+        } else {
+          globalThis[name] = originals[name];
+        }
+      });
+    });
+
+    const struct0 = (type) => globalThis[moduleJsName(type)]["__struct__/0"]();
+
+    const struct1 = (type, values) =>
+      globalThis[moduleJsName(type)]["__struct__/1"](values);
+
+    const assertClauseError = (error, module, functionName, arity) => {
+      assert.deepEqual(
+        field(error.struct, "__struct__"),
+        Type.alias("FunctionClauseError"),
+      );
+
+      assert.deepEqual(field(error.struct, "module"), module);
+      assert.deepEqual(
+        field(error.struct, "function"),
+        Type.atom(functionName),
+      );
+      assert.deepEqual(field(error.struct, "arity"), Type.integer(arity));
+    };
+
+    const capturedError = (fun) => {
+      try {
+        fun();
+      } catch (error) {
+        return error;
+      }
+
+      return null;
+    };
+
+    describe("__struct__/0", () => {
+      it("returns a struct of the type", () => {
+        assert.deepEqual(
+          field(struct0(ACCOUNT), "__struct__"),
+          Type.alias(ACCOUNT),
+        );
+      });
+
+      it("leaves the id nil, as the Elixir struct default does", () => {
+        assert.deepEqual(field(struct0(ACCOUNT), "id"), Type.nil());
+      });
+
+      it("applies the declared defaults", () => {
+        assert.deepEqual(
+          field(struct0(ACCOUNT), "public"),
+          Type.boolean(false),
+        );
+      });
+
+      it("holds the empty metadata", () => {
+        assert.deepEqual(
+          field(struct0(ACCOUNT), "__meta__"),
+          Model.emptyMetadata(),
+        );
+      });
+
+      it("holds the sentinel for a relationship", () => {
+        const [name] = Object.keys(Model.entry(POST).relationships);
+
+        assert.deepEqual(field(struct0(POST), name), Model.notIncluded(name));
+      });
+
+      it("holds the sentinel for an inverse", () => {
+        assert.deepEqual(
+          field(struct0(CHANNEL), "messages"),
+          Model.notIncluded("messages"),
+        );
+      });
+
+      it("holds the sentinel for a derived field", () => {
+        assert.deepEqual(
+          field(struct0(CHANNEL), "message_count"),
+          Model.notIncluded("message_count"),
+        );
+      });
+    });
+
+    describe("__struct__/1", () => {
+      it("replaces the keys of a keyword list", () => {
+        const values = Type.keywordList([
+          [Type.atom("id"), Type.bitstring("abc")],
+        ]);
+
+        assert.deepEqual(
+          field(struct1(ACCOUNT, values), "id"),
+          Type.bitstring("abc"),
+        );
+      });
+
+      it("replaces the keys of a map", () => {
+        const values = Type.map([[Type.atom("public"), Type.boolean(true)]]);
+
+        assert.deepEqual(
+          field(struct1(ACCOUNT, values), "public"),
+          Type.boolean(true),
+        );
+      });
+
+      it("leaves the other fields at their defaults", () => {
+        const values = Type.map([[Type.atom("public"), Type.boolean(true)]]);
+
+        assert.deepEqual(field(struct1(ACCOUNT, values), "id"), Type.nil());
+      });
+
+      it("raises KeyError on an unknown key", () => {
+        const values = Type.keywordList([
+          [Type.atom("no_such_field"), Type.integer(1)],
+        ]);
+
+        const error = capturedError(() => struct1(ACCOUNT, values));
+
+        assert.deepEqual(
+          field(error.struct, "__struct__"),
+          Type.alias("KeyError"),
+        );
+        assert.deepEqual(
+          field(error.struct, "key"),
+          Type.atom("no_such_field"),
+        );
+        assert.deepEqual(field(error.struct, "term"), Type.nil());
+      });
+
+      it("raises FunctionClauseError on an element that isn't a pair", () => {
+        const values = Type.list([
+          Type.tuple([Type.atom("id"), Type.integer(1), Type.integer(2)]),
+        ]);
+
+        const error = capturedError(() => struct1(ACCOUNT, values));
+
+        assertClauseError(
+          error,
+          Type.alias(ACCOUNT),
+          "-__struct__/1-inlined-0-",
+          2,
+        );
+      });
+
+      it("raises FunctionClauseError on an improper list's tail", () => {
+        const values = Type.improperList([
+          Type.tuple([Type.atom("id"), Type.integer(1)]),
+          Type.integer(2),
+        ]);
+
+        const error = capturedError(() => struct1(ACCOUNT, values));
+
+        assertClauseError(
+          error,
+          Type.alias("Enum"),
+          "-reduce/3-lists^foldl/2-0-",
+          3,
+        );
+      });
+
+      it("raises what's wrong with an element before an improper tail", () => {
+        const values = Type.improperList([
+          Type.tuple([Type.atom("no_such_field"), Type.integer(1)]),
+          Type.integer(2),
+        ]);
+
+        const error = capturedError(() => struct1(ACCOUNT, values));
+
+        assert.deepEqual(
+          field(error.struct, "__struct__"),
+          Type.alias("KeyError"),
+        );
+      });
+    });
+
+    it("keeps a function the type already has", () => {
+      const existing = globalThis[moduleJsName(ACCOUNT)]["__struct__/0"];
+
+      defineStructFunctions();
+
+      assert.strictEqual(
+        globalThis[moduleJsName(ACCOUNT)]["__struct__/0"],
+        existing,
       );
     });
   });

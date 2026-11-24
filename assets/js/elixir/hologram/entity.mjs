@@ -724,6 +724,76 @@ export function typeValid(value, attributeType) {
   }
 }
 
+// The struct the type's __struct__/0 returns, as Elixir's defstruct has it: new/2 with no id minted,
+// since a struct carries whatever it was built with.
+function defaultStruct(type) {
+  return buildStruct(Type.alias(type), Model.entry(type), [["id", Type.nil()]]);
+}
+
+// The type's __struct__/1, which Elixir generates as a reduce over any enumerable with a function
+// taking {key, value}: its default struct with the given keys replaced. An unknown key raises the
+// KeyError that function's map update raises, and an element of another shape the clause error.
+// None of new/2's refusals apply.
+// Deps: [Enum.to_list/1]
+function structWith(type, values) {
+  const struct = Type.cloneMap(defaultStruct(type));
+  const list = Elixir_Enum["to_list/1"](values);
+  const isProper = Type.isProperList(list);
+
+  // An improper tail is reached last, so what's wrong with an element before it is what raises.
+  for (const element of isProper ? list.data : list.data.slice(0, -1)) {
+    if (!Type.isTuple(element) || element.data.length !== 2) {
+      Interpreter.raiseFunctionClauseError(type, "-__struct__/1-inlined-0-", 2);
+    }
+
+    const [key, value] = element.data;
+    const encodedKey = Type.encodeMapKey(key);
+
+    if (!Object.hasOwn(struct.data, encodedKey)) {
+      Interpreter.raiseFramelessError(["badkey", key]);
+    }
+
+    struct.data[encodedKey] = [key, value];
+  }
+
+  if (!isProper) {
+    Interpreter.raiseFunctionClauseError(
+      "Enum",
+      "-reduce/3-lists^foldl/2-0-",
+      3,
+    );
+  }
+
+  return struct;
+}
+
+function defineStructFunction(type, functionArityStr, fun) {
+  const module = globalThis[Interpreter.moduleJsName(`Elixir.${type}`)];
+
+  if (!module || !(functionArityStr in module)) {
+    Interpreter.defineManuallyPortedFunction(
+      type,
+      functionArityStr,
+      "public",
+      fun,
+    );
+  }
+}
+
+// Defines __struct__/0 and __struct__/1 of every entity type in the model, so that code holding
+// only a synced row's module can build a struct of it, without every synced type's chunk loading.
+// A type that has them keeps them: a chunk's own functions, or the ones an earlier call defined.
+// Called again when a server hands over rules that add types to the model.
+export function defineStructFunctions() {
+  for (const type of Object.keys(globalThis.Hologram.sync?.model ?? {})) {
+    defineStructFunction(type, "__struct__/0", () => defaultStruct(type));
+
+    defineStructFunction(type, "__struct__/1", (values) =>
+      structWith(type, values),
+    );
+  }
+}
+
 const Elixir_Hologram_Entity = {
   "generate_id/0": () => Type.bitstring(Utils.uuidv7()),
 

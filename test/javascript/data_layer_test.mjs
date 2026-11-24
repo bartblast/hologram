@@ -733,6 +733,27 @@ describe("DataLayer", () => {
       });
     });
 
+    it("defines the struct functions of the model's entity types", () => {
+      const sync = globalThis.Hologram.sync;
+
+      globalThis.Hologram.sync = {model: {"MyApp.StructDefined": {}}};
+
+      try {
+        DataLayer.defineManuallyPortedFunctions();
+
+        assert.isTrue(
+          globalThis.Elixir_MyApp_StructDefined.__exports__.has("__struct__/0"),
+        );
+
+        assert.isTrue(
+          globalThis.Elixir_MyApp_StructDefined.__exports__.has("__struct__/1"),
+        );
+      } finally {
+        globalThis.Hologram.sync = sync;
+        delete globalThis.Elixir_MyApp_StructDefined;
+      }
+    });
+
     it("defines the hand-written Auth, DB, Entity, Job and Query.Stage functions as public functions of their modules", () => {
       DataLayer.defineManuallyPortedFunctions();
 
