@@ -17,6 +17,7 @@ defmodule Hologram.ControllerMutationTest do
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Runtime.Serializer
+  alias Hologram.Runtime.Session
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Mutation.Module1, as: MutationModule1
@@ -116,6 +117,13 @@ defmodule Hologram.ControllerMutationTest do
     |> handle_mutation_request()
   end
 
+  defp identity_tag_of(session) do
+    :post
+    |> Plug.Test.conn("/hologram/mutation", "")
+    |> Plug.Test.init_test_session(session)
+    |> Session.identity_tag()
+  end
+
   defp public_write(id, opts \\ []) do
     %{
       "op" => "create",
@@ -149,6 +157,43 @@ defmodule Hologram.ControllerMutationTest do
              }
 
       assert EntityOperations.get(MutationModule2, id) != nil
+    end
+
+    test "names the identity on a batch it applies" do
+      conn = post_batch(envelope([public_write(Entity.generate_id())]))
+
+      assert conn.status == 200
+
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [
+               identity_tag_of(@anonymous_session)
+             ]
+    end
+
+    # A tab that only saves learns here that its stream serves the previous user.
+    test "names the identity on a conflict" do
+      user = create_user("conflict-tag@example.com")
+
+      :ok = SubscriptionRegistry.register_connection(@instance_id, self())
+      :ok = SubscriptionRegistry.update_identity(@instance_id, @hologram_session_id, nil)
+
+      conn = post_batch(envelope([public_write(Entity.generate_id())]), session_of(user.id))
+
+      assert conn.status == 409
+
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [
+               identity_tag_of(session_of(user.id))
+             ]
+    end
+
+    # The token went with the session, and the session the reply leaves is a new one.
+    test "names the identity minted for a browser that lost its session" do
+      conn = post_batch(envelope([public_write(Entity.generate_id())]), %{})
+
+      assert conn.status == 403
+
+      assert [tag] = Plug.Conn.get_resp_header(conn, "hologram-identity-tag")
+      assert tag == Session.identity_tag(conn)
+      refute String.starts_with?(tag, "none.")
     end
 
     test "applies the batch under the session's user" do

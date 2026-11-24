@@ -576,10 +576,14 @@ defmodule Hologram.Controller do
   """
   @spec handle_mutation_request(mutation_conn()) :: Plug.Conn.t()
   def handle_mutation_request(initial_conn) do
+    # Every reply names the identity, since a tab that only saves learns of a change here (a save
+    # never changes it). Named after Session.init/1, which mints a session for a browser that lost
+    # its own.
     conn =
       initial_conn
       |> PlugConnUtils.init_conn()
       |> Session.init()
+      |> put_identity_tag_header()
 
     if validate_csrf_token(conn) do
       handle_validated_mutation_request(conn)

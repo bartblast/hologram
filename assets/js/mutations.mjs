@@ -1,6 +1,7 @@
 "use strict";
 
 import App from "./app.mjs";
+import Client from "./client.mjs";
 import Config from "./config.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Replica from "./replica.mjs";
@@ -69,10 +70,18 @@ export default class Mutations {
       Config.mutationTimeoutMs,
     );
 
+    // Checked once the answer is taken in, whatever came of it.
+    let identity = null;
+
     // Cleared only once the answer is READ, not once the response arrives - a body that never
     // streams is the same silence as a request that never answers.
     try {
       const response = await fetch("/hologram/mutation", opts);
+
+      // A tab that only saves sends no command, and while its stream serves the previous user, the
+      // server answers each of its saves with a conflict: this reply is where the tab learns of the
+      // identity.
+      identity = Client.observeIdentity(response);
 
       if (response.status === 400) {
         throw new HologramRuntimeError(
@@ -91,6 +100,10 @@ export default class Mutations {
       return await response.json();
     } finally {
       clearTimeout(deadline);
+
+      if (identity !== null) {
+        Client.catchUpIdentity(identity);
+      }
     }
   }
 }

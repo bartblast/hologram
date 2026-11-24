@@ -3,8 +3,11 @@
 import {assert, sinon} from "./support/helpers.mjs";
 
 import App from "../../assets/js/app.mjs";
+import Client from "../../assets/js/client.mjs";
 import Config from "../../assets/js/config.mjs";
+import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
+import IdentityTracker from "../../assets/js/identity_tracker.mjs";
 import Mutations from "../../assets/js/mutations.mjs";
 import Replica from "../../assets/js/replica.mjs";
 
@@ -26,8 +29,11 @@ describe("Mutations", () => {
       ],
     };
 
-    const responding = (body, status = 200) =>
+    const responding = (body, status = 200, identityTag = null) =>
       (fetchStub = sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers(
+          identityTag ? {"hologram-identity-tag": identityTag} : {},
+        ),
         json: async () => body,
         ok: status >= 200 && status < 300,
         status,
@@ -199,6 +205,7 @@ describe("Mutations", () => {
         signal = opts.signal;
 
         return Promise.resolve({
+          headers: new Headers(),
           json: async () => ({dropped: {}, status: "confirmed"}),
           ok: true,
           status: 200,
@@ -230,6 +237,104 @@ describe("Mutations", () => {
       }
 
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
+    });
+
+    // A tab that only saves sends no command, and a stream that missed the change answers each of
+    // its saves with a conflict.
+    describe("checking the stream against the identity", () => {
+      let catchingUp, originalDataLayer;
+
+      beforeEach(() => {
+        IdentityTracker.init("1.tag-1");
+
+        originalDataLayer = Hologram.dataLayer;
+        catchingUp = sinon.spy();
+
+        Hologram.dataLayer = {catchUpIdentity: catchingUp};
+      });
+
+      afterEach(() => {
+        Hologram.dataLayer = originalDataLayer;
+
+        IdentityTracker.documentPeriod = null;
+        IdentityTracker.period = null;
+        IdentityTracker.periods = new Set();
+        IdentityTracker.tag = null;
+      });
+
+      it("checks after taking in the reply's tag", async () => {
+        let tagSeen;
+
+        Hologram.dataLayer = {
+          catchUpIdentity: () => (tagSeen = IdentityTracker.tag),
+        };
+
+        responding({dropped: {}, status: "confirmed"}, 200, "2.tag-2");
+
+        await Mutations.send(batch);
+
+        assert.equal(tagSeen, "2.tag-2");
+      });
+
+      it("checks on a conflict", async () => {
+        responding({}, 409, "2.tag-2");
+
+        assert.deepStrictEqual(await Mutations.send(batch), {
+          httpStatus: 409,
+          status: "failed",
+        });
+
+        sinon.assert.calledOnce(catchingUp);
+      });
+
+      it("checks on an envelope the endpoint could not parse", async () => {
+        responding("seq must be a non-negative integer", 400, "2.tag-2");
+
+        let thrownError = null;
+
+        try {
+          await Mutations.send(batch);
+        } catch (error) {
+          thrownError = error;
+        }
+
+        assert.instanceOf(thrownError, HologramRuntimeError);
+        sinon.assert.calledOnce(catchingUp);
+      });
+
+      // The server's answer can move the identity the client knows.
+      it("checks a reply no newer than what the client knows once the server has answered", async () => {
+        IdentityTracker.observe("3.tag-3");
+
+        let answer;
+
+        sinon
+          .stub(Client, "settleIdentity")
+          .returns(new Promise((resolve) => (answer = resolve)));
+
+        responding({}, 409, "2.tag-2");
+
+        await Mutations.send(batch);
+
+        sinon.assert.notCalled(catchingUp);
+
+        answer();
+        await Promise.resolve();
+
+        sinon.assert.calledOnce(catchingUp);
+      });
+
+      it("checks nothing when no reply came", async () => {
+        sinon.stub(globalThis, "fetch").rejects(new Error("offline"));
+
+        try {
+          await Mutations.send(batch);
+        } catch {
+          // The failure reaches the caller.
+        }
+
+        sinon.assert.notCalled(catchingUp);
+      });
     });
 
     it("lets a network failure through to the caller", async () => {
@@ -286,6 +391,7 @@ describe("Mutations", () => {
         signal = opts.signal;
 
         return Promise.resolve({
+          headers: new Headers(),
           json: () => new Promise(() => {}),
           ok: true,
           status: 200,

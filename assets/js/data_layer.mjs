@@ -190,11 +190,11 @@ export default class DataLayer {
     return Batches.carryAcrossSuspension(promise);
   }
 
-  // Opens a new stream when a command's reply names an identity this tab doesn't follow, and its
-  // handshake follows it (see takeHandshake). The server tells every stream of the session of a
-  // change, but a stream whose request left with the previous cookie, and which started listening
-  // just after the change was told, never hears of it and goes on serving the previous user. When
-  // the stream told this tab first, the tags match and nothing is done.
+  // Opens a new stream when a command's or a save's reply names an identity this tab doesn't
+  // follow, and its handshake follows it (see takeHandshake). The server tells every stream of the
+  // session of a change, but a stream whose request left with the previous cookie, and which
+  // started listening just after the change was told, never hears of it and goes on serving the
+  // previous user. When the stream told this tab first, the tags match and nothing is done.
   //
   // Once per tag, until a handshake names a tag or the tab follows one: replies that land while the
   // handshake is on its way would each open another stream and throw away the one about to open,

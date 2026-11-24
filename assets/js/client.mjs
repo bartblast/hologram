@@ -105,6 +105,23 @@ export default class Client {
     ]);
   }
 
+  // Checks the tab's stream against the identity a command's or a save's reply left the client
+  // with, for a stream that missed the change (see DataLayer.catchUpIdentity). Every reply is
+  // checked, not just one that moved the tracker: one turned away because the stream serves the
+  // previous user names the tag the tracker already holds. Not for a page: a page for another user
+  // follows it at mount and then opens a stream that presents the new page's receipts, and a
+  // prefetched one isn't on screen.
+  //
+  // Takes what observeIdentity answered.
+  static catchUpIdentity({settling}) {
+    if (settling) {
+      // The server's answer can move the identity the client knows.
+      settling.then(() => Hologram.dataLayer?.catchUpIdentity());
+    } else {
+      Hologram.dataLayer?.catchUpIdentity();
+    }
+  }
+
   static connect(sendImmediatePing) {
     Connection.connect();
     HttpTransport.restartPing(sendImmediatePing);
@@ -170,7 +187,7 @@ export default class Client {
 
       // Read whatever the answer is: a page's middleware can log the user in or out and answer
       // with something other than a page.
-      const {period: identityPeriod} = $.#observeIdentity(response);
+      const {period: identityPeriod} = $.observeIdentity(response);
 
       // Awaited so that whatever the callback goes on to do is part of this promise. A redirect
       // answers by fetching the next page, and without the await a failure there - the hop limit
@@ -216,6 +233,19 @@ export default class Client {
     return Connection.isConnected();
   }
 
+  // Takes in the identity a response names, and asks the server when that can't be told to be the
+  // latest word on it. Answers with the period and, when the server was asked, the promise of its
+  // answer.
+  static observeIdentity(response) {
+    const period = IdentityTracker.observeResponse(response);
+
+    // Not awaited: what the reply carries doesn't wait for the server's answer.
+    const settling =
+      period === IdentityTracker.SUPERSEDED ? $.settleIdentity() : null;
+
+    return {period, settling};
+  }
+
   // The epoch stamps the next action the reply carries: it is the page the command was sent from,
   // so that a reply landing after a navigation is dropped as stale instead of running against the
   // destination. A command the user triggered passes the displayed page's epoch, a command an
@@ -241,7 +271,7 @@ export default class Client {
 
       // Read before the status: a command turned away can still have come with another identity
       // than the one the client knew, and this reply is where the client learns of it.
-      identity = $.#observeIdentity(response);
+      identity = $.observeIdentity(response);
 
       if (!response.ok) {
         $.#failCommand(response.status);
@@ -299,7 +329,7 @@ export default class Client {
       $.#failCommand(error);
     } finally {
       if (identity !== null) {
-        $.#catchUpIdentity(identity);
+        $.catchUpIdentity(identity);
       }
     }
   }
@@ -324,40 +354,12 @@ export default class Client {
     }
   }
 
-  // Checks the tab's stream against the identity a command's reply left the client with, for a
-  // stream that missed the change (see DataLayer.catchUpIdentity). Every reply is checked, not just
-  // one that moved the tracker: one turned away because the stream serves the previous user names
-  // the tag the tracker already holds. Not for a page: a page for another user follows it at mount
-  // and then opens a stream that presents the new page's receipts, and a prefetched one isn't on
-  // screen.
-  static #catchUpIdentity({settling}) {
-    if (settling) {
-      // The server's answer can move the identity the client knows.
-      settling.then(() => Hologram.dataLayer?.catchUpIdentity());
-    } else {
-      Hologram.dataLayer?.catchUpIdentity();
-    }
-  }
-
   static #failCommand(message) {
     throw new HologramRuntimeError(`command failed: ${message}`);
   }
 
   static #handleFetchPageError(message) {
     throw new HologramRuntimeError(`page fetch failed: ${message}`);
-  }
-
-  // Takes in the identity a response names, and asks the server when that can't be told to be the
-  // latest word on it. Answers with the period and, when the server was asked, the promise of its
-  // answer.
-  static #observeIdentity(response) {
-    const period = IdentityTracker.observeResponse(response);
-
-    // Not awaited: what the reply carries doesn't wait for the server's answer.
-    const settling =
-      period === IdentityTracker.SUPERSEDED ? $.settleIdentity() : null;
-
-    return {period, settling};
   }
 }
 
