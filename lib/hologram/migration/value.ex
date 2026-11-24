@@ -714,10 +714,12 @@ defmodule Hologram.Migration.Value do
         {:cond, _meta, [[do: _clauses]]} = node, found ->
           {without_pattern(node, env), found}
 
-        {kind, _meta, [pattern, _right]} = node, found when kind in [:->, :<-, :=, :match?] ->
+        {kind, _meta, [pattern, _right]} = node, found
+        when kind in [:->, :<-, :=, :destructure, :match?] ->
           {node, Enum.concat(pattern_variables(pattern), found)}
 
-        {{:., _dot_meta, [receiver, :match?]}, _meta, [pattern, _right]} = node, found ->
+        {{:., _dot_meta, [receiver, form]}, _meta, [pattern, _right]} = node, found
+        when form in [:destructure, :match?] ->
           if Macro.expand(receiver, env) == Kernel do
             {node, Enum.concat(pattern_variables(pattern), found)}
           else
@@ -737,6 +739,16 @@ defmodule Hologram.Migration.Value do
       end)
 
     names
+  end
+
+  # What a pin runs: pipes expanded, and a quote reduced to what it reads, since its code is data.
+  defp pin_code(expr, env) do
+    Macro.prewalk(expr, fn node ->
+      case unpiped_call(node, env) do
+        {:quote, meta, args} when is_list(args) -> {:__block__, meta, quote_reads(args)}
+        unpiped -> unpiped
+      end
+    end)
   end
 
   # A pin in a pattern matches against a variable, which Elixir allows anywhere in a body.
@@ -808,6 +820,29 @@ defmodule Hologram.Migration.Value do
           }
           | acc
         ]
+    end
+  end
+
+  # Quoted code is data, so a quote reads its options, and what its body unquotes unless they turn
+  # that off.
+  defp quote_reads(args) do
+    {body, options} =
+      args
+      |> Enum.flat_map(&if(Keyword.keyword?(&1), do: &1, else: [options: &1]))
+      |> Keyword.pop(:do)
+
+    # With separate options, Elixir ignores any beside the do. Options only the compiler can read,
+    # like an attribute, leave the body to the compiler.
+    settings =
+      case args do
+        [first, _block] -> if Keyword.keyword?(first), do: first, else: [unquote: first]
+        _single -> options
+      end
+
+    if Keyword.get(settings, :unquote, not Keyword.has_key?(settings, :bind_quoted)) == true do
+      [options | unquoted(body)]
+    else
+      [options]
     end
   end
 
@@ -1199,8 +1234,19 @@ defmodule Hologram.Migration.Value do
   defp unquoted(ast) do
     {_ast, values} =
       Macro.prewalk(ast, [], fn
+        # A nested quote keeps its body's unquotes for itself, but not its separate options'.
+        {:quote, _meta, [options, _body]}, found ->
+          {{:__block__, [], [options]}, found}
+
+        {:quote, _meta, args}, found when is_list(args) ->
+          {nil, found}
+
         {form, _meta, [value]}, found when form in [:unquote, :unquote_splicing] ->
           {nil, [value | found]}
+
+        # Elixir has no remote unquote_splicing, and the receiver is still unquoted.
+        {{:., _dot_meta, [receiver, :unquote]}, _meta, [value]}, found ->
+          {{:__block__, [], [receiver]}, [value | found]}
 
         node, found ->
           {node, found}
@@ -1397,12 +1443,11 @@ defmodule Hologram.Migration.Value do
   end
 
   defp validate_pin!(expr, inner, scope) do
-    readable = scope.args -- pin_bindings(expr, scope.env)
+    code = pin_code(expr, scope.env)
+    readable = scope.args -- pin_bindings(code, scope.env)
 
     {_ast, pinned} =
-      expr
-      |> Macro.prewalk(&unpiped_call(&1, scope.env))
-      |> Macro.prewalk([], fn
+      Macro.prewalk(code, [], fn
         {:@, _meta, _args}, found ->
           {nil, found}
 
@@ -1414,10 +1459,6 @@ defmodule Hologram.Migration.Value do
         # A segment's type is a word, so only its value and size are read.
         {:"::", meta, [value, spec]}, found ->
           {{:__block__, meta, [value | segment_sizes(spec)]}, found}
-
-        # Quoted code is data, so only what it unquotes is read.
-        {:quote, meta, args}, found when is_list(args) ->
-          {{:__block__, meta, unquoted(args)}, found}
 
         {name, _meta, context} = node, found when is_atom(name) and is_atom(context) ->
           {node, if(name in readable, do: [name | found], else: found)}
@@ -1451,7 +1492,10 @@ defmodule Hologram.Migration.Value do
     end)
   end
 
-  defp without_pattern({:cond, meta, [[do: clauses]]}, _env) do
+  defp without_pattern(
+         {:cond, meta, [[do: [{:->, _arrow_meta, _args} | _rest] = clauses]]},
+         _env
+       ) do
     {:cond, meta, [Enum.flat_map(clauses, fn {:->, _meta, [heads, body]} -> [body | heads] end)]}
   end
 

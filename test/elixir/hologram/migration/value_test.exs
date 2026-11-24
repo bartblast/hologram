@@ -977,10 +977,97 @@ defmodule Hologram.Migration.ValueTest do
       end
     end
 
-    test "names the argument a pin reads beside a binding of another argument's name" do
-      assert refusal(
-               ~s|fn title, other -> coalesce(title, other, ^Enum.map_join([other], fn title -> title end)) end|
-             ) =~ "a backfill fn reads its argument other by name, not pinned"
+    test "names an argument a pin reads beside a binding of another argument's name" do
+      for pin <- [
+            ~S|Enum.map_join([title], fn other -> other end)|,
+            ~S|(case "a" do ^title -> "b" end)|,
+            ~S|<<1::integer-size(title)-little>>|,
+            ~S|<<1::title*8>>|,
+            ~S|inspect(quote(do: unquote(title)))|
+          ] do
+        assert refusal(
+                 "fn title, other -> coalesce(title, other, ^(#{pin}; fn other -> other end)) end"
+               ) =~ "a backfill fn reads its argument title by name, not pinned"
+      end
+    end
+
+    test "accepts a piped match? binding an argument's name inside a pin" do
+      for match <- [
+            ~S[{title, _} |> match?({"a", 1})],
+            ~S[{title, _} |> Kernel.match?({"a", 1})]
+          ] do
+        assert %Value{term: {:coalesce, [_title, {:value, "true"}]}} =
+                 backfill("fn title -> coalesce(title, ^to_string(#{match})) end")
+      end
+    end
+
+    test "accepts quoted code that doesn't unquote an argument" do
+      for quoted <- [
+            "quote(unquote: false, do: unquote(title))",
+            "quote(do: quote(do: unquote(title)))",
+            "quote(do: Foo.unquote_splicing(title))",
+            "quote(do: title |> unquote())",
+            "quote(do: title |> Foo.unquote())"
+          ] do
+        assert %Value{term: {:coalesce, [_title, {:value, value}]}} =
+                 backfill("fn title -> coalesce(title, ^inspect(#{quoted})) end")
+
+        assert value =~ "unquote"
+      end
+    end
+
+    test "accepts a quote whose options only the compiler can read" do
+      for {attributes, quoted} <- [
+            {"@options [unquote: false]", "quote(@options, do: unquote(title))"},
+            {"@off false", "quote(unquote: @off, do: unquote(title))"}
+          ] do
+        body = "fn title -> coalesce(title, ^inspect(#{quoted})) end"
+
+        module = compile_migration("20260813091522", op_with(body, attributes))
+
+        assert [%{opts: [backfill: %Value{term: {:coalesce, [_title, {:value, value}]}}]}] =
+                 module.__hologram_migration__().ops
+
+        assert value =~ "unquote"
+      end
+    end
+
+    test "leaves a pin binding an argument's name with destructure to the call check" do
+      for call <- ["destructure", "Kernel.destructure"] do
+        body = ~s|fn title -> coalesce(title, ^(#{call}([title], ["a"]); title)) end|
+
+        # The call check lists every refused call with its line, so the error carries none.
+        error = assert_raise Hologram.CompileError, fn -> backfill(body) end
+
+        assert error.message =~
+                 "app/migrations/20260813091522.ex:5 - calls Kernel.Utils.destructure/2"
+
+        refute error.message =~ "reads its argument title by name"
+      end
+    end
+
+    test "names an argument a quote reads through its options or a remote unquote" do
+      for quoted <- [
+            "quote(bind_quoted: [x: title], do: x)",
+            "quote(line: title, do: 1)",
+            "quote(do: Foo.unquote(title)())",
+            "quote(do: unquote(title).unquote(:foo)())",
+            "quote(do: 1 |> unquote(title))",
+            "quote(do: title = unquote(title))",
+            "quote(do: quote([line: unquote(title)], do: 1))",
+            "quote([], [unquote: false, do: unquote(title)])"
+          ] do
+        assert refusal("fn title -> coalesce(title, ^inspect(#{quoted})) end") =~
+                 "a backfill fn reads its argument title by name, not pinned"
+      end
+    end
+
+    test "leaves a malformed cond in a pin to the compiler" do
+      for cond_body <- ["cond do end", "cond do 1 end", "cond do [1] end"] do
+        assert_raise CompileError, fn ->
+          backfill("fn title -> coalesce(title, ^(#{cond_body})) end")
+        end
+      end
     end
 
     test "accepts a pinned attribute named like an argument" do
