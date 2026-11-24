@@ -8,6 +8,7 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Oplog
   alias Hologram.Realtime
   alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
@@ -285,6 +286,10 @@ defmodule HologramFeatureTests.Helpers do
   transaction that has not finished. Without it a test that reloads immediately can find an empty
   database and conclude, wrongly, that nothing was kept.
 
+  Only frames that have arrived are covered. The place a first fill is dated at comes with the
+  marker ending the fill, after its rows, so a test that reloads to read a first fill back waits
+  for `await_local_fill/1` first: rows stored with no place are dropped by the next page load.
+
   Answers `nil` rather than zero for a page whose runtime has not attached its window yet, which is
   what keeps the wait waiting instead of passing before the browser could have written anything.
   Raises if writes are still in flight after `@max_wait_time`.
@@ -429,6 +434,45 @@ defmodule HologramFeatureTests.Helpers do
       clicked
     else
       await_local_read(clicked, button_text, element_id, expected, attempts_left - 1)
+    end
+  end
+
+  @doc """
+  Blocks until no transaction older than the operations log's newest change is still running on
+  the database server.
+
+  For a test whose browser or client comes back with the place it was given: called after the
+  test's writes and before the first visit or connect, it makes that place one past everything the
+  test wrote.
+
+  A session's first place is the oldest transaction still running when it starts, and PostgreSQL
+  counts transactions per server, so one open anywhere on it holds the place back - in another
+  database, like another test run's, as much as in this one. A place below the test's changes
+  breaks such a test two ways. Below the log's oldest change it reads as one from before the log,
+  and the client is sent everything again instead of being caught up (#1763). And the changes
+  after it are replayed from the rows as they stand, so a row the test took away since is told as
+  gone.
+
+  Raises `ArgumentError` on an empty log, where every returning client is sent everything again
+  whatever its place. Raises `Wallaby.ExpectationNotMetError` if such a transaction is still
+  running after `@max_wait_time`.
+  """
+  @spec await_log_settled() :: :ok
+  def await_log_settled do
+    statement = """
+    SELECT "tx"
+    FROM "#{Mapper.system_schema()}"."oplog"
+    ORDER BY "tx" DESC
+    LIMIT 1
+    """
+
+    case Connection.query(statement, []) do
+      {:ok, %{rows: [[newest_tx]]}} ->
+        do_await_log_settled(newest_tx, current_time())
+
+      {:ok, %{rows: []}} ->
+        raise ArgumentError,
+              "the operations log is empty, call await_log_settled/0 after the test's writes"
     end
   end
 
@@ -1695,6 +1739,24 @@ defmodule HologramFeatureTests.Helpers do
 
   defp current_time do
     :erlang.monotonic_time(:milli_seconds)
+  end
+
+  # The newest change is read once, by the caller: read again on every round, the wait would chase
+  # whatever is written meanwhile.
+  defp do_await_log_settled(newest_tx, start_time) do
+    cond do
+      Oplog.current_xmin() > newest_tx ->
+        :ok
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for the transactions older than the operations log's newest " <>
+                "change, one is still running on the database server"
+
+      true ->
+        :timer.sleep(50)
+        do_await_log_settled(newest_tx, start_time)
+    end
   end
 
   defp do_execute_query_once(%{driver: driver} = parent, query) do

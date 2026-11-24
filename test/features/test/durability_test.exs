@@ -13,9 +13,15 @@ defmodule HologramFeatureTests.DurabilityTest do
   #
   # The lever is emptying the SERVER between the two: a TRUNCATE writes nothing to the operations
   # log, so a returning client is never told the rows are gone and the stream has nothing to send
-  # it. Anything on screen after that came out of the browser's own store, and there is no timing
-  # to get right. (Holding the stream open instead does not work: `visit/3` blocks until the client
-  # reports a connection, so a page whose stream never attaches never finishes visiting.)
+  # it. Anything on screen after that came out of the browser's own store. (Holding the stream open
+  # instead does not work: `visit/3` blocks until the client reports a connection, so a page whose
+  # stream never attaches never finishes visiting.)
+  #
+  # The lever holds only for a browser that left with a place, and one past the rows' own changes
+  # in the log, so the first visit waits for both. The place comes with the marker ending the fill,
+  # after the rows are on screen, and rows stored with no place are dropped by the next page load.
+  # And a place below the rows' changes has them replayed from the emptied tables, or reads as one
+  # from before the log (see `await_log_settled/0`).
   #
   # Every one of these leans on a Wallaby session being a fresh Chrome profile, and so an empty
   # store to begin with - nothing truncates a browser's database.
@@ -37,10 +43,13 @@ defmodule HologramFeatureTests.DurabilityTest do
     |> Product.new()
     |> DB.create!()
 
+    await_log_settled()
+
     session
     |> visit(DurabilityPage)
     |> click(button("Show products"))
     |> assert_text(css("#live_products"), ~r/^abacus,armchair$/)
+    |> await_local_fill()
     |> await_durable_writes()
 
     truncate_every_entity_table()

@@ -82,6 +82,8 @@ defmodule HologramFeatureTests.CatchupTest do
     |> Document.new()
     |> DB.create!()
 
+    await_log_settled()
+
     session
     |> visit(SyncPage)
     |> await_local_fill()
@@ -110,6 +112,8 @@ defmodule HologramFeatureTests.CatchupTest do
     %{folder_id: folder.id, public: false, title: "points_at_the_folder"}
     |> Document.new()
     |> DB.create!()
+
+    await_log_settled()
 
     session
     |> visit(SyncPage)

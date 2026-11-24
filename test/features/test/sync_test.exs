@@ -354,10 +354,17 @@ defmodule HologramFeatureTests.SyncTest do
   # with cannot come from its fill - mid-fill it holds some types and not others, and a place
   # handed over then is a claim it could not honour. Hence the write before it leaves: it is there
   # to produce a frame after the store is complete, which is the first frame carrying a place.
+  #
+  # The log is settled before the client connects, here and in the three features below this one:
+  # that frame's place is no higher than the oldest transaction still running when it was read, so
+  # without the wait it can be below the row the client was filled with (see
+  # `await_log_settled/0`).
   feature "tells a returning client only what moved while it was away", %{session: _session} do
     %{public: true, title: "held_across_the_gap"}
     |> Document.new()
     |> DB.create!()
+
+    await_log_settled()
 
     filled_client = drain_initial_sync(connect())
 
@@ -405,6 +412,8 @@ defmodule HologramFeatureTests.SyncTest do
       %{folder_id: folder.id, public: false, title: "held_through_its_folder"}
       |> Document.new()
       |> DB.create!()
+
+    await_log_settled()
 
     # Awaited BEFORE draining, since drain_initial_sync/1 passes over the deltas frames and drops
     # them - the fill's own content can be read here and nowhere after. Its arrival is what proves
@@ -465,6 +474,8 @@ defmodule HologramFeatureTests.SyncTest do
     |> Document.new()
     |> DB.create!()
 
+    await_log_settled()
+
     # The anchor is the positive artifact beside the negative one: this is the frame the document
     # WOULD have travelled in, so its absence there is the client never having held it - which is
     # what makes the put_entity below a row being revealed rather than one being sent again.
@@ -514,6 +525,8 @@ defmodule HologramFeatureTests.SyncTest do
       %{body: "labelled_while_away", position: 0}
       |> Message.new()
       |> DB.create!()
+
+    await_log_settled()
 
     filled_client = drain_initial_sync(connect())
 
