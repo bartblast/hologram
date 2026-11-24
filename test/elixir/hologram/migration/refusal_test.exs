@@ -18,17 +18,19 @@ defmodule Hologram.Migration.RefusalTest do
   #   * tightening a column while a row holds NULL - covered in full by the atomicity
   #     suite, whose "applies none of a file's ops when pre-flight refuses one of them" test
   #     uses that refusal as its lever and asserts the same three things.
-  #   * a required attribute ADDED without a value for the existing rows - refused EARLIER
-  #     than the database, by `Model.fold/2` itself: `validate_filled_adds!/1` rejects an
-  #     add_attribute that is required and carries neither backfill: nor default:, exempting
-  #     only entities the same file created before it. Its message ("declare backfill: for
-  #     a one-time value...") is the one a dev actually sees - covered by the model suite. A
-  #     migration reaches the database-level check only around that validation: an
-  #     optional add the same chunk tightens, whose default arrives after a rename - tested
-  #     below - or a required relationship, which declares no default at all. Schema
-  #     reconciliation folds a model from MODULES rather than ops, so a required attribute
-  #     declared on a populated dev database reaches it there too, where the reconciler
-  #     suite covers it.
+  #   * a required attribute or to-one relationship ADDED without a value for the existing
+  #     rows - refused EARLIER than the database, by `Model.fold/2` itself:
+  #     `validate_filled_adds!/1` rejects an add that is required and carries neither
+  #     backfill: nor, for an attribute, default:, exempting only entities the same file
+  #     created before it. Its messages, which ask for backfill: or optional: true, are the
+  #     ones a dev actually sees - covered by the model suite, and below for a relationship
+  #     the same file renames, where only the compile error is asserted, since nothing
+  #     reaches the database. A migration reaches the database-level check only around that
+  #     validation: an optional add the same chunk tightens, whose default arrives after a
+  #     rename - tested below. An add whose computed backfill leaves rows nil is refused
+  #     after its fill instead, which the backfill suite covers. Schema reconciliation folds
+  #     a model from MODULES rather than ops, so a required attribute declared on a
+  #     populated dev database reaches it there too, where the reconciler suite covers it.
   #   * a foreign key over orphaned rows - void by construction, since a relationship
   #     column is born together with its foreign key and no op adopts an existing column.
   #
