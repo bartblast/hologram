@@ -1967,6 +1967,279 @@ describe("LocalDatabase", () => {
       assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 12);
       assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
     });
+
+    it("keeps a carried row's numbers above the point beside it as shown", () => {
+      LocalDatabase.raiseFinal(10);
+
+      const filed = LocalDatabase.carryNumbers(TASK, row("t1", 12, 14));
+
+      assert.isNull(filed.server_created_seq);
+      assert.isNull(filed.server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_created_seq: 12, server_updated_seq: 14},
+      });
+    });
+
+    it("carries a row's numbers the point reaches as they came", () => {
+      LocalDatabase.raiseFinal(12);
+
+      const filed = LocalDatabase.carryNumbers(TASK, row("t1", 11, 12));
+
+      assert.equal(filed.server_created_seq, 11);
+      assert.equal(filed.server_updated_seq, 12);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("carries the number a held row has in place of one above the point", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 5, 8));
+
+      const filed = LocalDatabase.carryNumbers(TASK, row("t1", 5, 14));
+
+      assert.equal(filed.server_updated_seq, 8);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 14},
+      });
+    });
+
+    it("keeps the newest number a page showed", () => {
+      LocalDatabase.raiseFinal(10);
+
+      LocalDatabase.carryNumbers(TASK, row("t1", 12, 14));
+      LocalDatabase.carryNumbers(TASK, row("t1", 12, 13));
+
+      assert.equal(
+        LocalDatabase.waitingNumbers(TASK, "t1").shown.server_updated_seq,
+        14,
+      );
+    });
+
+    it("files a shown number the point reaches while a newer one waits", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 5, 8));
+      LocalDatabase.carryNumbers(TASK, row("t1", 5, 14));
+      hold(row("t1", 5, 16));
+
+      LocalDatabase.raiseFinal(14);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 14);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_updated_seq: 16},
+        own: false,
+      });
+    });
+
+    it("files the higher of a shown and a waiting number the point reaches", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 12, 18));
+      LocalDatabase.carryNumbers(TASK, row("t1", 12, 15));
+
+      LocalDatabase.raiseFinal(20);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 12);
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 18);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("files the shown number when it is the higher one the point reaches", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 12, 15));
+      LocalDatabase.carryNumbers(TASK, row("t1", 12, 18));
+
+      LocalDatabase.raiseFinal(20);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 18);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("hands a row's shown numbers to its record and takes them back", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 5, 8));
+      LocalDatabase.carryNumbers(TASK, row("t1", 5, 14));
+
+      const [record] = LocalDatabase.records([`${TASK} t1`]);
+
+      assert.deepStrictEqual(record.waiting, {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 14},
+      });
+
+      LocalDatabase.reset();
+      LocalDatabase.restore([record], 10);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 14},
+      });
+    });
+
+    it("keeps a row's shown numbers when the store's copy is taken up", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 5, 8));
+      LocalDatabase.carryNumbers(TASK, row("t1", 5, 14));
+
+      LocalDatabase.takeStoredFinal(10);
+      LocalDatabase.putStored(TASK, row("t1", 5, 8), null);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 14},
+      });
+    });
+
+    it("moves a carried row's numbers above a lower stored point beside it", () => {
+      LocalDatabase.raiseFinal(20);
+
+      LocalDatabase.putRow(
+        TASK,
+        LocalDatabase.carryNumbers(TASK, row("t1", 12, 15)),
+      );
+
+      LocalDatabase.markCarried(TASK, "t1");
+
+      LocalDatabase.takeStoredFinal(12);
+
+      const held = LocalDatabase.baseRow(TASK, "t1");
+
+      assert.equal(held.server_created_seq, 12);
+      assert.isNull(held.server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 15},
+      });
+    });
+
+    it("leaves the numbers of a row a page didn't carry to the store", () => {
+      LocalDatabase.raiseFinal(20);
+
+      hold(row("t1", 12, 15));
+
+      LocalDatabase.takeStoredFinal(12);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 15);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+  });
+
+  describe("orderingKey()", () => {
+    const TASK = "MyApp.Task";
+    const SAVED_AT = "2026-11-24T10:00:00.000000Z";
+
+    const row = (id, created, updated, extra = {}) =>
+      Object.assign(
+        {
+          id,
+          server_created_at: SAVED_AT,
+          server_created_seq: created,
+          server_updated_seq: updated,
+          title: "Draft copy",
+        },
+        extra,
+      );
+
+    const hold = (item) =>
+      LocalDatabase.putRow(TASK, LocalDatabase.holdNumbers(TASK, item));
+
+    const key = (id, field = "server_updated_seq") =>
+      LocalDatabase.orderingKey(TASK, LocalDatabase.baseRow(TASK, id), field);
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {
+              id: "uuid",
+              server_created_at: "utc_datetime_usec",
+              server_created_seq: "integer",
+              server_updated_seq: "integer",
+              title: "string",
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+      LocalDatabase.raiseFinal(10);
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+      Model.reset();
+    });
+
+    it("places a row by its number final here", () => {
+      hold(row("t1", 5, 8));
+
+      assert.deepStrictEqual(key("t1"), [0, 8]);
+    });
+
+    it("places a row by the number a page showed above its own", () => {
+      hold(row("t1", 5, 8));
+      LocalDatabase.carryNumbers(TASK, row("t1", 5, 14));
+
+      assert.deepStrictEqual(key("t1"), [0, 14]);
+    });
+
+    it("places a row by a big number a page showed as a big integer", () => {
+      hold(row("t1", 5, 8));
+      LocalDatabase.carryNumbers(TASK, row("t1", 5, "9007199254740995"));
+
+      assert.deepStrictEqual(key("t1"), [0, 9007199254740995n]);
+    });
+
+    it("places a stranger's row whose number waits after the numbered ones", () => {
+      hold(row("t1", 12, 12));
+
+      assert.deepStrictEqual(key("t1"), [1, null]);
+    });
+
+    it("places this client's own row by the number it waits for", () => {
+      hold(row("t1", 12, 14, {$own: true}));
+
+      assert.deepStrictEqual(key("t1"), [2, 14]);
+      assert.deepStrictEqual(key("t1", "server_created_seq"), [2, 12]);
+    });
+
+    it("places an own row waiting for no updated number by its created one", () => {
+      hold(row("t1", 12, null, {$own: true}));
+
+      assert.deepStrictEqual(key("t1"), [2, 12]);
+    });
+
+    it("places a big waiting number as a big integer", () => {
+      hold(row("t1", "9007199254740993", "9007199254740995", {$own: true}));
+
+      assert.deepStrictEqual(key("t1"), [2, 9007199254740995n]);
+    });
+
+    it("places a row the server hasn't saved last", () => {
+      LocalDatabase.putRow(
+        TASK,
+        row("t1", null, null, {server_created_at: null}),
+      );
+
+      assert.deepStrictEqual(key("t1"), [3, null]);
+    });
   });
 
   describe("reset()", () => {

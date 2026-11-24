@@ -1456,16 +1456,62 @@ describe("Deltas", () => {
       });
     });
 
-    it("files a carried row's numbers as they came", () => {
+    it("keeps a carried row's numbers above the point beside it as shown", () => {
       LocalDatabase.raiseFinal(10);
 
       Deltas.apply(
-        {put_entity: {[TASK]: [numbered(12, 12)]}},
+        {put_entity: {[TASK]: [numbered(12, 14)]}},
         {insertOnly: true},
       );
 
-      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 12);
+      const row = LocalDatabase.baseRow(TASK, "t1");
+
+      assert.isNull(row.server_created_seq);
+      assert.isNull(row.server_updated_seq);
+      assert.deepEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_created_seq: 12, server_updated_seq: 14},
+      });
+    });
+
+    it("files a carried row's numbers at or below the point as they came", () => {
+      LocalDatabase.raiseFinal(12);
+
+      Deltas.apply(
+        {put_entity: {[TASK]: [numbered(11, 12)]}},
+        {insertOnly: true},
+      );
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 11);
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 12);
       assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("keeps a carried number for a row it holds, writing nothing", () => {
+      LocalDatabase.raiseFinal(10);
+
+      Deltas.apply({put_entity: {[TASK]: [numbered(5, 8)]}});
+
+      const written = Deltas.apply(
+        {put_entity: {[TASK]: [numbered(5, 14, {title: "Final copy"})]}},
+        {insertOnly: true},
+      );
+
+      assert.deepEqual(written, new Set());
+
+      const row = LocalDatabase.baseRow(TASK, "t1");
+
+      assert.equal(row.title, "Draft copy");
+      assert.equal(row.server_updated_seq, 8);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 14},
+      });
     });
 
     it("holds nothing for a patch naming a row it doesn't hold", () => {

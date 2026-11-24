@@ -32,9 +32,10 @@ export default class Deltas {
     Deltas.#hashes = {byType: new Map(), salt: null};
   }
 
-  // `insertOnly` is how rows a page carried are applied, which changes two things and nothing
-  // else: a row already held is left alone, and one that is filed is remembered as unconfirmed
-  // until the stream delivers it.
+  // `insertOnly` is how rows a page carried are applied, which changes three things and nothing
+  // else: a row already held is left alone, one that is filed is remembered as unconfirmed until
+  // the stream delivers it, and its numbers past the final point are kept beside the row as shown
+  // rather than in it (see LocalDatabase.carryNumbers), held row or not.
   //
   // Left alone because what a page carries can be OLDER than what the client holds - a page
   // rendered at one moment lands after the stream delivered a later change to the same row - and
@@ -275,18 +276,23 @@ export default class Deltas {
     return changes.id;
   }
 
-  // A row from the stream holds only the numbers that are final, the rest waiting beside it (see
-  // LocalDatabase.holdNumbers), while one a page carried is filed as it came: the render already
-  // left out every number it could not call final, and the first render here has to match it.
+  // A row holds only the numbers that are final here, the rest waiting beside it (see
+  // LocalDatabase.holdNumbers) - or, for one a page carried, kept beside it as shown (see
+  // LocalDatabase.carryNumbers), since the render left out every number the server could not call
+  // final.
   static #putRow(type, row, opts) {
     Deltas.#observeRevisions(row);
 
     if (opts.insertOnly) {
+      // A number the page showed is kept even for a row held already, since a list orders the row
+      // by it until the stream's own is final.
+      const carried = LocalDatabase.carryNumbers(type, row);
+
       if (LocalDatabase.baseRow(type, row.id) !== null) {
         return null;
       }
 
-      Deltas.#fileRow(type, row);
+      Deltas.#fileRow(type, carried);
       LocalDatabase.markCarried(type, row.id);
 
       return row.id;

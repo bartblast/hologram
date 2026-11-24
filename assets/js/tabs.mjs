@@ -922,6 +922,9 @@ export default class Tabs {
         Tabs.#takeRules(message);
       } else {
         if (base.records !== null) {
+          // The numbers the page showed outlive the rows they sit beside, which go now.
+          const shown = LocalDatabase.shownNumbers();
+
           for (const rowKey of LocalDatabase.vouchedRowKeys()) {
             const separator = rowKey.indexOf(" ");
 
@@ -951,7 +954,12 @@ export default class Tabs {
               Clock.observe(revision);
             }
 
-            LocalDatabase.putStored(type, row, waiting);
+            LocalDatabase.putStored(
+              type,
+              row,
+              waiting,
+              shown.get(`${type} ${id}`),
+            );
             LocalDatabase.unmarkCarried(type, id);
 
             for (const [relationship, targetIds] of Object.entries(facts)) {

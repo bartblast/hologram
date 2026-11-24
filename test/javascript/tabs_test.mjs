@@ -1904,6 +1904,40 @@ describe("Tabs", () => {
         );
       });
 
+      // The rows the stream vouched for go before the store's come in, and the numbers the page
+      // showed for them are final on the server whatever the store holds.
+      it("keeps the numbers the page showed for the rows it takes up", async () => {
+        LocalDatabase.raiseFinal(10);
+
+        LocalDatabase.putRow("MyApp.Task", {id: "t-stored", title: "vouched"});
+
+        LocalDatabase.carryNumbers("MyApp.Task", {
+          id: "t-stored",
+          server_updated_seq: 14,
+        });
+
+        sinon.stub(Durability, "readBase").resolves({
+          cursor: "place-2",
+          finalSeq: 10,
+          records: [record("t-stored", "stored")],
+        });
+
+        await follow();
+
+        Tabs.receive(state("place-3"));
+        await waitForEventLoop();
+
+        assert.equal(
+          LocalDatabase.baseRow("MyApp.Task", "t-stored").title,
+          "stored",
+        );
+
+        assert.deepStrictEqual(
+          LocalDatabase.waitingNumbers("MyApp.Task", "t-stored"),
+          {numbers: {}, own: false, shown: {server_updated_seq: 14}},
+        );
+      });
+
       // Before there was a store to read, it took the state's place and swept every row it held.
       it("takes up the store when it holds no place", async () => {
         const reading = sinon.stub(Durability, "readBase").resolves({

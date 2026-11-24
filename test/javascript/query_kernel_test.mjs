@@ -3916,4 +3916,168 @@ describe("QueryKernel", () => {
       ]);
     });
   });
+
+  // The numbers that wait or that a page showed live beside the browser's rows, so these cases
+  // have no twin in interpreter_test.exs.
+  describe("run() - ordering by the numbers a save is given", () => {
+    const TASK = "MyApp.Task";
+    const SAVED_AT = "2026-11-24T10:00:00.000000Z";
+
+    const row = (title, created, updated, extra = {}) =>
+      Object.assign(
+        {
+          id: title,
+          server_created_at: SAVED_AT,
+          server_created_seq: created,
+          server_updated_seq: updated,
+          title,
+        },
+        extra,
+      );
+
+    const hold = (item) =>
+      LocalDatabase.putRow(TASK, LocalDatabase.holdNumbers(TASK, item));
+
+    const term = (overrides = {}) =>
+      Object.assign(
+        {
+          cardinality: "set",
+          entity: TASK,
+          filter: [],
+          include: {},
+          skip: null,
+          sort: [["id", "asc"]],
+          take: null,
+        },
+        overrides,
+      );
+
+    const titles = (overrides) =>
+      QueryKernel.run(term(overrides)).map((node) => node.row.title);
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {
+              id: "string",
+              server_created_at: "utc_datetime_usec",
+              server_created_seq: "integer",
+              server_updated_seq: "integer",
+              title: "string",
+            },
+            enumValues: {},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      LocalDatabase.raiseFinal(10);
+
+      // final
+      LocalDatabase.putRow(TASK, row("a", 3, 5));
+
+      // shown by a page
+      LocalDatabase.putRow(
+        TASK,
+        LocalDatabase.carryNumbers(TASK, row("b", 12, 14)),
+      );
+
+      // a stranger's, waiting
+      hold(row("c", 11, 11));
+
+      // this client's own, waiting
+      hold(row("d", 16, 16, {$own: true}));
+      hold(row("e", 15, 15, {$own: true}));
+
+      // not saved yet
+      LocalDatabase.putRow(
+        TASK,
+        row("f", null, null, {server_created_at: null}),
+      );
+    });
+
+    it("orders the numbers that aren't final after the final ones", () => {
+      assert.deepEqual(titles({sort: [["server_updated_seq", "asc"]]}), [
+        "a",
+        "b",
+        "c",
+        "e",
+        "d",
+        "f",
+      ]);
+    });
+
+    it("orders the numbers that aren't final first when descending", () => {
+      assert.deepEqual(titles({sort: [["server_updated_seq", "desc"]]}), [
+        "f",
+        "d",
+        "e",
+        "c",
+        "b",
+        "a",
+      ]);
+    });
+
+    it("breaks a tie among rows with no number known by the next key", () => {
+      hold(row("g", 13, 13));
+
+      assert.deepEqual(
+        titles({
+          sort: [
+            ["server_updated_seq", "desc"],
+            ["id", "desc"],
+          ],
+        }),
+        ["f", "d", "e", "g", "c", "b", "a"],
+      );
+    });
+
+    it("compares only a number final here or shown", () => {
+      assert.deepEqual(titles({filter: [["server_updated_seq", ">", 4]]}), [
+        "a",
+        "b",
+      ]);
+
+      assert.deepEqual(titles({filter: [["server_updated_seq", "<", 20]]}), [
+        "a",
+        "b",
+      ]);
+    });
+
+    it("compares only a number final here or shown on the operand's side", () => {
+      const filter = [
+        ["server_created_seq", "<=", {attribute: "server_updated_seq"}],
+      ];
+
+      assert.deepEqual(titles({filter}), ["a", "b"]);
+    });
+
+    it("judges an equality by the field as it reads", () => {
+      assert.deepEqual(titles({filter: [["server_updated_seq", "==", null]]}), [
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+      ]);
+
+      assert.deepEqual(
+        titles({filter: [["server_updated_seq", "==", 14]]}),
+        [],
+      );
+    });
+
+    it("compares the fields as they read without an entity type", () => {
+      const shown = LocalDatabase.baseRow(TASK, "b");
+      const filter = [["server_updated_seq", ">", 4]];
+
+      assert.isTrue(QueryKernel.matches(shown, filter, TASK));
+      assert.isFalse(QueryKernel.matches(shown, filter));
+    });
+  });
 });

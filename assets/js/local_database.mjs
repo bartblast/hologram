@@ -133,11 +133,13 @@ export default class LocalDatabase {
   // its own - until the log the numbers come from is another (see `forgetFinal`).
   static #finalSeq = null;
 
-  // type -> id -> {numbers: {field: number}, own: boolean} - each number a row came with above the
-  // final point, held back from the row until the point reaches it. The row holds the number it
-  // had before, final, or null when it had none, so a number a reader finds is always final and no
-  // reader has to ask. Own is whether the row's own batch created it, kept while its created
-  // number waits: until then it is this client's own unnumbered row.
+  // type -> id -> {numbers: {field: number}, shown?: {field: number}, own: boolean} - each number
+  // a row came with above the final point, held back from the row until the point reaches it. The
+  // row holds the number it had before, final, or null when it had none, so a number a reader
+  // finds is always final and no reader has to ask. Shown is the numbers a page carried above the
+  // point: final on the server, so a list orders the row by them (see orderingKey). Own is whether
+  // the row's own batch created it, kept while its created number waits: until then it is this
+  // client's own unnumbered row.
   static #waiting = {};
 
   static addFact(type, relationship, sourceId, targetId) {
@@ -360,6 +362,33 @@ export default class LocalDatabase {
     }
   }
 
+  // The given row a page carried as the base files it: a copy with every number above the final
+  // point replaced by the one the row already holds, or null, as a stream row's is (see
+  // holdNumbers). The render showed only numbers final on the server, so each is kept beside the
+  // row as shown, and a list orders the row by it while the field reads as not final here (see
+  // orderingKey). A number at or below the point is the stream's to bring for a row held already.
+  static carryNumbers(type, row) {
+    const filed = Object.assign({}, row);
+
+    delete filed[OWN];
+
+    const held = LocalDatabase.baseRow(type, row.id);
+
+    for (const field of SEQUENCE_FIELDS) {
+      if (!Object.hasOwn(row, field) || LocalDatabase.#isFinal(row[field])) {
+        continue;
+      }
+
+      filed[field] = held?.[field] ?? null;
+
+      LocalDatabase.#show(type, row.id, field, row[field]);
+    }
+
+    LocalDatabase.#settleEntry(type, row.id);
+
+    return filed;
+  }
+
   // How far the numbers the client holds are final, or null when it was told nothing yet.
   static finalSeq() {
     return LocalDatabase.#finalSeq;
@@ -443,7 +472,47 @@ export default class LocalDatabase {
     LocalDatabase.#fileFinal();
   }
 
-  // The numbers the given row waits for, as `{numbers, own}`, or null when it waits for none.
+  // Whether the field is one of the numbers a save is given, which a list orders by the rule in
+  // orderingKey.
+  static isSequenceField(name) {
+    return SEQUENCE_FIELDS.includes(name);
+  }
+
+  // Where a row stands in a list ordered by one of its numbers, as `[rank, number]`, lowest first:
+  // 0 for a number final here or one a page showed, 1 for no number known, 2 for a row this
+  // client's own batch created, ordered among its kind by the number it waits for, and 3 for a row
+  // the server has not saved yet. A row whose number isn't final here goes at the newest end, since
+  // its number is above every final one, and so does this client's own work, which is newer still.
+  static orderingKey(type, row, field) {
+    const value = row[field] ?? null;
+    const entry = LocalDatabase.#waiting[type]?.[row.id];
+    const shown = entry?.shown?.[field];
+
+    if (
+      shown !== undefined &&
+      (value === null || BigInt(shown) > BigInt(value))
+    ) {
+      return [0, LocalDatabase.#readNumber(shown)];
+    }
+
+    if (value !== null) {
+      return [0, value];
+    }
+
+    if (entry?.own) {
+      return [
+        2,
+        LocalDatabase.#readNumber(
+          entry.numbers[field] ?? entry.numbers.server_created_seq,
+        ),
+      ];
+    }
+
+    return [(row.server_created_at ?? null) === null ? 3 : 1, null];
+  }
+
+  // The numbers the given row waits for, as `{numbers, own}` with the ones a page showed as
+  // `shown`, or null when it waits for none.
   static waitingNumbers(type, id) {
     return LocalDatabase.#waiting[type]?.[id] ?? null;
   }
@@ -783,20 +852,76 @@ export default class LocalDatabase {
 
   // Files a row the store holds as the store holds it, over anything held under its id, with the
   // numbers the store says it waits for - what a tab taking up the store's place does with each of
-  // its rows (see Tabs.#takeStore), after `takeStoredFinal`.
-  static putStored(type, row, waiting) {
+  // its rows (see Tabs.#takeStore), after `takeStoredFinal`. The numbers this tab's page showed
+  // stay, since they are final on the server whatever the store holds: a list keeps ordering the
+  // row by them. They are the ones held beside the row now, and the given ones, which
+  // `shownNumbers` took before the row was dropped.
+  static putStored(type, row, waiting, shown = {}) {
+    const kept = Object.entries(
+      Object.assign({}, LocalDatabase.#waiting[type]?.[row.id]?.shown),
+    ).concat(Object.entries(shown));
+
     LocalDatabase.putRow(type, row);
 
     delete LocalDatabase.#waiting[type]?.[row.id];
+
+    for (const [field, number] of kept) {
+      LocalDatabase.#show(type, row.id, field, number);
+    }
 
     LocalDatabase.#takeWaiting(type, row.id, waiting);
     LocalDatabase.#fileFinal();
   }
 
+  // The numbers a page showed for each row, keyed "<type> <id>" as vouchedRowKeys are, for a tab
+  // about to drop the rows it holds and take up the store's (see putStored).
+  static shownNumbers() {
+    const shown = new Map();
+
+    for (const [type, entries] of Object.entries(LocalDatabase.#waiting)) {
+      for (const [id, entry] of Object.entries(entries)) {
+        if (entry.shown !== undefined) {
+          shown.set(`${type} ${id}`, Object.assign({}, entry.shown));
+        }
+      }
+    }
+
+    return shown;
+  }
+
   // Takes up the final point the store holds, in place of the one held: the rows held from now on
-  // are the store's, and its point is the one written down with them.
+  // are the store's, and its point is the one written down with them. A row only a page carried
+  // stays, and a number of its filed under a higher point than the store's moves back beside it as
+  // shown, so a number in a row is still final here.
   static takeStoredFinal(finalSeq) {
     LocalDatabase.#finalSeq = finalSeq ?? null;
+
+    for (const [type, id] of LocalDatabase.carriedEntries()) {
+      const held = LocalDatabase.baseRow(type, id);
+
+      if (held === null) {
+        continue;
+      }
+
+      const above = SEQUENCE_FIELDS.filter(
+        (field) =>
+          (held[field] ?? null) !== null &&
+          !LocalDatabase.#isFinal(held[field]),
+      );
+
+      if (above.length === 0) {
+        continue;
+      }
+
+      const row = Object.assign({}, held);
+
+      for (const field of above) {
+        LocalDatabase.#show(type, id, field, held[field]);
+        row[field] = null;
+      }
+
+      LocalDatabase.putRow(type, row);
+    }
   }
 
   // The overlay is deliberately NOT reset here. This runs on a resync, which replaces what the
@@ -821,7 +946,13 @@ export default class LocalDatabase {
   }
 
   static #copyEntry(entry) {
-    return {numbers: Object.assign({}, entry.numbers), own: entry.own};
+    const copy = {numbers: Object.assign({}, entry.numbers), own: entry.own};
+
+    if (entry.shown !== undefined) {
+      copy.shown = Object.assign({}, entry.shown);
+    }
+
+    return copy;
   }
 
   static #dropCountable() {
@@ -1007,32 +1138,58 @@ export default class LocalDatabase {
     return swept;
   }
 
-  // Files every waiting number at or below the final point into its row, on a copy of the row, since
-  // readers hold the rows they were handed.
+  // Files every waiting or shown number at or below the final point into its row, the higher of
+  // the two when both are, on a copy of the row, since readers hold the rows they were handed. A
+  // shown number can be filed while a newer one waits: it is final, and older than what waits.
   static #fileFinal() {
     for (const [type, entries] of Object.entries(LocalDatabase.#waiting)) {
       for (const [id, entry] of Object.entries(entries)) {
-        const fields = Object.keys(entry.numbers).filter((field) =>
-          LocalDatabase.#isFinal(entry.numbers[field]),
-        );
-
         const held = LocalDatabase.baseRow(type, id);
 
-        if (fields.length === 0 || held === null) {
+        if (held === null) {
           continue;
         }
 
-        const row = Object.assign({}, held);
+        let row = null;
 
-        for (const field of fields) {
-          row[field] = entry.numbers[field];
-          delete entry.numbers[field];
+        for (const field of SEQUENCE_FIELDS) {
+          let filed = null;
+
+          for (const numbers of [entry.numbers, entry.shown ?? {}]) {
+            const number = numbers[field];
+
+            if (number !== undefined && LocalDatabase.#isFinal(number)) {
+              delete numbers[field];
+
+              if (filed === null || BigInt(number) > BigInt(filed)) {
+                filed = number;
+              }
+            }
+          }
+
+          const current = held[field] ?? null;
+
+          if (
+            filed !== null &&
+            (current === null || BigInt(filed) > BigInt(current))
+          ) {
+            row ??= Object.assign({}, held);
+            row[field] = filed;
+          }
         }
 
-        LocalDatabase.putRow(type, Model.readIntegers(type, row));
+        if (row !== null) {
+          LocalDatabase.putRow(type, Model.readIntegers(type, row));
+        }
+
         LocalDatabase.#settleEntry(type, id);
       }
     }
+  }
+
+  // A waiting number as the wire spelled it, which is a string past 2^53.
+  static #readNumber(number) {
+    return typeof number === "string" ? BigInt(number) : (number ?? null);
   }
 
   static #isFinal(number) {
@@ -1058,8 +1215,23 @@ export default class LocalDatabase {
       entry.own = false;
     }
 
-    if (Object.keys(entry.numbers).length === 0) {
+    if (entry.shown !== undefined && Object.keys(entry.shown).length === 0) {
+      delete entry.shown;
+    }
+
+    if (Object.keys(entry.numbers).length === 0 && entry.shown === undefined) {
       delete entries[id];
+    }
+  }
+
+  // Keeps a number a page showed beside the row, unless one it showed before is newer.
+  static #show(type, id, field, number) {
+    const entry = LocalDatabase.#waitingEntry(type, id);
+    const shown = entry.shown?.[field];
+
+    if (shown === undefined || BigInt(number) > BigInt(shown)) {
+      entry.shown ??= {};
+      entry.shown[field] = number;
     }
   }
 
@@ -1082,6 +1254,18 @@ export default class LocalDatabase {
         BigInt(held) < BigInt(number)
       ) {
         entry.numbers[field] = number;
+      }
+    }
+
+    for (const [field, number] of Object.entries(stored.shown ?? {})) {
+      const held = row[field];
+
+      if (
+        held === null ||
+        held === undefined ||
+        BigInt(held) < BigInt(number)
+      ) {
+        LocalDatabase.#show(type, id, field, number);
       }
     }
 
