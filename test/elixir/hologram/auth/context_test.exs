@@ -540,12 +540,18 @@ defmodule Hologram.Auth.ContextTest do
                 end
               end)
 
+            # Stays alive as the inner task's parent until the inner task ends.
+            monitor = Process.monitor(inner)
             send(test_pid, {:inner, inner})
-            Process.sleep(:infinity)
+
+            receive do
+              {:DOWN, ^monitor, :process, ^inner, _reason} -> :ok
+            end
           end)
         end)
 
       assert_receive {:inner, inner}, @receive_timeout
+      on_exit(fn -> Process.exit(inner, :kill) end)
       await_down(starter)
       send(inner, :go)
 
@@ -759,8 +765,9 @@ defmodule Hologram.Auth.ContextTest do
       {:ok, task} =
         with_actor("user_id_40", fn ->
           Task.Supervisor.start_child(supervisor, fn ->
+            # Linked, so it goes when the test's supervisor stops the task.
             child =
-              spawn(fn ->
+              spawn_link(fn ->
                 receive do
                   :look -> send(test_pid, {:first, started_by_request?()})
                 end
