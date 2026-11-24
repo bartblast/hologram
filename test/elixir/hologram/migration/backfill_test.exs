@@ -1263,7 +1263,12 @@ defmodule Hologram.Migration.BackfillTest do
           insert_row("my_app_task", code: "b", title: "same")
 
           assert_error RuntimeError,
-                       ~r/filling its NULLs with the backfill would make 1 key repeat over \("slug"\)/,
+                       ~s(cannot make column "slug" on table "my_app_task" required - filling ) <>
+                         ~s{its NULLs with the backfill would make 1 key repeat over ("slug") - } <>
+                         "fix the data or the backfill, drop the unique declaration, or keep " <>
+                         "optional: true on the attribute in the entity type and remove " <>
+                         "optional: false and backfill: from the op, or the whole op when it " <>
+                         "changes nothing else",
                        fn ->
                          apply_file([tighten(:slug, unquote(backfill))], create, first_model)
                        end
@@ -1673,6 +1678,55 @@ defmodule Hologram.Migration.BackfillTest do
 
         refute has_column?("my_app_task", "owner_id")
       end)
+    end
+
+    for {label, backfill} <- [
+          {"constant", :id},
+          {"computed", quote(do: %Value{term: {:name, [:creator_id]}})}
+        ] do
+      test "refuses a #{label} backfill making a unique to-one repeat, naming the relationship",
+           %{
+             create: create,
+             first_model: first_model,
+             scratch: scratch
+           } do
+        unique =
+          migration("20260813120000", [
+            %{
+              op: :change_relationship,
+              entity: MyApp.Task,
+              name: :reviewer,
+              changes: [unique: true],
+              line: 3
+            }
+          ])
+
+        unique_model = Model.fold(first_model, unique.ops)
+
+        route(scratch, fn ->
+          assert run([create, unique], unique_model, @context) == :ok
+
+          creator = user_id()
+          insert_row("my_app_task", code: "a", creator_id: uuid(creator))
+          insert_row("my_app_task", code: "b", creator_id: uuid(creator))
+
+          backfill = if unquote(backfill) == :id, do: creator, else: unquote(backfill)
+          file = migration("20260813142237", [tighten_reviewer(backfill)])
+
+          assert_error RuntimeError,
+                       ~s(cannot make column "reviewer_id" on table "my_app_task" required - ) <>
+                         "filling its NULLs with the backfill would make 1 key repeat over " <>
+                         ~s{("reviewer_id") - fix the data or the backfill, drop the unique } <>
+                         "declaration, or keep optional: true on the relationship in the entity " <>
+                         "type and remove optional: false and backfill: from the op, or the whole " <>
+                         "op when it changes nothing else",
+                       fn ->
+                         run([create, unique, file], Model.fold(unique_model, file.ops), @context)
+                       end
+
+          assert ids_by_code("my_app_task", "reviewer_id") == [nil, nil]
+        end)
+      end
     end
 
     test "refuses a to-one tightening the expression leaves nil, rows unchanged", %{

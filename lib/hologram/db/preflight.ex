@@ -92,7 +92,7 @@ defmodule Hologram.DB.Preflight do
     mapping
     |> unique_indexes(table)
     |> Enum.filter(&(column_name in &1.columns))
-    |> check_filled_keys!(table, column_name, encoded_value, "the default")
+    |> check_filled_keys!(table, column_name, encoded_value, :default)
   end
 
   @doc """
@@ -144,11 +144,11 @@ defmodule Hologram.DB.Preflight do
   end
 
   def check_fill!(op) do
-    source = if op[:fill_source] == :backfill, do: "the backfill", else: "the default"
+    fill = if op[:fill_source] == :backfill, do: {:backfill, filled_member(op)}, else: :default
 
     op.table
     |> standing_unique_indexes(op.column, not_ready_invalid_indexes())
-    |> check_filled_keys!(op.table, op.column, op.fill, source)
+    |> check_filled_keys!(op.table, op.column, op.fill, fill)
   end
 
   @doc """
@@ -178,7 +178,13 @@ defmodule Hologram.DB.Preflight do
 
       {:ok, %{rows: [[count]]}} = Connection.query(statement, params)
 
-      raise_filled_duplicate_keys!(op.table, op.column, index.columns, count, "the backfill")
+      raise_filled_duplicate_keys!(
+        op.table,
+        op.column,
+        index.columns,
+        count,
+        {:backfill, filled_member(op)}
+      )
     end)
   end
 
@@ -417,7 +423,7 @@ defmodule Hologram.DB.Preflight do
 
   defp refusable?(_op), do: false
 
-  defp check_filled_keys!(indexes, table, column_name, encoded_value, source) do
+  defp check_filled_keys!(indexes, table, column_name, encoded_value, fill) do
     Enum.each(indexes, fn index ->
       statement =
         DDL.filled_duplicate_check_statement(
@@ -429,7 +435,7 @@ defmodule Hologram.DB.Preflight do
 
       {:ok, %{rows: [[count]]}} = Connection.query(statement, [encoded_value])
 
-      raise_filled_duplicate_keys!(table, column_name, index.columns, count, source)
+      raise_filled_duplicate_keys!(table, column_name, index.columns, count, fill)
     end)
   end
 
@@ -556,6 +562,13 @@ defmodule Hologram.DB.Preflight do
     |> Map.values()
     |> Enum.find(&(&1.table == table))
   end
+
+  defp fill_name(:default), do: "the default"
+
+  defp fill_name({:backfill, _member}), do: "the backfill"
+
+  # A fill's op names a target only when it fills a relationship.
+  defp filled_member(op), do: if(op[:fill_target], do: "relationship", else: "attribute")
 
   defp goes_through?({:rewrite, columns}, %{live?: live?}, index_columns) do
     live? or Enum.any?(index_columns, &(&1 in columns))
@@ -689,15 +702,14 @@ defmodule Hologram.DB.Preflight do
             "the unique index over it is not built yet, #{reason} - update the rows"
   end
 
-  defp raise_filled_duplicate_keys!(_table, _column, _columns, 0, _source), do: :ok
+  defp raise_filled_duplicate_keys!(_table, _column, _columns, 0, _fill), do: :ok
 
-  defp raise_filled_duplicate_keys!(table, column, columns, count, source) do
+  defp raise_filled_duplicate_keys!(table, column, columns, count, fill) do
     key = Enum.map_join(columns, ", ", &~s("#{&1}"))
 
     raise ~s(cannot make column "#{column}" on table "#{table}" required - ) <>
-            "filling its NULLs with #{source} would make #{count} " <>
-            "#{pluralize_keys(count)} repeat over (#{key}) - " <>
-            "fix the data, keep the attribute optional: true, or drop the unique declaration"
+            "filling its NULLs with #{fill_name(fill)} would make #{count} " <>
+            "#{pluralize_keys(count)} repeat over (#{key}) - #{repeat_ways_out(fill)}"
   end
 
   defp pluralize_keys(1), do: "key"
@@ -711,6 +723,18 @@ defmodule Hologram.DB.Preflight do
   defp pluralize_values([_value]), do: "value"
 
   defp pluralize_values(_values), do: "values"
+
+  defp repeat_ways_out(:default) do
+    "fix the data, keep the attribute optional: true, or drop the unique declaration"
+  end
+
+  # A member staying optional takes the whole tightening out of the op, backfill included, as the
+  # NULL refusal of a backfill says.
+  defp repeat_ways_out({:backfill, member}) do
+    "fix the data or the backfill, drop the unique declaration, or keep optional: true on the " <>
+      "#{member} in the entity type and remove optional: false and backfill: from the op, or the " <>
+      "whole op when it changes nothing else"
+  end
 
   defp standing_unique_indexes(table, column, skipped_names \\ MapSet.new()) do
     Introspection.schema().tables[table].indexes
