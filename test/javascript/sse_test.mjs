@@ -930,6 +930,20 @@ describe("Sse", () => {
       sinon.assert.calledOnce(mockEventSource.close);
     });
 
+    // A batch whose tab closed before announcing it has nothing else to wake the sender.
+    it("tells the data layer about each heartbeat", async () => {
+      const streamBeat = sinon.stub();
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      Hologram.dataLayer = {streamBeat};
+
+      mockEventSource.listeners.heartbeat({});
+
+      sinon.assert.calledOnce(streamBeat);
+    });
+
     it("is cancelled when the browser reports the error first", async () => {
       await Sse.connect();
       Sse.eventSource.onopen({});

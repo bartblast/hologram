@@ -809,6 +809,19 @@ export default class DataLayer {
     Batches.flush();
   }
 
+  // A batch whose tab closed before saying it filed one has nothing to wake the sender, so with
+  // nobody acting it would sit in the store unsent. The stream's heartbeat is a clock this tab
+  // already has, and it stops while offline, where there is nothing to send to anyway.
+  //
+  // Only with an empty queue, so a beat can never send a batch a second time. A queue holding one
+  // may be sending it, waiting out a retry's backoff, holding it for a stopped tab, or stopped by
+  // a send that raised.
+  static streamBeat() {
+    if (Batches.pendingCount() === 0) {
+      Batches.flush();
+    }
+  }
+
   // What a render that handed a page over counted, for as long as this client's own database cannot
   // count for itself.
   //

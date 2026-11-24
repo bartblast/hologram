@@ -238,6 +238,9 @@ export default class Sse {
 
       $.eventSource.addEventListener("heartbeat", () => {
         $.armHeartbeatWatchdog();
+
+        // The one wake-up that comes with nothing happening (see DataLayer.streamBeat).
+        Hologram.dataLayer?.streamBeat();
       });
 
       $.eventSource.addEventListener("refresh_sub_receipts", (event) => {
