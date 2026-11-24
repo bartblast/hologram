@@ -5284,12 +5284,31 @@ describe("Hologram", () => {
 
             await fetchPageStub.firstCall.args[1]({
               ...payloadFor("restored-answer"),
+              actorUserId: "u2",
               identityPeriod: IdentityTracker.period,
+              syncRows: {},
             });
 
             frames.splice(0).forEach((frame) => frame());
 
-            bundleArrivesAndMountRaises("restored-answer");
+            // Stopped right after the ingest, before the page is registered for the tests after.
+            dataLayer.ingestMountData = sinon
+              .stub()
+              .throws(new Error("mount failed"));
+
+            try {
+              assert.throws(
+                () => bundleArrives("restored-answer"),
+                "mount failed",
+              );
+            } finally {
+              Hologram.isMounting = false;
+            }
+
+            sinon.assert.calledOnceWithMatch(dataLayer.ingestMountData, {
+              actorUserId: "u2",
+              pageDigest: "restored-answer",
+            });
           });
         });
 
