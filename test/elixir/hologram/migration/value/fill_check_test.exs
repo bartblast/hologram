@@ -46,6 +46,33 @@ defmodule Hologram.Migration.Value.FillCheckTest do
     assert run([migration], Model.fold(Model.empty(), @ops), @context) == :ok
   end
 
+  describe "create_filled_ids!/0, keep_filled_ids!/1 and drop_filled_ids!/0" do
+    test "use the session's own table when the search path puts another of its name first", %{
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        result =
+          Connection.transaction(fn ->
+            {:ok, _result} = Connection.query(~s|CREATE TABLE public."$fill_ids" (id uuid)|)
+            {:ok, _result} = Connection.query("SET LOCAL search_path TO public, pg_temp")
+
+            create_filled_ids!()
+            keep_filled_ids!(["018f0000-0000-7000-8000-000000000000"])
+
+            {:ok, %{rows: kept}} = Connection.query(~s|SELECT count(*) FROM pg_temp."$fill_ids"|)
+
+            drop_filled_ids!()
+
+            {:ok, %{rows: other}} = Connection.query(~s|SELECT count(*) FROM public."$fill_ids"|)
+
+            Connection.rollback({kept, other})
+          end)
+
+        assert result == {:error, {[[1]], [[0]]}}
+      end)
+    end
+  end
+
   describe "check!/2" do
     test "doesn't read a table when the member declares no rule and no bound" do
       assert check!(%{@fill | rules: [optional: true], table: "no_such_table"}) == :ok

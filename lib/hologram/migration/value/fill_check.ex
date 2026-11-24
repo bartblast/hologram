@@ -17,8 +17,10 @@ defmodule Hologram.Migration.Value.FillCheck do
   @rule_keys [:format, :in, :length, :max, :max_length, :min, :min_length]
 
   # The rows a fill of NULLs writes, kept apart since once it has run nothing else tells them from
-  # the rows that already held a value.
-  @filled_ids ~s("$fill_ids")
+  # the rows that already held a value. Named in pg_temp, since a search path listing pg_temp
+  # after another schema would let a table of that name there take the writes, the read and the
+  # drop.
+  @filled_ids ~s(pg_temp."$fill_ids")
 
   @doc """
   Validates that no row holding NULL in the given `fill_column` op's column would take a value over
