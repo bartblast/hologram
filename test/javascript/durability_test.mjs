@@ -606,6 +606,7 @@ describe("Durability", () => {
 
       await Durability.persistFrame([unstorableRecord()], "place-1");
 
+      assert.equal(Durability.mode, "memory");
       assert.deepStrictEqual(await readPair("u9"), pair);
     });
 
