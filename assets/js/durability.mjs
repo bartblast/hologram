@@ -390,7 +390,7 @@ export default class Durability {
 
             queue.put(batch.record());
             meta.put(batch.seq, "seq");
-            meta.put(Clock.last(), "clock");
+            Durability.#putClock(meta);
           };
         };
       };
@@ -637,7 +637,7 @@ export default class Durability {
         }
       });
 
-      meta.put(Clock.last(), "clock");
+      Durability.#putClock(meta);
     });
   }
 
@@ -884,7 +884,7 @@ export default class Durability {
             }
 
             meta.put(cursor, "cursor");
-            meta.put(Clock.last(), "clock");
+            Durability.#putClock(meta);
           };
         },
         {settlesStore: true},
@@ -1400,6 +1400,17 @@ export default class Durability {
     db.createObjectStore(ENTITIES, {keyPath: ["type", "id"]});
     db.createObjectStore(META);
     db.createObjectStore(QUEUE, {keyPath: "seq"});
+  }
+
+  // Where this tab's clock stands, unless the store's already stands further. Every user's tabs
+  // write it, and a tab of another user can be behind the clock this user's rows were stamped
+  // with: written over, the next load would start the clock below revisions it holds.
+  static #putClock(meta) {
+    const stored = meta.get("clock");
+
+    stored.onsuccess = () => {
+      meta.put(Math.max(stored.result ?? 0, Clock.last()), "clock");
+    };
   }
 
   // Runs the given write only if the store is this tab's user's and has not been claimed since this

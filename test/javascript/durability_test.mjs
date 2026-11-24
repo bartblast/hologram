@@ -3143,6 +3143,15 @@ describe("Durability", () => {
       assert.equal(await readMeta("clock"), Clock.last());
     });
 
+    // The owner's rows can carry revisions this tab's clock hasn't reached.
+    it("doesn't move the stored clock back", async () => {
+      await writeMeta({clock: 8_000_000_000_000_000});
+
+      await Durability.persistFrame([], "place-2");
+
+      assert.equal(await readMeta("clock"), 8_000_000_000_000_000);
+    });
+
     it("is not cleared", async () => {
       await Durability.clear();
 
