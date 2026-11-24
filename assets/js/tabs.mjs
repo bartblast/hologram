@@ -125,11 +125,11 @@ export default class Tabs {
   // greet it with none of the page's subscriptions (see where the page starts it, in hologram.mjs).
   //
   // The group can hand the lead to a tab that has not taken it yet - one still starting, reading
-  // the store again (see #takeStore), or waiting on the store's answer (see #lead). It holds the lock, so it is the tab that sends the
-  // queue, and keeps it with the identity (a tab still starting holds neither yet: the stored
-  // queue waits for the next page load, see Durability.detach); but its stream is still a
-  // follower's, which the server serves no sync on, so it opens one of its own as a follower
-  // would.
+  // the store again (see #takeStore), or waiting on the store's answer (see #lead). It holds the
+  // lock, so it is the tab that sends the queue, and keeps it with the identity (a tab still
+  // starting holds neither yet: the stored queue waits for the next page load, see
+  // Durability.detach); but its stream is still a follower's, which the server serves no sync on,
+  // so it opens one of its own as a follower would.
   //
   // And a tab that is not ready holds no place it can greet the server from: what it held is
   // dropped as it leaves, and a tab reading the store again was doing so because its place was in

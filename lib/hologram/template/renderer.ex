@@ -468,8 +468,8 @@ defmodule Hologram.Template.Renderer do
       raise Hologram.MisuseError,
         message:
           "#{inspect(page_module)} changed the signed-in user in a layout's or component's " <>
-            "init/3 again when it was rendered for the new user - change it in the page's " <>
-            "init/3, middleware or a command"
+            "init/3 again when it was rendered for the new user - change it in one place: " <>
+            "the page's init/3, middleware or a command"
   end
 
   # Queries evaluated during the render are filtered by the session user's policies, and the
@@ -1482,13 +1482,15 @@ defmodule Hologram.Template.Renderer do
     Carry.start()
   end
 
-  # A layout's or child's init/3 changed who is signed in. With nothing read yet the render just
-  # goes on as the new user. Otherwise part of the page is the previous user's, so it starts over
-  # (see render_page/4). Outside a page render there's no actor to move.
+  # A layout's or child's init/3 changed who is signed in. When the render read anything as the
+  # previous user, part of the page is theirs, so it starts over (see render_page/4). The page's
+  # {Hologram, :user} context counts, worked out for them even for a visitor, as does a query that
+  # found nothing. With nothing read, as in an app with no data model, the render just goes
+  # on as the new user. Outside a page render there's no actor to move.
   defp follow_user_change(user_id) do
     cond do
       not Carry.active?() -> :ok
-      Carry.gathered?() -> throw({@restart_render, user_id})
+      RoleGrant.user_entity() != nil or Carry.read?() -> throw({@restart_render, user_id})
       true -> Context.put_actor(user_id)
     end
   end

@@ -2,6 +2,7 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module183 do
   use Hologram.Page
 
+  alias Hologram.Test.Fixtures.Template.Renderer.Module138
   alias Hologram.Test.Fixtures.Template.Renderer.Module180
 
   route "/hologram-test-fixtures-template-renderer-module183"
@@ -19,6 +20,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module183 do
   def template do
     ~HOLO"""
     <Module180 cid="signing_in" user_id={@user_id} />
+    <Module138 />
     """
   end
 end

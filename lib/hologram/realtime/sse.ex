@@ -329,7 +329,7 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
-      # A change of identity's, naming the tag of the identity it is for.
+      # A resync for a change of identity, naming the tag of the identity it is for.
       {:sync_resync, reason, identity_tag} ->
         id = System.unique_integer([:positive, :monotonic])
         chunk_data = Frame.encode_resync_envelope(id, reason, identity_tag)

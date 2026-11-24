@@ -642,11 +642,11 @@ export default class SyncStream {
 
   // Whether this tab has to hold its writes: the server would refuse them. That is a stop over the
   // model rather than the protocol, because the write endpoint compares only the model - under a
-  // protocol stop, writes still land. Or the tab moved to another user and has no pair for them yet.
-  // Any pair it holds after the move ends the wait: the one the store keeps for the new user, the
-  // one the new user's group hands it, or a handshake's. All are the new user's, since the move
-  // dropped the previous user's. Or the session's cookie still names the previous
-  // user (see laggingCookie).
+  // protocol stop, writes still land. Or the tab moved to another user and has no pair for them
+  // yet. Any pair it holds after the move ends the wait: the one the store keeps for the new user,
+  // the one the new user's group hands it, or a handshake's. All are the new user's, since the move
+  // dropped the previous user's. Or the session's cookie still names the previous user (see
+  // laggingCookie).
   static holdsWrites() {
     return (
       $.stopReason === "model_hash" ||

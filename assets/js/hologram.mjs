@@ -3131,15 +3131,15 @@ export default class Hologram {
 
     $.requestChunks(chunkDigests);
 
+    // What a restore left for the mount was abandoned, or this page wouldn't have come.
+    $.#shouldLoadMountData = true;
+
     // Readable before the patch, rather than as a side effect of a script the patch inserts and
     // the browser then runs. The page module is already decoded above, so it is reused. A payload
     // with no identity period gives a page whose snapshot is never restored.
     // The data-layer values travel as plain JSON rather than as serialized terms, as they do in the
     // boot data block: the local database reads them, not compiled code. A server that predates
     // them sends none, which the mount reads as nothing to ingest.
-    // What a restore left for the mount was abandoned, or this page wouldn't have come.
-    $.#shouldLoadMountData = true;
-
     $.#mountData = {
       actorEntityId: payload.actorEntityId,
       actorUserId: payload.actorUserId,

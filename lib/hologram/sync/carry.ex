@@ -30,6 +30,7 @@ defmodule Hologram.Sync.Carry do
   @count_types_key {__MODULE__, :count_types}
   @counts_key {__MODULE__, :counts}
   @grant_scopes_key {__MODULE__, :grant_scopes}
+  @read_key {__MODULE__, :read}
 
   # The largest integer a JavaScript Number holds exactly, Number.MAX_SAFE_INTEGER.
   @max_safe_integer 9_007_199_254_740_991
@@ -46,6 +47,7 @@ defmodule Hologram.Sync.Carry do
     Process.delete(@key)
     Process.delete(@count_types_key)
     Process.delete(@counts_key)
+    Process.delete(@read_key)
 
     # Armed rather than cleared: a permission check outside a render finds no set here and
     # records nothing, which is what keeps the trusted paths (commands, mix tasks, IEx) free of
@@ -133,6 +135,9 @@ defmodule Hologram.Sync.Carry do
 
     Process.put(@key, collected)
 
+    # Kept apart from the rows, since a query that found nothing still answered for its user.
+    Process.put(@read_key, true)
+
     :ok
   end
 
@@ -178,13 +183,14 @@ defmodule Hologram.Sync.Carry do
   def active?, do: Process.get(@grant_scopes_key) != nil
 
   @doc """
-  Returns whether the render has gathered anything so far: a row, a count or a permission check.
+  Returns whether the render has read anything since `start/0`: a query's rows, even none, a
+  count or a permission check.
   """
-  @spec gathered?() :: boolean
-  def gathered? do
+  @spec read?() :: boolean
+  def read? do
     grant_scopes = Process.get(@grant_scopes_key, MapSet.new())
 
-    gathered() != %{} or gathered_counts() != %{} or MapSet.size(grant_scopes) > 0
+    Process.get(@read_key, false) or gathered_counts() != %{} or MapSet.size(grant_scopes) > 0
   end
 
   @doc """

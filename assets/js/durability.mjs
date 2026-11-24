@@ -33,11 +33,11 @@ import Utils from "./utils.mjs";
 // user's unfinished work whatever has gone wrong since. Its record shape is FROZEN, spelled and
 // argued in `batch.mjs`: a bundle drains what an older bundle wrote.
 //
-// The identity is kept PER USER, each under a key of its own in `meta`, because a replica's numbering is
-// that user's. A user who comes back to a browser somebody else used in between has to send their
-// queued batches under the pair they were numbered under, or a batch whose answer was lost is
-// applied a second time. And a tab whose store another user took can go on writing its own pair
-// without touching theirs.
+// The identity is kept PER USER, each under a key of its own in `meta`, because a replica's
+// numbering is that user's. A user who comes back to a browser somebody else used in between has to
+// send their queued batches under the pair they were numbered under, or a batch whose answer was
+// lost is applied a second time. And a tab whose store another user took can go on writing its own
+// pair without touching theirs.
 //
 // A storage failure is the one thing a pair does not outlive. After one, this page goes on spending
 // numbers that nothing records, so a later load resuming under that pair would hand out numbers

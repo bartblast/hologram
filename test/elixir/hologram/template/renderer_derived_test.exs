@@ -1206,14 +1206,16 @@ defmodule Hologram.Template.RendererDerivedTest do
       assert Context.actor_user_id() == nil
     end
 
-    test "doesn't render again when nothing was read before a child's init/3", %{user: user} do
-      boot =
-        Module183
-        |> render_page_html(%Server{}, %{user_id: user.id})
-        |> boot_data()
+    # Its context user was read for the visitor before the child's init/3 ran.
+    test "renders a page that read no rows again for the user a child's init/3 signed in", %{
+      user: user
+    } do
+      html = render_page_html(Module183, %Server{}, %{user_id: user.id})
+      boot = boot_data(html)
 
-      assert Process.get(:module_180_inits) == 1
+      assert String.contains?(html, "current user = renderer_signed_in@example.com")
       assert boot["actorUserId"] == Auth.owner_key(user.id)
+      assert boot_row_ids(boot, Module14) == [user.id]
     end
 
     test "leaves the actor alone outside a page render" do
