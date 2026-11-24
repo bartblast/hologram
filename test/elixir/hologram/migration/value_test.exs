@@ -1600,9 +1600,10 @@ defmodule Hologram.Migration.ValueTest do
       end
     end
 
+    # Collected from this compile alone, since stderr takes other tests' output too.
     test "emits no warning for the side of a fn that didn't run" do
-      warnings =
-        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+      {_module, diagnostics} =
+        Code.with_diagnostics(fn ->
           compiled("""
           @suffix "!"
           change_entity MyApp.Trip do
@@ -1611,7 +1612,7 @@ defmodule Hologram.Migration.ValueTest do
           """)
         end)
 
-      refute warnings =~ "was set but never used"
+      assert Enum.map(diagnostics, & &1.message) == []
     end
 
     test "keeps a pin inside match?, however it's spelled" do

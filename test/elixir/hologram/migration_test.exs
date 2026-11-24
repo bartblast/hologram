@@ -306,9 +306,10 @@ defmodule Hologram.MigrationTest do
       assert_received {:ops, [%{opts: [default: "a"]}]}
     end
 
+    # Collected from this compile alone, since stderr takes other tests' output too.
     test "raises no unused alias warning for an alias used only in ops" do
-      output =
-        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+      {_module, diagnostics} =
+        Code.with_diagnostics(fn ->
           compile_migration("20260813091522", """
           alias MyApp.Task
 
@@ -316,7 +317,7 @@ defmodule Hologram.MigrationTest do
           """)
         end)
 
-      refute output =~ "unused alias"
+      assert Enum.map(diagnostics, & &1.message) == []
     end
 
     test "names the entity types of its ops as runtime references, not compile-time ones" do
