@@ -498,7 +498,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                ["migration"],
                ["mutation"],
                ["oplog"],
-               ["schema_object"]
+               ["schema_object"],
+               ["server_run"]
              ]
     end
 

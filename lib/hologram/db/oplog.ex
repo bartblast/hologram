@@ -43,6 +43,8 @@ defmodule Hologram.DB.Oplog do
 
   @relationship_ops [:add_relationship, :del_relationship]
 
+  @type log_entry :: %{inserted_at: DateTime.t(), seq: pos_integer, tx: non_neg_integer}
+
   # Fixed application-defined key every save holds, shared, from before it takes its first serial
   # until it ends. Frozen forever: a node reading another key would not see the saves still
   # running. Provenance (for uniqueness, not for re-derivation): first 8 bytes of
@@ -112,6 +114,77 @@ defmodule Hologram.DB.Oplog do
   """
   @spec serial_lock_key() :: integer
   def serial_lock_key, do: @serial_lock_key
+
+  @doc """
+  Puts the row the server's run is read from back, after a crash or a failover emptied it. A row
+  already there is left alone.
+
+  Naming the key makes PostgreSQL refuse the insert while the key is missing, as it is during a
+  restore. A row added then would collide with the restored one and leave the table with two, so
+  this returns `:no_key` and adds nothing.
+  """
+  @spec ensure_server_run() :: :ok | :no_key
+  def ensure_server_run do
+    statement = """
+    INSERT INTO "#{Mapper.system_schema()}"."server_run" DEFAULT VALUES
+    ON CONFLICT ("only_row") DO NOTHING
+    """
+
+    case Connection.query(statement) do
+      {:ok, _result} -> :ok
+      {:error, %Postgrex.Error{postgres: %{code: :invalid_column_reference}}} -> :no_key
+    end
+  end
+
+  @doc """
+  Returns the log's entry at the given seq, or nil when it holds none, with the server run it was
+  read in (see `serials_in_flight/0`).
+
+  An entry is its seq, its transaction and the time it was written, which together tell it from a
+  later entry given the same seq after the server lost the commit of the first.
+  """
+  @spec entry_at(non_neg_integer) :: {log_entry | nil, String.t() | nil}
+  def entry_at(seq) do
+    read_entry(~s|"seq" = $1|, seq)
+  end
+
+  @doc """
+  Returns the log's last entry at or below the given seq, or nil when it holds none, with the server
+  run it was read in (see `entry_at/1`).
+  """
+  @spec last_entry_through(non_neg_integer) :: {log_entry | nil, String.t() | nil}
+  def last_entry_through(seq) do
+    read_entry(~s|"seq" <= $1|, seq)
+  end
+
+  @doc """
+  Returns the highest serial handed out so far, 0 before the first, the saves that were holding the
+  serial lock right after, each named by its virtual transaction id, which tells a save from the
+  next one on the same connection, and the server run both were read in, or nil when that can't be
+  said.
+
+  The serial is read first, and that order is what makes the answer safe (see
+  `Hologram.Sync.FinalLimit`). A save takes the lock before its serial, so one holding a serial at
+  or below the one read already held the lock, and is either among the saves read or has ended.
+  Read the other way round, a save starting between the two reads would be missed.
+
+  Postgres drops a save's lock after its commit is visible, so once a save is gone from this list a
+  new read sees what it wrote.
+
+  The run names one life of the server. Its row is in an unlogged table, which PostgreSQL empties
+  after a crash and leaves empty on a promoted standby, and it's read with the time the server
+  started, which a clean restart moves, and the log's file, which restoring a dump replaces. Each
+  statement reads it itself, since one statement can't
+  span a crash: two reads naming one run happened in one life of the server. Nil means the row is
+  gone, or the two reads were in different runs.
+  """
+  @spec serials_in_flight() :: {non_neg_integer, MapSet.t(String.t()), String.t() | nil}
+  def serials_in_flight do
+    {high, high_run} = high_serial()
+    {running, running_run} = running_saves()
+
+    {high, running, if(high_run == running_run, do: high_run)}
+  end
 
   @doc """
   Returns the SQL calling the function every serial comes from.
@@ -459,6 +532,17 @@ defmodule Hologram.DB.Oplog do
     }
   end
 
+  defp high_serial do
+    statement = """
+    SELECT "last_value", "is_called", #{run_sql()}
+    FROM "#{Mapper.system_schema()}"."oplog_seq_seq"
+    """
+
+    {:ok, %Postgrex.Result{rows: [[serial, called?, run]]}} = Connection.query(statement)
+
+    {if(called?, do: serial, else: 0), run}
+  end
+
   # sobelow_skip ["SQL.Query"]
   defp insert(effects, model_hash, actor_id, mutation_ref) do
     values = Enum.flat_map(effects, &row(&1, model_hash, actor_id, mutation_ref))
@@ -511,5 +595,59 @@ defmodule Hologram.DB.Oplog do
 
       "(COALESCE(#{seq_slot}::bigint, #{next_seq_sql()}), #{Enum.join(slots, ", ")})"
     end)
+  end
+
+  defp read_entry(condition, seq) do
+    statement = """
+    SELECT #{run_sql()}, "entry"."seq", "entry"."tx", "entry"."inserted_at"
+    FROM (SELECT 1) AS "one"
+    LEFT JOIN LATERAL (
+      SELECT "seq", "tx", "inserted_at"
+      FROM "#{Mapper.system_schema()}"."oplog"
+      WHERE #{condition}
+      ORDER BY "seq" DESC
+      LIMIT 1
+    ) AS "entry" ON true
+    """
+
+    case Connection.query(statement, [seq]) do
+      {:ok, %Postgrex.Result{rows: [[run, nil, nil, nil]]}} ->
+        {nil, run}
+
+      {:ok, %Postgrex.Result{rows: [[run, entry_seq, tx, inserted_at]]}} ->
+        {%{inserted_at: inserted_at, seq: entry_seq, tx: tx}, run}
+    end
+  end
+
+  # The start time as a number, since its text form follows each session's settings, and the log's
+  # file, which a restored dump replaces while the server keeps running.
+  defp run_sql do
+    schema = Mapper.system_schema()
+
+    ~s|(SELECT "run"::text \|\| '/' \|\| | <>
+      ~s|(extract(epoch FROM pg_catalog.pg_postmaster_start_time()) * 1000000)::bigint::text | <>
+      ~s|\|\| '/' \|\| pg_catalog.pg_relation_filenode('"#{schema}"."oplog"'::pg_catalog.regclass)::text | <>
+      ~s|FROM "#{schema}"."server_run")|
+  end
+
+  # An advisory key of 64 bits shows in pg_locks as its high and low halves, and is scoped to one
+  # database.
+  defp running_saves do
+    <<class_id::32, object_id::32>> = <<@serial_lock_key::signed-64>>
+
+    statement = """
+    SELECT coalesce(array_agg("virtualtransaction"), '{}'), #{run_sql()}
+    FROM pg_catalog.pg_locks
+    WHERE "locktype" = 'advisory' AND "classid" = $1 AND "objid" = $2 AND "objsubid" = 1
+      AND "mode" = 'ShareLock' AND "granted"
+      AND "database" = (
+        SELECT "oid" FROM pg_catalog.pg_database WHERE "datname" = current_database()
+      )
+    """
+
+    {:ok, %Postgrex.Result{rows: [[saves, run]]}} =
+      Connection.query(statement, [class_id, object_id])
+
+    {MapSet.new(saves), run}
   end
 end

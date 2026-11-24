@@ -992,6 +992,18 @@ defmodule Hologram.DB.SchemaReconciler do
       CREATE INDEX "oplog_inserted_at_$idx" ON "#{system_schema}"."oplog"
       USING brin ("inserted_at")
       """,
+      # One row naming this life of the server (see `Hologram.DB.Oplog.serials_in_flight/0`).
+      # Unlogged for what that does to it: PostgreSQL empties it after a crash, and a promoted
+      # standby holds it empty. Seeded here, so a first round has nothing to write.
+      """
+      CREATE UNLOGGED TABLE "#{system_schema}"."server_run" (
+        "only_row" boolean PRIMARY KEY DEFAULT true CHECK ("only_row"),
+        "run" uuid NOT NULL DEFAULT gen_random_uuid()
+      )
+      """,
+      """
+      INSERT INTO "#{system_schema}"."server_run" DEFAULT VALUES
+      """,
       """
       CREATE TABLE "#{system_schema}"."mutation" (
         "replica_id" text NOT NULL,
