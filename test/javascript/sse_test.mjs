@@ -1690,13 +1690,14 @@ describe("Sse", () => {
         it("records no period", async () => {
           IdentityTracker.init("1.tag-1");
           Sse.handshakePeriod = IdentityTracker.period;
+          const previous = Sse.handshakePeriod;
           IdentityTracker.observe("2.tag-2");
 
           stubHandshakeResponse(session);
 
           await Sse.connect();
 
-          assert.notEqual(Sse.handshakePeriod, IdentityTracker.period);
+          assert.equal(Sse.handshakePeriod, previous);
         });
 
         it("changes no receipts, and reloads for none", async () => {
