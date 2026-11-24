@@ -817,7 +817,9 @@ export default class LocalDatabase {
   //
   // The final point comes in with the records, since it was written down with them, and so do the
   // numbers they wait for. A row the page brought takes a stored number only when it is newer than
-  // the one the row holds, which a number the page's render could not call final yet is.
+  // the one the row holds, which a number the page's render could not call final yet is. A stored
+  // row can hold a number the stored point doesn't reach, which goes back beside it (see
+  // #holdStoredAbove).
   static restore(records, finalSeq = null) {
     LocalDatabase.raiseFinal(finalSeq);
 
@@ -830,13 +832,19 @@ export default class LocalDatabase {
 
       const {facts, id, row, type} = record;
 
-      if (LocalDatabase.baseRow(type, id) === null) {
+      const stored = LocalDatabase.baseRow(type, id) === null;
+
+      if (stored) {
         LocalDatabase.putRow(type, row);
       } else {
         LocalDatabase.unmarkCarried(type, id);
       }
 
       LocalDatabase.#takeWaiting(type, id, record.waiting);
+
+      if (stored) {
+        LocalDatabase.#holdStoredAbove(type, id);
+      }
 
       for (const [relationship, targetIds] of Object.entries(facts)) {
         if (!LocalDatabase.hasFacts(type, relationship, id)) {
@@ -855,7 +863,8 @@ export default class LocalDatabase {
   // its rows (see Tabs.#takeStore), after `takeStoredFinal`. The numbers this tab's page showed
   // stay, since they are final on the server whatever the store holds: a list keeps ordering the
   // row by them. They are the ones held beside the row now, and the given ones, which
-  // `shownNumbers` took before the row was dropped.
+  // `shownNumbers` took before the row was dropped. A number the store's point doesn't reach goes
+  // back beside the row, as `restore` does with it.
   static putStored(type, row, waiting, shown = {}) {
     const kept = Object.entries(
       Object.assign({}, LocalDatabase.#waiting[type]?.[row.id]?.shown),
@@ -870,6 +879,7 @@ export default class LocalDatabase {
     }
 
     LocalDatabase.#takeWaiting(type, row.id, waiting);
+    LocalDatabase.#holdStoredAbove(type, row.id);
     LocalDatabase.#fileFinal();
   }
 
@@ -1185,6 +1195,39 @@ export default class LocalDatabase {
         LocalDatabase.#settleEntry(type, id);
       }
     }
+  }
+
+  // Moves each number a stored row holds above the point back beside it, unless a newer one waits
+  // there already. A frame naming no place is stored with its rows filed under the point held then,
+  // while the point stored stays the one written with the last place (see Durability.persistFrame).
+  // Kept in the row, such a number would be one a reader finds while an older one stored beside
+  // another row still waits, and a count from it would never take that older one in.
+  static #holdStoredAbove(type, id) {
+    const held = LocalDatabase.baseRow(type, id);
+
+    const above = SEQUENCE_FIELDS.filter(
+      (field) =>
+        (held[field] ?? null) !== null && !LocalDatabase.#isFinal(held[field]),
+    );
+
+    if (above.length === 0) {
+      return;
+    }
+
+    const row = Object.assign({}, held);
+    const entry = LocalDatabase.#waitingEntry(type, id);
+
+    for (const field of above) {
+      const waiting = entry.numbers[field];
+
+      if (waiting === undefined || BigInt(waiting) < BigInt(held[field])) {
+        entry.numbers[field] = held[field];
+      }
+
+      row[field] = null;
+    }
+
+    LocalDatabase.putRow(type, row);
   }
 
   // A waiting number as the wire spelled it, which is a string past 2^53.

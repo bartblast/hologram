@@ -1886,6 +1886,58 @@ describe("LocalDatabase", () => {
       assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
     });
 
+    // A frame naming no place is stored with its rows filed under the point held then, and the
+    // point stored with them is the one written with the last place.
+    it("holds a restored row's number above the restored point back", () => {
+      LocalDatabase.restore(
+        [{facts: {}, id: "t1", row: row("t1", 5, 15), type: TASK}],
+        10,
+      );
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 5);
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_updated_seq: 15},
+        own: false,
+      });
+    });
+
+    it("keeps a restored row's newer waiting number over the one it holds above the point", () => {
+      LocalDatabase.restore(
+        [
+          {
+            facts: {},
+            id: "t1",
+            row: row("t1", 12, 15),
+            type: TASK,
+            waiting: {numbers: {server_updated_seq: 18}, own: false},
+          },
+        ],
+        10,
+      );
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_created_seq);
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_created_seq: 12, server_updated_seq: 18},
+        own: false,
+      });
+    });
+
+    it("leaves the numbers of a row the page brought above the restored point alone", () => {
+      LocalDatabase.putRow(TASK, row("t1", 5, 15));
+
+      LocalDatabase.restore(
+        [{facts: {}, id: "t1", row: row("t1", 5, 8), type: TASK}],
+        10,
+      );
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 15);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
     it("holds a stored number newer than a carried row's back, own flag and all", () => {
       LocalDatabase.putRow(TASK, row("t1", null, null));
 
@@ -1953,6 +2005,18 @@ describe("LocalDatabase", () => {
       assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
         numbers: {server_created_seq: 12},
         own: true,
+      });
+    });
+
+    it("holds a stored row's number above the store's point back", () => {
+      LocalDatabase.takeStoredFinal(10);
+      LocalDatabase.putStored(TASK, row("t1", 5, 15), null);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_updated_seq: 15},
+        own: false,
       });
     });
 
