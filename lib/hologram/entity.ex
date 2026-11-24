@@ -323,9 +323,9 @@ defmodule Hologram.Entity do
 
       derived :message_count, :integer, fn messages -> count(messages) end
 
-      derived :unread_count, :integer, fn channel, last_seen_at ->
+      derived :unread_count, :integer, fn channel, last_seen_seq ->
         channel.messages
-        |> filter(server_created_at > ^last_seen_at)
+        |> filter(server_created_seq > ^last_seen_seq)
         |> count()
       end
 
