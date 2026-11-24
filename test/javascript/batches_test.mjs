@@ -3689,7 +3689,11 @@ describe("Batches", () => {
       Durability.mode = "indexeddb";
       const batch = made("u1", "t1");
 
+      LocalDatabase.actorUserId = "u2";
       Batches.releaseForeign("u2");
+
+      LocalDatabase.actorUserId = "u1";
+      Batches.releaseForeign("u1");
 
       Durability.mode = "memory";
       file(false);
