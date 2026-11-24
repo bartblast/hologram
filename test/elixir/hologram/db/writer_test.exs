@@ -1192,7 +1192,7 @@ defmodule Hologram.DB.WriterTest do
 
     test "answers an amount the column can't take with its violation when the stored value passes" do
       user = create_user("huge_amount@example.com")
-      task = create_changed_task(%{count: 5})
+      task = create_changed_task(%{count: -5_000_000_000_000_000_000})
 
       assert as_user(user, fn ->
                update(increment(task, :count, 10_000_000_000_000_000_000))
