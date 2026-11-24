@@ -519,6 +519,27 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Blocks until the given JavaScript returns true, then returns the `session`. For a value a page
+  sets at a time the test can't wait for in any other way.
+  """
+  @spec await_script(Wallaby.Session.t(), String.t(), non_neg_integer) :: Wallaby.Session.t()
+  def await_script(session, script, attempts_left \\ 100)
+
+  def await_script(_session, script, 0) do
+    raise Wallaby.ExpectationNotMetError,
+          "Timed out waiting for the script to return true: #{script}"
+  end
+
+  def await_script(session, script, attempts_left) do
+    if script_result(session, script) == true do
+      session
+    else
+      Process.sleep(50)
+      await_script(session, script, attempts_left - 1)
+    end
+  end
+
+  @doc """
   Blocks until the client's write queue holds at least one refused batch, and returns the
   refusals as the queue's own window reads them.
 

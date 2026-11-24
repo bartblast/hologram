@@ -208,6 +208,7 @@ defmodule HologramFeatureTests.IdentityChangeTest do
     |> mark_document()
     |> reload()
     |> wait_for_unmarked_document()
+    |> await_script("return globalThis.__mountedBeforeBack !== undefined;")
     |> assert_script_result("return globalThis.__mountedBeforeBack;", false)
     |> assert_page(IdentityChangePage)
     |> assert_text(css("#result"), "marked")
