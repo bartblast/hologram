@@ -469,6 +469,114 @@ defmodule Hologram.DB.ResetTest do
                Enum.sort([run_database, shadow])
     end
 
+    test "keeps a run database whose shadow was created again between the listings", %{
+      database_opts: database_opts,
+      scratch_opts: scratch_opts
+    } do
+      run_database =
+        create_database(
+          scratch_opts,
+          DatabaseBootstrap.run_database_name(scratch_opts[:database], "0123abcd")
+        )
+
+      shadow = create_database(scratch_opts, run_database <> "_shadow")
+      quoted_shadow = Mapper.quote_identifier(shadow)
+
+      # Wide margins: the shadow has to be created again after the first listing, and well before
+      # the second.
+      recreation =
+        Task.async(fn ->
+          Process.sleep(500)
+
+          with_maintenance(scratch_opts, fn maintenance ->
+            query!(maintenance, "DROP DATABASE #{quoted_shadow}")
+            query!(maintenance, "CREATE DATABASE #{quoted_shadow} TEMPLATE template0")
+          end)
+        end)
+
+      leftovers = own_leftovers(scratch_opts)
+
+      assert drop_leftovers!(database_opts, :test, leftovers, relisting_interval_ms: 3_000) == %{
+               dropped: [],
+               skipped: [{run_database, :shadow_kept}]
+             }
+
+      Task.await(recreation)
+
+      assert existing_databases(scratch_opts, [run_database, shadow]) ==
+               Enum.sort([run_database, shadow])
+    end
+
+    test "keeps a run database whose shadow was dropped between the listings", %{
+      database_opts: database_opts,
+      scratch_opts: scratch_opts
+    } do
+      run_database =
+        create_database(
+          scratch_opts,
+          DatabaseBootstrap.run_database_name(scratch_opts[:database], "0123abcd")
+        )
+
+      shadow = create_database(scratch_opts, run_database <> "_shadow")
+
+      # Wide margins: the shadow has to go after the first listing, and well before the second.
+      drop =
+        Task.async(fn ->
+          Process.sleep(500)
+
+          with_maintenance(scratch_opts, fn maintenance ->
+            query!(maintenance, "DROP DATABASE #{Mapper.quote_identifier(shadow)}")
+          end)
+        end)
+
+      leftovers = own_leftovers(scratch_opts)
+
+      assert drop_leftovers!(database_opts, :test, leftovers, relisting_interval_ms: 3_000) == %{
+               dropped: [],
+               skipped: [{run_database, :shadow_kept}]
+             }
+
+      Task.await(drop)
+
+      assert existing_databases(scratch_opts, [run_database]) == [run_database]
+    end
+
+    test "keeps the shadow of a run database created between the listings, without reporting it",
+         %{database_opts: database_opts, scratch_opts: scratch_opts} do
+      run_database = DatabaseBootstrap.run_database_name(scratch_opts[:database], "0123abcd")
+      shadow = create_database(scratch_opts, run_database <> "_shadow")
+      quoted_run_database = Mapper.quote_identifier(run_database)
+
+      on_exit(fn ->
+        with_maintenance(scratch_opts, fn maintenance ->
+          query!(maintenance, "DROP DATABASE IF EXISTS #{quoted_run_database} WITH (FORCE)")
+        end)
+      end)
+
+      # Wide margins: the run database has to come after the first listing, and well before the
+      # second.
+      creation =
+        Task.async(fn ->
+          Process.sleep(500)
+
+          with_maintenance(scratch_opts, fn maintenance ->
+            query!(maintenance, "CREATE DATABASE #{quoted_run_database} TEMPLATE template0")
+          end)
+        end)
+
+      leftovers = own_leftovers(scratch_opts)
+
+      assert drop_leftovers!(database_opts, :test, leftovers, relisting_interval_ms: 3_000) == %{
+               dropped: [],
+               skipped: []
+             }
+
+      Task.await(creation)
+
+      assert existing_databases(scratch_opts, [run_database, shadow]) ==
+               Enum.sort([run_database, shadow])
+    end
+
     test "keeps the shadow of a run database it skips, without reporting it", %{
       database_opts: database_opts,
       scratch_opts: scratch_opts

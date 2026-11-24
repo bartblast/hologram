@@ -71,7 +71,8 @@ defmodule Hologram.DB.Reset do
   twice, the interval apart, and only those both listings show are dropped, so a database a run
   has just created and not yet connected to is left alone. A shadow goes before the database it
   was named after, and a database whose shadow is left stays too, as in the test runs' own
-  sweep. The configured database is never dropped, whatever it's named.
+  sweep, and so does one whose shadow is new or gone since the first listing, and the shadow of
+  a database new since then. The configured database is never dropped, whatever it's named.
 
   Runs in the test env only. The options take :relisting_interval_ms, which defaults to a second.
   """
@@ -89,14 +90,16 @@ defmodule Hologram.DB.Reset do
       first_listing = list_leftovers(pid, leftovers, database)
       Process.sleep(relisting_interval_ms)
 
+      second_listing = list_leftovers(pid, leftovers, database)
+
       # Compared by oid too, so a database dropped and created again under its name between the
       # listings counts as new.
       listed =
-        pid
-        |> list_leftovers(leftovers, database)
-        |> Map.filter(fn {name, listed} -> first_listing[name][:oid] == listed.oid end)
+        Map.filter(second_listing, fn {name, listed} ->
+          first_listing[name][:oid] == listed.oid
+        end)
 
-      drop_listed_leftovers(pid, listed, first_listing)
+      drop_listed_leftovers(pid, listed, second_listing, first_listing)
     end)
   end
 
@@ -124,8 +127,9 @@ defmodule Hologram.DB.Reset do
   schemas and nothing else, so tables of an Ecto repo sharing it stay. Refuses, changing
   nothing, while another client is connected to the database, when its marker says it belongs
   to another app, another env, or the migrator - the given app and env are the current ones -
-  or when it has more than one row, when something outside the two schemas depends on them, which the
-  drop would take along, or when the database name is longer than PostgreSQL's 63 bytes.
+  or when it has more than one row, when something outside the two schemas depends on them,
+  which the drop would take along, or when the database name is longer than PostgreSQL's 63
+  bytes.
 
   Runs in the dev and test envs only.
   """
@@ -307,7 +311,8 @@ defmodule Hologram.DB.Reset do
       :dropped
     else
       reason when reason in [:in_use, :not_owner] -> reason
-      _gone_or_replaced -> :gone
+      %{^name => _replaced} -> :replaced
+      _gone -> :gone
     end
   rescue
     error in Postgrex.Error ->
@@ -320,13 +325,16 @@ defmodule Hologram.DB.Reset do
   # A database and its shadow go together, the shadow first: dropped or kept on their own, a
   # shadow whose database is gone is found by no later sweep when the database's name was cut, and
   # a live run's shadow could go with its database kept. A pair whose database is skipped keeps its
-  # shadow unreported. No listed shadow has a listed shadow of its own, since no run base or named
+  # shadow unreported. The pairs come from the whole second listing, and from the shadows the first
+  # one shows, so a database whose shadow is new or gone since the first listing stays - the
+  # verifier drops a shadow before creating it again - and so does the shadow of a database new
+  # since then. No listed shadow has a listed shadow of its own, since no run base or named
   # database ends in _shadow, so a pair is never part of a longer chain.
-  defp drop_listed_leftovers(pid, listed, first_listing) do
+  defp drop_listed_leftovers(pid, listed, second_listing, first_listing) do
     shadows =
-      for {name, _listed} <- listed,
+      for {name, _listed} <- second_listing,
           shadow = ShadowVerifier.shadow_database_name(name),
-          Map.has_key?(listed, shadow),
+          Map.has_key?(second_listing, shadow) or Map.has_key?(first_listing, shadow),
           into: %{},
           do: {name, shadow}
 
@@ -340,9 +348,14 @@ defmodule Hologram.DB.Reset do
     |> Enum.reject(&MapSet.member?(paired_shadows, &1))
     |> Enum.sort()
     |> Enum.reduce(%{dropped: [], skipped: []}, fn name, sweep ->
+      shadow = shadows[name]
+
       case leftover_refusal(listed[name], first_listing[name]) do
+        nil when shadow != nil and not is_map_key(listed, shadow) ->
+          %{sweep | skipped: [{name, :shadow_kept} | sweep.skipped]}
+
         nil ->
-          pair = Enum.reject([shadows[name], name], &is_nil/1)
+          pair = Enum.reject([shadow, name], &is_nil/1)
           drop_pair(pid, pair, listed, first_listing, sweep)
 
         reason ->
@@ -361,6 +374,11 @@ defmodule Hologram.DB.Reset do
 
       :gone ->
         drop_pair(pid, rest, listed, first_listing, sweep)
+
+      # A shadow created again since the second listing is a live verifier's, so its database
+      # stays with it. A database replaced since isn't reported, as a gone one isn't.
+      :replaced ->
+        %{sweep | skipped: Enum.map(rest, &{&1, :shadow_kept}) ++ sweep.skipped}
 
       reason ->
         skipped = Enum.map(rest, &{&1, :shadow_kept})
