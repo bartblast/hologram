@@ -7,16 +7,25 @@ defmodule Hologram.Auth.SpawnMark do
   # serves many users in turn. The one thing it copies to a new process at spawn is its trace
   # flags, so a process working for a session holds set_on_spawn in a trace session of its own.
   #
+  # It also holds timestamp, which stays after the session ends, as the record that the process
+  # has worked for one. A task a supervisor starts inherits nothing from its caller, so that record
+  # is all it can read. It can't live in the process dictionary: Bandit clears that between the
+  # requests of a keep-alive connection.
+  #
   # The trace session has no event flags, so the tracer never receives a message, and being a
   # session of its own, it neither sees nor disturbs an app's own tracing.
   #
   # The flags live only as long as the tracer: killing it clears every process' flags, and setting
   # one afterwards still reports success. So a set is read back, and a session can't start
-  # unmarked. Processes already running when that happens lose their mark.
+  # unmarked. Processes already running when that happens lose their mark, and what a request
+  # already in flight starts afterwards, plain or through a supervisor, carries none. That's why
+  # this process is supervised apart from the database unit, whose restarts would otherwise take it
+  # down.
 
   use GenServer
 
-  @flags [:set_on_spawn]
+  @mark_flag :set_on_spawn
+  @served_flag :timestamp
   @session_key {__MODULE__, :trace_session}
 
   @doc """
@@ -37,26 +46,18 @@ defmodule Hologram.Auth.SpawnMark do
   @spec marked?(:trace.session() | nil) :: boolean
   def marked?(session \\ trace_session())
 
-  def marked?(session), do: held_by?(self(), session)
+  def marked?(nil), do: false
 
-  @doc """
-  Returns true when the given local process holds the mark, and false when it doesn't or has ended.
-  """
-  @spec held_by?(pid, :trace.session() | nil) :: boolean
-  def held_by?(pid, session \\ trace_session())
+  def marked?(session) do
+    {:flags, flags} = :trace.info(session, self(), :flags)
 
-  def held_by?(_pid, nil), do: false
-
-  def held_by?(pid, session) do
-    case :trace.info(session, pid, :flags) do
-      {:flags, flags} -> :set_on_spawn in flags
-      :undefined -> false
-    end
+    @mark_flag in flags
   end
 
   @doc """
   Sets or clears the calling process' mark, which the processes it starts from then on inherit.
-  Raises when the mark can't be set because the tracer has ended, so no session runs unmarked.
+  Setting it also records for good that the process has worked for a session. Raises when the mark
+  can't be set because the tracer has ended, so no session runs unmarked.
   """
   @spec put(boolean, :trace.session() | nil) :: :ok
   def put(marked?, session \\ trace_session())
@@ -64,7 +65,7 @@ defmodule Hologram.Auth.SpawnMark do
   def put(_marked?, nil), do: :ok
 
   def put(marked?, session) do
-    :trace.process(session, self(), marked?, @flags)
+    restore(marked?, session)
 
     if marked? and not marked?(session) do
       raise "can't mark this process as working for a session: #{inspect(__MODULE__)} isn't running"
@@ -82,8 +83,43 @@ defmodule Hologram.Auth.SpawnMark do
 
   def restore(_marked?, nil), do: :ok
 
-  def restore(marked?, session) do
-    :trace.process(session, self(), marked?, @flags)
+  def restore(true, session) do
+    :trace.process(session, self(), true, [@mark_flag, @served_flag])
+
+    :ok
+  end
+
+  def restore(false, session) do
+    :trace.process(session, self(), false, [@mark_flag])
+
+    :ok
+  end
+
+  @doc """
+  Returns true when the given local process has worked for a session, which includes having
+  inherited the mark, or has ended. Read in one step, so a process leaving a session or ending
+  can't be caught halfway. An app with no data model has no sessions to tell apart, so it's false
+  there.
+  """
+  @spec served_or_ended?(pid, :trace.session() | nil) :: boolean
+  def served_or_ended?(pid, session \\ trace_session())
+
+  def served_or_ended?(_pid, nil), do: false
+
+  def served_or_ended?(pid, session) do
+    case :trace.info(session, pid, :flags) do
+      {:flags, flags} -> @served_flag in flags
+      :undefined -> true
+    end
+  end
+
+  @doc """
+  Drops the handle a previous start left behind, for an app restarting with no data model, which
+  runs no tracer and whose sessions have nothing to be marked for.
+  """
+  @spec forget() :: :ok
+  def forget do
+    :persistent_term.erase(@session_key)
 
     :ok
   end

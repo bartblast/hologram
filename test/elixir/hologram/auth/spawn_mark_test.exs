@@ -34,39 +34,96 @@ defmodule Hologram.Auth.SpawnMarkTest do
     end
   end
 
-  describe "held_by?/2" do
-    test "is true for another process holding the mark" do
-      {session, _tracer} = start_session()
+  describe "served_or_ended?/2" do
+    # Starts a process that runs the function, tells the test and stays alive.
+    defp start_process(fun) do
       test_pid = self()
-      put(true, session)
 
       pid =
         spawn(fn ->
-          send(test_pid, :started)
+          fun.()
+          send(test_pid, :ready)
           Process.sleep(:infinity)
         end)
 
-      assert_receive :started, @receive_timeout
-      assert held_by?(pid, session)
+      assert_receive :ready, @receive_timeout
+
+      pid
     end
 
-    test "is false for a process that doesn't hold it" do
-      {session, tracer} = start_session()
+    test "is false for a process that never held the mark" do
+      {session, _tracer} = start_session()
+      pid = start_process(fn -> :ok end)
 
-      refute held_by?(tracer, session)
+      refute served_or_ended?(pid, session)
     end
 
-    test "is false for a process that has ended" do
+    test "is true for a process holding the mark" do
+      {session, _tracer} = start_session()
+      pid = start_process(fn -> put(true, session) end)
+
+      assert served_or_ended?(pid, session)
+    end
+
+    test "is true for a process that inherited the mark" do
+      {session, _tracer} = start_session()
+      put(true, session)
+      pid = start_process(fn -> :ok end)
+
+      assert served_or_ended?(pid, session)
+    end
+
+    test "stays true after the mark is cleared" do
+      {session, _tracer} = start_session()
+
+      pid =
+        start_process(fn ->
+          put(true, session)
+          put(false, session)
+        end)
+
+      assert served_or_ended?(pid, session)
+    end
+
+    # Bandit does this between the requests of a keep-alive connection.
+    test "stays true after the process dictionary is cleared" do
+      {session, _tracer} = start_session()
+
+      pid =
+        start_process(fn ->
+          put(true, session)
+          put(false, session)
+          Enum.each(Process.get_keys(), &Process.delete/1)
+        end)
+
+      assert served_or_ended?(pid, session)
+    end
+
+    test "is false for a process started after the mark was cleared" do
+      {session, _tracer} = start_session()
+      put(true, session)
+      put(false, session)
+      pid = start_process(fn -> :ok end)
+
+      refute served_or_ended?(pid, session)
+    end
+
+    test "is true for a process that has ended" do
       {session, _tracer} = start_session()
       pid = spawn(fn -> :ok end)
       monitor = Process.monitor(pid)
       assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}, @receive_timeout
 
-      refute held_by?(pid, session)
+      assert served_or_ended?(pid, session)
     end
 
-    test "is false with no trace session" do
-      refute held_by?(self(), nil)
+    # With no data model there's no session to protect, so nothing is refused for its caller.
+    test "is false with no trace session, even for a process that has ended" do
+      pid = spawn(fn -> :ok end)
+      monitor = Process.monitor(pid)
+      assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}, @receive_timeout
+
+      refute served_or_ended?(pid, nil)
     end
   end
 

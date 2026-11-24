@@ -654,6 +654,43 @@ defmodule Hologram.Auth.ContextTest do
       refute answer
     end
 
+    # Bandit clears the process dictionary between the requests of a keep-alive connection, and a
+    # supervised task can first look after that.
+    test "is true for a supervised task whose caller's dictionary was cleared after its session" do
+      supervisor = start_supervised!(Task.Supervisor)
+      test_pid = self()
+      ref = make_ref()
+
+      caller =
+        spawn(fn ->
+          {:ok, task} =
+            with_actor("user_id_69", fn ->
+              Task.Supervisor.start_child(supervisor, fn ->
+                receive do
+                  :go -> send(test_pid, {ref, started_by_request?()})
+                end
+              end)
+            end)
+
+          Process.get_keys()
+          |> Enum.reject(&(&1 in [:"$ancestors", :"$initial_call", :"$process_label"]))
+          |> Enum.each(&Process.delete/1)
+
+          send(test_pid, {:task, task})
+
+          receive do
+            :end -> :ok
+          end
+        end)
+
+      assert_receive {:task, task}, @receive_timeout
+      send(task, :go)
+
+      assert_receive {^ref, true}, @receive_timeout
+
+      send(caller, :end)
+    end
+
     # Walking a process once per path took minutes at this depth.
     test "answers quickly under deeply nested supervisors" do
       nest = fn nest, depth ->

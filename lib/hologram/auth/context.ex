@@ -33,10 +33,6 @@ defmodule Hologram.Auth.Context do
   # :server inside without_session/1, which is no session by explicit choice.
   @actor_key {__MODULE__, :actor_user_id}
 
-  # Set for good on a process once it has worked for a session, for the tasks a supervisor starts
-  # on its behalf to find: those are spawned by the supervisor, so they don't inherit SpawnMark.
-  @served_key {__MODULE__, :served_session}
-
   # The search's answer, kept since how a process was started can't change, while what the search
   # can read about its ancestors does as they end or go on to serve a session.
   @started_by_request_key {__MODULE__, :started_by_request}
@@ -117,8 +113,9 @@ defmodule Hologram.Auth.Context do
   ended ancestor stops the search, so a process started by a supervised task that has ended isn't
   found. Neither is work handed to a process that was already running or that a supervisor started
   with no record of who asked for it, nor a stream's workers when its enumeration began outside the
-  session. A process with the :sensitive flag, set before or during the session, passes on no mark
-  and shows no record of having served one, so what it starts isn't found either.
+  session. A process with the :sensitive flag, set before or during the session, passes on no mark,
+  so what it spawns isn't found either, while a task it hands to a supervisor is still judged by
+  its record.
 
   without_session/1 clears the mark for what the process spawns inside it, but a supervisor's task
   has no mark to clear: a task whose caller has served a session or has ended counts, even one
@@ -208,15 +205,10 @@ defmodule Hologram.Auth.Context do
   # The mark goes first: when it can't be set, the process is left as it was.
   defp enter_state({:session, _user_id} = session) do
     SpawnMark.put(true)
-    Process.put(@served_key, true)
     Process.put(@actor_key, session)
   end
 
-  # A marked process keeps a record of it, since a task it handed to a supervisor is judged by what
-  # can be read about it, and the mark is out of sight for as long as this lasts.
   defp enter_state(:server) do
-    if SpawnMark.marked?(), do: Process.put(@served_key, true)
-
     SpawnMark.put(false)
     Process.put(@actor_key, :server)
   end
@@ -275,14 +267,6 @@ defmodule Hologram.Auth.Context do
     :ok
   end
 
-  defp served_or_ended?(pid) do
-    case Process.info(pid, {:dictionary, @served_key}) do
-      nil -> true
-      {_item, true} -> true
-      {_item, :undefined} -> false
-    end
-  end
-
   defp spawned_by?(caller, caller, _seen), do: true
 
   defp spawned_by?(pid, caller, seen) when is_pid(pid) and node(pid) == node() do
@@ -327,11 +311,5 @@ defmodule Hologram.Auth.Context do
 
   defp request_work?(pid) when node(pid) != node(), do: false
 
-  # The mark is read first. Entering without_session/1 records the process as served and then
-  # clears the mark, and an ending process loses both, so a mark found missing here means the record
-  # or the end is already there to read. In the other order, a read landing between the two steps
-  # would find neither, and the answer is kept.
-  defp request_work?(pid) do
-    SpawnMark.held_by?(pid) or served_or_ended?(pid)
-  end
+  defp request_work?(pid), do: SpawnMark.served_or_ended?(pid)
 end

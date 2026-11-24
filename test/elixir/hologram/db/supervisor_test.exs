@@ -4,7 +4,6 @@ defmodule Hologram.DB.SupervisorTest do
 
   import Hologram.DB.Supervisor
 
-  alias Hologram.Auth.SpawnMark
   alias Hologram.DB
   alias Hologram.DB.EctoGuard
   alias Hologram.DB.IndexBuilder
@@ -20,7 +19,6 @@ defmodule Hologram.DB.SupervisorTest do
              {:ok,
               {%{strategy: :rest_for_one, intensity: 3, period: 5, auto_shutdown: :never},
                [
-                 %{id: SpawnMark, start: {SpawnMark, :start_link, [[]]}},
                  %{id: DB, start: {DB, :start_link, [[]]}, type: :supervisor},
                  %{id: QueryCache, start: {QueryCache, :start_link, [[]]}},
                  %{
@@ -51,14 +49,13 @@ defmodule Hologram.DB.SupervisorTest do
   describe "children/1" do
     test "leaves the index builder out in dev and test" do
       for env <- [:dev, :test] do
-        assert children(env) == [SpawnMark, DB, QueryCache, Sync.Supervisor, Job.Supervisor]
+        assert children(env) == [DB, QueryCache, Sync.Supervisor, Job.Supervisor]
       end
     end
 
     # Last, so the node serves while it builds.
     test "starts the index builder last where migrations manage the database" do
       assert children(:prod) == [
-               SpawnMark,
                DB,
                QueryCache,
                Sync.Supervisor,

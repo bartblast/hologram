@@ -59,6 +59,9 @@ defmodule Hologram.ApplicationTest do
       # singleton semantics), so nothing here disturbs concurrent database tests.
       assert Hologram.DB.Supervisor in child_modules
 
+      # Beside the database unit rather than inside it, so a restart storm there keeps the marks.
+      assert Hologram.Auth.SpawnMark in child_modules
+
       assert Hologram.Assets.ChunkRegistry in child_modules
       assert Hologram.Assets.PageDigestRegistry in child_modules
       assert Hologram.Assets.PathRegistry in child_modules
