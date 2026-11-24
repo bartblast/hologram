@@ -2257,6 +2257,17 @@ describe("DataLayer", () => {
         sinon.assert.notCalled(persisting);
       });
 
+      // A new session of the same user, like a login again in another tab.
+      it("keeps the rows, the place and the pair under a new session of that user", () => {
+        followToSameUser({identityTag: "2.tag-2"});
+
+        assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+        assert.equal(SyncStream.syncCursor, "place-1");
+        assert.equal(Replica.id, "replica-1");
+        assert.equal(SyncStream.followedTag, "2.tag-2");
+        sinon.assert.notCalled(rendering);
+      });
+
       it("answers that it didn't move the tab", () => {
         assert.isFalse(followToSameUser());
       });
