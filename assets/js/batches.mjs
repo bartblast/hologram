@@ -568,7 +568,7 @@ export default class Batches {
   // order (see its note on the sender).
   //
   // Every write of these batches naming such a row goes with it, and so does an edge pointing at
-  // one, which would otherwise leave a held row's set naming a row this client doesn't hold.
+  // one, which the fold would otherwise go on showing in a held row's set until the batch's answer.
   static landUnsent(types, appliedSeq) {
     if (!Number.isInteger(appliedSeq)) {
       return;

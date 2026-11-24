@@ -42,6 +42,11 @@ defmodule HologramSyncBenchmark.Sweep do
   given first one, and `passed?` judges its result. `summary` turns a result into the line the
   step prints, for a case whose steps measure other things than writes.
 
+  `hooks` may hold `:before_step`, run for a client count and first marker on a server node of its
+  own before the step's, for a case whose step starts on a node that has just replaced another.
+  What it returns is the step's fourth argument, nil without one. `:after_step` is then called with
+  it once the step is over, however it ended.
+
   A step whose server node passes `memory_limit` bytes is stopped there, by halting the node, so
   the run can't exhaust the machine. It has no figures, so it's returned apart, as the step that
   stopped the sweep with the reading that stopped it, or nil when none did.
@@ -49,12 +54,20 @@ defmodule HologramSyncBenchmark.Sweep do
   @spec run(
           pid,
           [pos_integer],
-          (Peer.t(), pos_integer, non_neg_integer -> map),
+          (Peer.t(), pos_integer, non_neg_integer, term -> map),
           (map -> boolean),
           (map -> String.t()),
-          pos_integer
-        ) :: {[map], %{clients: pos_integer, memory: non_neg_integer} | nil}
-  def run(conn, counts, step, passed?, summary, memory_limit) do
+          pos_integer,
+          keyword
+        ) ::
+          {[map],
+           %{
+             optional(:while_filling) => boolean,
+             clients: pos_integer,
+             memory: non_neg_integer
+           }
+           | nil}
+  def run(conn, counts, step, passed?, summary, memory_limit, hooks \\ []) do
     if length(counts) > @max_steps do
       raise ArgumentError, "a sweep takes at most #{@max_steps} steps"
     end
@@ -64,7 +77,7 @@ defmodule HologramSyncBenchmark.Sweep do
       |> Enum.with_index()
       |> Enum.reduce_while({[], nil}, fn {count, index}, {results, nil} ->
         conn
-        |> run_step(count, index, step, passed?, memory_limit)
+        |> run_step(count, index, step, passed?, memory_limit, hooks)
         |> take_step(count, results, summary)
       end)
 
@@ -77,6 +90,15 @@ defmodule HologramSyncBenchmark.Sweep do
     IO.puts("  STOPPED at the memory limit, the server node held #{gigabytes(memory)} GB")
 
     {:halt, {results, %{clients: count, memory: memory}}}
+  end
+
+  defp take_step({:stopped_filling, memory}, count, results, _summary) do
+    IO.puts(
+      "  STOPPED at the memory limit while filling on the first node, which held " <>
+        "#{gigabytes(memory)} GB"
+    )
+
+    {:halt, {results, %{clients: count, memory: memory, while_filling: true}}}
   end
 
   defp take_step({:ok, result}, _count, results, summary) do
@@ -92,35 +114,116 @@ defmodule HologramSyncBenchmark.Sweep do
   # A guard on the server node halts it past the memory limit, and is asked once the step is
   # over whether it did: a node halted while the step only waited, with no call to fail, still
   # makes the step a stopped one, and a step that failed for another reason keeps its error.
-  defp run_step(conn, count, index, step, passed?, memory_limit) do
+  defp run_step(conn, count, index, step, passed?, memory_limit, hooks) do
     :ok = DB.truncate_log!(conn)
     :ok = DB.vacuum_analyze!(conn)
     autovacuum_before = DB.autovacuum_runs(conn)
+    first_marker = index * @markers_per_step
 
     IO.puts("Step: #{count} clients")
 
-    case Peer.with_peer(&guarded_step(&1, step, count, index, memory_limit)) do
-      {:stopped, memory} ->
-        {:stopped, memory}
+    with {:ok, step_context} <- prepare_step(hooks, count, first_marker, memory_limit),
+         {:ok, result} <-
+           guarded_step(hooks, step_context, memory_limit, fn peer ->
+             step.(peer, count, first_marker, step_context)
+           end) do
+      result =
+        Map.merge(result, %{
+          autovacuum_ran: DB.autovacuum_runs(conn) != autovacuum_before,
+          heap_kills: Measure.heap_kills(Peer.log_path()),
+          session_cuts: Measure.session_cuts(Peer.log_path())
+        })
 
-      {:ok, result} ->
-        result =
-          Map.merge(result, %{
-            autovacuum_ran: DB.autovacuum_runs(conn) != autovacuum_before,
-            heap_kills: Measure.heap_kills(Peer.log_path()),
-            session_cuts: Measure.session_cuts(Peer.log_path())
-          })
-
-        {:ok, Map.put(result, :passed, passed?.(result))}
+      {:ok, Map.put(result, :passed, passed?.(result))}
     end
   end
 
-  defp guarded_step(peer, step, count, index, memory_limit) do
+  defp prepare_step(hooks, count, first_marker, memory_limit) do
+    case Keyword.fetch(hooks, :before_step) do
+      {:ok, before_step} ->
+        memory_limit
+        |> prepare_guarded(&before_step.(&1, count, first_marker), &call_after_step(hooks, &1))
+        |> mark_filling()
+
+      :error ->
+        {:ok, nil}
+    end
+  end
+
+  # A stop here is the filling node's rather than the measured one's, so the figure mustn't read as
+  # the case's own limit.
+  defp mark_filling({:stopped, memory}), do: {:stopped_filling, memory}
+
+  defp mark_filling(prepared), do: prepared
+
+  defp guarded_step(hooks, step_context, memory_limit, fun) do
+    with_guarded_peer(memory_limit, fun)
+  after
+    call_after_step(hooks, step_context)
+  end
+
+  defp call_after_step(hooks, step_context) do
+    case Keyword.fetch(hooks, :after_step) do
+      {:ok, after_step} -> after_step.(step_context)
+      :error -> :ok
+    end
+  end
+
+  @doc """
+  Calls the given function with a fresh server node as `with_guarded_peer/2` does, for one that
+  prepares something outliving the node, and calls `clean_up` with what it returned when it doesn't
+  reach the caller: the node passed the memory limit just after, or stopping it raised.
+  """
+  @spec prepare_guarded(pos_integer, (Peer.t() -> result), (result -> term)) ::
+          {:ok, result} | {:stopped, non_neg_integer}
+        when result: term
+  def prepare_guarded(memory_limit, prepare, clean_up) do
+    key = {__MODULE__, make_ref()}
+
+    try do
+      outcome =
+        with_guarded_peer(memory_limit, fn peer ->
+          prepared = prepare.(peer)
+          Process.put(key, prepared)
+          prepared
+        end)
+
+      prepared = Process.delete(key)
+
+      if match?({:stopped, _memory}, outcome) and prepared != nil do
+        clean_up.(prepared)
+      end
+
+      outcome
+    catch
+      kind, reason ->
+        case Process.delete(key) do
+          nil -> :ok
+          prepared -> clean_up.(prepared)
+        end
+
+        :erlang.raise(kind, reason, __STACKTRACE__)
+    end
+  end
+
+  @doc """
+  Calls the given function with a fresh server node, stopping the node past the given number of
+  bytes of memory, and returns `{:ok, result}`, or `{:stopped, memory}` with the reading it was
+  stopped at.
+  """
+  @spec with_guarded_peer(pos_integer, (Peer.t() -> result)) ::
+          {:ok, result} | {:stopped, non_neg_integer}
+        when result: term
+  def with_guarded_peer(memory_limit, fun) do
+    Peer.with_peer(&guarded(&1, fun, memory_limit))
+  end
+
+  defp guarded(peer, fun, memory_limit) do
     guard = Measure.start_memory_guard(peer, memory_limit)
 
     outcome =
       try do
-        {:ok, step.(peer, count, index * @markers_per_step)}
+        {:ok, fun.(peer)}
       catch
         kind, reason -> {:error, kind, reason, __STACKTRACE__}
       end
@@ -140,6 +243,60 @@ defmodule HologramSyncBenchmark.Sweep do
       {memory, _outcome} ->
         {:stopped, memory}
     end
+  end
+
+  @doc """
+  Measures each given size in turn, for a case stepping over sizes rather than client counts, and
+  returns the results with what ended the run early, or nil. `measure` gets a size and the first
+  marker number it may use, and answers `{:ok, result}`, `{:stopped, memory}` or `{:failed,
+  message}`. A size that doesn't answer `:ok` ends the run, keeping the results before it.
+  """
+  @spec over_sizes(
+          [pos_integer],
+          (pos_integer -> String.t()),
+          (pos_integer, non_neg_integer ->
+             {:ok, map} | {:stopped, non_neg_integer} | {:failed, String.t()}),
+          (map -> String.t())
+        ) :: {[map], map | nil}
+  def over_sizes(sizes, heading, measure, summary) do
+    if length(sizes) > @max_steps do
+      raise ArgumentError, "a run takes at most #{@max_steps} sizes"
+    end
+
+    {results, stopped} =
+      sizes
+      |> Enum.with_index()
+      |> Enum.reduce_while({[], nil}, fn {size, index}, {results, nil} ->
+        size
+        |> heading.()
+        |> IO.puts()
+
+        size
+        |> measure.(index * @markers_per_step)
+        |> take_size(size, results, summary)
+      end)
+
+    {Enum.reverse(results), stopped}
+  end
+
+  defp take_size({:ok, result}, _size, results, summary) do
+    result
+    |> summary.()
+    |> IO.puts()
+
+    {:cont, {[result | results], nil}}
+  end
+
+  defp take_size({:stopped, memory}, size, results, _summary) do
+    IO.puts("  STOPPED at the memory limit")
+
+    {:halt, {results, %{memory: memory, reason: :memory, size: size}}}
+  end
+
+  defp take_size({:failed, message}, size, results, _summary) do
+    IO.puts("  FAILED: #{message}")
+
+    {:halt, {results, %{reason: message, size: size}}}
   end
 
   @doc """
@@ -185,10 +342,13 @@ defmodule HologramSyncBenchmark.Sweep do
     [
       named && named.fill.restarts > 0 &&
         "#{named.fill.restarts} #{if named.fill.restarts == 1, do: "fill", else: "fills"} " <>
-          "restarted, #1635",
+          "restarted",
       stopped &&
-        "#{stopped.clients} stopped at the #{memory_limit_gb} GB memory limit, the server node " <>
-          "holding #{gigabytes(stopped.memory)} GB"
+        "#{stopped.clients} stopped at the #{memory_limit_gb} GB memory limit" <>
+          if(Map.get(stopped, :while_filling, false),
+            do: " while filling on the first node, before the wave",
+            else: ""
+          ) <> ", the server node holding #{gigabytes(stopped.memory)} GB"
     ]
   end
 
@@ -229,8 +389,7 @@ defmodule HologramSyncBenchmark.Sweep do
       "fill p50 #{Report.cell(Measure.percentile(fill.ms, 50))} ms",
       "p99 #{Report.cell(Measure.percentile(fill.ms, 99))} ms",
       "#{fill.filled}/#{result.clients} filled, #{fill.restarts} restarts, " <>
-        "#{result.heap_kills} heap kills" <>
-        if(result.heap_kills != fill.restarts, do: " (MISMATCH)", else: ""),
+        "#{result.heap_kills} heap kills",
       "single write #{Report.cell(isolated.last_delivery_ms)} ms to the last client, " <>
         "#{isolated.leaked} leaked",
       "steady p99 #{Report.cell(steady.p99_ms)} ms, #{steady.missing} missing, " <>

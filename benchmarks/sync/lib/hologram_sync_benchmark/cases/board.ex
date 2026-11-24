@@ -33,8 +33,10 @@ defmodule HologramSyncBenchmark.Cases.Board do
         "#{opts[:cards]} cards read with #{variant(variant).rule}, which lets every client " <>
           "read every card, so every write reaches every client"
       ],
+      name: variant(variant).name <> Step.group_suffix(opts),
       seed: &seed(&1, &2, opts, variant(variant)),
-      spec: &spec(&1, &2, &3, &4, opts, variant(variant))
+      spec: &spec(&1, &2, &3, &4, opts, variant(variant)),
+      title: variant(variant).title <> Step.group_title(opts)
     })
   end
 
@@ -72,6 +74,7 @@ defmodule HologramSyncBenchmark.Cases.Board do
       conn: conn,
       duration_ms: opts[:duration] * 1_000,
       expected: fn _offset -> every_client end,
+      fill_group: opts[:fill_group],
       fill_timeout_ms: opts[:fill_timeout] * 1_000,
       first_marker: first_marker,
       rate: opts[:rate],

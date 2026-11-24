@@ -398,10 +398,14 @@ defmodule Hologram.AuthContentionTest do
       on_own_session(scratch_opts, fn ->
         elect_victim()
 
-        Context.with_actor(actor_id, write)
+        run_as(actor_id, write)
       end)
     end)
   end
+
+  defp run_as(nil, write), do: write.()
+
+  defp run_as(actor_id, write), do: Context.with_actor(actor_id, write)
 
   defp stringify_keys(map), do: Map.new(map, fn {key, value} -> {Atom.to_string(key), value} end)
 

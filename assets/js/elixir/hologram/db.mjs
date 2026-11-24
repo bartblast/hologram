@@ -98,13 +98,17 @@ function basedOn(held, changes) {
 // two clients making the same two edges send the same two writes.
 function edgeEntries(entity, entityType, relationshipOps) {
   return Object.values(relationshipOps.data)
-    .map(([key, op]) => ({
-      id: Bitstring.toText(structField(entity, "id")),
-      op: `${op.value}_relationship`,
-      relationship: key.data[0].value,
-      target_id: Bitstring.toText(key.data[1]),
-      type: entityType,
-    }))
+    .map(([key, op]) => {
+      validateId(key.data[1]);
+
+      return {
+        id: Bitstring.toText(structField(entity, "id")),
+        op: `${op.value}_relationship`,
+        relationship: key.data[0].value,
+        target_id: Bitstring.toText(key.data[1]),
+        type: entityType,
+      };
+    })
     .sort((left, right) =>
       `${left.relationship} ${left.target_id}`.localeCompare(
         `${right.relationship} ${right.target_id}`,
@@ -232,8 +236,8 @@ function violationLine(entityType, values, pair) {
 
   const requirement = requirementDescription(reason);
 
-  // A field the values do not hold has no received value to show - a moved attribute is judged on
-  // the value the write arrives at, which the caller never held.
+  // A field the values do not hold has no received value to show - a move's amount is not among
+  // the values.
   return name.value in values
     ? `  * attribute ${spelled} ${requirement}, got: ${Interpreter.inspect(values[name.value])}`
     : `  * attribute ${spelled} ${requirement}`;
@@ -329,6 +333,9 @@ export function createEntity(entity, entityType) {
   if (!Type.isAtom(validation)) {
     return validation;
   }
+
+  // Validation doesn't judge the id, and the server can't store a row under one that isn't an id.
+  validateId(structField(entity, "id"));
 
   const stamp = Clock.stamp();
   const entry = writeEntry(entity, entityType, stamp);
@@ -466,8 +473,10 @@ function refusedAmounts(deltas) {
     .map(([name, amount]) => [Type.atom(name), amount]);
 }
 
-// A moved counter is judged on the value the move ARRIVES AT, which is the only value that is
-// ever true of it - the same rule the server applies to what its statement returns.
+// Judges where the moves would land from the value this client holds. That value can be out of
+// date, so the answer is never grounds for refusing a write: only the server judges a move, on
+// what its statement returns.
+// eslint-disable-next-line no-unused-vars
 function validateMoves(entityType, held, deltas) {
   const moved = Object.entries(deltas).map(([name, amount]) => [
     Type.atom(name),
@@ -814,12 +823,6 @@ const Elixir_Hologram_DB = {
 
     if (!Type.isAtom(validation)) {
       return validation;
-    }
-
-    const movesValidation = validateMoves(entityType, held, deltas);
-
-    if (!Type.isAtom(movesValidation)) {
-      return movesValidation;
     }
 
     const data = Model.unboxChanges(entityType, changes);

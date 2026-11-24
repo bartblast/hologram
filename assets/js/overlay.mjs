@@ -113,10 +113,11 @@ export default class Overlay {
     );
   }
 
-  // A confirmed batch's values ARE what the server stored, so they move out of the overlay and
-  // into the base, and the layer goes with them. What a reader sees does not change - the folded
-  // value and the promoted value are the same - which is why nothing flickers whichever arrives
-  // first, this answer or the frame carrying the same rows.
+  // A confirmed batch's put values ARE what the server stored, and a moved counter is an
+  // estimate until its patch frame lands, since the base it was added to can be out of date. Both
+  // move out of the overlay and into the base, and the layer goes with them. What a reader sees
+  // does not change - the folded value and the promoted value are the same - which is why nothing
+  // flickers whichever arrives first, this answer or the frame carrying the same rows.
   //
   // Applied against the BASE row rather than the folded one: a later batch may still be pending
   // over the same row, and its values are not the server's to store.
@@ -324,7 +325,8 @@ export default class Overlay {
   // server's pair is nil: it is the moment the row reaches the server, which has not happened
   // yet, and the server's own row brings it.
   // Every settable field takes that stamp as its revision, which is what the server's insert does
-  // with the same number.
+  // with the same number. A job's framework attributes aren't in the write, so the ones with a
+  // default take it here: an absent attempt would box to nil, which compares above every number.
   //
   // Reached only while the base holds no such row - once one is there, it is the server's own
   // copy and stands on its own.
@@ -335,13 +337,18 @@ export default class Overlay {
       Model.settableFields(type).map((field) => [field, write.stamp]),
     );
 
-    const row = Object.assign({id: write.id}, write.data, {
-      created_at: timestamp,
-      server_created_at: null,
-      server_updated_at: null,
-      updated_at: timestamp,
-      $revisions: revisions,
-    });
+    const row = Object.assign(
+      {id: write.id},
+      Overlay.#frameworkDefaults(type),
+      write.data,
+      {
+        created_at: timestamp,
+        server_created_at: null,
+        server_updated_at: null,
+        updated_at: timestamp,
+        $revisions: revisions,
+      },
+    );
 
     return Model.computeSortKeys(type, row);
   }
@@ -403,6 +410,41 @@ export default class Overlay {
     return sourceIds;
   }
 
+  // The defaults of the given type's framework attributes, as a row spells them.
+  static #frameworkDefaults(type) {
+    const entry = Model.entry(type);
+
+    return Object.fromEntries(
+      entry.frameworkAttributes
+        .filter((name) => Object.hasOwn(entry.defaults, name))
+        .map((name) => [
+          name,
+          Model.unbox(entry.defaults[name], entry.attributes[name]),
+        ]),
+    );
+  }
+
+  // Whether the base holds both rows the given edge names. Asked of the model's types and not of
+  // the bundle's list of synced ones, which a deploy changing only rules can leave behind what the
+  // server sends. An edge of a type or to a type the model doesn't name can't be judged, so it
+  // counts as held.
+  static #holdsEnds(write) {
+    if (!Model.isEntityType(write.type)) {
+      return true;
+    }
+
+    const relationship = Model.relationships(write.type)[write.relationship];
+
+    if (!relationship || !Model.isEntityType(relationship.type)) {
+      return true;
+    }
+
+    return (
+      LocalDatabase.baseRow(write.type, write.id) !== null &&
+      LocalDatabase.baseRow(relationship.type, write.target_id) !== null
+    );
+  }
+
   // The inverse of a to-many the given relationship of the given type is, when it is one - an
   // entry the build bakes for a type this client holds.
   static #joinInverse(type, relationship) {
@@ -452,6 +494,13 @@ export default class Overlay {
 
   static #promoteWrite(write) {
     if (write.op === "add_relationship") {
+      // A row can leave while its batch waits, and sync tells nothing of a pair naming a row the
+      // client doesn't hold, so nothing would ever take this one out again. Leaving it unfiled
+      // loses nothing: should the row become this client's, the server tells the pair then.
+      if (!Overlay.#holdsEnds(write)) {
+        return;
+      }
+
       LocalDatabase.addFact(
         write.type,
         write.relationship,

@@ -513,4 +513,42 @@ defmodule Hologram.DB.CodecTest do
       assert encode_enum_value(:high) == "high"
     end
   end
+
+  describe "storable_date?/1" do
+    test "takes the first and last day a date column holds" do
+      assert storable_date?(Date.new!(-4713, 11, 24))
+      assert storable_date?(Date.new!(5_874_897, 12, 31))
+    end
+
+    test "refuses the day before the first and the day after the last" do
+      refute storable_date?(Date.new!(-4713, 11, 23))
+      refute storable_date?(Date.new!(5_874_898, 1, 1))
+    end
+
+    test "refuses a date in another calendar, which the driver can't encode" do
+      refute storable_date?(%{~D[2026-01-01] | calendar: Hologram.Test.OtherCalendar})
+    end
+  end
+
+  describe "storable_datetime?/1" do
+    test "takes the first and last instant" do
+      assert storable_datetime?(~U[-4713-11-24 00:00:00.000000Z])
+      assert storable_datetime?(~U[9999-12-31 23:59:59.999999Z])
+    end
+
+    test "refuses one microsecond before the first and after the last" do
+      refute storable_datetime?(~U[-4713-11-23 23:59:59.999999Z])
+      refute storable_datetime?(%{~U[0000-01-01 00:00:00.000000Z] | year: 10_000})
+    end
+
+    test "judges the instant the offsets give" do
+      assert storable_datetime?(%{~U[9999-12-31 23:59:59Z] | utc_offset: 3600})
+      refute storable_datetime?(%{~U[9999-12-31 23:59:59Z] | utc_offset: -3600})
+    end
+
+    test "refuses offsets that aren't integers" do
+      refute storable_datetime?(%{~U[2026-07-17 12:00:00Z] | utc_offset: "0"})
+      refute storable_datetime?(%{~U[2026-07-17 12:00:00Z] | std_offset: 3600.5})
+    end
+  end
 end

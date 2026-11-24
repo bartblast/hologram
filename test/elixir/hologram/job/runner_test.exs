@@ -5,6 +5,7 @@ defmodule Hologram.Job.RunnerTest do
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.Auth
+  alias Hologram.Auth.Context
   alias Hologram.DB
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity
@@ -33,16 +34,33 @@ defmodule Hologram.Job.RunnerTest do
     free?
   end
 
+  # The wait is timed from when the outcome was written, which is after the operation began and
+  # before it returned, so the bounds are the operation's window plus the wait's own range.
+  defp assert_scheduled_between(scheduled_at, before, after_op, min_ms, max_ms) do
+    assert DateTime.compare(scheduled_at, DateTime.add(before, min_ms, :millisecond)) != :lt
+    assert DateTime.compare(scheduled_at, DateTime.add(after_op, max_ms, :millisecond)) != :gt
+  end
+
   defp create_user(email) do
     %{email: email}
     |> Module14.new()
     |> DB.create!()
   end
 
-  # A job of the outcome fixture, created as the given user or as nobody. Module3 declares no
-  # allow :create, so a create under an acting user claims the server's authority - what the run
-  # is under is the actor the row carries, which is stamped either way.
+  # A job of the outcome fixture on its last attempt, so that a run failing leaves it failed.
   defp job(outcome, user \\ nil) do
+    job = fresh_job(outcome, user)
+    attempt = Job.max_attempts(Module3) - 1
+
+    :ok = EntityOperations.update(Module3, job.id, %{attempt: attempt})
+
+    %{job | attempt: attempt}
+  end
+
+  # A job of the outcome fixture with all its attempts ahead, created as the given user or as
+  # nobody. Module3 declares no allow :create, so a create under an acting user claims the server's
+  # authority - what the run is under is the actor the row carries, which is stamped either way.
+  defp fresh_job(outcome, user \\ nil) do
     create = fn -> Job.create!(Module3, [outcome: outcome], trust: true) end
 
     if user, do: as_user(user, create), else: create.()
@@ -117,6 +135,47 @@ defmodule Hologram.Job.RunnerTest do
     test "skips a job that is not there", %{run_lock: run_lock} do
       assert claim(Module1, Entity.generate_id(), run_lock) == :taken
     end
+
+    test "leaves a queued job with no due time", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      :ok = EntityOperations.update(Module1, job.id, %{scheduled_at: nil})
+
+      assert claim(Module1, job.id, run_lock) == :taken
+      assert EntityOperations.get(Module1, job.id).status == :queued
+    end
+
+    test "counts the attempt", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      assert {:claimed, claimed_job} = claim(Module1, job.id, run_lock)
+
+      assert claimed_job.attempt == 1
+      assert EntityOperations.get(Module1, job.id).attempt == 1
+    end
+
+    test "counts on from the attempts the job has had", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      :ok = EntityOperations.update(Module1, job.id, %{attempt: 3})
+
+      assert {:claimed, %{attempt: 4}} = claim(Module1, job.id, run_lock)
+    end
+
+    # The look that named it read it before another node put it back to wait.
+    test "leaves a queued job that isn't due yet", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      set_scheduled_at(Module1, job.id, DateTime.add(DateTime.utc_now(), 1, :hour))
+
+      assert claim(Module1, job.id, run_lock) == :taken
+
+      row = EntityOperations.get(Module1, job.id)
+
+      assert row.status == :queued
+      assert row.attempt == 0
+      assert lock_free?(job)
+    end
   end
 
   describe "invoke/1" do
@@ -169,6 +228,46 @@ defmodule Hologram.Job.RunnerTest do
     test "runs a job created with no actor raw" do
       assert invoke(job(:record_actor)) == :done
       assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == false
+    end
+
+    test "runs a job created with no actor with no session, whatever session calls it" do
+      user = create_user("caller@example.com")
+      job = job(:record_actor)
+
+      as_user(user, fn ->
+        assert invoke(job) == :done
+        assert Auth.user_id() == user.id
+      end)
+
+      assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == false
+    end
+
+    # A job with neither a user nor the server's mark fails closed: a signed-out visitor's.
+    test "runs a job with no user and no server mark as an anonymous session" do
+      job = %{job(:record_actor) | run_as_server: false}
+
+      assert invoke(job) == :done
+      assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == true
+      assert Context.session?() == false
+    end
+
+    test "judges a write of a job with no user and no server mark by the rules" do
+      job = %{job(:create_row) | run_as_server: false}
+
+      assert {:failed, text} = invoke(job)
+
+      assert text =~ "** (Hologram.AccessDeniedError) not allowed to create"
+      assert DB.read(Entity2) == []
+    end
+
+    test "runs a job created by a user in that user's session" do
+      user = create_user("session@example.com")
+
+      assert invoke(job(:record_actor, user)) == :done
+      assert Process.get(:ran_in_session?) == true
     end
 
     test "answers failed for a write the creating user may not make" do
@@ -198,6 +297,14 @@ defmodule Hologram.Job.RunnerTest do
       assert_receive {:DOWN, ^monitor_ref, :process, ^dead, _reason}
 
       assert catch_exit(process(Module3, job.id, dead))
+    end
+
+    test "runs a job stored with no actor with no session", %{run_lock: run_lock} do
+      job = job(:record_actor)
+
+      assert process(Module3, job.id, run_lock) == :done
+      assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == false
     end
 
     test "leaves a queued job whose run lock another session holds", %{run_lock: run_lock} do
@@ -230,6 +337,111 @@ defmodule Hologram.Job.RunnerTest do
 
       assert row.status == :failed
       assert row.error =~ "** (RuntimeError) boom"
+    end
+
+    test "puts a failed job with attempts left back to wait, with the error on its row", %{
+      run_lock: run_lock
+    } do
+      job = fresh_job(:raise)
+      before_run = DateTime.utc_now()
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      after_run = DateTime.utc_now()
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :queued
+      assert row.attempt == 1
+      assert row.error =~ "** (RuntimeError) boom"
+      assert_scheduled_between(row.scheduled_at, before_run, after_run, 27_000, 33_000)
+      assert lock_free?(job)
+    end
+
+    test "waits longer after a later attempt", %{run_lock: run_lock} do
+      job = fresh_job(:raise)
+      before_run = DateTime.utc_now()
+
+      :ok = EntityOperations.update(Module3, job.id, %{attempt: 2})
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      after_run = DateTime.utc_now()
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.attempt == 3
+      assert_scheduled_between(row.scheduled_at, before_run, after_run, 432_000, 528_000)
+    end
+
+    test "doesn't run a job again before its wait is over", %{run_lock: run_lock} do
+      job = fresh_job(:raise)
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      assert queued(Module3, MapSet.new(), 5) == []
+      assert process(Module3, job.id, run_lock) == :taken
+      assert EntityOperations.get(Module3, job.id).attempt == 1
+    end
+
+    test "runs a job waiting for a retry once its wait is over", %{run_lock: run_lock} do
+      job = fresh_job(:raise)
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      set_scheduled_at(Module3, job.id, DateTime.add(DateTime.utc_now(), -1))
+
+      assert [%{id: id}] = queued(Module3, MapSet.new(), 5)
+      assert id == job.id
+      assert process(Module3, job.id, run_lock) == :failed
+      assert EntityOperations.get(Module3, job.id).attempt == 2
+    end
+
+    test "clears the error of an earlier attempt when the job ends done", %{run_lock: run_lock} do
+      job = fresh_job(:ok)
+
+      :ok = EntityOperations.update(Module3, job.id, %{attempt: 1, error: "earlier"})
+
+      assert process(Module3, job.id, run_lock) == :done
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :done
+      assert row.error == nil
+    end
+
+    # A run that lost its lock can be swept back into the queue and claimed again while it is still
+    # going, so the row reads running under a newer attempt when the old run comes to record.
+    test "leaves the row of a newer attempt alone", %{run_lock: run_lock} do
+      job = fresh_job(:superseded)
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :running
+      assert row.attempt == 2
+      assert row.error == nil
+    end
+
+    # Deleted and created again under its id, the row counts its attempts from the start, so the
+    # old run's number can come round again on a row that isn't its own.
+    test "leaves a row created again under the same id alone", %{run_lock: run_lock} do
+      job = fresh_job(:recreated)
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.outcome == :ok
+      assert row.status == :running
+      assert row.attempt == 1
+      assert row.error == nil
+    end
+
+    test "records the outcome of a run whose due time was moved meanwhile", %{run_lock: run_lock} do
+      job = fresh_job(:rescheduled)
+
+      assert process(Module3, job.id, run_lock) == :done
+      assert EntityOperations.get(Module3, job.id).status == :done
     end
 
     test "skips a job another worker has claimed", %{run_lock: run_lock} do
@@ -315,12 +527,12 @@ defmodule Hologram.Job.RunnerTest do
   end
 
   describe "queued/3" do
-    # Each job is made a second older than the one created before it, an order no insertion order
+    # Each job is made due a second before the one created before it, an order no insertion order
     # could produce by accident.
     defp jobs_oldest_first(count) do
       for index <- 1..count do
         job = job(:ok)
-        set_created_at(Module3, job.id, DateTime.add(~U[2026-01-01 00:00:00.000000Z], -index))
+        set_scheduled_at(Module3, job.id, DateTime.add(~U[2026-01-01 00:00:00.000000Z], -index))
 
         job
       end
@@ -334,10 +546,27 @@ defmodule Hologram.Job.RunnerTest do
       |> Enum.map(& &1.id)
     end
 
-    test "answers the oldest queued jobs of the type, oldest first" do
+    test "answers the longest due queued jobs of the type, longest due first" do
       [first, second, _third] = jobs_oldest_first(3)
 
       assert queued_ids([], 2) == [first, second]
+    end
+
+    # A browser's clock can be set as far back as it likes, and created_at is what it says.
+    test "doesn't let a job with a backdated creation time jump the queue" do
+      [first, second] = jobs_oldest_first(2)
+
+      set_created_at(Module3, second, ~U[2000-01-01 00:00:00.000000Z])
+
+      assert queued_ids([], 2) == [first, second]
+    end
+
+    test "leaves out queued jobs that aren't due yet" do
+      [waiting, due] = jobs_oldest_first(2)
+
+      set_scheduled_at(Module3, waiting, DateTime.add(DateTime.utc_now(), 1, :hour))
+
+      assert queued_ids([], 5) == [due]
     end
 
     test "answers only jobs of the given type" do
@@ -373,13 +602,113 @@ defmodule Hologram.Job.RunnerTest do
     end
   end
 
+  describe "retry_delay_ms/1" do
+    for {attempt, delay_ms} <- [
+          {1, 30_000},
+          {2, 120_000},
+          {3, 480_000},
+          {4, 1_920_000},
+          {5, 7_680_000},
+          {6, 21_600_000},
+          {9, 21_600_000},
+          {1_000, 21_600_000}
+        ] do
+      test "waits within 10% of #{delay_ms} ms after attempt #{attempt}" do
+        delays = for _try <- 1..200, do: retry_delay_ms(unquote(attempt))
+
+        assert Enum.min(delays) >= unquote(delay_ms) - div(unquote(delay_ms), 10)
+        assert Enum.max(delays) <= unquote(delay_ms) + div(unquote(delay_ms), 10)
+        assert length(Enum.uniq(delays)) > 1
+      end
+    end
+
+    # A row running from before attempts were counted.
+    test "waits as after the first attempt for an attempt count of 0" do
+      assert retry_delay_ms(0) in 27_000..33_000
+    end
+  end
+
+  describe "time_out/3" do
+    test "fails a job on its last attempt, saying it passed its limit" do
+      job = abandoned_job()
+
+      assert time_out(Module1, job.id, 5_000) == :ok
+
+      row = EntityOperations.get(Module1, job.id)
+
+      assert row.status == :failed
+      assert row.error =~ "the run passed its time limit of 5000 ms and was killed"
+    end
+
+    test "puts a job with attempts left back to wait" do
+      job = fresh_job(:ok)
+
+      :ok = EntityOperations.update(Module3, job.id, %{attempt: 1, status: :running})
+
+      assert time_out(Module3, job.id, 5_000) == :ok
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :queued
+      assert row.attempt == 1
+      assert row.error =~ "the run passed its time limit of 5000 ms and was killed"
+      assert DateTime.compare(row.scheduled_at, DateTime.utc_now()) == :gt
+    end
+
+    test "leaves a job whose outcome was recorded before the kill landed" do
+      job = abandoned_job()
+
+      :ok = EntityOperations.update(Module1, job.id, %{status: :done})
+
+      assert time_out(Module1, job.id, 5_000) == :ok
+
+      row = EntityOperations.get(Module1, job.id)
+
+      assert row.status == :done
+      assert row.error == nil
+    end
+
+    # Swept and claimed again on another node, between the kill and this write.
+    test "leaves a job another worker's run holds the lock of", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      assert {:claimed, _job} = claim(Module1, job.id, run_lock)
+      assert time_out(Module1, job.id, 5_000) == :ok
+
+      row = EntityOperations.get(Module1, job.id)
+
+      assert row.status == :running
+      assert row.error == nil
+    end
+
+    test "leaves a job that is gone" do
+      assert time_out(Module1, Entity.generate_id(), 5_000) == :ok
+    end
+  end
+
   describe "sweep/2" do
-    # Running with no lock held, the way a node that stopped mid-run leaves it.
+    # Running with no lock held, the way a node that stopped mid-run leaves it, on its last attempt.
     defp abandoned_job do
       job = Job.create!(Module1)
-      :ok = EntityOperations.update(Module1, job.id, %{status: :running})
+      :ok = EntityOperations.update(Module1, job.id, %{attempt: 1, status: :running})
 
       job
+    end
+
+    test "puts a job cut short with attempts left back to wait" do
+      job = fresh_job(:ok)
+      :ok = EntityOperations.update(Module3, job.id, %{attempt: 1, status: :running})
+
+      before_sweep = DateTime.utc_now()
+      assert sweep([Module3], MapSet.new()) == :ok
+      after_sweep = DateTime.utc_now()
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :queued
+      assert row.attempt == 1
+      assert row.error =~ "the run was cut short before its outcome was recorded"
+      assert_scheduled_between(row.scheduled_at, before_sweep, after_sweep, 27_000, 33_000)
     end
 
     test "fails a running job whose run lock nobody holds" do
@@ -391,6 +720,26 @@ defmodule Hologram.Job.RunnerTest do
 
       assert row.status == :failed
       assert row.error =~ "the run was cut short before its outcome was recorded"
+    end
+
+    # The sandbox keeps one transaction open for the whole test, so the first sweep's lock on the
+    # job is still held by this session when the second one looks.
+    test "doesn't take a lock its own session holds for another run's" do
+      job = fresh_job(:ok)
+
+      :ok = EntityOperations.update(Module3, job.id, %{attempt: 1, status: :running})
+
+      assert sweep([Module3], MapSet.new()) == :ok
+      assert EntityOperations.get(Module3, job.id).status == :queued
+
+      :ok =
+        EntityOperations.update(Module3, job.id, %{
+          attempt: Job.max_attempts(Module3),
+          status: :running
+        })
+
+      assert sweep([Module3], MapSet.new()) == :ok
+      assert EntityOperations.get(Module3, job.id).status == :failed
     end
 
     test "leaves a running job whose run lock another session holds", %{run_lock: run_lock} do
@@ -421,7 +770,12 @@ defmodule Hologram.Job.RunnerTest do
     test "sweeps every type it is given" do
       module_1_job = abandoned_job()
       module_3_job = job(:ok)
-      :ok = EntityOperations.update(Module3, module_3_job.id, %{status: :running})
+
+      :ok =
+        EntityOperations.update(Module3, module_3_job.id, %{
+          attempt: Job.max_attempts(Module3),
+          status: :running
+        })
 
       assert sweep([Module1, Module3], MapSet.new()) == :ok
 

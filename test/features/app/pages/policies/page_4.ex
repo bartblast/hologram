@@ -56,6 +56,7 @@ defmodule HologramFeatureTests.Policies.Page4 do
     user =
       %{email: "member@example.com"}
       |> User.new()
+      |> trust()
       |> DB.create!()
 
     put_action(%{server | user_id: user.id}, :show_result, result: "logged_in")

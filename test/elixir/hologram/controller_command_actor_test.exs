@@ -147,7 +147,8 @@ defmodule Hologram.ControllerCommandActorTest do
     granter = create_user("user_2@example.com")
     user = create_user("user_3@example.com")
 
-    expected_msg = "global roles are granted only by trusted code running without an acting user"
+    expected_msg =
+      "global roles are granted only by server code claiming trust: true or running outside a session"
 
     assert_error Hologram.AccessDeniedError, expected_msg, fn ->
       execute_command(

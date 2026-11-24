@@ -7,6 +7,7 @@ import Clock from "../../assets/js/clock.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
+import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
 
@@ -139,6 +140,47 @@ describe("Overlay", () => {
           votes: stamp,
         },
       });
+    });
+
+    it("gives a created job the defaults of the framework's attributes", () => {
+      const JOB = "MyApp.Jobs.Notify";
+
+      globalThis.Hologram.sync.model[JOB] = {
+        attributes: {
+          actor_id: "uuid",
+          attempt: "integer",
+          created_at: "datetime",
+          error: "string",
+          id: "uuid",
+          scheduled_at: "datetime",
+          status: "enum",
+          updated_at: "datetime",
+        },
+        constraints: {},
+        defaults: {attempt: Type.integer(0), status: Type.atom("queued")},
+        enumValues: {status: ["queued", "running", "done", "failed"]},
+        frameworkAttributes: [
+          "actor_id",
+          "attempt",
+          "error",
+          "run_as_server",
+          "scheduled_at",
+          "status",
+        ],
+        relationships: {},
+        serverOnly: ["error"],
+      };
+
+      Model.reset();
+
+      pushed(createWrite({data: {}, id: "j1", type: JOB}));
+
+      const row = Overlay.foldRow(JOB, "j1", null);
+
+      assert.strictEqual(row.attempt, 0);
+      assert.strictEqual(row.status, "queued");
+      assert.notProperty(row, "scheduled_at");
+      assert.notProperty(row.$revisions, "attempt");
     });
 
     it("timestamps a create from the moment its writer made it", () => {
@@ -948,14 +990,102 @@ describe("Overlay", () => {
         };
 
         Model.reset();
+
+        LocalDatabase.putRow(TODO, base());
+        LocalDatabase.putRow(LABEL, {id: "l1", name: "Urgent"});
       });
 
-      const labelEdge = (op) => ({
-        id: "t1",
-        op,
-        relationship: "labels",
-        target_id: "l1",
-        type: TODO,
+      const labelEdge = (op, overrides = {}) =>
+        Object.assign(
+          {
+            id: "t1",
+            op,
+            relationship: "labels",
+            target_id: "l1",
+            type: TODO,
+          },
+          overrides,
+        );
+
+      // The label left while the batch waited, and sync tells nothing of a pair naming a row the
+      // client doesn't hold, so a pair filed here would stay.
+      it("files neither side of a pair whose target the base doesn't hold", () => {
+        LocalDatabase.deleteRow(LABEL, "l1");
+        LocalDatabase.replaceFacts(LABEL, "todos", "l1", ["t2"]);
+
+        Overlay.promote(pushed(labelEdge("add_relationship")), {});
+
+        assert.isFalse(LocalDatabase.hasFacts(TODO, "labels", "t1"));
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(LABEL, "todos", "l1"),
+          new Set(["t2"]),
+        );
+      });
+
+      it("files neither side of a pair whose source the base doesn't hold", () => {
+        LocalDatabase.replaceFacts(LABEL, "todos", "l1", ["t2"]);
+        LocalDatabase.deleteRow(TODO, "t1");
+
+        Overlay.promote(pushed(labelEdge("add_relationship")), {});
+
+        assert.isFalse(LocalDatabase.hasFacts(TODO, "labels", "t1"));
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(LABEL, "todos", "l1"),
+          new Set(["t2"]),
+        );
+      });
+
+      it("files a pair to a row the batch created, but not to one a marker ruled out", () => {
+        const create = (id) =>
+          createWrite({data: {name: "New"}, id, type: LABEL});
+
+        const batch = pushed(
+          create("l2"),
+          create("l3"),
+          labelEdge("add_relationship", {target_id: "l2"}),
+          labelEdge("add_relationship", {target_id: "l3"}),
+        );
+
+        batch.landed.add(1);
+
+        Overlay.promote(batch, {});
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(TODO, "labels", "t1"),
+          new Set(["l2"]),
+        );
+      });
+
+      it("judges only a pair whose target type the model names", () => {
+        globalThis.Hologram.sync.model[TODO].relationships.notes = {
+          optional: false,
+          toMany: true,
+          type: "MyApp.Note",
+        };
+
+        Model.reset();
+
+        LocalDatabase.deleteRow(LABEL, "l1");
+
+        Overlay.promote(
+          pushed(
+            labelEdge("add_relationship"),
+            labelEdge("add_relationship", {
+              relationship: "notes",
+              target_id: "n1",
+            }),
+          ),
+          {},
+        );
+
+        assert.isFalse(LocalDatabase.hasFacts(TODO, "labels", "t1"));
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(TODO, "notes", "t1"),
+          new Set(["n1"]),
+        );
       });
 
       // The answer can land before the frame carrying the same edge on the label, and the label's

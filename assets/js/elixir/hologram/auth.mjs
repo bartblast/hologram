@@ -1083,7 +1083,20 @@ const Elixir_Hologram_Auth = {
   // that id answers :ok and writes nothing, which is the server's idempotency mirrored where the
   // client can see it. The server replays every check when the batch lands and a refusal rolls
   // the row back.
+  //
+  // :global in place of the entity is the global form, which is trusted-only. Options never go
+  // here, so a list is refused as it is on the server.
   "grant_role/3": (userOrId, role, entity) => {
+    if (isGlobalScope(entity)) {
+      return Elixir_Hologram_Auth["grant_role/2"](userOrId, role);
+    }
+
+    if (Type.isList(entity)) {
+      Interpreter.raiseMisuseError(
+        misplacedOptionsMessage("grant_role", entity),
+      );
+    }
+
     const userId = validateUserId(userOrId);
     const {entityType, entityId} = entityReference(entity, "granted");
     const roleName = validateDeclaredRole(entityType, role);
@@ -1166,6 +1179,13 @@ const Elixir_Hologram_Auth = {
     );
   },
 
+  // Ported to refuse the claim, and otherwise the plain verb.
+  "grant_role/4": (userOrId, role, entity, opts) => {
+    refuseTrustClaim(opts, "grant_role");
+
+    return Elixir_Hologram_Auth["grant_role/3"](userOrId, role, entity);
+  },
+
   "revoke_role/2": (_userOrId, _role) => {
     raiseAccessDenied(trustedWriteMessage("global", "revoked"));
   },
@@ -1177,7 +1197,19 @@ const Elixir_Hologram_Auth = {
   // A row the client does not hold answers :ok and writes nothing, as the server's own no-op does:
   // whoever may revoke a grant may read it, and everyone reads their own, so "not held" is "not
   // there" for anyone the gate lets through. The server replays the gate when the batch lands.
+  //
+  // :global and a list in place of the entity are handled as in grant_role/3.
   "revoke_role/3": (userOrId, role, entity) => {
+    if (isGlobalScope(entity)) {
+      return Elixir_Hologram_Auth["revoke_role/2"](userOrId, role);
+    }
+
+    if (Type.isList(entity)) {
+      Interpreter.raiseMisuseError(
+        misplacedOptionsMessage("revoke_role", entity),
+      );
+    }
+
     const userId = validateUserId(userOrId);
     const {entityType, entityId} = entityReference(entity, "revoked");
     const roleName = validateDeclaredRole(entityType, role);
@@ -1239,6 +1271,13 @@ const Elixir_Hologram_Auth = {
     });
 
     return Type.atom("ok");
+  },
+
+  // Ported to refuse the claim, and otherwise the plain verb.
+  "revoke_role/4": (userOrId, role, entity, opts) => {
+    refuseTrustClaim(opts, "revoke_role");
+
+    return Elixir_Hologram_Auth["revoke_role/3"](userOrId, role, entity);
   },
 
   "can?/3": (userOrId, operation, entity) => {
@@ -1416,7 +1455,40 @@ export function signedInWriteMessage(verb) {
 
 // The two grant shapes trusted code writes - type-wide and global - which a browser never may.
 export function trustedWriteMessage(scope, verb) {
-  return `${scope} roles are ${verb} only by trusted code running without an acting user`;
+  return `${scope} roles are ${verb} only by server code claiming trust: true or running outside a session`;
+}
+
+function isGlobalScope(entity) {
+  return Type.isAtom(entity) && entity.value === "global";
+}
+
+// IMPORTANT!
+// A hand port of Hologram.Auth's sentence for options in the entity's place. Always update both
+// tiers together.
+function misplacedOptionsMessage(verb, entity) {
+  return `${verb} takes an entity, an entity type or :global as its third argument, got: ${Interpreter.inspect(entity)} - options go fourth`;
+}
+
+// The options a grant verb takes on the server. Its one option claims the server's authority, which
+// a client can't, so it raises what trust/1 raises here. No options is the plain verb.
+function refuseTrustClaim(opts, verb) {
+  if (Type.isList(opts) && opts.data.length === 0) {
+    return;
+  }
+
+  if (Type.isList(opts) && Type.isKeywordList(opts) && opts.data.length === 1) {
+    const [key, value] = opts.data[0].data;
+
+    if (key.value === "trust" && Type.isTrue(value)) {
+      Interpreter.raiseMisuseError(
+        "trust is the server's authority - a client cannot claim it",
+      );
+    }
+  }
+
+  Interpreter.raiseMisuseError(
+    `${verb} takes trust: true as its only option, got: ${Interpreter.inspect(opts)}`,
+  );
 }
 
 function raiseAccessDenied(message) {

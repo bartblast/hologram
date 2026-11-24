@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.Jobs.KillRun do
-  use Hologram.Job
+  use Hologram.Job, max_attempts: 1
 
   attribute :label, :string
 

@@ -9,23 +9,28 @@ defmodule Hologram.Mutation do
   # no second set of rules for a write that arrived over the wire. Its authority is the one
   # difference: a batch carries no claim, and every write in it is judged by the verb's own rules -
   # an update by the fields it changes - under the anonymous semantics when nobody is signed in,
-  # where a server-side verb with no acting user would write raw. One update/1 call reaches here as
+  # as a server-side verb in the same request is. One update/1 call reaches here as
   # a write for its values and amounts, if it has any, and one for each of its edges, the later ones
   # marked as the same call, and they are applied through ONE executor call, as the server verb
   # applies them: every field the call changes is judged against the row the call started from. A
   # refusal at any step rolls the whole batch back and names the write it refused, a call's by the
   # write it starts at - and a refusal the EVALUATOR made is then kept, the batch as it arrived
-  # beside its answer, for the session that sent it.
+  # beside its answer, for the session that sent it. So is a batch holding a date or datetime this
+  # server can't read, which is refused before any transaction.
+
+  require Logger
 
   alias Hologram.Auth
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
+  alias Hologram.DB
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Merge
   alias Hologram.DB.Writer
+  alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Mutation.Envelope
   alias Hologram.Mutation.Record
@@ -46,10 +51,12 @@ defmodule Hologram.Mutation do
   @default_clock_allowance_ms 300_000
 
   @type rejection ::
-          :stale_build
+          :actor_not_found
+          | :stale_build
           | :clock
           | :forged_client
           | :not_found
+          | :unstorable
           | %Hologram.AccessDeniedError{}
           | map
 
@@ -266,6 +273,7 @@ defmodule Hologram.Mutation do
     edge_fields = Enum.map(followers, & &1.relationship)
 
     Writer.check_update!(row, Map.keys(write.data) ++ Map.keys(write.deltas) ++ edge_fields)
+    check_values(write, index)
 
     {changes, lost} =
       Merge.resolve(write.data, write.based_on, write.stamp, row.__meta__.revisions)
@@ -359,6 +367,16 @@ defmodule Hologram.Mutation do
     |> Enum.map(fn {lead, index, followers} -> {lead, index, Enum.reverse(followers)} end)
   end
 
+  # Every value of an update is judged, the ones about to lose the merge too. The writer only sees
+  # the values that win, and a losing one goes into the answer, stored as jsonb, which can't hold
+  # some of what a write can carry.
+  defp check_values(write, index) do
+    case Entity.validate(write.entity_type, write.data) do
+      :ok -> :ok
+      {:error, violations} -> Connection.rollback({:rejected, index, violations})
+    end
+  end
+
   # Checked before anything runs, against the writes as a whole - a stamp the server cannot vouch
   # for refuses the batch and names the write that carried it.
   defp check_clocks(writes) do
@@ -399,8 +417,16 @@ defmodule Hologram.Mutation do
     # A denial is the one refusal the executor RAISES rather than returns, because on the server it
     # is a programming error to write what the acting user may not. Here it is an ordinary answer:
     # a client asking for something it may not have is the system working. Anything else raised
-    # propagates - the transaction rolls back and re-raises it, which is what a bug should do.
-    error in Hologram.AccessDeniedError -> Connection.rollback({:rejected, index, error})
+    # propagates - the transaction rolls back and re-raises it, which is what a bug should do -
+    # except what the database says about this write itself, which a retry would only hear again.
+    error in Hologram.AccessDeniedError ->
+      Connection.rollback({:rejected, index, error})
+
+    error in Postgrex.Error ->
+      case write_refusal(error, write) do
+        nil -> refuse_unstorable(error, write, index, __STACKTRACE__)
+        reason -> Connection.rollback({:rejected, index, reason})
+      end
   end
 
   # A record answers as the batch first landed, and a grant row that answer carries may have been
@@ -458,6 +484,22 @@ defmodule Hologram.Mutation do
     Map.merge(attributes, references)
   end
 
+  # A creator's grant names the session's own user as both granter and grantee, so either key
+  # failing means that user's row is gone, or was deleted earlier in this batch, and the database
+  # may report either. A browser-sent
+  # grant's missing grantee never gets here: the grant verb answers it first. The reason is no field
+  # of the write, which may have a user of its own. A model with no user entity type has no grant
+  # store to ask.
+  defp granter_refusal(mapping, constraint) do
+    with %{columns: columns} <- Map.get(mapping, RoleGrant),
+         %{name: name} when name in ["granted_by_id", "user_id"] <-
+           Enum.find(columns, &(&1.fk_constraint == constraint)) do
+      :actor_not_found
+    else
+      _no_match -> nil
+    end
+  end
+
   # What the row KEPT where this write lost, spelled the way a frame spells a patch - the winning
   # values and the revisions they carry.
   #
@@ -488,13 +530,19 @@ defmodule Hologram.Mutation do
   # is kept of it is written after the rollback, on its own statement: the batch as it arrived and
   # the answer it got, so that a change a browser made and then lost is somewhere, with the reason.
   #
-  # Only a refusal the EVALUATOR made reaches here. A batch refused before its transaction was
-  # refused for its build or its clock rather than for what it writes, and the server read nothing
-  # of it worth keeping - a stale one it could not parse at all.
+  # A refusal the EVALUATOR made reaches here, and so does a value this server couldn't read. Any
+  # other batch refused before its transaction was refused for its build or its clock rather than
+  # for what it writes, and the server read nothing of it worth keeping - a stale one it could not
+  # parse at all.
   #
   # Nothing is kept for an anonymous session either, nor for a user id no user entity can have: an
   # answer is replayed only to the session that earned it, and the record holds every such session
   # as nobody - so a refusal kept under no actor would be readable by any of them, or by nobody.
+  #
+  # The answer comes from the record, because another arrival of this batch may have landed it after
+  # this one was refused, and the record is what every arrival has to agree with. Keeping a refusal
+  # waits for an arrival still running. A visitor's refusal keeps nothing, so it has nothing to wait
+  # on and sees only an arrival that has already finished.
   defp keep_refused(envelope, raw, actor_id, index, reason) do
     answer = rejection(index, reason)
 
@@ -509,7 +557,7 @@ defmodule Hologram.Mutation do
       )
     end
 
-    {:ok, answer}
+    recorded_answer(envelope, actor_id) || {:ok, answer}
   end
 
   defp lock_row(write, index) do
@@ -535,6 +583,7 @@ defmodule Hologram.Mutation do
   defp parse(raw) do
     case Envelope.parse(raw) do
       {:ok, envelope} -> {:ok, envelope}
+      {:refused, envelope, index, violations} -> {:refused, envelope, index, violations}
       {:error, message} -> {:invalid, message}
     end
   end
@@ -550,8 +599,14 @@ defmodule Hologram.Mutation do
          :ok <- check_clocks(envelope.writes) do
       apply_batch(envelope, raw, server_struct)
     else
-      {:invalid, message} -> {:invalid, message}
-      {:rejected, index, reason} -> {:ok, rejection(index, reason)}
+      {:invalid, message} ->
+        {:invalid, message}
+
+      {:rejected, index, reason} ->
+        {:ok, rejection(index, reason)}
+
+      {:refused, envelope, index, violations} ->
+        refuse_unread(envelope, raw, server_struct, index, violations)
     end
   end
 
@@ -615,6 +670,46 @@ defmodule Hologram.Mutation do
     end
   end
 
+  # The safety net behind the validators. A data exception (SQLSTATE class 22) almost always means
+  # a value the database can't store, and answering 500 would have the browser retry the batch
+  # forever, with every later write from that device waiting behind it. Refused, it rolls back and
+  # the queue moves on, and a signed-in user's batch is kept. A trigger or a delete can raise one
+  # too, and that write is refused the same way.
+  #
+  # 22P02 is left out: on a write it means an enum label the Postgres type doesn't have, so the
+  # database is out of step with the app, and a deploy can fix that while the write waits.
+  #
+  # The log names the type and the code and not the error's message, which can quote the value.
+  @spec refuse_unstorable(Postgrex.Error.t(), Write.t(), non_neg_integer, Exception.stacktrace()) ::
+          no_return
+  defp refuse_unstorable(
+         %Postgrex.Error{postgres: %{pg_code: "22" <> _rest = code}},
+         write,
+         index,
+         _stacktrace
+       )
+       when code != "22P02" do
+    Logger.error(
+      "Hologram refused a browser write to #{inspect(write.entity_type)}: the database answered with a data error (SQLSTATE #{code})"
+    )
+
+    Connection.rollback({:rejected, index, :unstorable})
+  end
+
+  defp refuse_unstorable(error, _write, _index, stacktrace), do: reraise(error, stacktrace)
+
+  # A batch holding a value this server can't read never reaches a transaction, and is kept like any
+  # other refused batch, so a signed-in user's write can still be recovered. Its record is asked
+  # first, which answers a repeat from it and refuses another session's pair as forged.
+  defp refuse_unread(envelope, raw, server_struct, index, violations) do
+    record_actor_id = Auth.canonical_id(server_struct.user_id)
+
+    case recorded_answer(envelope, record_actor_id) do
+      nil -> keep_refused(envelope, raw, record_actor_id, index, violations)
+      answer -> answer
+    end
+  end
+
   # The answer a refusal travels as: the position of the write it names - nil for a refusal of the
   # whole batch - and the reason as a serialized term, since a reason is an arbitrary term (a
   # field-keyed map holding a regex or a range, an exception struct) that plain JSON cannot spell
@@ -656,4 +751,33 @@ defmodule Hologram.Mutation do
   defp stringify_entry({:"$revisions", revisions}), do: {"$revisions", stringify(revisions)}
 
   defp stringify_entry({name, value}), do: {Atom.to_string(name), value}
+
+  # Three things a browser can't know before it sends, answered as refusals of the write because
+  # raising would have it retry them forever. An edge's target may be gone: deleted while the device
+  # was offline, or a create of this device's that was refused. A create's id may be taken: a form
+  # that made its id once and was submitted twice, or a derived id made on a second device. And the
+  # signed-in user's own row may be gone, which the grant a create hands its creator runs into.
+  defp write_refusal(
+         %Postgrex.Error{postgres: %{code: :foreign_key_violation, constraint: constraint}},
+         %Write{entity_type: entity_type}
+       ) do
+    mapping = DB.mapping()
+    %{join_tables: join_tables} = Map.fetch!(mapping, entity_type)
+
+    case Enum.find(join_tables, &(&1.target_fk_constraint == constraint)) do
+      %{relationship: relationship} -> %{relationship => [:not_found]}
+      nil -> granter_refusal(mapping, constraint)
+    end
+  end
+
+  defp write_refusal(
+         %Postgrex.Error{postgres: %{code: :unique_violation, constraint: constraint}},
+         %Write{op: :create, entity_type: entity_type}
+       ) do
+    if Map.fetch!(DB.mapping(), entity_type).pk_constraint == constraint do
+      %{id: [:unique]}
+    end
+  end
+
+  defp write_refusal(_error, _write), do: nil
 end
