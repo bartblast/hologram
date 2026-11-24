@@ -33,6 +33,20 @@ defmodule HologramFeatureTests.MultiTabTest do
     script_result(session, "return globalThis.Hologram.durability.leader();")
   end
 
+  # What a tab that files a batch and closes, or runs late, looks like to the others: the batch is
+  # in the store and nobody hears of it.
+  defp drop_sealed_messages(session) do
+    execute_script(session, """
+    const post = BroadcastChannel.prototype.postMessage;
+
+    BroadcastChannel.prototype.postMessage = function (message) {
+      if (message?.kind !== "sealed") {
+        post.call(this, message);
+      }
+    };
+    """)
+  end
+
   # A tab takes the lead when the browser grants it the lock the tab before it was holding, which
   # happens whenever that tab goes - so this is polled rather than read.
   defp await_leader(session, attempts_left \\ 100)
@@ -272,6 +286,46 @@ defmodule HologramFeatureTests.MultiTabTest do
     writer
     |> close_tab(first)
     |> release_mutations()
+
+    assert [%Todo{title: "alpha"}] = await_server_todos(1)
+  end
+
+  # The later batch is announced and the earlier one isn't, so a sender that followed the
+  # announcements alone would go past the earlier one and never send it.
+  #
+  # The heartbeat is set far apart so that no beat wakes the sender between the two writes.
+  feature "sends a write nobody announced when a later one is announced", %{session: session} do
+    session
+    |> simulate_fast_sse_heartbeat(60_000)
+    |> visit(WriteQueuePage)
+    |> await_leader()
+    |> open_tab(WriteQueuePage)
+    |> drop_sealed_messages()
+    |> click(button("Create alpha"))
+    |> assert_text(css("#todos"), "alpha 0")
+    |> await_durable_writes()
+    |> open_tab(WriteQueuePage)
+    |> click(button("Create gamma"))
+
+    assert [%Todo{title: "alpha"}, %Todo{title: "gamma"}] = await_server_todos(2)
+  end
+
+  # Nobody acts after the write and the stream is already open, so its heartbeat is the only thing
+  # left to wake the sender. A second apart, so a slow machine doesn't miss two beats, which would
+  # reopen the stream, and that wakes the sender too.
+  feature "sends a write nobody announced with no other tab acting", %{session: session} do
+    leading =
+      session
+      |> simulate_fast_sse_heartbeat(1_000)
+      |> visit(WriteQueuePage)
+      |> await_leader()
+
+    wait_for_connection(current_instance_id(leading))
+
+    leading
+    |> open_tab(WriteQueuePage)
+    |> drop_sealed_messages()
+    |> click(button("Create alpha"))
 
     assert [%Todo{title: "alpha"}] = await_server_todos(1)
   end
