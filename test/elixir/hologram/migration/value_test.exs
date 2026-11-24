@@ -1415,10 +1415,12 @@ defmodule Hologram.Migration.ValueTest do
     end
 
     test "takes the arguments in the order written" do
-      {module, value} = elixir_op(~s|fn first, last -> first <> " " <> last end|)
+      {module, value} = elixir_op(~s|fn last, first -> first <> " " <> last end|)
 
-      assert %Value{args: [:first, :last]} = value
-      assert module.__backfill_0__("Ann", "Lee") == "Ann Lee"
+      assert %Value{args: [:last, :first], term: {:function, ^module, name, [:last, :first]}} =
+               value
+
+      assert apply(module, name, ["Lee", "Ann"]) == "Ann Lee"
     end
 
     test "gives two backfills on one line distinct functions" do
