@@ -465,7 +465,7 @@ defmodule Hologram.Migration.ValueTest do
     end
 
     test "keeps an integer" do
-      assert backfill("7") == 7
+      assert backfill("7") === 7
     end
 
     test "keeps a float" do
@@ -473,7 +473,7 @@ defmodule Hologram.Migration.ValueTest do
     end
 
     test "keeps a signed number" do
-      assert backfill("-7") == -7
+      assert backfill("-7") === -7
     end
 
     test "keeps a boolean" do
