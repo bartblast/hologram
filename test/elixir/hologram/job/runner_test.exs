@@ -7,6 +7,7 @@ defmodule Hologram.Job.RunnerTest do
   alias Hologram.Auth
   alias Hologram.Auth.Context
   alias Hologram.DB
+  alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity
   alias Hologram.Job
@@ -526,6 +527,24 @@ defmodule Hologram.Job.RunnerTest do
     end
   end
 
+  # Runs the function on the test's sandboxed connection in a Task a session started, the way a
+  # worker started by a process working for a session runs.
+  defp in_session_task(fun) do
+    test_pid = self()
+    user = create_user("runner_session_task@example.com")
+
+    Context.with_actor(user.id, fn ->
+      fn ->
+        :ok = DBConnection.Ownership.ownership_allow(DB.pool_name(), test_pid, self(), [])
+        Connection.enter_sandbox()
+
+        fun.()
+      end
+      |> Task.async()
+      |> Task.await()
+    end)
+  end
+
   describe "queued/3" do
     # Each job is made due a second before the one created before it, an order no insertion order
     # could produce by accident.
@@ -599,6 +618,12 @@ defmodule Hologram.Job.RunnerTest do
       jobs_oldest_first(1)
 
       assert queued(Module3, MapSet.new(), 0) == []
+    end
+
+    test "reads the queue from a process a session started" do
+      [job_id] = jobs_oldest_first(1)
+
+      assert in_session_task(fn -> queued_ids([], 5) end) == [job_id]
     end
   end
 
@@ -709,6 +734,13 @@ defmodule Hologram.Job.RunnerTest do
       assert row.attempt == 1
       assert row.error =~ "the run was cut short before its outcome was recorded"
       assert_scheduled_between(row.scheduled_at, before_sweep, after_sweep, 27_000, 33_000)
+    end
+
+    test "sweeps from a process a session started" do
+      job = abandoned_job()
+
+      assert in_session_task(fn -> sweep([Module1], MapSet.new()) end) == :ok
+      assert EntityOperations.get(Module1, job.id).status == :failed
     end
 
     test "fails a running job whose run lock nobody holds" do

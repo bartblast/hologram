@@ -554,9 +554,34 @@ defmodule Hologram.Auth do
   A user id no user entity can have - an app's own serial id, say - is returned as it is. The data
   layer reads such a session as one with no user: its rules answer it as an anonymous session, and
   its writes are judged by them rather than trusted.
+
+  Raises Hologram.MisuseError in a process started for a request's work that doesn't carry the user
+  (see `as_current_user/1`), since nil there would read as a signed-out visitor.
   """
   @spec user_id() :: Server.identity_id() | nil
-  defdelegate user_id, to: Context, as: :actor_user_id
+  defdelegate user_id, to: Context
+
+  @doc """
+  Wraps the given function so that it runs as the current user wherever it's called, for moving a
+  request's work to another process:
+
+      Task.start(Auth.as_current_user(fn -> DB.read(Note, id) end))
+
+  Call it in the process doing the request's work, so outside the function you hand to the `Task`:
+  the user is remembered right here, and stays the same whatever that process goes on to do. The
+  wrapped function is judged by the same rules as the request, a signed-out visitor's included.
+  Called in code no request started, like a seed, it keeps the server's authority.
+
+  Run the wrapped function in a process started for it. A long-lived process that runs one, handed
+  over through `Agent.update/2` or a `GenServer` message, counts as having served a request from
+  then on, so the tasks a `Task.Supervisor` starts for it have to carry a user or claim trust.
+
+  Takes a function of no arguments, or of one for the likes of `Task.async_stream/3`, and returns a
+  function of the same arity. It takes no user, so it can't be used to act as anyone else.
+  """
+  @spec as_current_user((-> result)) :: (-> result) when result: any
+  @spec as_current_user((arg -> result)) :: (arg -> result) when arg: any, result: any
+  defdelegate as_current_user(fun), to: Context, as: :capture
 
   @doc """
   Returns the server's verdict on each operation of the given row's type it sends one on (see
