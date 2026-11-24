@@ -11,14 +11,14 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
   @space "space"
 
   # The member reads the space in the first state and loses it in the second, which commits at 16
-  # with transaction id 101.
+  # with serial 101.
   setup do
     member_state = state(%{"name" => "space"}, [@member])
     left_state = state(%{"name" => "space"}, [])
 
     entries = [
-      %{after_lock_at: 0, committed_at: 1, state: member_state, xid: 100},
-      %{after_lock_at: 15, committed_at: 16, state: left_state, xid: 101}
+      %{after_lock_at: 0, committed_at: 1, state: member_state, max_seq: 100, min_seq: 100},
+      %{after_lock_at: 15, committed_at: 16, state: left_state, max_seq: 101, min_seq: 101}
     ]
 
     %{entries: entries}
@@ -49,13 +49,13 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
   end
 
   test "flags a row under a cursor past its user's loss", %{entries: entries} do
-    record = record(%{"name" => "space"}, cursor_tx: 102, opened_at: 10, received_at: 20)
+    record = record(%{"name" => "space"}, cursor_seq: 101, opened_at: 10, received_at: 20)
 
     assert [%{candidates: [1]}] = Checks.leaks([record], entries, @member)
   end
 
   test "passes a row under a cursor below its user's loss", %{entries: entries} do
-    record = record(%{"name" => "space"}, cursor_tx: 101, opened_at: 10, received_at: 20)
+    record = record(%{"name" => "space"}, cursor_seq: 100, opened_at: 10, received_at: 20)
 
     assert Checks.leaks([record], entries, @member) == []
   end
@@ -67,13 +67,15 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
         after_lock_at: 0,
         committed_at: 1,
         state: state(%{"name" => "space"}, [@member]),
-        xid: 100
+        max_seq: 100,
+        min_seq: 100
       },
       %{
         after_lock_at: 15,
         committed_at: 16,
         state: state(%{"name" => "renamed"}, [@member]),
-        xid: 101
+        max_seq: 101,
+        min_seq: 101
       }
     ]
 
@@ -92,10 +94,23 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
         after_lock_at: 0,
         committed_at: 1,
         state: state(%{"name" => "space"}, [@member]),
-        xid: 100
+        max_seq: 100,
+        min_seq: 100
       },
-      %{after_lock_at: 5, committed_at: 25, state: state(%{"name" => "space"}, []), xid: 101},
-      %{after_lock_at: 6, committed_at: 7, state: state(%{"name" => "space"}, []), xid: 102}
+      %{
+        after_lock_at: 5,
+        committed_at: 25,
+        state: state(%{"name" => "space"}, []),
+        max_seq: 101,
+        min_seq: 101
+      },
+      %{
+        after_lock_at: 6,
+        committed_at: 7,
+        state: state(%{"name" => "space"}, []),
+        max_seq: 102,
+        min_seq: 102
+      }
     ]
 
     record = record(%{"name" => "space"}, opened_at: 10, received_at: 30)
@@ -133,8 +148,8 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
       put_in(state(%{"name" => "space"}, [])[:rows][Tag], %{"t" => %{"name" => "new"}})
 
     entries = [
-      %{after_lock_at: 0, committed_at: 1, state: before, xid: 100},
-      %{after_lock_at: 15, committed_at: 16, state: after_rename, xid: 101}
+      %{after_lock_at: 0, committed_at: 1, state: before, max_seq: 100, min_seq: 100},
+      %{after_lock_at: 15, committed_at: 16, state: after_rename, max_seq: 101, min_seq: 101}
     ]
 
     record = %{
@@ -158,15 +173,15 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
     left_state = put_in(state(%{"name" => "space"}, [])[:rows][Tag], tags.("old"))
     renamed_state = put_in(state(%{"name" => "space"}, [])[:rows][Tag], tags.("new"))
 
-    # Committed in lock order; the rename has the lower id, so a cursor past it floors at it.
+    # Committed in lock order; the rename holds the lower serial, so a cursor past it floors at it.
     entries = [
-      %{after_lock_at: 0, committed_at: 1, state: member_state, xid: 100},
-      %{after_lock_at: 5, committed_at: 6, state: left_state, xid: 300},
-      %{after_lock_at: 7, committed_at: 8, state: renamed_state, xid: 270}
+      %{after_lock_at: 0, committed_at: 1, state: member_state, max_seq: 100, min_seq: 100},
+      %{after_lock_at: 5, committed_at: 6, state: left_state, max_seq: 300, min_seq: 300},
+      %{after_lock_at: 7, committed_at: 8, state: renamed_state, max_seq: 270, min_seq: 270}
     ]
 
     tag = %{
-      record(%{"name" => "new"}, cursor_tx: 280, opened_at: 0, received_at: 20)
+      record(%{"name" => "new"}, cursor_seq: 280, opened_at: 0, received_at: 20)
       | id: "t",
         named: [{SpaceMember, "m"}],
         type: Tag
@@ -181,11 +196,134 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
     assert [_tag_leak, _pair_leak] = Checks.leaks([tag, pair], entries, "someone else")
   end
 
+  # Check 3. Tag "t" is created holding serial 5 and tag "u" after it holding 9, and every user
+  # reads both.
+  describe "below_final/4" do
+    setup do
+      created = tags_state(%{"t" => {5, 5}})
+      both = tags_state(%{"t" => {5, 5}, "u" => {9, 9}})
+
+      entries = [
+        %{after_lock_at: 0, committed_at: 1, max_seq: 5, min_seq: 5, state: created},
+        %{after_lock_at: 10, committed_at: 11, max_seq: 9, min_seq: 9, state: both}
+      ]
+
+      %{entries: entries}
+    end
+
+    test "passes a view holding every row at or below its limit", %{entries: entries} do
+      views = [view(5, 20, %{"t" => {5, 5}}), view(9, 30, %{"t" => {5, 5}, "u" => {9, 9}})]
+
+      assert Checks.below_final(views, entries, @member, 9) == []
+    end
+
+    test "flags a row missing below the limit", %{entries: entries} do
+      assert [%{id: "t", problem: :missing, wanted: {5, 5}}] =
+               Checks.below_final([view(5, 20, %{})], entries, @member, 9)
+    end
+
+    test "flags a row showing a number other than its final one", %{entries: entries} do
+      assert [%{id: "t", problem: :numbers, shown: {nil, nil}, wanted: {5, 5}}] =
+               Checks.below_final([view(5, 20, %{"t" => {nil, nil}})], entries, @member, 9)
+    end
+
+    # The view's limit is below "u"'s number, so its numbers may still be held back.
+    test "passes a row whose number is above the view's limit", %{entries: entries} do
+      assert Checks.below_final([view(5, 30, %{"t" => {5, 5}})], entries, @member, 9) == []
+    end
+
+    test "flags a row showing a number above the view's limit", %{entries: entries} do
+      view = %{
+        view(5, 20, %{"t" => {5, 5}})
+        | rows: %{Space => %{"s" => {5, 9}}, Tag => %{"t" => {5, 5}}}
+      }
+
+      assert [%{id: "s", problem: :above_final, shown: {5, 9}, type: Space}] =
+               Checks.below_final([view], entries, @member, 9)
+    end
+
+    test "judges only the types a view holds whole", %{entries: entries} do
+      view = %{view(5, 20, %{}) | rows: %{}, whole: MapSet.new([Space])}
+
+      assert Checks.below_final([view], entries, @member, 9) == []
+    end
+
+    # A commit that got the lock before the frame arrived can take a row away, so a row has to be
+    # readable in every state from the floor on.
+    test "passes a row a commit locked before the frame took away", %{entries: [created, both]} do
+      gone = %{
+        after_lock_at: 15,
+        committed_at: 25,
+        max_seq: 12,
+        min_seq: 12,
+        state: tags_state(%{})
+      }
+
+      entries = [created, both, gone]
+
+      assert Checks.below_final([view(9, 20, %{})], entries, @member, 12) == []
+    end
+
+    # A commit holding a serial above the limit can still be on its way, so a row a commit after it
+    # created can be too, whatever its number.
+    test "judges no state past a commit holding a serial above the limit", %{
+      entries: [created | _]
+    } do
+      ahead = %{
+        created
+        | after_lock_at: 2,
+          max_seq: 20,
+          min_seq: 20,
+          state: tags_state(%{"t" => {5, 5}, "v" => {20, 20}})
+      }
+
+      behind = %{
+        created
+        | after_lock_at: 3,
+          max_seq: 7,
+          min_seq: 7,
+          state: tags_state(%{"t" => {5, 5}, "v" => {20, 20}, "w" => {7, 7}})
+      }
+
+      entries = [created, ahead, behind]
+
+      assert Checks.below_final([view(10, 20, %{"t" => {5, 5}})], entries, @member, 20) == []
+
+      assert [%{id: "t", problem: :missing}] =
+               Checks.below_final([view(10, 20, %{})], entries, @member, 20)
+    end
+
+    test "flags a limit short of the last commit's serials once the writes stopped", %{
+      entries: entries
+    } do
+      assert [%{final_seq: 5, last_seq: 9, problem: :not_final}] =
+               Checks.below_final([], entries, @member, 5)
+
+      assert [%{final_seq: nil, problem: :not_final}] =
+               Checks.below_final([], entries, @member, nil)
+    end
+  end
+
+  defp tags_state(numbered) do
+    rows = Map.new(Model.types(), &{&1, %{}})
+
+    %{
+      grants: MapSet.new(),
+      pairs: MapSet.new(),
+      rows: %{rows | Tag => Map.new(numbered, fn {id, _seqs} -> {id, %{"name" => id}} end)},
+      seqs: %{Tag => numbered}
+    }
+  end
+
+  defp view(final_seq, at, rows) do
+    %{at: at, final_seq: final_seq, rows: %{Tag => rows}, whole: MapSet.new([Tag])}
+  end
+
   defp record(carried, opts) do
     %{
       applied?: true,
       carried: carried,
-      cursor_tx: Keyword.get(opts, :cursor_tx),
+      cursor_seq: Keyword.get(opts, :cursor_seq),
       id: @space,
       named: [],
       opened_at: Keyword.fetch!(opts, :opened_at),

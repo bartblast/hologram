@@ -2,9 +2,10 @@ defmodule HologramSyncTests.Consistency.Report do
   @moduledoc false
 
   # What a failed randomized run tells: a message short enough for CI's log, naming the seed, how
-  # to replay it, the first problems with the commits behind each row and the client's connects and
-  # cuts, and a trace with everything - the plan, every commit in lock order, each client's events
-  # with the rows and pairs it received, and every problem - written to a file CI keeps.
+  # to replay it, the first problems with the commits behind each row and the client's connects,
+  # cuts and reloads, and a trace with everything - the plan, every commit in lock order, each
+  # client's events with the rows and pairs it received, and every problem - written to a file CI
+  # keeps.
 
   alias HologramSyncTests.Consistency.Plan
 
@@ -86,6 +87,8 @@ defmodule HologramSyncTests.Consistency.Report do
   defp summary(outcome) do
     "Check 1, stores that differ once the writes stopped: #{length(outcome.differences)}. " <>
       "Check 2, rows received that their user couldn't read then: #{length(outcome.leaks)}. " <>
+      "Check 3, rows missing or misnumbered below a final limit, numbered above it, or a limit " <>
+      "short at the end: #{length(outcome.below_final)}. " <>
       "Failures: #{length(outcome.failures)}. " <>
       "Clients away past the gap limit and never told to start over: #{length(outcome.missed_resyncs)}."
   end
@@ -93,6 +96,7 @@ defmodule HologramSyncTests.Consistency.Report do
   defp problems(outcome) do
     Enum.map(outcome.differences, &{:difference, &1}) ++
       Enum.map(outcome.leaks, &{:leak, &1}) ++
+      Enum.map(outcome.below_final, &{:below_final, &1}) ++
       Enum.map(outcome.failures, &{:failure, &1}) ++
       Enum.map(outcome.missed_resyncs, &{:missed_resync, &1})
   end
@@ -133,9 +137,37 @@ defmodule HologramSyncTests.Consistency.Report do
 
     {leak.client,
      "received #{what}, at #{record.received_at}, on a connection opened at " <>
-       "#{record.opened_at}, bounded by tx #{inspect(record.cursor_tx)} - in the commits " <>
+       "#{record.opened_at}, bounded by seq #{inspect(record.cursor_seq)} - in the commits " <>
        "#{inspect(leak.candidates)} the frame could come from, its user could read it with those " <>
        "values in none, or a row it names in none since the connection opened", record.id}
+  end
+
+  defp describe_problem({:below_final, %{problem: :not_final} = problem}) do
+    {problem.client,
+     "held the numbers final only up to #{inspect(problem.final_seq)} once the writes stopped " <>
+       "and the server had read every commit, short of the last commit's serial " <>
+       "#{problem.last_seq}", nil}
+  end
+
+  defp describe_problem({:below_final, %{problem: :above_final} = problem}) do
+    {problem.client,
+     "was told at #{problem.at} the numbers are final up to #{problem.final_seq}, and shows " <>
+       "#{inspect(problem.type)} #{problem.id} numbered #{inspect(problem.shown)}, above it",
+     problem.id}
+  end
+
+  defp describe_problem({:below_final, problem}) do
+    shown =
+      if problem.problem == :missing,
+        do: "misses it",
+        else: "shows its numbers as #{inspect(problem.shown)}"
+
+    {problem.client,
+     "was told at #{problem.at} the numbers are final up to #{problem.final_seq}, and " <>
+       "#{shown}: #{inspect(problem.type)} #{problem.id} is numbered #{inspect(problem.wanted)} " <>
+       "and its user could read it from commit #{problem.floor}, the last of the commits in " <>
+       "lock order whose serials all lie at or below the limit, through every commit locked " <>
+       "before the frame arrived", problem.id}
   end
 
   defp describe_problem({:failure, failure}) do
@@ -183,7 +215,8 @@ defmodule HologramSyncTests.Consistency.Report do
       for {entry, index} <- Enum.with_index(outcome.history.entries),
           Enum.any?(entry.ops, fn op -> Enum.any?(related, &String.contains?(op, &1)) end),
           do:
-            "   commit #{index} (#{entry.writer}, xid #{entry.xid}, lock #{entry.after_lock_at}, " <>
+            "   commit #{index} (#{entry.writer}, seqs #{describe_seqs(entry)}, " <>
+              "lock #{entry.after_lock_at}, " <>
               "committed #{entry.committed_at}): #{Enum.join(entry.ops, "; ")}"
 
     [
@@ -191,6 +224,10 @@ defmodule HologramSyncTests.Consistency.Report do
       | if(touching == [], do: ["   none"], else: touching)
     ]
   end
+
+  defp describe_seqs(%{min_seq: nil}), do: "none"
+
+  defp describe_seqs(entry), do: "#{entry.min_seq}..#{entry.max_seq}"
 
   defp related_ids(row_id, entries) do
     rows =
@@ -221,13 +258,15 @@ defmodule HologramSyncTests.Consistency.Report do
 
   defp timeline(client) do
     steps =
-      for event <- client.events, event.kind in [:connect, :closed] do
-        if event.kind == :connect,
-          do: "   #{event.at} connect, cursor #{inspect(event.cursor)}",
-          else: "   #{event.at} closed: #{inspect(event.cause)}"
+      for event <- client.events, event.kind in [:connect, :closed, :reload] do
+        case event.kind do
+          :connect -> "   #{event.at} connect, cursor #{inspect(event.cursor)}"
+          :closed -> "   #{event.at} closed: #{inspect(event.cause)}"
+          :reload -> "   #{event.at} reload"
+        end
       end
 
-    ["  its connects and closes:" | steps]
+    ["  its connects, closes and reloads:" | steps]
   end
 
   defp trace(outcome, plan) do
@@ -248,7 +287,8 @@ defmodule HologramSyncTests.Consistency.Report do
       for(
         {entry, index} <- Enum.with_index(outcome.history.entries),
         do:
-          "  #{index} #{entry.writer} xid #{entry.xid} at #{entry.after_lock_at}..#{entry.committed_at}: " <>
+          "  #{index} #{entry.writer} seqs #{describe_seqs(entry)} at " <>
+            "#{entry.after_lock_at}..#{entry.committed_at}: " <>
             Enum.join(entry.ops, "; ")
       ),
       "",

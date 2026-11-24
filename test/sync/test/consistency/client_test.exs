@@ -104,9 +104,9 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     refute Map.has_key?(Client.store(client)[Tag], "stale")
   end
 
-  # Check 2 bounds a frame by its cursor's transaction id, so a cursor of another shape has to stop
-  # the run rather than switch the bound off.
-  test "a client fails on a cursor it can't read a transaction id from", %{
+  # Check 2 bounds a frame by its cursor's serial, so a cursor of another shape has to stop the run
+  # rather than switch the bound off.
+  test "a client fails on a cursor it can't read a serial from", %{
     users: [member | _users]
   } do
     client = start_client(member.id)
@@ -230,7 +230,7 @@ defmodule HologramSyncTests.Consistency.ClientTest do
 
     send(client, {:http, {request_id, :stream, chunk}})
 
-    assert %{cursor_tx: ^seq, id: "t"} =
+    assert %{cursor_seq: ^seq, id: "t"} =
              client
              |> Client.records()
              |> List.last()
@@ -386,6 +386,135 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     assert Client.failures(client) == []
   end
 
+  # The numbers come above anything the sequence gave, so no limit the server tells reaches them.
+  test "a client holds back a number above its final limit until a limit reaches it", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert await(fn -> Client.final_seq(client) != nil end)
+
+    request_id = request_id(client)
+    above = 1_000_000_000_000
+
+    send_frame(client, request_id, "sync_deltas", %{
+      cursor: nil,
+      deltas: %{
+        put_entity: %{
+          "HologramSyncTests.Entities.Tag" => [
+            %{id: "t", name: "t", server_created_seq: above, server_updated_seq: above}
+          ]
+        }
+      }
+    })
+
+    assert shown_numbers(client, "t") == {nil, nil}
+
+    send_frame(client, request_id, "sync_deltas", %{
+      cursor: nil,
+      deltas: %{
+        patch_entity: %{
+          "HologramSyncTests.Entities.Tag" => [
+            %{id: "t", name: "u", server_updated_seq: above + 1}
+          ]
+        }
+      },
+      final_seq: above
+    })
+
+    # The patch's number took the put's place beside the row, as a later save's does.
+    assert shown_numbers(client, "t") == {above, nil}
+    assert Client.final_seq(client) == above
+
+    send_frame(client, request_id, "sync_deltas", %{
+      cursor: nil,
+      deltas: %{},
+      final_seq: above + 1
+    })
+
+    assert shown_numbers(client, "t") == {above, above + 1}
+  end
+
+  # The numbers came from a log that's gone, so none of them orders anything against the new one's.
+  test "a client told its log is gone forgets the final limit and every number", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert await(fn -> Client.final_seq(client) != nil end)
+
+    refute {nil, nil} in shown_tags(client)
+
+    send_frame(client, request_id(client), "sync_resync", %{reason: "retention"})
+
+    assert Client.final_seq(client) == nil
+    forgotten = shown_tags(client)
+
+    assert Enum.uniq(forgotten) == [{nil, nil}]
+  end
+
+  # A reload starts from what the store wrote down, so the page comes back from its place and keeps
+  # its numbers and the final limit written with that place.
+  test "a client reloading comes back from its place with its numbers", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert await(fn -> Client.final_seq(client) != nil end)
+
+    final_seq = Client.final_seq(client)
+    cursor = Client.cursor(client)
+    shown = last_view(client)
+
+    Client.cut(client)
+    create!(Tag, name: "while away")
+    Client.reload(client)
+
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    cursors = connect_cursors(client)
+
+    assert List.last(cursors) == cursor
+    assert await(fn -> Client.final_seq(client) >= final_seq end)
+    events = Client.events(client)
+
+    assert Enum.any?(events, &(&1.kind == :reload and &1.from == :store))
+
+    after_reload = last_view(client)
+
+    assert Map.take(after_reload.rows[Tag], Map.keys(shown.rows[Tag])) == shown.rows[Tag]
+    assert Client.failures(client) == []
+  end
+
+  # The browser refuses a store with no place and clears it, so the page fills from nothing and
+  # holds no final limit until the server names one.
+  test "a client reloading with no place written down fills from nothing", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+
+    Client.cut(client)
+    Client.put_cursor(client, nil)
+    Client.reload(client)
+
+    events = Client.events(client)
+
+    assert Enum.any?(events, &(&1.kind == :reload and &1.from == :nothing))
+    cursors = connect_cursors(client)
+
+    assert List.last(cursors) == nil
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert Client.failures(client) == []
+  end
+
   describe "Checks.diff/2" do
     test "names a missing row, an extra row, wrong fields and a wrong set" do
       expected = %{
@@ -452,6 +581,41 @@ defmodule HologramSyncTests.Consistency.ClientTest do
              |> Client.events()
              |> Enum.filter(&(&1.kind in [:connect, :closed]))
              |> Enum.map(&(&1[:cause] || &1.kind))
+  end
+
+  defp request_id(client) do
+    client
+    |> Client.events()
+    |> Enum.filter(&(&1.kind == :connect))
+    |> List.last()
+    |> Map.fetch!(:request_id)
+  end
+
+  defp send_frame(client, request_id, event, data) do
+    send(
+      client,
+      {:http, {request_id, :stream, "event: #{event}\ndata: #{Jason.encode!(data)}\n\n"}}
+    )
+  end
+
+  defp shown_numbers(client, id) do
+    last_view(client).rows[Tag][id]
+  end
+
+  defp last_view(client) do
+    client
+    |> Client.views()
+    |> List.last()
+  end
+
+  # Every tag's numbers as the client holds them, read from its state: a client with no final limit
+  # keeps no view.
+  defp shown_tags(client) do
+    client
+    |> :sys.get_state()
+    |> Map.fetch!(:tables)
+    |> Map.fetch!("HologramSyncTests.Entities.Tag")
+    |> Enum.map(fn {_id, row} -> {row["server_created_seq"], row["server_updated_seq"]} end)
   end
 
   defp connect_cursors(client) do

@@ -30,13 +30,15 @@ defmodule HologramSyncTests.Consistency.Model do
   @sets %{Card => %{"tags" => Tag}, Tag => %{"cards" => Card}}
 
   @typedoc """
-  A state of the test's tables: the rows of each type by id, the card and tag pairs, and the
-  viewer grants on boards, each `{user_id, board_id}`, or `{user_id, :all}` for a type-wide one.
+  A state of the test's tables: the rows of each type by id, the card and tag pairs, the viewer
+  grants on boards, each `{user_id, board_id}`, or `{user_id, :all}` for a type-wide one, and the
+  numbers each row holds as stored, `{server_created_seq, server_updated_seq}` by type and id.
   """
   @type state :: %{
           grants: MapSet.t({String.t(), String.t() | :all}),
           pairs: MapSet.t({String.t(), String.t()}),
-          rows: %{module => %{String.t() => map}}
+          rows: %{module => %{String.t() => map}},
+          seqs: %{module => %{String.t() => {pos_integer, pos_integer}}}
         }
 
   @doc """
@@ -89,8 +91,9 @@ defmodule HologramSyncTests.Consistency.Model do
 
   @doc """
   Returns the current state of the test's tables. Read with the server's own authority, so every
-  row is read whoever is acting, and in a statement per type, one for the pairs and one for the
-  grants - a caller wanting one moment reads it where no write can commit in between.
+  row is read whoever is acting, and in a statement per type, one for the pairs, one for the
+  grants and one per type for the numbers - a caller wanting one moment reads it where no write
+  can commit in between.
   """
   @spec snapshot() :: state
   def snapshot do
@@ -112,7 +115,7 @@ defmodule HologramSyncTests.Consistency.Model do
           into: MapSet.new(),
           do: {grant.user_id, grant.entity_id || :all}
 
-    %{grants: grants, pairs: MapSet.new(pairs, &List.to_tuple/1), rows: rows}
+    %{grants: grants, pairs: MapSet.new(pairs, &List.to_tuple/1), rows: rows, seqs: seqs()}
   end
 
   @doc """
@@ -193,6 +196,21 @@ defmodule HologramSyncTests.Consistency.Model do
     type
     |> Query.trust()
     |> DB.read()
+  end
+
+  # Read as stored: a read through the rules hides a number above the final limit, and the checks
+  # judge what a client was shown against the numbers as they are.
+  defp seqs do
+    Map.new(@types, fn type ->
+      %{rows: rows} =
+        DB.sql!(
+          ~s(SELECT "id", "server_created_seq", "server_updated_seq" ) <>
+            ~s(FROM "hologram_data"."#{DB.table_name(type)}")
+        )
+
+      {type,
+       Map.new(rows, fn [id, created_seq, updated_seq] -> {id, {created_seq, updated_seq}} end)}
+    end)
   end
 
   defp tags_table, do: DB.join_table_name(Card, :tags)

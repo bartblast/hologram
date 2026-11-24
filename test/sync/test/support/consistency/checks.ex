@@ -5,7 +5,10 @@ defmodule HologramSyncTests.Consistency.Checks do
   # read - every row, with its current fields and sets, and nothing more. The second: every row a
   # client received was one its user could read, with the values it carried, in a state the server
   # could have read it from, and every row its sets or a pair named one its user could read since
-  # the connection opened.
+  # the connection opened. The third: a client told the numbers are final up to a limit holds every
+  # row its user could read throughout with a number at or below it, showing that number - so no
+  # list of its ordered by number skips one - and once the writes stop, the limit reaches the last
+  # commit.
 
   alias HologramSyncTests.Consistency.Client
   alias HologramSyncTests.Consistency.Model
@@ -43,10 +46,10 @@ defmodule HologramSyncTests.Consistency.Checks do
 
   A frame could have been read from a state when the state could have committed before the frame
   arrived (its transaction got the commit lock before then), could still have been current when the
-  connection carrying the frame opened (no later state had committed by the open),
-  and, with a bounding transaction id - the frame's cursor's, or the place the client held when it
-  arrived - is at or after every state left by a transaction below it: the server read that place
-  before the frame's rows, and every transaction below it had ended by then.
+  connection carrying the frame opened (no later state had committed by the open), and, with a
+  bounding serial - the seq of the frame's cursor, or of the place the client held when it arrived
+  - is at or after every state left by a transaction holding a serial at or below it: the server
+  read that place before the frame's rows, and every save holding one had ended by then.
   Each violation names the record and the states that bounded it, by position in the history.
   """
   @spec leaks(list(map), list(map), String.t() | nil) :: list(map)
@@ -57,6 +60,33 @@ defmodule HologramSyncTests.Consistency.Checks do
       |> Enum.with_index()
 
     Enum.flat_map(records, &leak(&1, indexed, user_id))
+  end
+
+  @doc """
+  Returns what check 3 finds in the given views of a client of the given user, from
+  `Client.views/1`, given the history's entries and the limit the client held once the writes
+  stopped and the server had read every commit, or nil.
+
+  Each view names a limit, and the server tells one only once it sent every change holding a
+  serial at or below it. The states in lock order up to the first commit holding a serial above the
+  limit are then all the client's to know - the last of them is the view's floor - while a commit
+  after it may yet be on its way, whatever it changed. A row of a type the view holds whole, with a
+  created number at or below the limit, that its user could read in the floor and in every state
+  after it whose transaction got the commit lock before the frame arrived, so that nothing still on
+  its way could have taken it away, has to be in the view, showing that number - and, when its
+  updated number is the same in all those states and at or below the limit, that one too.
+
+  A number a view shows is one a reader finds, so it is always at or below the view's limit, in a
+  type held whole or not.
+
+  Answers each row missing or showing other numbers, or showing one above the limit, by the view's
+  time and limit, and a limit held at the end that stops short of the last commit's serials.
+  """
+  @spec below_final(list(map), list(map), String.t() | nil, non_neg_integer | nil) :: list(map)
+  def below_final(views, entries, user_id, final_seq) do
+    indexed = Enum.with_index(entries)
+
+    Enum.flat_map(views, &view_problems(&1, indexed, user_id)) ++ not_final(entries, final_seq)
   end
 
   @doc """
@@ -97,8 +127,143 @@ defmodule HologramSyncTests.Consistency.Checks do
     end
   end
 
+  defp view_problems(view, indexed, user_id) do
+    above_final(view) ++ missing_or_misnumbered(view, indexed, user_id)
+  end
+
+  defp above_final(view) do
+    for {type, rows} <- view.rows,
+        {id, shown} <- rows,
+        {created_seq, updated_seq} = shown,
+        above?(created_seq, view.final_seq) or above?(updated_seq, view.final_seq),
+        do: %{
+          at: view.at,
+          final_seq: view.final_seq,
+          id: id,
+          problem: :above_final,
+          shown: shown,
+          type: type
+        }
+  end
+
+  defp above?(seq, final_seq), do: seq != nil and seq > final_seq
+
+  defp missing_or_misnumbered(view, indexed, user_id) do
+    case final_floor(view.final_seq, indexed) do
+      nil ->
+        []
+
+      floor ->
+        window =
+          Enum.filter(indexed, fn {entry, index} ->
+            index == floor or (index > floor and entry.after_lock_at < view.at)
+          end)
+
+        {floor_entry, _floor} = Enum.find(window, &(elem(&1, 1) == floor))
+
+        for type <- whole_types(view.whole),
+            {id, {created_seq, _updated_seq}} <- seqs_of(floor_entry.state, type),
+            created_seq <= view.final_seq,
+            readable_throughout?(window, user_id, type, id),
+            problem = row_problem(view, window, type, id, created_seq),
+            problem != nil,
+            do:
+              Map.merge(problem, %{
+                at: view.at,
+                final_seq: view.final_seq,
+                floor: floor,
+                id: id,
+                type: type
+              })
+    end
+  end
+
+  defp readable_throughout?(window, user_id, type, id) do
+    Enum.all?(window, fn {entry, _index} -> Model.readable?(entry.state, user_id, type, id) end)
+  end
+
+  defp row_problem(view, window, type, id, created_seq) do
+    shown = get_in(view.rows, [type, id])
+
+    updated_seq = steady_updated_seq(window, type, id, view.final_seq)
+
+    cond do
+      shown == nil ->
+        %{problem: :missing, wanted: {created_seq, updated_seq}}
+
+      elem(shown, 0) != created_seq ->
+        %{problem: :numbers, shown: shown, wanted: {created_seq, updated_seq}}
+
+      updated_seq != nil and elem(shown, 1) != updated_seq ->
+        %{problem: :numbers, shown: shown, wanted: {created_seq, updated_seq}}
+
+      true ->
+        nil
+    end
+  end
+
+  # The row's updated number when it's the same throughout the window and at or below the limit,
+  # else nil.
+  defp steady_updated_seq(window, type, id, final_seq) do
+    updated_seqs =
+      window
+      |> Enum.map(fn {entry, _index} -> updated_seq(entry.state, type, id) end)
+      |> Enum.uniq()
+
+    case updated_seqs do
+      [seq] when seq <= final_seq -> seq
+      _moved_or_held -> nil
+    end
+  end
+
+  defp updated_seq(state, type, id) do
+    {_created_seq, updated_seq} =
+      state
+      |> seqs_of(type)
+      |> Map.get(id, {nil, nil})
+
+    updated_seq
+  end
+
+  # The last commit's serials are final once the writes stopped and the server read it.
+  defp not_final(entries, final_seq) do
+    last_seq =
+      entries
+      |> Enum.map(& &1.max_seq)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.max(fn -> nil end)
+
+    if last_seq != nil and (final_seq == nil or final_seq < last_seq),
+      do: [%{final_seq: final_seq, last_seq: last_seq, problem: :not_final}],
+      else: []
+  end
+
+  defp whole_types(:all), do: Model.types()
+
+  defp whole_types(whole), do: Enum.sort(whole)
+
+  defp seqs_of(state, type) do
+    state
+    |> Map.get(:seqs, %{})
+    |> Map.get(type, %{})
+  end
+
+  # The position of the last state before the first commit holding a serial above the limit, or
+  # nil when the first commit holds one. A commit that logged nothing changed nothing to send.
+  defp final_floor(final_seq, indexed) do
+    final_prefix =
+      Enum.take_while(indexed, fn {entry, _index} ->
+        entry.max_seq == nil or entry.max_seq <= final_seq
+      end)
+
+    case List.last(final_prefix) do
+      nil -> nil
+      {_entry, index} -> index
+    end
+  end
+
   defp candidates(record, indexed) do
-    floor = cursor_floor(record.cursor_tx, indexed)
+    floor = serial_floor(record.cursor_seq, indexed) || 0
 
     record
     |> open_candidates(indexed)
@@ -115,15 +280,16 @@ defmodule HologramSyncTests.Consistency.Checks do
     end)
   end
 
-  # The position of the last state a transaction below the cursor left - the earliest state the
-  # frame's rows can be from.
-  defp cursor_floor(nil, _indexed), do: 0
+  # The position of the last state a transaction holding a serial at or below the given one left -
+  # the earliest state the server can have read once every save holding one had ended. Nil without
+  # a serial, or when no such transaction committed.
+  defp serial_floor(nil, _indexed), do: nil
 
-  defp cursor_floor(cursor_tx, indexed) do
+  defp serial_floor(seq, indexed) do
     indexed
-    |> Enum.filter(fn {entry, _index} -> entry.xid < cursor_tx end)
+    |> Enum.filter(fn {entry, _index} -> entry.min_seq != nil and entry.min_seq <= seq end)
     |> Enum.map(&elem(&1, 1))
-    |> Enum.max(fn -> 0 end)
+    |> Enum.max(fn -> nil end)
   end
 
   defp explains?(entry, record, user_id) do

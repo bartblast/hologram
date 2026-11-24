@@ -4,8 +4,12 @@ defmodule HologramSyncTests.Consistency.Client do
   # A simulated browser tab: a process holding a sync stream and a store it keeps the way the
   # browser keeps its local database, so the consistency checks can compare what it holds with
   # what its user may read. It mirrors `assets/js/deltas.mjs`, the frame handling of
-  # `assets/js/sync_stream.mjs` and the refill and sweep of `assets/js/local_database.mjs`, and
-  # nothing else of the browser: it renders nothing, writes nothing and holds no tab group.
+  # `assets/js/sync_stream.mjs` and the refill, the sweep and the numbers held back of
+  # `assets/js/local_database.mjs`, and nothing else of the browser: it renders nothing, writes
+  # nothing and holds no tab group. A reload starts the page again from what the browser writes
+  # down after a frame: the rows, and the place with the final limit as it stood after the last
+  # frame naming a place. A store with no place is cleared and the page fills from nothing -
+  # `Durability.persistFrame` and `Durability.restore`.
   #
   # The stream is `Hologram.Test.SyncClient`'s, started from this process so its messages arrive
   # here, and read as they come rather than waited on - a frame changes the store the moment it
@@ -24,28 +28,47 @@ defmodule HologramSyncTests.Consistency.Client do
   # What the browser waits before reconnecting a stream that ended (`assets/js/sse.mjs`).
   @reconnect_delay_ms 250
 
+  # The numbers a save gives a row, which the browser holds back until they're final.
+  @numbers ["server_created_seq", "server_updated_seq"]
+
   @typedoc """
   A put or a patch of one of the model's rows, or a pair added under one, as the client received
   it: the monotonic time read before the connect that carried it started, the time the chunk
-  completing its frame arrived, the transaction id bounding it, the declared fields it carried, the
-  rows its sets or its pair named, each `{type, id}`, and whether the client applied it - a patch
-  for a row it doesn't hold is passed over, and is a row the server sent all the same.
+  completing its frame arrived, the serial bounding it, the declared fields it carried, the rows
+  its sets or its pair named, each `{type, id}`, and whether the client applied it - a patch for a
+  row it doesn't hold is passed over, and is a row the server sent all the same.
 
-  The bound is the frame's cursor, or, for a frame carrying none, the place the client held when it
-  arrived: only a batch's last frame carries one, and the server read the batch's rows after every
-  transaction below the client's place had ended - a client cut off right there comes back from
-  it. Nil when the client held no place either.
+  The bound is the seq of the frame's cursor, or, for a frame carrying none, of the place the
+  client held when it arrived: only a batch's last frame carries one, and the server read the
+  batch's rows after every save holding a serial at or below the client's place had ended - a
+  client cut off right there comes back from it. Nil when the client held no place either.
   """
   @type received :: %{
           applied?: boolean,
           carried: map,
-          cursor_tx: non_neg_integer | nil,
+          cursor_seq: non_neg_integer | nil,
           id: String.t(),
           named: list({module, String.t()}),
           pair?: boolean,
           opened_at: integer,
           received_at: integer,
           type: module
+        }
+
+  @typedoc """
+  What the client showed once a frame was in, when it held a final limit: the time the chunk
+  completing the frame arrived, the limit, the types it holds whole - every type, or the ones whose
+  marker came since its last refill began - and the numbers each of their rows shows,
+  `{server_created_seq, server_updated_seq}` by type and id, nil for one held back.
+
+  A type is whole once its marker came, and stays whole across a cut, a catch-up and a reload: what
+  a final limit vouches for is in the rows of a type whose fill ended, and only there.
+  """
+  @type view :: %{
+          at: integer,
+          final_seq: non_neg_integer,
+          rows: %{module => %{String.t() => {integer | nil, integer | nil}}},
+          whole: :all | MapSet.t(module)
         }
 
   @doc """
@@ -77,6 +100,13 @@ defmodule HologramSyncTests.Consistency.Client do
   """
   @spec connect(pid, keyword) :: :ok
   def connect(client, opts \\ []), do: GenServer.call(client, {:connect, opts}, 30_000)
+
+  @doc """
+  Returns the final limit the client holds, or nil when it was told none since it last started
+  over.
+  """
+  @spec final_seq(pid) :: non_neg_integer | nil
+  def final_seq(client), do: GenServer.call(client, :final_seq)
 
   @doc """
   Returns the place the client would come back from, or nil.
@@ -125,6 +155,15 @@ defmodule HologramSyncTests.Consistency.Client do
   def records(client), do: GenServer.call(client, :records)
 
   @doc """
+  Reloads the client, the way a browser reloading the tab does: the stream closes, the page starts
+  again from what the store wrote down - every row, the place and the final limit written with
+  it - with no completeness marker yet, and connects from that place. A store with no place is
+  cleared, so the page fills from nothing.
+  """
+  @spec reload(pid) :: :ok
+  def reload(client), do: GenServer.call(client, :reload, 30_000)
+
+  @doc """
   Stops the client, closing its stream, waiting at most the given milliseconds.
   """
   @spec stop(pid, timeout) :: :ok
@@ -144,6 +183,12 @@ defmodule HologramSyncTests.Consistency.Client do
   @spec view(pid) :: {boolean, %{module => %{String.t() => map}}}
   def view(client), do: GenServer.call(client, :view)
 
+  @doc """
+  Returns what the client showed after each frame that changed it, oldest first (see `t:view/0`).
+  """
+  @spec views(pid) :: list(view)
+  def views(client), do: GenServer.call(client, :views)
+
   @impl GenServer
   def init(opts) do
     # So a supervisor stopping it runs terminate/2, which closes the stream: :httpc keeps a stream
@@ -160,14 +205,19 @@ defmodule HologramSyncTests.Consistency.Client do
        cut_when: nil,
        events: [],
        facts: %{},
+       final_seq: nil,
        opened_at: nil,
        reconnect: nil,
        records: [],
+       stored_final: nil,
        stream: nil,
        synced_all: false,
        synced_types: MapSet.new(),
        tables: %{},
-       user_id: Keyword.get(opts, :user_id)
+       user_id: Keyword.get(opts, :user_id),
+       views: [],
+       waiting: %{},
+       whole: MapSet.new()
      }}
   end
 
@@ -184,6 +234,8 @@ defmodule HologramSyncTests.Consistency.Client do
 
   def handle_call(:cursor, _from, state), do: {:reply, state.cursor, state}
 
+  def handle_call(:final_seq, _from, state), do: {:reply, state.final_seq, state}
+
   # A cut while the client waits to reconnect takes that reconnect back, so it's recorded too: the
   # run reads a client's return as the first connect after its cut.
   def handle_call(:cut, _from, %{stream: nil} = state),
@@ -199,11 +251,26 @@ defmodule HologramSyncTests.Consistency.Client do
 
   def handle_call(:records, _from, state), do: {:reply, Enum.reverse(state.records), state}
 
+  # The page loading again holds no awaiting mark and no completeness marker: the browser keeps
+  # neither in the store.
+  def handle_call(:reload, _from, state) do
+    reloaded =
+      state
+      |> close(:reload)
+      |> cancel_reconnect()
+      |> restore()
+      |> Map.merge(%{awaiting: MapSet.new(), synced_all: false, synced_types: MapSet.new()})
+
+    {:reply, :ok, open(%{reloaded | cut_when: nil})}
+  end
+
   def handle_call(:store, _from, state), do: {:reply, comparable_store(state), state}
 
   def handle_call(:view, _from, state) do
     {:reply, {state.complete?, comparable_store(state)}, state}
   end
+
+  def handle_call(:views, _from, state), do: {:reply, Enum.reverse(state.views), state}
 
   @impl GenServer
   # Only the reconnect the client still waits for: a cut or a connect since then took it back, even
@@ -245,7 +312,10 @@ defmodule HologramSyncTests.Consistency.Client do
     {frames, rest} = SyncClient.parse_frames(state.buffer <> chunk)
 
     Enum.reduce_while(frames, %{state | buffer: rest}, fn frame, acc ->
-      handled = handle_frame(frame, acc, received_at)
+      handled =
+        frame
+        |> handle_frame(acc, received_at)
+        |> keep_view(received_at)
 
       if cut_now?(handled) do
         {:halt, close(handled, :cut)}
@@ -336,32 +406,59 @@ defmodule HologramSyncTests.Consistency.Client do
         end)
       end)
 
+    final_seq = field(frame, "final_seq")
+
+    # The frame's rows are in first, so a number the frame itself makes final waits for it a moment
+    # - as `SyncStream.receiveFrame` raises the limit after `Deltas.apply`.
     applied
+    |> raise_final(final_seq)
     |> keep_cursor(cursor)
-    |> event(:frame, %{cursor: cursor, frame: "sync_deltas", ops: ops_summary(frame)})
+    |> event(:frame, %{
+      cursor: cursor,
+      final_seq: final_seq,
+      frame: "sync_deltas",
+      ops: ops_summary(frame)
+    })
   end
 
   defp handle_frame(%{"event" => "synced", "data" => data}, state, _received_at) do
     frame = Jason.decode!(data)
 
+    # Ahead of the sweep, which goes by the rows rather than their numbers.
+    raised = raise_final(state, frame["final_seq"])
+
     marked =
       case frame["scope"] do
-        "all" -> %{mark_all_synced(state) | complete?: true}
-        "types" -> mark_types_synced(state, frame["types"])
-        _unknown_scope -> state
+        "all" -> %{mark_all_synced(raised) | complete?: true, whole: :all}
+        "types" -> mark_types_synced(raised, frame["types"])
+        _unknown_scope -> raised
       end
 
     marked
     |> keep_cursor(frame["cursor"])
-    |> event(:frame, %{cursor: frame["cursor"], frame: "synced", scope: frame["scope"]})
+    |> event(:frame, %{
+      cursor: frame["cursor"],
+      final_seq: frame["final_seq"],
+      frame: "synced",
+      scope: frame["scope"]
+    })
   end
 
   defp handle_frame(%{"event" => "sync_resync", "data" => data}, state, _received_at) do
     %{"reason" => reason} = Jason.decode!(data)
 
-    refilled = if reason == "identity", do: reset(state), else: begin_refill(state)
+    # A refill keeps the final limit, unless the log the numbers came from is gone or the place
+    # naming it can't be read.
+    refilled =
+      cond do
+        reason == "identity" -> reset(state)
+        reason in ["retention", "cursor"] -> forget_final(begin_refill(state))
+        true -> begin_refill(state)
+      end
 
-    event(%{refilled | complete?: false, cursor: nil}, :frame, %{
+    # The store goes with the place, so nothing written down names a final limit until a frame
+    # names a place again - `SyncStream.listen`.
+    event(%{refilled | complete?: false, cursor: nil, stored_final: nil}, :frame, %{
       frame: "sync_resync",
       reason: reason
     })
@@ -423,6 +520,8 @@ defmodule HologramSyncTests.Consistency.Client do
     delete_row(state, type, id)
   end
 
+  # The numbers a patch carries are held back as a put's are, against the row as it's held.
+
   # A patch merges into the row the client holds, and is passed over for one it doesn't: it
   # names a row the client was told about, so an unheld one is a row it was already told to let go.
   # Recorded either way, since the server sent the row's values.
@@ -432,15 +531,19 @@ defmodule HologramSyncTests.Consistency.Client do
         record(state, type, changes, origin, false)
 
       held ->
-        state
-        |> file_row(type, Map.merge(held, changes))
+        {filed, held_back} = hold_numbers(state, type, changes)
+
+        held_back
+        |> file_row(type, Map.merge(held, filed))
         |> record(type, changes, origin, true)
     end
   end
 
   defp apply_one(state, "put_entity", type, row, origin) do
-    state
-    |> file_row(type, row)
+    {filed, held_back} = hold_numbers(state, type, row)
+
+    held_back
+    |> file_row(type, filed)
     |> Map.update!(:awaiting, &MapSet.delete(&1, {type, row["id"]}))
     |> record(type, row, origin, true)
   end
@@ -500,8 +603,106 @@ defmodule HologramSyncTests.Consistency.Client do
       end)
 
     # The row's awaiting mark stays, as the browser's carried mark does: a sweep takes it, and the
-    # pairs an edge filed under the id since, along with it.
-    %{state | facts: facts, tables: Map.update(state.tables, type, %{}, &Map.delete(&1, id))}
+    # pairs an edge filed under the id since, along with it. The numbers it waited for go.
+    %{
+      state
+      | facts: facts,
+        tables: Map.update(state.tables, type, %{}, &Map.delete(&1, id)),
+        waiting: Map.delete(state.waiting, {type, id})
+    }
+  end
+
+  # The given row or patch as the store files it, with every number above the final limit held
+  # back: the row keeps the number it already holds in its place, or nil, and the number waits
+  # beside it. A number at or below the limit is filed as it came, leaving one waiting for the
+  # same field to wait - `LocalDatabase.holdNumbers`.
+  defp hold_numbers(state, type, item) do
+    held = get_in(state.tables, [type, item["id"]]) || %{}
+
+    Enum.reduce(@numbers, {item, state}, fn name, {filed, acc} ->
+      with {:ok, number} <- Map.fetch(item, name),
+           false <- final?(acc.final_seq, number) do
+        waiting =
+          Map.update(
+            acc.waiting,
+            {type, item["id"]},
+            %{name => number},
+            &Map.put(&1, name, number)
+          )
+
+        {Map.put(filed, name, Map.get(held, name)), %{acc | waiting: waiting}}
+      else
+        _final_or_absent -> {filed, acc}
+      end
+    end)
+  end
+
+  defp final?(_final_seq, nil), do: true
+
+  defp final?(nil, _number), do: false
+
+  defp final?(final_seq, number), do: number <= final_seq
+
+  # Moves the limit up to the given one and files every waiting number it now reaches into a held
+  # row, over a lower one or none. A limit at or below the one held moves nothing: another node
+  # can be behind this one - `LocalDatabase.raiseFinal`.
+  defp raise_final(state, nil), do: state
+
+  defp raise_final(%{final_seq: held} = state, final_seq) when held != nil and final_seq <= held,
+    do: state
+
+  defp raise_final(state, final_seq), do: file_final(%{state | final_seq: final_seq})
+
+  # A waiting number of a row the client no longer holds stays, as the browser's does, until a
+  # delete or a start over takes it - `LocalDatabase.#fileFinal`.
+  defp file_final(state) do
+    Enum.reduce(state.waiting, state, fn {{type, id} = key, numbers}, acc ->
+      case get_in(acc.tables, [type, id]) do
+        nil ->
+          acc
+
+        held ->
+          file_reached(acc, key, held, numbers)
+      end
+    end)
+  end
+
+  defp file_reached(state, {type, id} = key, held, numbers) do
+    {reached, waiting} = Map.split_with(numbers, fn {_name, n} -> final?(state.final_seq, n) end)
+
+    waiting_left =
+      if waiting == %{},
+        do: Map.delete(state.waiting, key),
+        else: Map.put(state.waiting, key, waiting)
+
+    row = Enum.reduce(reached, held, &file_number/2)
+
+    %{state | tables: put_in(state.tables, [type, id], row), waiting: waiting_left}
+  end
+
+  # A waiting number doesn't take the place of a higher one the row got since, in a frame whose
+  # number was final already.
+  defp file_number({name, number}, row) do
+    current = Map.get(row, name)
+
+    if current == nil or number > current, do: Map.put(row, name, number), else: row
+  end
+
+  # The log the numbers came from is gone, so the limit, the numbers waiting for it and the numbers
+  # the rows hold go - `LocalDatabase.forgetFinal`.
+  defp forget_final(state) do
+    tables =
+      Map.new(state.tables, fn {type, rows} ->
+        {type, Map.new(rows, fn {id, row} -> {id, unnumbered(row)} end)}
+      end)
+
+    %{state | final_seq: nil, tables: tables, waiting: %{}}
+  end
+
+  defp unnumbered(row) do
+    Enum.reduce(@numbers, row, fn name, acc ->
+      if Map.has_key?(acc, name), do: Map.put(acc, name, nil), else: acc
+    end)
   end
 
   # Every held row goes back to awaiting the server's word, and the completeness marks go, so the
@@ -513,7 +714,8 @@ defmodule HologramSyncTests.Consistency.Client do
       state
       | awaiting: MapSet.union(state.awaiting, MapSet.new(held)),
         synced_all: false,
-        synced_types: MapSet.new()
+        synced_types: MapSet.new(),
+        whole: MapSet.new()
     }
   end
 
@@ -530,7 +732,11 @@ defmodule HologramSyncTests.Consistency.Client do
       |> MapSet.new()
       |> MapSet.difference(state.synced_types)
 
-    synced = %{state | synced_types: MapSet.union(state.synced_types, marked)}
+    synced = %{
+      state
+      | synced_types: MapSet.union(state.synced_types, marked),
+        whole: add_whole(state.whole, types)
+    }
 
     if state.synced_all do
       synced
@@ -560,23 +766,106 @@ defmodule HologramSyncTests.Consistency.Client do
       state
       | awaiting: MapSet.new(),
         facts: %{},
+        final_seq: nil,
         synced_all: false,
         synced_types: MapSet.new(),
-        tables: %{}
+        stored_final: nil,
+        tables: %{},
+        waiting: %{},
+        whole: MapSet.new()
     }
+  end
+
+  # A store with no place is refused and cleared, so the page fills from nothing. One with a place
+  # gives the page its rows under the limit written with that place, which a frame naming no place
+  # can have raised since: a number the page filed above it waits beside its row again, as
+  # `LocalDatabase.restore` moves a stored one back - `Durability.restore`.
+  defp restore(%{cursor: nil} = state), do: event(reset(state), :reload, %{from: :nothing})
+
+  defp restore(state) do
+    restored =
+      Enum.reduce(state.tables, %{state | final_seq: state.stored_final}, fn {type, rows}, acc ->
+        Enum.reduce(rows, acc, fn {id, row}, row_acc -> unfile(row_acc, type, id, row) end)
+      end)
+
+    event(restored, :reload, %{from: :store, final_seq: state.stored_final})
+  end
+
+  # A number already waiting for the same field is the newer one, so it stays.
+  defp unfile(state, type, id, row) do
+    above = for name <- @numbers, not final?(state.final_seq, Map.get(row, name)), do: name
+
+    if above == [] do
+      state
+    else
+      numbers = Map.take(row, above)
+      waiting = Map.update(state.waiting, {type, id}, numbers, &Map.merge(numbers, &1))
+      filed = Map.merge(row, Map.new(above, &{&1, nil}))
+
+      %{state | tables: put_in(state.tables, [type, id], filed), waiting: waiting}
+    end
+  end
+
+  defp add_whole(:all, _types), do: :all
+
+  defp add_whole(whole, types) do
+    types
+    |> Enum.map(&model_type/1)
+    |> Enum.reject(&is_nil/1)
+    |> MapSet.new()
+    |> MapSet.union(whole)
+  end
+
+  # Kept only when the client holds a limit and a whole type, and only when it differs from the
+  # last one kept: the checks judge each by the rows readable when its frame arrived.
+  defp keep_view(%{final_seq: nil} = state, _received_at), do: state
+
+  defp keep_view(state, received_at) do
+    view = %{
+      at: received_at,
+      final_seq: state.final_seq,
+      rows: shown_numbers(state),
+      whole: state.whole
+    }
+
+    case state.views do
+      [last | _views]
+      when last.final_seq == view.final_seq and last.whole == view.whole and
+             last.rows == view.rows ->
+        state
+
+      _changed ->
+        if view.whole == MapSet.new(), do: state, else: %{state | views: [view | state.views]}
+    end
+  end
+
+  defp shown_numbers(state) do
+    types = if state.whole == :all, do: Model.types(), else: MapSet.to_list(state.whole)
+
+    Map.new(types, fn module ->
+      rows =
+        state.tables
+        |> Map.get(wire_type(module), %{})
+        |> Map.new(fn {id, row} ->
+          {id, {Map.get(row, "server_created_seq"), Map.get(row, "server_updated_seq")}}
+        end)
+
+      {module, rows}
+    end)
   end
 
   # Kept as the browser keeps it, and checked the way the server reads one back: one its decoding
   # can't read fails the run, whether a deltas frame or a marker carried it.
   defp keep_cursor(state, nil), do: state
 
+  # The limit goes down with the place, as it stands once the frame is in: the browser writes both
+  # only for a frame naming a place - `Durability.persistFrame`.
   defp keep_cursor(state, cursor) do
-    case cursor_tx(cursor) do
-      {:ok, _tx} ->
-        %{state | cursor: cursor}
+    kept = %{state | cursor: cursor, stored_final: state.final_seq}
 
-      :error ->
-        event(%{state | cursor: cursor}, :failure, %{cursor: cursor, failure: "unreadable cursor"})
+    case cursor_seq(cursor) do
+      {:ok, _seq} -> kept
+      :error -> event(kept, :failure, %{cursor: cursor, failure: "unreadable cursor"})
     end
   end
 
@@ -590,7 +879,7 @@ defmodule HologramSyncTests.Consistency.Client do
         record = %{
           applied?: applied?,
           carried: Map.take(data, Model.fields(module)),
-          cursor_tx: bound_tx(cursor),
+          cursor_seq: bound_seq(cursor),
           id: data["id"],
           named: named(module, data),
           opened_at: state.opened_at,
@@ -615,9 +904,9 @@ defmodule HologramSyncTests.Consistency.Client do
 
   # A bound check 2 can't read is a failure where the cursor was kept, so the record goes without
   # one and is still checked against the other two bounds.
-  defp bound_tx(cursor) do
-    case cursor_tx(cursor) do
-      {:ok, tx} -> tx
+  defp bound_seq(cursor) do
+    case cursor_seq(cursor) do
+      {:ok, seq} -> seq
       :error -> nil
     end
   end
@@ -625,9 +914,9 @@ defmodule HologramSyncTests.Consistency.Client do
   # The seq of the place a cursor names - opaque to a browser, read here because check 2 bounds what
   # a frame may carry by it, and read the way the server reads one back, so a change to the format
   # shows up as a failure where the cursor is kept rather than quietly switching the bound off.
-  defp cursor_tx(nil), do: {:ok, nil}
+  defp cursor_seq(nil), do: {:ok, nil}
 
-  defp cursor_tx(cursor) do
+  defp cursor_seq(cursor) do
     case Cursor.decode(cursor) do
       {:ok, {seq, _tx, _at}, _log_id, _policy_hash, _types_hash} -> {:ok, seq}
       :error -> :error

@@ -49,7 +49,7 @@ defmodule HologramSyncTests.Consistency.WriterTest do
     assert [%{writer: :second} = earlier, %{writer: :first} = later] = History.entries(history)
     assert tag_names(earlier.state) == ["second"]
     assert tag_names(later.state) == ["first", "second"]
-    assert later.xid < earlier.xid
+    assert later.min_seq < earlier.min_seq
   end
 
   # The holder keeps the lock past reading its state, up to its commit, so the waiter's state, read
@@ -126,7 +126,7 @@ defmodule HologramSyncTests.Consistency.WriterTest do
 
     records = Client.records(client)
 
-    assert Enum.any?(records, &(&1.cursor_tx != nil))
+    assert Enum.any?(records, &(&1.cursor_seq != nil))
     assert Checks.leaks(records, History.entries(history), member.id) == []
 
     stale = %{List.last(records) | carried: %{"title" => "never written"}}

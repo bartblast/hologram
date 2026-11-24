@@ -2,8 +2,8 @@ defmodule HologramSyncTests.Consistency.Run do
   @moduledoc false
 
   # One randomized run of a plan: the data written first, then the writers' transactions and the
-  # clients' schedules all at once, then every client connected again and both checks. Answers
-  # what each check found, with what the report needs to explain it.
+  # clients' schedules all at once, then every client connected again and the three checks.
+  # Answers what each check found, with what the report needs to explain it.
   #
   # The run traps exits while it goes, so a client, writer or schedule that crashes is a failure in
   # the report, with the seed and the trace, rather than one that takes the test down without them.
@@ -14,7 +14,6 @@ defmodule HologramSyncTests.Consistency.Run do
   alias Hologram.Entity.Model, as: EntityModel
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
-  alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.Sessions
   alias HologramSyncTests.Consistency.Checks
   alias HologramSyncTests.Consistency.Client
@@ -36,11 +35,12 @@ defmodule HologramSyncTests.Consistency.Run do
 
   @typedoc """
   What a run found: the differences check 1 left in each client's store, the records check 2
-  flagged, the clients' failures and the run's own, and the clients whose gap outgrew a replay
-  and who weren't told to start over - with the history and each client's events and records for
-  the report.
+  flagged, the rows check 3 found missing below a final limit, the clients' failures and the run's
+  own, and the clients whose gap outgrew a replay and who weren't told to start over - with the
+  history and each client's events and records for the report.
   """
   @type outcome :: %{
+          below_final: list(map),
           clients: list(map),
           differences: list(map),
           failures: list(map),
@@ -149,6 +149,8 @@ defmodule HologramSyncTests.Consistency.Run do
 
   defp run_step(:connect, pid), do: Client.connect(pid)
 
+  defp run_step(:reload, pid), do: Client.reload(pid)
+
   defp run_step(:connect_cut_mid_fill, pid) do
     Client.connect(pid, cut_when: &match?([%{frame: "sync_deltas"} | _events], &1))
   end
@@ -189,6 +191,12 @@ defmodule HologramSyncTests.Consistency.Run do
     {reports, dead} = split_dead(clients, settled)
 
     %{
+      below_final:
+        for(
+          report <- reports,
+          problem <- report.below_final,
+          do: Map.put(problem, :client, report.name)
+        ),
       clients: reports ++ dead,
       differences:
         for(
@@ -277,6 +285,7 @@ defmodule HologramSyncTests.Consistency.Run do
     settled = Checks.diff(store, expected)
     incomplete = if complete?, do: [], else: [:incomplete]
     records = Client.records(client.pid)
+    views = Client.views(client.pid)
 
     differences =
       if first_differences == [],
@@ -285,24 +294,27 @@ defmodule HologramSyncTests.Consistency.Run do
 
     %{
       client
-      | differences: differences,
+      | below_final:
+          Checks.below_final(views, entries, client.user_id, Client.final_seq(client.pid)),
+        differences: differences,
         events: Client.events(client.pid),
         leaks: Checks.leaks(records, entries, client.user_id),
         records: records
     }
   end
 
-  # The server has routed every commit once the dispatcher's read edge is past the last one's
-  # transaction id: everything below the edge had ended when it was read.
-  defp await_log_read([]), do: :ok
-
+  # The server has routed every commit once the dispatcher's read edge reaches the last serial a
+  # commit's log entries hold: the edge is the last entry it read.
   defp await_log_read(entries) do
-    last_xid =
+    seqs =
       entries
-      |> Enum.map(& &1.xid)
-      |> Enum.max()
+      |> Enum.map(& &1.max_seq)
+      |> Enum.reject(&is_nil/1)
 
-    await(fn -> (ReadEdge.get(ReadEdge) || 0) > last_xid end, @read_ms)
+    case seqs do
+      [] -> :ok
+      seqs -> await(fn -> read_seq() >= Enum.max(seqs) end, @read_ms)
+    end
   end
 
   # Every batch routed is in a session's mailbox once the read edge passes the last commit. A
@@ -397,7 +409,14 @@ defmodule HologramSyncTests.Consistency.Run do
   defp start_client(planned, base_url) do
     {:ok, pid} = Client.start_link(base_url: base_url, user_id: planned.user_id)
 
-    Map.merge(planned, %{differences: [], events: [], leaks: [], pid: pid, records: []})
+    Map.merge(planned, %{
+      below_final: [],
+      differences: [],
+      events: [],
+      leaks: [],
+      pid: pid,
+      records: []
+    })
   end
 
   # Every client is stopped, whatever the others do: one that died meanwhile, or one stuck in a

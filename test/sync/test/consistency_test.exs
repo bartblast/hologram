@@ -61,7 +61,7 @@ defmodule HologramSyncTests.ConsistencyTest do
     record = %{
       applied?: true,
       carried: %{"title" => "stale"},
-      cursor_tx: 1_234,
+      cursor_seq: 1_234,
       id: "card-1",
       named: [],
       opened_at: 0,
@@ -70,6 +70,7 @@ defmodule HologramSyncTests.ConsistencyTest do
     }
 
     client = %{
+      below_final: [],
       differences: [],
       events: [
         %{at: 0, cursor: nil, kind: :connect, request_id: make_ref()},
@@ -85,6 +86,18 @@ defmodule HologramSyncTests.ConsistencyTest do
     state = %{rows: %{Card => %{"card-1" => %{"board_id" => "board-1", "title" => "fresh"}}}}
 
     outcome = %{
+      below_final: [
+        %{
+          at: 12,
+          client: "tab of u",
+          final_seq: 1_233,
+          floor: 0,
+          id: "card-1",
+          problem: :missing,
+          type: Card,
+          wanted: {1_232, 1_233}
+        }
+      ],
       clients: [client],
       differences: [
         %{client: "tab of u", difference: {:missing, Card, "card-1", %{"title" => "fresh"}}}
@@ -104,17 +117,19 @@ defmodule HologramSyncTests.ConsistencyTest do
             after_lock_at: 1,
             committed_at: 2,
             ops: ["retitle_card card-1 fresh"],
+            max_seq: 1_233,
+            min_seq: 1_232,
             state: state,
-            writer: "writer 1",
-            xid: 1_233
+            writer: "writer 1"
           },
           %{
             after_lock_at: 3,
             committed_at: 4,
             ops: ["archive_board board-1 true"],
+            max_seq: 1_235,
+            min_seq: 1_235,
             state: state,
-            writer: "writer 2",
-            xid: 1_235
+            writer: "writer 2"
           }
         ]
       },
@@ -135,13 +150,17 @@ defmodule HologramSyncTests.ConsistencyTest do
     assert message =~ "misses HologramSyncTests.Entities.Card card-1"
 
     assert message =~
-             "commit 0 (writer 1, xid 1233, lock 1, committed 2): retitle_card card-1 fresh"
+             "commit 0 (writer 1, seqs 1232..1233, lock 1, committed 2): retitle_card card-1 fresh"
 
     assert message =~
-             "commit 1 (writer 2, xid 1235, lock 3, committed 4): archive_board board-1 true"
+             "commit 1 (writer 2, seqs 1235..1235, lock 3, committed 4): archive_board board-1 true"
 
     assert message =~ "5 closed: :cut"
-    assert message =~ "at 10, on a connection opened at 0, bounded by tx 1234"
+    assert message =~ "at 10, on a connection opened at 0, bounded by seq 1234"
+
+    assert message =~
+             "was told at 12 the numbers are final up to 1233, and misses it: " <>
+               "HologramSyncTests.Entities.Card card-1 is numbered {1232, 1233}"
 
     dir =
       Path.join(System.tmp_dir!(), "sync_consistency_test_#{System.unique_integer([:positive])}")
@@ -163,7 +182,7 @@ defmodule HologramSyncTests.ConsistencyTest do
 
     assert Enum.at(lines, received - 1) =~ "kind: :closed"
     assert Enum.at(lines, received) =~ ~s(carried: %{"title" => "stale"})
-    assert Enum.at(lines, received) =~ "cursor_tx: 1234"
+    assert Enum.at(lines, received) =~ "cursor_seq: 1234"
 
     assert trace =~ "writer 1 (ops): tag_card card-1 tag-1 - no entity with id"
     assert trace =~ "writer 2 (ops): rename x - %DBConnection.ConnectionError{"
