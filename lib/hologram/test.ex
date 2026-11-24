@@ -20,6 +20,14 @@ defmodule Hologram.Test do
   while in production that route has no session and reads and writes past the rules. Don't rely on
   such a test to show that a rule protects the route.
 
+  Like the processes a request starts, the processes the test process starts from then on, and the
+  tasks a `Task.Supervisor` starts for it, are refused at their first judged call unless they carry
+  the user with `Hologram.Auth.as_current_user/1` or claim trust. A process `start_supervised`
+  starts is refused when this call came before the test's first `start_supervised`, which starts
+  the supervisor the test's processes run under. Called in `setup_all`, it reaches only that block's
+  own process: the tests run with no user, as trusted server code, and only what the block starts
+  is refused.
+
   Raises Hologram.MisuseError when given a user struct whose id is nil - the test would run as a
   signed-out visitor instead of the user it names, and could pass without exercising what it was
   written for.

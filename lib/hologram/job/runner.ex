@@ -10,7 +10,7 @@ defmodule Hologram.Job.Runner do
   # the claim's transaction and given up once the outcome is recorded - so a running row whose lock
   # nobody holds is one whose run was cut short.
 
-  import Hologram.Query, only: [filter: 2, sort: 2, take: 2]
+  import Hologram.Query, only: [filter: 2, sort: 2, take: 2, trust: 1]
 
   alias Hologram.Auth.Context
   alias Hologram.DB
@@ -167,6 +167,10 @@ defmodule Hologram.Job.Runner do
     # the ordinary verb rather than a statement of its own: with nobody acting there is nothing to
     # filter, and the rows come back as the structs run/1 is handed. The same goes for sweep/2.
     #
+    # The read claims trust, as does sweep/2's, since a worker can be started by a process working
+    # for a session, like a test's after as_user/1, and would otherwise be refused as that session's
+    # work.
+    #
     # The queued and the running rows are read apart, two reads where one would do, because only
     # this one is bounded - the index on status and due time keeps both cheap (see
     # Hologram.DB.IndexPlan.framework_needs/1).
@@ -180,6 +184,7 @@ defmodule Hologram.Job.Runner do
     |> filter(status == :queued and scheduled_at <= ^now)
     |> sort(scheduled_at)
     |> take(^limit)
+    |> trust()
     |> DB.read()
     |> Enum.reject(&MapSet.member?(skip_ids, &1.id))
     |> Enum.take(count)
@@ -213,6 +218,7 @@ defmodule Hologram.Job.Runner do
     Enum.each(job_types, fn job_type ->
       job_type
       |> filter(status == :running)
+      |> trust()
       |> DB.read()
       |> Enum.map(& &1.id)
       |> Enum.reject(&MapSet.member?(skip_ids, &1))

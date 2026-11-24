@@ -59,6 +59,9 @@ defmodule Hologram.ApplicationTest do
       # singleton semantics), so nothing here disturbs concurrent database tests.
       assert Hologram.DB.Supervisor in child_modules
 
+      # Beside the database unit rather than inside it, so a restart storm there keeps the marks.
+      assert Hologram.Auth.SpawnMark in child_modules
+
       assert Hologram.Assets.ChunkRegistry in child_modules
       assert Hologram.Assets.PageDigestRegistry in child_modules
       assert Hologram.Assets.PathRegistry in child_modules
@@ -69,6 +72,31 @@ defmodule Hologram.ApplicationTest do
 
       # Stop the app tree deterministically - link teardown is asynchronous and would race
       # the gateway restart and the other test's supervisor start.
+      :ok = Supervisor.stop(pid)
+    end
+
+    test "drops the handle of a tracer an earlier start ran when it runs none" do
+      System.delete_env("HOLOGRAM_START")
+
+      session_key = {Hologram.Auth.SpawnMark, :trace_session}
+      session = :persistent_term.get(session_key)
+      tracer = Process.whereis(Hologram.Auth.SpawnMark)
+
+      # The way a stopped app leaves it: no tracer runs, and the handle of the one it ran is there.
+      Process.unregister(Hologram.Auth.SpawnMark)
+
+      on_exit(fn ->
+        Process.register(tracer, Hologram.Auth.SpawnMark)
+        :persistent_term.put(session_key, session)
+      end)
+
+      stopped_tracer = spawn(fn -> Process.sleep(:infinity) end)
+      :persistent_term.put(session_key, :trace.session_create(__MODULE__, stopped_tracer, []))
+      Process.exit(stopped_tracer, :kill)
+
+      assert {:ok, pid} = start(:my_app, :temporary)
+      assert :persistent_term.get(session_key, nil) == nil
+
       :ok = Supervisor.stop(pid)
     end
 
