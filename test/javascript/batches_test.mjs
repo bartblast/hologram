@@ -653,6 +653,33 @@ describe("Batches", () => {
         assert.deepStrictEqual(sent, [1, 2]);
       });
 
+      // Its answer can reach this tab during the read, from the tab that led before it.
+      it("reads the whole queue when the head leaves during the read", async () => {
+        const head = await filedElsewhere("t1");
+
+        await filedElsewhere("t2");
+
+        Batches.adopt([head.record()]);
+
+        const read = Durability.queuedBatches.bind(Durability);
+
+        const reading = sinon.stub(Durability, "queuedBatches").callsFake(read);
+
+        reading.onFirstCall().callsFake(async (below) => {
+          const records = await read(below);
+
+          Batches.settle(1, confirmed());
+
+          await Durability.forgetBatch(1);
+
+          return records;
+        });
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, [2]);
+      });
+
       // Guards the loop against waiting on, or spinning over, a record it will never take up.
       it("goes past another user's lower batch and leaves it in the store", async () => {
         await filedElsewhere("t1", "u2");

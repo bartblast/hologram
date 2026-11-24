@@ -295,10 +295,13 @@ defmodule HologramFeatureTests.MultiTabTest do
   #
   # The heartbeat is set far apart so that no beat wakes the sender between the two writes.
   feature "sends a write nobody announced when a later one is announced", %{session: session} do
+    # A stream opening wakes the sender too, so the fill it delivers has to land before the first
+    # write.
     session
     |> simulate_fast_sse_heartbeat(60_000)
     |> visit(WriteQueuePage)
     |> await_leader()
+    |> await_local_fill()
     |> open_tab(WriteQueuePage)
     |> drop_sealed_messages()
     |> click(button("Create alpha"))
@@ -314,15 +317,11 @@ defmodule HologramFeatureTests.MultiTabTest do
   # left to wake the sender. A second apart, so a slow machine doesn't miss two beats, which would
   # reopen the stream, and that wakes the sender too.
   feature "sends a write nobody announced with no other tab acting", %{session: session} do
-    leading =
-      session
-      |> simulate_fast_sse_heartbeat(1_000)
-      |> visit(WriteQueuePage)
-      |> await_leader()
-
-    wait_for_connection(current_instance_id(leading))
-
-    leading
+    session
+    |> simulate_fast_sse_heartbeat(1_000)
+    |> visit(WriteQueuePage)
+    |> await_leader()
+    |> await_local_fill()
     |> open_tab(WriteQueuePage)
     |> drop_sealed_messages()
     |> click(button("Create alpha"))

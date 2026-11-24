@@ -311,14 +311,15 @@ export default class Batches {
 
         const batch = Batches.pending[0];
 
-        if (batch === undefined) {
-          return;
-        }
-
-        // The read found a lower batch, or this one joined the queue while it ran. Either way no
-        // read has started since it was filed.
+        // The read found a lower batch, this one joined the queue while it ran, or the head left
+        // it. Either way the read says nothing about what goes next, so another one does: with no
+        // head it reads the whole queue, which is what finds a batch above the one that left.
         if (batch !== head) {
           continue;
+        }
+
+        if (batch === undefined) {
+          return;
         }
 
         // Nothing leaves under an identity still on its way to the store (see
