@@ -672,6 +672,31 @@ describe("Client", () => {
       sinon.assert.calledOnce(onNotPageStub);
     });
 
+    // A page's mount follows another user and then opens a stream for the new page's receipts, and
+    // a prefetched page isn't on screen.
+    it("leaves the stream to the page", async () => {
+      const originalDataLayer = Hologram.dataLayer;
+      const catchingUp = sinon.spy();
+
+      Hologram.dataLayer = {catchUpIdentity: catchingUp};
+
+      sinon.stub(globalThis, "fetch").resolves({
+        ...pageDataResponse({type: "page"}),
+        headers: new Headers({
+          "hologram-identity-tag": "2.tag-2",
+          "hologram-page-data": "true",
+        }),
+      });
+
+      try {
+        await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
+      } finally {
+        Hologram.dataLayer = originalDataLayer;
+      }
+
+      sinon.assert.notCalled(catchingUp);
+    });
+
     // A page's middleware can answer with any status it likes, a plain 200 included, so the marker
     // rather than the status is what says an answer describes a page.
     it("treats an unmarked success as something other than a page", async () => {
@@ -999,6 +1024,187 @@ describe("Client", () => {
 
       assert.instanceOf(thrownError, HologramRuntimeError);
       assert.equal(IdentityTracker.tag, "2.tag-2");
+    });
+
+    // The stream may have missed the change the reply was made under.
+    describe("checking the stream against the identity", () => {
+      const reply = (fields = {}) => ({
+        headers: new Headers({"hologram-identity-tag": "2.tag-2"}),
+        ok: true,
+        json: sinon.stub().resolves({
+          action: serialized(Type.nil()),
+          selfEchoes: serialized(Type.list()),
+          status: 1,
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
+        }),
+        ...fields,
+      });
+
+      let catchingUp, originalDataLayer;
+
+      beforeEach(() => {
+        originalDataLayer = Hologram.dataLayer;
+        catchingUp = sinon.spy();
+
+        Hologram.dataLayer = {catchUpIdentity: catchingUp};
+      });
+
+      afterEach(() => {
+        Hologram.dataLayer = originalDataLayer;
+      });
+
+      it("checks after taking in the reply's tag", async () => {
+        let tagSeen;
+
+        Hologram.dataLayer = {
+          catchUpIdentity: () => (tagSeen = IdentityTracker.tag),
+        };
+
+        sinon.stub(globalThis, "fetch").resolves(reply());
+
+        await Client.sendCommand(command);
+
+        assert.equal(tagSeen, "2.tag-2");
+      });
+
+      // The new stream's handshake presents the receipts the tab holds.
+      it("checks after taking in the receipts the reply adds", async () => {
+        const receipt = Type.tuple([
+          Type.bitstring("ch1"),
+          Type.bitstring("page"),
+          Type.bitstring("receipt-1"),
+        ]);
+
+        let receiptsSeen;
+
+        Hologram.dataLayer = {
+          catchUpIdentity: () =>
+            (receiptsSeen = App.subscriptionReceiptRegistry.entries.size),
+        };
+
+        sinon.stub(globalThis, "fetch").resolves(
+          reply({
+            json: sinon.stub().resolves({
+              action: serialized(Type.nil()),
+              selfEchoes: serialized(Type.list()),
+              status: 1,
+              subReceiptAdds: serialized(Type.list([receipt])),
+              subReceiptDrops: serialized(Type.list()),
+            }),
+          }),
+        );
+
+        await Client.sendCommand(command);
+
+        assert.equal(receiptsSeen, 1);
+      });
+
+      it("checks on a reply that failed the command, before failing", async () => {
+        sinon.stub(globalThis, "fetch").resolves(
+          reply({
+            json: sinon.stub().resolves({
+              action: serialized(Type.bitstring("boom")),
+              status: 0,
+            }),
+          }),
+        );
+
+        try {
+          await Client.sendCommand(command);
+        } catch {
+          // The failure is the command's own.
+        }
+
+        sinon.assert.calledOnce(catchingUp);
+      });
+
+      // Turned away because the stream serves the previous user, it names the tag the client
+      // already holds.
+      it("checks on a reply that was turned away, before failing", async () => {
+        IdentityTracker.observe("2.tag-2");
+
+        sinon
+          .stub(globalThis, "fetch")
+          .resolves(reply({ok: false, status: 403}));
+
+        try {
+          await Client.sendCommand(command);
+        } catch {
+          // The failure is the command's own.
+        }
+
+        sinon.assert.calledOnce(catchingUp);
+      });
+
+      // The answer can move the identity the client knows.
+      it("checks a reply no newer than what the client knows once the server has answered", async () => {
+        IdentityTracker.observe("3.tag-3");
+
+        let answer;
+
+        sinon
+          .stub(Client, "settleIdentity")
+          .returns(new Promise((resolve) => (answer = resolve)));
+
+        sinon.stub(globalThis, "fetch").resolves(reply());
+
+        await Client.sendCommand(command);
+
+        sinon.assert.notCalled(catchingUp);
+
+        answer();
+        await Promise.resolve();
+
+        sinon.assert.calledOnce(catchingUp);
+      });
+
+      it("runs with no data layer", async () => {
+        Hologram.dataLayer = null;
+
+        sinon.stub(globalThis, "fetch").resolves(reply());
+
+        await Client.sendCommand(command);
+
+        assert.equal(IdentityTracker.tag, "2.tag-2");
+      });
+
+      it("runs with no data layer once the server has answered", async () => {
+        IdentityTracker.observe("3.tag-3");
+        Hologram.dataLayer = null;
+
+        const rejections = [];
+        const onRejection = (reason) => rejections.push(reason);
+
+        sinon.stub(Client, "settleIdentity").resolves();
+        sinon.stub(globalThis, "fetch").resolves(reply());
+
+        process.on("unhandledRejection", onRejection);
+
+        try {
+          await Client.sendCommand(command);
+          await new Promise((resolve) => setImmediate(resolve));
+        } finally {
+          process.off("unhandledRejection", onRejection);
+        }
+
+        assert.deepStrictEqual(rejections, []);
+      });
+
+      // A body cut off mid-transfer, say, after the reply named the new tag.
+      it("checks on a reply whose body can't be read", async () => {
+        sinon
+          .stub(globalThis, "fetch")
+          .resolves(reply({json: sinon.stub().rejects(new Error("cut off"))}));
+
+        try {
+          await Client.sendCommand(command);
+        } catch {
+          // The failure is the command's own.
+        }
+
+        sinon.assert.calledOnce(catchingUp);
+      });
     });
 
     it("command fails due to result status code", async () => {

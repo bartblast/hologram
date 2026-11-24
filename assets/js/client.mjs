@@ -170,7 +170,7 @@ export default class Client {
 
       // Read whatever the answer is: a page's middleware can log the user in or out and answer
       // with something other than a page.
-      const identityPeriod = $.#observeIdentity(response);
+      const {period: identityPeriod} = $.#observeIdentity(response);
 
       // Awaited so that whatever the callback goes on to do is part of this promise. A redirect
       // answers by fetching the next page, and without the await a failure there - the hop limit
@@ -232,12 +232,16 @@ export default class Client {
       body: Serializer.serialize($.buildCommandPayload(command), "server"),
     };
 
+    // Checked once the reply is taken in, whatever came of it: the new stream's handshake presents
+    // the receipts the reply added.
+    let identity = null;
+
     try {
       const response = await fetch("/hologram/command", opts);
 
       // Read before the status: a command turned away can still have come with another identity
       // than the one the client knew, and this reply is where the client learns of it.
-      $.#observeIdentity(response);
+      identity = $.#observeIdentity(response);
 
       if (!response.ok) {
         $.#failCommand(response.status);
@@ -293,6 +297,10 @@ export default class Client {
       }
 
       $.#failCommand(error);
+    } finally {
+      if (identity !== null) {
+        $.#catchUpIdentity(identity);
+      }
     }
   }
 
@@ -316,6 +324,21 @@ export default class Client {
     }
   }
 
+  // Checks the tab's stream against the identity a command's reply left the client with, for a
+  // stream that missed the change (see DataLayer.catchUpIdentity). Every reply is checked, not just
+  // one that moved the tracker: one turned away because the stream serves the previous user names
+  // the tag the tracker already holds. Not for a page: a page for another user follows it at mount
+  // and then opens a stream that presents the new page's receipts, and a prefetched one isn't on
+  // screen.
+  static #catchUpIdentity({settling}) {
+    if (settling) {
+      // The server's answer can move the identity the client knows.
+      settling.then(() => Hologram.dataLayer?.catchUpIdentity());
+    } else {
+      Hologram.dataLayer?.catchUpIdentity();
+    }
+  }
+
   static #failCommand(message) {
     throw new HologramRuntimeError(`command failed: ${message}`);
   }
@@ -325,15 +348,16 @@ export default class Client {
   }
 
   // Takes in the identity a response names, and asks the server when that can't be told to be the
-  // latest word on it.
+  // latest word on it. Answers with the period and, when the server was asked, the promise of its
+  // answer.
   static #observeIdentity(response) {
     const period = IdentityTracker.observeResponse(response);
 
-    if (period === IdentityTracker.SUPERSEDED) {
-      $.settleIdentity();
-    }
+    // Not awaited: what the reply carries doesn't wait for the server's answer.
+    const settling =
+      period === IdentityTracker.SUPERSEDED ? $.settleIdentity() : null;
 
-    return period;
+    return {period, settling};
   }
 }
 

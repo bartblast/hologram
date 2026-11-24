@@ -1152,6 +1152,187 @@ describe("DataLayer", () => {
     });
   });
 
+  describe("catchUpIdentity()", () => {
+    let reconnecting, wasStarted;
+
+    beforeEach(() => {
+      wasStarted = Sse.isStarted;
+      Sse.isStarted = true;
+
+      reconnecting = sinon.stub(Sse, "reconnect");
+
+      // A follow to another user starts the tab over.
+      sinon.stub(Deltas, "apply");
+      sinon.stub(SyncStream, "scheduleRender");
+
+      IdentityTracker.init("1.tag-1");
+      IdentityTracker.observe("2.tag-2");
+
+      DataLayer.caughtUpTag = null;
+      LocalDatabase.reset();
+      LocalDatabase.actorUserId = "u1";
+      Replica.reset();
+      SyncStream.followedTag = "1.tag-1";
+    });
+
+    afterEach(() => {
+      Sse.isStarted = wasStarted;
+
+      IdentityTracker.documentPeriod = null;
+      IdentityTracker.period = null;
+      IdentityTracker.periods = new Set();
+      IdentityTracker.tag = null;
+
+      DataLayer.caughtUpTag = null;
+      LocalDatabase.reset();
+      LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
+      LocalDatabase.identityEndedPeriod = null;
+      Replica.reset();
+      SyncStream.awaitingIdentity = false;
+      SyncStream.awaitingPair = false;
+      SyncStream.followedTag = null;
+      SyncStream.laggingCookie = false;
+      SyncStream.rowsChangedSinceRender = false;
+      SyncStream.syncCursor = null;
+    });
+
+    it("opens a new stream for an identity the tab doesn't follow", () => {
+      DataLayer.catchUpIdentity();
+
+      sinon.assert.calledOnce(reconnecting);
+    });
+
+    // The reply names only the tag: the handshake names who the session serves.
+    it("follows nothing itself", () => {
+      DataLayer.catchUpIdentity();
+
+      assert.equal(SyncStream.followedTag, "1.tag-1");
+      assert.equal(LocalDatabase.actorUserId, "u1");
+    });
+
+    it("leaves the stream alone for the identity the tab follows", () => {
+      SyncStream.followedTag = "2.tag-2";
+
+      DataLayer.catchUpIdentity();
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    it("opens no stream before the page has", () => {
+      Sse.isStarted = false;
+
+      DataLayer.catchUpIdentity();
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    it("opens no stream while no identity is known", () => {
+      IdentityTracker.tag = null;
+
+      DataLayer.catchUpIdentity();
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    // A follow of an identity it couldn't take for the latest, or a mount, has one coming.
+    it("opens no stream for a tab waiting to hear who it serves", () => {
+      SyncStream.awaitingIdentity = true;
+
+      DataLayer.catchUpIdentity();
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    // A reply that lands while the handshake is on its way would throw that handshake away, and
+    // one that names no tag follows nothing.
+    it("opens one stream per identity", () => {
+      DataLayer.catchUpIdentity();
+      DataLayer.catchUpIdentity();
+
+      sinon.assert.calledOnce(reconnecting);
+    });
+
+    it("opens another stream for the next identity", () => {
+      DataLayer.catchUpIdentity();
+      IdentityTracker.observe("3.tag-3");
+      DataLayer.catchUpIdentity();
+
+      sinon.assert.calledTwice(reconnecting);
+    });
+
+    // A cookie set back brings an earlier tag back, stamp and all.
+    it("catches up with a tag again once the tab has followed another", () => {
+      DataLayer.catchUpIdentity();
+
+      DataLayer.followIdentity({
+        actorEntityId: "entity-3",
+        actorUserId: "u3",
+        identityTag: "3.tag-3",
+      });
+
+      IdentityTracker.tag = "2.tag-2";
+      DataLayer.catchUpIdentity();
+
+      sinon.assert.calledTwice(reconnecting);
+    });
+
+    // An older cookie set back while the handshake was on its way names the tag the tab follows,
+    // and a later reply can bring the newer one back.
+    it("catches up with a tag again once a handshake names the one the tab follows", () => {
+      DataLayer.catchUpIdentity();
+
+      DataLayer.takeHandshake({
+        actorEntityId: "entity-1",
+        actorUserId: "u1",
+        identityTag: "1.tag-1",
+        replica: null,
+      });
+
+      DataLayer.catchUpIdentity();
+
+      sinon.assert.calledTwice(reconnecting);
+    });
+
+    // Without a tag the handshake follows nothing, and a stream per reply would follow nothing too.
+    it("waits for a handshake that names a tag", () => {
+      DataLayer.catchUpIdentity();
+
+      DataLayer.takeHandshake({
+        actorEntityId: "entity-1",
+        actorUserId: "u1",
+        identityTag: null,
+        replica: null,
+      });
+
+      DataLayer.catchUpIdentity();
+
+      sinon.assert.calledOnce(reconnecting);
+    });
+
+    // Its handshake names the new user, and the tab follows it there.
+    it("is answered by the handshake's follow", () => {
+      DataLayer.catchUpIdentity();
+
+      DataLayer.takeHandshake({
+        actorEntityId: "entity-2",
+        actorUserId: "u2",
+        identityTag: "2.tag-2",
+        replica: {id: "replica-2", token: "token-2"},
+      });
+
+      DataLayer.catchUpIdentity();
+
+      sinon.assert.calledOnce(reconnecting);
+      assert.equal(LocalDatabase.actorUserId, "u2");
+      assert.equal(SyncStream.followedTag, "2.tag-2");
+      assert.deepStrictEqual(Replica.current(), {
+        id: "replica-2",
+        token: "token-2",
+      });
+    });
+  });
+
   describe("followIdentity()", () => {
     const TASK = "MyApp.Task";
 

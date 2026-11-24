@@ -65,6 +65,12 @@ export default class DataLayer {
   // once the mount is done (see #followMountedIdentity).
   static #reconnectsAfterMount = false;
 
+  // Made public to make tests easier
+  //
+  // The tag the tab last opened a new stream to catch up with, until a handshake names a tag or the
+  // tab follows one (see catchUpIdentity).
+  static caughtUpTag = null;
+
   // Based on run_query!/4
   //
   // Answers the given normalized term a derived field of the given module is defined by, for the
@@ -182,6 +188,33 @@ export default class DataLayer {
   // resume into whichever action started meanwhile, and write, close or discard that one's batch.
   static carryAcrossSuspension(promise) {
     return Batches.carryAcrossSuspension(promise);
+  }
+
+  // Opens a new stream when a command's reply names an identity this tab doesn't follow, and its
+  // handshake follows it (see takeHandshake). The server tells every stream of the session of a
+  // change, but a stream whose request left with the previous cookie, and which started listening
+  // just after the change was told, never hears of it and goes on serving the previous user. When
+  // the stream told this tab first, the tags match and nothing is done.
+  //
+  // Once per tag, until a handshake names a tag or the tab follows one: replies that land while the
+  // handshake is on its way would each open another stream and throw away the one about to open,
+  // and a handshake that names no tag follows nothing. A tab already waiting to hear who it serves
+  // has a new stream coming.
+  static catchUpIdentity() {
+    const tag = IdentityTracker.tag;
+
+    if (
+      !Sse.isStarted ||
+      tag === null ||
+      tag === SyncStream.followedTag ||
+      tag === $.caughtUpTag ||
+      SyncStream.awaitingIdentity
+    ) {
+      return;
+    }
+
+    $.caughtUpTag = tag;
+    Sse.reconnect();
   }
 
   // Sealed BEFORE the render that follows an action, so the one frame that follows shows the
@@ -663,6 +696,9 @@ export default class DataLayer {
     IdentityTracker.observe(identityTag);
     SyncStream.followedTag = identityTag ?? null;
 
+    // A cookie set back brings an earlier tag back, stamp and all, which a catch-up has to see.
+    $.caughtUpTag = null;
+
     if (!isSameUser) {
       LocalDatabase.reset();
 
@@ -720,6 +756,12 @@ export default class DataLayer {
   // too: its next handshake comes once it has settled.
   static takeHandshake({actorEntityId, actorUserId, identityTag, replica}) {
     const named = identityTag !== null && identityTag !== undefined;
+
+    // A handshake that names who the stream serves answers any catch-up, followed or not: an older
+    // cookie set back while it was on its way names the tag already followed.
+    if (named) {
+      $.caughtUpTag = null;
+    }
 
     if (named && identityTag !== SyncStream.followedTag) {
       // The stream about to open replaces the one the tab is leaving, which closes any sync session
