@@ -1721,6 +1721,28 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a derived field counting a related set compared with new() written first" do
+      defmodule NewRowValidatorFixture19 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+
+        attribute :limit, :integer
+
+        relationship :channel, Module32
+
+        allow :read
+        allow :update, when: new(limit) >= channel.message_count
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture19 - channel.message_count counts messages - a policy condition reads a related set only through any, none or all"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NewRowValidatorFixture19], [])
+      end
+    end
+
     test "rejects a pinned condition reading the row above on a line for another operation" do
       expected_msg =
         ~s/invalid when option [{{:outer, 1, :title}, {:==, "x"}}] for allow :read in Hologram.Policy.ValidatorTest.NewRowValidatorFixture4 - a pinned condition must be a list of predicates, each pairing a name or a path with a value/

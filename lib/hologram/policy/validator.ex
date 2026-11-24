@@ -424,16 +424,23 @@ defmodule Hologram.Policy.Validator do
   end
 
   # The names of the row after the change the given clauses read outside any quantifier, each
-  # judged as the same name of the stored row is.
+  # judged as the same name of the stored row is, and a stored name compared with one written
+  # first: the stored row's names are read from the comparisons each starts, so it would go
+  # unread.
   defp new_row_names(clauses) do
     Enum.flat_map(clauses, fn
       {:or, alternatives} -> Enum.flat_map(alternatives, &new_row_names/1)
       {check, {_asked, _chain}} when check in [:can, :has_role] -> []
       {quantifier, {_source, _inner}} when quantifier in [:all, :any, :none] -> []
+      {{:outer, 1, name}, _operator, {:attribute, other}} -> [name | compared_name(other)]
       {name, _operator, {:attribute, other}} -> new_row_name(name) ++ new_row_name(other)
       {name, _operator, _value} -> new_row_name(name)
     end)
   end
+
+  defp compared_name({:outer, 1, name}), do: [name]
+
+  defp compared_name(name), do: [name]
 
   defp new_row_name({:outer, 1, name}), do: [name]
 
