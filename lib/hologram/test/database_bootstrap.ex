@@ -8,11 +8,14 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
   alias Hologram.DB.Config
   alias Hologram.DB.Mapper
+  alias Hologram.Entity.Model
   alias Hologram.Test.DatabaseBootstrap.Connection
 
   # What a later run's sweep tells a test database by - never its name, so a database whose name
   # only looks like one is never dropped. No quotes, so it goes into SQL as a literal unescaped.
   @mark "Hologram test database, dropped by a later test run once nothing is connected"
+
+  @ran_key {__MODULE__, :ran}
 
   @doc """
   Returns the comment a test database carries for a later run to drop it once nothing is
@@ -61,7 +64,11 @@ defmodule Hologram.Test.DatabaseBootstrap do
   """
   @spec run!(list(String.t())) :: %{String.t() => String.t()}
   def run!(extra_databases \\ []) do
-    refuse_outside_test!()
+    refuse_outside_test!(
+      "Hologram.Test.DatabaseBootstrap.run!/1 creates and drops databases and points the " <>
+        "database config at them",
+      "run!/1"
+    )
 
     database_opts =
       :hologram
@@ -101,7 +108,34 @@ defmodule Hologram.Test.DatabaseBootstrap do
       Keyword.put(database_opts, :database, run_databases[database_opts[:database]])
     )
 
+    :persistent_term.put(@ran_key, true)
+
     run_databases
+  end
+
+  @doc """
+  Runs run!/1 with no extra databases when the app declares entities and this VM hasn't run it
+  yet, so a test helper that ran it first, for databases of its own beside the configured one,
+  keeps the ones it got.
+
+  An app without entities starts no database, so it needs no server.
+
+  Refuses outside the test environment when it would run run!/1, naming Hologram.Test.setup/0,
+  its caller.
+  """
+  @spec run_once!() :: :ok
+  def run_once! do
+    if Model.exists?() and not :persistent_term.get(@ran_key, false) do
+      refuse_outside_test!(
+        "Hologram.Test.setup/0 gives an app with entities a database of its own for the test " <>
+          "run, which it creates and points the database config at",
+        "setup/0"
+      )
+
+      run!()
+    end
+
+    :ok
   end
 
   # No handshake timeout: the handshake starts once the server accepted the TCP connection,
@@ -223,15 +257,15 @@ defmodule Hologram.Test.DatabaseBootstrap do
   # Config.resolve!/2 supplies defaults only, so the app's real config wins, and the run's
   # databases would be created on whatever server it names, with the running app's config
   # repointed at them and the marked databases nobody is connected to dropped. A release with
-  # no HOLOGRAM_ENV reports :dev, so it refuses.
-  defp refuse_outside_test! do
+  # no HOLOGRAM_ENV reports :dev, so it refuses. Named after the function the caller called, so a
+  # test helper calling setup/0 too early is told to move that call.
+  defp refuse_outside_test!(action, function) do
     env = Hologram.env()
 
     if env != :test do
-      raise "Hologram.Test.DatabaseBootstrap.run!/1 creates and drops databases and points " <>
-              "the database config at them, so it runs in the test env only - the current env " <>
-              "is #{inspect(env)}. When neither HOLOGRAM_ENV nor MIX_ENV is set, the test env " <>
-              "is recognized by the running ExUnit server, so call run!/1 after ExUnit.start()."
+      raise "#{action}, so it runs in the test env only - the current env is #{inspect(env)}. " <>
+              "When neither HOLOGRAM_ENV nor MIX_ENV is set, the test env is recognized by the " <>
+              "running ExUnit server, so call #{function} after ExUnit.start()."
     end
   end
 
