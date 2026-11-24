@@ -503,6 +503,12 @@ export default class Durability {
     try {
       loaded = await Durability.#read();
     } catch (error) {
+      // A move the tab has moved on from says nothing about the store the next move reads, which
+      // fails on its own if it fails at all.
+      if (!isCurrent()) {
+        return;
+      }
+
       return Durability.#memoryMode(`read failed (${error})`);
     }
 

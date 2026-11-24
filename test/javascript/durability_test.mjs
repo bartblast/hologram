@@ -1354,6 +1354,19 @@ describe("Durability", () => {
       assert.equal(Durability.mode, "indexeddb");
       assert.isNull(Durability.restore(true));
     });
+
+    // The move the tab went on to reads the store for itself.
+    it("keeps storing when a read that stopped being current fails", async () => {
+      await Durability.open();
+
+      sinon
+        .stub(FDBDatabase.prototype, "transaction")
+        .throws(new DOMException("broken", "UnknownError"));
+
+      await Durability.load(() => false);
+
+      assert.equal(Durability.mode, "indexeddb");
+    });
   });
 
   describe("asking the browser to keep the data", () => {
