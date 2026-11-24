@@ -42,7 +42,8 @@ defmodule Hologram.Migration.Value do
           env: Macro.Env.t(),
           imported: list({atom, non_neg_integer}),
           kind: :elixir | :marked | :query | {:word, {atom, non_neg_integer}},
-          query: {:ok, Macro.t()} | {:error, Exception.t()} | :none
+          query: {:ok, Macro.t()} | {:error, Exception.t()} | :none,
+          run_calls: list({atom, non_neg_integer})
         }
 
   @typep scope :: %{args: list(atom), env: Macro.Env.t(), in_fn: boolean}
@@ -260,7 +261,11 @@ defmodule Hologram.Migration.Value do
       env: env,
       imported: Enum.filter(calls, &(elixir_imports(env, &1) != [])),
       kind: kind,
-      query: read_query(body, kind, fn_scope)
+      query: read_query(body, kind, fn_scope),
+      # A call in quoted code is data, so only these count as a query(...) or a query word. The
+      # calls above keep the quoted ones for the import check, since a quote records the imports
+      # in force.
+      run_calls: body |> run_code(env) |> local_calls(env)
     }
   end
 
@@ -296,7 +301,7 @@ defmodule Hologram.Migration.Value do
   """
   @spec choose_fn!(fn_reading, Macro.Env.t()) :: :elixir | :query
   def choose_fn!(reading, %{module: module} = env) do
-    if {:query, 1} in reading.calls and Module.defines?(module, {:query, 1}) do
+    if {:query, 1} in reading.run_calls and Module.defines?(module, {:query, 1}) do
       Expression.compile_error!(
         "query(...) marks a backfill body as a query, so this module can't define query/1 " <>
           "beside it - rename the function",
@@ -741,16 +746,6 @@ defmodule Hologram.Migration.Value do
     names
   end
 
-  # What a pin runs: pipes expanded, and a quote reduced to what it reads, since its code is data.
-  defp pin_code(expr, env) do
-    Macro.prewalk(expr, fn node ->
-      case unpiped_call(node, env) do
-        {:quote, meta, args} when is_list(args) -> {:__block__, meta, quote_reads(args)}
-        unpiped -> unpiped
-      end
-    end)
-  end
-
   # A pin in a pattern matches against a variable, which Elixir allows anywhere in a body.
   defp pin_outside_pattern?(ast, env) do
     {_ast, found?} =
@@ -1091,6 +1086,17 @@ defmodule Hologram.Migration.Value do
     {:constant, normalize_constant(value, type)}
   end
 
+  # What the code runs: pipes expanded, and a quote reduced to what it reads, since its code is
+  # data.
+  defp run_code(expr, env) do
+    Macro.prewalk(expr, fn node ->
+      case unpiped_call(node, env) do
+        {:quote, meta, args} when is_list(args) -> {:__block__, meta, quote_reads(args)}
+        unpiped -> unpiped
+      end
+    end)
+  end
+
   defp segment_sizes({:-, _meta, [left, right]}) do
     left
     |> segment_sizes()
@@ -1412,7 +1418,7 @@ defmodule Hologram.Migration.Value do
   end
 
   defp validate_no_words!(reading, module, scope) do
-    if {:query, 1} in reading.calls do
+    if {:query, 1} in reading.run_calls do
       compile_error!(
         "query(...) wraps the whole body of a backfill fn, got: " <>
           Macro.to_string(reading.body),
@@ -1422,7 +1428,7 @@ defmodule Hologram.Migration.Value do
     end
 
     words =
-      Enum.filter(reading.calls, fn {name, _arity} = call ->
+      Enum.filter(reading.run_calls, fn {name, _arity} = call ->
         name in @elixir_refused_words and not call_taken?(call, reading, module)
       end)
 
@@ -1443,7 +1449,7 @@ defmodule Hologram.Migration.Value do
   end
 
   defp validate_pin!(expr, inner, scope) do
-    code = pin_code(expr, scope.env)
+    code = run_code(expr, scope.env)
     readable = scope.args -- pin_bindings(code, scope.env)
 
     {_ast, pinned} =

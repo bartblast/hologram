@@ -1727,6 +1727,44 @@ defmodule Hologram.Migration.ValueTest do
       assert refusal(~s|fn title -> String.trim(at(title, 0)) end|) =~ "write Enum.at/2"
     end
 
+    test "takes a query word inside a quote as data" do
+      {module, _value} =
+        elixir_op(~s|fn title -> inspect(quote(do: split(title, ","))) <> title end|)
+
+      assert module.__backfill_0__("a") =~ ~r/^\{:split, \[\], \[\{:title, .*\}a$/
+    end
+
+    test "takes query(...) inside a quote as data, beside a query/1 of the module too" do
+      for extra <- ["", "def query(value), do: value"] do
+        {module, _value} =
+          elixir_op(~s|fn title -> inspect(quote(do: query(title))) <> title end|, extra)
+
+        assert module.__backfill_0__("a") =~ ~r/^\{:query, \[\], \[\{:title, .*\}a$/
+      end
+    end
+
+    test "compares the import of a call inside a quote, which the quote records" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string,
+          backfill: fn title -> inspect(quote(do: split(title, ","))) <> title end
+      end
+
+      import String, only: [split: 2]
+      """
+
+      assert compiled_refusal(body) =~
+               "calls split/2, which an import changes between the op and the end of the " <>
+                 "module - put the import at the top of the module"
+    end
+
+    test "refuses a query word in a quote's options, which run" do
+      assert refusal(
+               ~s|fn title -> inspect(quote(bind_quoted: [x: split(title, ",")], do: x)) end|
+             ) =~
+               "write String.split/2"
+    end
+
     test "refuses the other words, saying it has no query" do
       for word <- [
             "count(title)",
