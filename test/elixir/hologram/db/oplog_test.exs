@@ -4,7 +4,6 @@ defmodule Hologram.DB.OplogTest do
   import Hologram.DB.Oplog
 
   alias Hologram.Auth.Context
-  alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity.Model
@@ -42,12 +41,12 @@ defmodule Hologram.DB.OplogTest do
     held?
   end
 
-  defp places do
-    statement = ~s|SELECT "tx", "seq" FROM "hologram_system"."oplog" ORDER BY "tx", "seq"|
+  defp seqs do
+    statement = ~s|SELECT "seq" FROM "hologram_system"."oplog" ORDER BY "seq"|
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
 
-    Enum.map(rows, fn [tx, seq] -> {tx, seq} end)
+    Enum.map(rows, fn [seq] -> seq end)
   end
 
   defp rows do
@@ -99,6 +98,7 @@ defmodule Hologram.DB.OplogTest do
     INSERT INTO "hologram_system"."oplog"
       ("op", "type", "entity_id", "data", "tx", "model_hash", "revisions", "mutation_ref", "old")
     VALUES ($1, $2, $3, $4, $5, 'seeded', $6, $7, $8)
+    RETURNING "seq"
     """
 
     params = [
@@ -112,9 +112,9 @@ defmodule Hologram.DB.OplogTest do
       old
     ]
 
-    {:ok, _result} = Connection.query(statement, params)
+    {:ok, %Postgrex.Result{rows: [[seq]]}} = Connection.query(statement, params)
 
-    :ok
+    seq
   end
 
   describe "next_seq()" do
@@ -155,26 +155,175 @@ defmodule Hologram.DB.OplogTest do
       :ok = append([%{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{}}])
 
       assert holds_serial_lock?()
-      assert [{_tx, seq}] = places()
+      assert [seq] = seqs()
       assert seq > serial
     end
   end
 
-  describe "current_xmin/0" do
-    test "returns the transaction id below which every transaction has finished" do
-      {:ok, %Postgrex.Result{rows: [[writing_tx]]}} =
-        Connection.query("SELECT pg_current_xact_id()")
+  describe "last_serial/0" do
+    # Other tests take serials meanwhile, so the one handed out here is at or below it, and the next
+    # one above it.
+    test "returns the highest serial handed out, also one no entry holds" do
+      serial = next_seq()
+      last = last_serial()
 
-      # The window's own transaction is in flight, so the edge cannot have passed it.
-      assert current_xmin() <= writing_tx
+      assert last >= serial
+      assert next_seq() > last
+    end
+  end
+
+  describe "log_id/0" do
+    # The test database was claimed when the suite started, so its marker row is there.
+    test "returns the id of the log as 32 hex digits" do
+      assert log_id() =~ ~r/\A[0-9a-f]{32}\z/
+    end
+
+    test "returns the same id on every read" do
+      assert log_id() == log_id()
+    end
+
+    # A crash and a promoted standby leave the run's row empty, and the row put back names a new
+    # run.
+    test "returns another id once the server names a new run" do
+      log_id = log_id()
+
+      {:ok, _result} =
+        Connection.query(~s|UPDATE "hologram_system"."server_run" SET "run" = gen_random_uuid()|)
+
+      refute log_id() == log_id
+    end
+
+    test "returns another id once the marker names a new log" do
+      log_id = log_id()
+
+      {:ok, _result} =
+        Connection.query(~s|UPDATE "hologram_system"."database" SET "log_id" = gen_random_uuid()|)
+
+      refute log_id() == log_id
+    end
+
+    # A restore runs the view's query again, since a dump carries the query and not the row.
+    test "returns another id once the database is restored as a new copy" do
+      log_id = log_id()
+
+      {:ok, _result} =
+        Connection.query(~s|REFRESH MATERIALIZED VIEW "hologram_system"."database_copy"|)
+
+      refute log_id() == log_id
+    end
+
+    test "returns nil while the server names no run" do
+      {:ok, _result} = Connection.query(~s|DELETE FROM "hologram_system"."server_run"|)
+
+      assert log_id() == nil
+    end
+  end
+
+  describe "populate_database_copy/0" do
+    test "fills the view a schema-only restore leaves empty" do
+      {:ok, _result} =
+        Connection.query(
+          ~s|REFRESH MATERIALIZED VIEW "hologram_system"."database_copy" WITH NO DATA|
+        )
+
+      assert populate_database_copy() == :ok
+
+      assert log_id() =~ ~r/\A[0-9a-f]{32}\z/
+    end
+
+    test "leaves a filled view as it is" do
+      log_id = log_id()
+
+      assert populate_database_copy() == :ok
+
+      assert log_id() == log_id
+    end
+  end
+
+  describe "rotate_log_id/1" do
+    test "gives the log a new id" do
+      log_id = log_id()
+
+      assert rotate_log_id(log_id) == :ok
+
+      assert log_id() =~ ~r/\A[0-9a-f]{32}\z/
+      refute log_id() == log_id
+    end
+
+    test "leaves an id that has moved already" do
+      log_id = log_id()
+      :ok = rotate_log_id(log_id)
+      rotated = log_id()
+
+      assert rotate_log_id(log_id) == :ok
+
+      assert log_id() == rotated
+    end
+  end
+
+  describe "run_log_id/1" do
+    test "returns the log id a run was read under" do
+      {_high, _running, run} = serials_in_flight()
+
+      assert run_log_id(run) == log_id()
+    end
+  end
+
+  describe "place/1" do
+    test "returns the place before the first entry for no entry" do
+      assert place(nil) == {0, 0, 0}
+    end
+
+    test "returns the entry's seq, transaction and time in microseconds" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      [entry] = read_after(0, 10)
+
+      assert place(entry) ==
+               {entry.seq, 200, DateTime.to_unix(entry.inserted_at, :microsecond)}
+    end
+  end
+
+  describe "holds_place?/1" do
+    test "holds the place before the first entry" do
+      assert holds_place?({0, 0, 0})
+    end
+
+    test "holds the place of an entry it holds" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      [entry] = read_after(0, 10)
+
+      assert holds_place?(place(entry))
+    end
+
+    test "doesn't hold a place no entry is at" do
+      seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      refute holds_place?({seq + 1, 200, 0})
+    end
+
+    # Another entry at the place's seq is one a server that lost the first one's commit wrote.
+    test "doesn't hold a place another entry is at" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      [entry] = read_after(0, 10)
+      {seq, tx, inserted_at} = place(entry)
+
+      refute holds_place?({seq, tx + 1, inserted_at})
+      refute holds_place?({seq, tx, inserted_at + 1})
     end
   end
 
   describe "replica_seqs_after/1" do
-    test "returns each replica's highest batch in a transaction above the given one" do
+    test "returns each replica's highest batch with an entry above the given seq" do
       entity_id = Hologram.Entity.generate_id()
 
-      seed(200, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "a", "seq" => 3})
+      first =
+        seed(200, "patch_entity", "Module2", entity_id, nil, nil, %{
+          "replica_id" => "a",
+          "seq" => 3
+        })
 
       seed(201, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "a", "seq" => 5})
 
@@ -182,89 +331,58 @@ defmodule Hologram.DB.OplogTest do
 
       seed(201, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "b", "seq" => 9})
 
-      assert replica_seqs_after(199) == %{"a" => 5, "b" => 9}
+      assert replica_seqs_after(first - 1) == %{"a" => 5, "b" => 9}
     end
 
-    test "leaves out the batches in the given transaction and below it" do
+    test "leaves out the batches with entries only at the given seq and below it" do
       entity_id = Hologram.Entity.generate_id()
 
-      seed(200, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "a", "seq" => 3})
+      first =
+        seed(200, "patch_entity", "Module2", entity_id, nil, nil, %{
+          "replica_id" => "a",
+          "seq" => 3
+        })
 
-      seed(201, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "b", "seq" => 9})
+      second =
+        seed(201, "patch_entity", "Module2", entity_id, nil, nil, %{
+          "replica_id" => "b",
+          "seq" => 9
+        })
 
-      assert replica_seqs_after(200) == %{"b" => 9}
-      assert replica_seqs_after(201) == %{}
+      assert replica_seqs_after(first) == %{"b" => 9}
+      assert replica_seqs_after(second) == %{}
     end
 
     test "passes over the effects of no batch" do
-      seed(201, "patch_entity", "Module2", Hologram.Entity.generate_id())
+      seq = seed(201, "patch_entity", "Module2", Hologram.Entity.generate_id())
 
-      assert replica_seqs_after(200) == %{}
+      assert replica_seqs_after(seq - 1) == %{}
     end
   end
 
-  describe "current_xmax/0" do
-    test "returns an id past a transaction that finished, even one begun after one still open" do
-      {:ok, %Postgrex.Result{rows: [[open_tx]]}} =
-        Connection.query("SELECT pg_current_xact_id()")
-
-      test_pid = self()
-
-      # On a connection of its own, outside the test's transaction, so it commits.
-      spawn_link(fn ->
-        :ok = DBConnection.Ownership.ownership_checkout(DB.pool_name(), [])
-
-        %Postgrex.Result{rows: [[finished_tx]]} =
-          Postgrex.query!(DB.pool_name(), "SELECT pg_current_xact_id()", [])
-
-        :ok = DBConnection.Ownership.ownership_checkin(DB.pool_name(), [])
-        send(test_pid, {:finished_tx, finished_tx})
-      end)
-
-      # The worker's connection comes from the pool the other database tests share, so it may wait
-      # for one to free up, until the pool gives up on the wait after a few seconds.
-      assert_receive {:finished_tx, finished_tx}, 15_000
-
-      assert finished_tx > open_tx
-      assert current_xmax() > finished_tx
-      assert current_xmin() <= open_tx
-    end
-  end
-
-  describe "oldest_place/0" do
+  describe "read_after/2" do
     test "returns nothing when the log holds no effects" do
-      assert oldest_place() == nil
+      assert read_after(0, 10) == []
     end
 
-    test "returns the place of the effect nothing precedes" do
-      seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+    test "returns the effects written after the given seq" do
+      first_seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
 
-      [oldest | _rest] = places()
-
-      assert oldest_place() == oldest
-    end
-  end
-
-  describe "read_after/3" do
-    test "returns nothing when the log holds no effects" do
-      assert read_after(0, 0, 10) == []
-    end
-
-    test "returns the effects written after the given place" do
-      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
-      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
-
-      [{_tx, first_seq} | _rest] = places()
-
-      assert [event] = read_after(200, first_seq, 10)
+      assert [event] = read_after(first_seq, 10)
       assert event.entity_id == @target_id
+    end
+
+    test "returns the time the effect was written" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      assert [%{inserted_at: %DateTime{}}] = read_after(0, 10)
     end
 
     test "returns the revisions the effect was stored with" do
       seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, nil, %{a: 5})
 
-      assert [event] = read_after(199, 0, 10)
+      assert [event] = read_after(0, 10)
       assert event.revisions == %{"a" => 5}
     end
 
@@ -285,7 +403,7 @@ defmodule Hologram.DB.OplogTest do
         old
       )
 
-      assert [event] = read_after(0, 0, 10)
+      assert [event] = read_after(0, 10)
       assert event.old == old
       assert event.data == nil
     end
@@ -293,7 +411,7 @@ defmodule Hologram.DB.OplogTest do
     test "returns no old references for an effect stored without them" do
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert [event] = read_after(0, 0, 10)
+      assert [event] = read_after(0, 10)
       assert event.old == nil
     end
 
@@ -305,43 +423,36 @@ defmodule Hologram.DB.OplogTest do
 
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, nil, nil, ref)
 
-      assert [event] = read_after(0, 0, 10)
+      assert [event] = read_after(0, 10)
       assert event.mutation_ref == ref
     end
 
     test "returns nothing for the batch of an effect no batch wrote" do
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert [event] = read_after(0, 0, 10)
+      assert [event] = read_after(0, 10)
       assert event.mutation_ref == nil
     end
 
-    test "leaves out the effect at the given place, which the reader already has" do
-      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+    test "leaves out the effect at the given seq, which the reader already has" do
+      seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      [{tx, seq}] = places()
-
-      assert read_after(tx, seq, 10) == []
-    end
-
-    test "leaves out effects of transactions below the given place" do
-      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
-      seed(202, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
-
-      assert [event] = read_after(201, 0, 10)
-      assert event.entity_id == @target_id
+      assert read_after(seq, 10) == []
     end
 
     # The payload is what makes an effect's size vary - a delete carries none, a wide entity's put
     # carries kilobytes - so leaving it out is what lets the caller bound a gap by counting.
     test "leaves the payload behind, since a replay reads values from the rows" do
-      seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{"c" => "x"})
+      seq =
+        seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{
+          "c" => "x"
+        })
 
-      assert [event] = read_after(0, 0, 10)
+      assert [event] = read_after(0, 10)
       assert event.data == nil
 
       # The windowed read, which diffs against values, still carries it.
-      assert [{200, [windowed]}] = read_window(200, 201)
+      assert [windowed] = read_window(seq - 1, seq)
       assert windowed.data == %{"c" => "x"}
     end
 
@@ -353,7 +464,7 @@ defmodule Hologram.DB.OplogTest do
       seed(200, "add_relationship", "Hologram.Test.Fixtures.Entity.Module3", @entity_id, data)
       seed(200, "del_relationship", "Hologram.Test.Fixtures.Entity.Module3", @entity_id, data)
 
-      assert [added, removed] = read_after(0, 0, 10)
+      assert [added, removed] = read_after(0, 10)
       assert added.data == data
       assert removed.data == data
     end
@@ -365,51 +476,49 @@ defmodule Hologram.DB.OplogTest do
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
       seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
 
-      assert [event] = read_after(0, 0, 1)
+      assert [event] = read_after(0, 1)
       assert event.tx == 200
     end
 
-    test "returns the effects in the order a reader is told about them" do
-      # Written in the reverse of the order they are read in, so insert order alone cannot produce
-      # the answer - the earlier transaction comes first however late its rows were written.
+    # Serials are handed out as saves write, so the log's order is theirs, whichever transaction
+    # wrote what.
+    test "returns the effects in seq order, whatever their transactions" do
       seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert [first, second] = read_after(0, 0, 10)
-      assert first.entity_id == @entity_id
-      assert second.entity_id == @target_id
+      assert [first, second] = read_after(0, 10)
+      assert first.entity_id == @target_id
+      assert second.entity_id == @entity_id
     end
   end
 
-  describe "count_after/4" do
-    test "counts the effects written after the given place" do
-      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+  describe "count_after/3" do
+    test "counts the effects written after the given seq" do
+      first_seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
       seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
 
-      assert count_after(200, 0, 10, "seeded") == {2, false}
-      assert count_after(201, 0, 10, "seeded") == {1, false}
+      assert count_after(first_seq - 1, 10, "seeded") == {2, false}
+      assert count_after(first_seq, 10, "seeded") == {1, false}
     end
 
     test "counts no further than the limit" do
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
       seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
 
-      assert count_after(0, 0, 1, "seeded") == {1, false}
+      assert count_after(0, 1, "seeded") == {1, false}
     end
 
     # Every row this suite seeds is written under the model hash "seeded".
     test "answers whether an effect counted was written under another model" do
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert count_after(0, 0, 10, "current") == {1, true}
+      assert count_after(0, 10, "current") == {1, true}
     end
 
-    test "answers nothing counted for a place past every effect" do
-      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+    test "answers nothing counted for a seq past every effect" do
+      seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      [{tx, seq}] = places()
-
-      assert count_after(tx, seq, 10, "seeded") == {0, false}
+      assert count_after(seq, 10, "seeded") == {0, false}
     end
   end
 
@@ -420,7 +529,7 @@ defmodule Hologram.DB.OplogTest do
 
       [first_seq, second_seq] =
         0
-        |> read_after(0, 10)
+        |> read_after(10)
         |> Enum.map(& &1.seq)
 
       assert any_data_match?([first_seq, second_seq], %{"user_id" => "b"})
@@ -430,7 +539,7 @@ defmodule Hologram.DB.OplogTest do
     test "matches nothing of a seq the log doesn't hold" do
       seed(200, "del_entity", "Hologram.Auth.RoleGrant", @entity_id, %{"user_id" => "a"})
 
-      [%{seq: seq}] = read_after(0, 0, 10)
+      [%{seq: seq}] = read_after(0, 10)
 
       refute any_data_match?([seq + 1], %{"user_id" => "a"})
     end
@@ -448,7 +557,7 @@ defmodule Hologram.DB.OplogTest do
 
       [first_seq, second_seq] =
         0
-        |> read_after(0, 10)
+        |> read_after(10)
         |> Enum.map(& &1.seq)
 
       assert read_data([first_seq, second_seq]) == %{
@@ -462,7 +571,7 @@ defmodule Hologram.DB.OplogTest do
 
       seed(200, "add_relationship", "Hologram.Test.Fixtures.Entity.Module3", @entity_id, data)
 
-      [%{seq: seq}] = read_after(0, 0, 10)
+      [%{seq: seq}] = read_after(0, 10)
 
       assert read_data([seq]) == %{seq => data}
     end
@@ -470,7 +579,7 @@ defmodule Hologram.DB.OplogTest do
     test "leaves out a seq the log doesn't hold" do
       seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{"c" => "x"})
 
-      [%{seq: seq}] = read_after(0, 0, 10)
+      [%{seq: seq}] = read_after(0, 10)
 
       assert read_data([seq, seq + 1]) == %{seq => %{"c" => "x"}}
     end
@@ -480,23 +589,24 @@ defmodule Hologram.DB.OplogTest do
     end
   end
 
-  describe "read_type_after/4" do
+  describe "read_type_after/3" do
     test "returns nothing when the log holds no effects of the given type" do
       seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module14", @entity_id, %{c: "other"})
 
-      assert read_type_after(Module2, 0, 0, %{}) == []
+      assert read_type_after(Module2, 0, %{}) == []
     end
 
-    test "returns the effects of the given type since the given place, in place order" do
-      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "before"})
-
-      [{_tx, first_seq}] = places()
+    test "returns the effects of the given type since the given seq, in seq order" do
+      first_seq =
+        seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{
+          c: "before"
+        })
 
       seed(201, "put_entity", "Hologram.Test.Fixtures.Entity.Module14", @target_id, %{c: "other"})
       seed(202, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id, %{c: "after"})
       seed(203, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "gone"})
 
-      assert [put, delete] = read_type_after(Module2, 200, first_seq, %{})
+      assert [put, delete] = read_type_after(Module2, first_seq, %{})
 
       assert put.entity_id == @target_id
       assert put.op == :put_entity
@@ -522,43 +632,44 @@ defmodule Hologram.DB.OplogTest do
         old
       )
 
-      assert [effect] = read_type_after(Module3, 0, 0, %{})
+      assert [effect] = read_type_after(Module3, 0, %{})
       assert effect.old == old
     end
 
     test "returns no old references for an effect stored without them" do
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "gone"})
 
-      assert [effect] = read_type_after(Module2, 0, 0, %{})
+      assert [effect] = read_type_after(Module2, 0, %{})
       assert effect.old == nil
     end
 
-    test "returns nothing written before the given place" do
-      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "before"})
+    test "returns nothing written at or before the given seq" do
+      seq =
+        seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{
+          c: "before"
+        })
 
-      [{tx, seq}] = places()
-
-      assert read_type_after(Module2, tx, seq, %{}) == []
+      assert read_type_after(Module2, seq, %{}) == []
     end
 
     test "returns only the effects whose data holds every pair of the given match" do
       seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "wanted"})
       seed(201, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id, %{c: "other"})
 
-      assert [effect] = read_type_after(Module2, 0, 0, %{c: "wanted"})
+      assert [effect] = read_type_after(Module2, 0, %{c: "wanted"})
       assert effect.entity_id == @entity_id
     end
   end
 
   describe "read_window/2" do
     test "returns nothing when the window holds no effects" do
-      assert read_window(1, 2) == []
+      assert read_window(0, 1) == []
     end
 
-    test "returns the effects of transactions inside the window" do
-      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+    test "returns the effects inside the window" do
+      seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert [{200, [event]}] = read_window(200, 201)
+      assert [event] = read_window(seq - 1, seq)
       assert event.op == :del_entity
       assert event.type == Module2
       assert event.entity_id == @entity_id
@@ -566,109 +677,119 @@ defmodule Hologram.DB.OplogTest do
     end
 
     test "returns the revisions the effect was stored with" do
-      seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, nil, %{a: 5})
+      seq =
+        seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, nil, %{
+          a: 5
+        })
 
-      assert [{200, [event]}] = read_window(200, 201)
+      assert [event] = read_window(seq - 1, seq)
       assert event.revisions == %{"a" => 5}
     end
 
     test "returns the old references the effect was stored with" do
       old = %{"c_id" => @target_id}
 
-      seed(
-        200,
-        "patch_entity",
-        "Hologram.Test.Fixtures.Entity.Module3",
-        @entity_id,
-        nil,
-        nil,
-        nil,
-        old
-      )
+      seq =
+        seed(
+          200,
+          "patch_entity",
+          "Hologram.Test.Fixtures.Entity.Module3",
+          @entity_id,
+          nil,
+          nil,
+          nil,
+          old
+        )
 
-      assert [{200, [event]}] = read_window(200, 201)
+      assert [event] = read_window(seq - 1, seq)
       assert event.old == old
     end
 
     test "returns no old references for an effect stored without them" do
-      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+      seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert [{200, [event]}] = read_window(200, 201)
+      assert [event] = read_window(seq - 1, seq)
       assert event.old == nil
     end
 
     test "returns the batch the effect was written under" do
-      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, nil, nil, %{
-        replica_id: @replica_id,
-        seq: 7
-      })
+      seq =
+        seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, nil, nil, %{
+          replica_id: @replica_id,
+          seq: 7
+        })
 
-      assert [{200, [event]}] = read_window(200, 201)
+      assert [event] = read_window(seq - 1, seq)
       assert event.mutation_ref == %{"replica_id" => @replica_id, "seq" => 7}
     end
 
     test "returns no batch for an effect written outside one" do
-      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+      seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert [{200, [event]}] = read_window(200, 201)
+      assert [event] = read_window(seq - 1, seq)
       assert event.mutation_ref == nil
     end
 
-    test "leaves out transactions below the window" do
-      seed(199, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+    test "leaves out the effect at the window's lower edge, which the reader already has" do
+      seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert read_window(200, 300) == []
+      assert read_window(seq, seq + 1) == []
     end
 
-    test "leaves out transactions at and above the window's upper edge" do
-      seed(300, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+    test "leaves out effects above the window's upper edge" do
+      seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert read_window(200, 300) == []
+      assert read_window(seq - 2, seq - 1) == []
     end
 
-    test "groups a transaction's effects together, in the order they happened" do
-      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{"c" => "x"})
+    test "returns the effects in seq order, whatever their transactions" do
+      first =
+        seed(201, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{"c" => "x"})
+
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
-      seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
+      last = seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
 
-      assert [{200, first_transaction}, {201, second_transaction}] = read_window(200, 202)
-      assert Enum.map(first_transaction, & &1.op) == [:put_entity, :del_entity]
-      assert Enum.map(second_transaction, & &1.op) == [:del_entity]
+      assert [put, delete, other_delete] = read_window(first - 1, last)
+      assert {put.op, put.tx} == {:put_entity, 201}
+      assert {delete.op, delete.tx} == {:del_entity, 200}
+      assert other_delete.entity_id == @target_id
     end
 
     # A newer peer writing a seventh op is what a rolling deploy produces, and raising here would
-    # take the dispatcher down mid-window - it restarts with no cursor and resumes at the log's
-    # edge, so everything between would be skipped rather than retried. Downstream is already
+    # take the dispatcher down mid-window - it restarts with no cursor and resumes at the final
+    # limit, so everything between would be skipped rather than retried. Downstream is already
     # indifferent: what reads an op matches it against atoms and leaves an unknown one alone.
     test "keeps an op this build does not know as the label it was written with" do
       statement = """
       INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash")
       VALUES ('op_from_a_newer_build', 'Hologram.Test.Fixtures.Entity.Module2', $1, $2, 'seeded')
+      RETURNING "seq"
       """
 
       params = [Codec.encode(@entity_id, :uuid), 200]
 
-      {:ok, _result} = Connection.query(statement, params)
+      {:ok, %Postgrex.Result{rows: [[seq]]}} = Connection.query(statement, params)
 
-      assert [{200, [event]}] = read_window(200, 201)
+      assert [event] = read_window(seq - 1, seq)
       assert event.op == "op_from_a_newer_build"
     end
 
     test "keeps an entity type this node has never compiled as the label it was written with" do
       # A name no test anywhere in the suite writes as an atom LITERAL: one that does makes the
       # atom exist for every test, and this one is about a type whose atom does not exist.
-      seed(200, "del_entity", "MyApp.TypeOnlyThisTestNames", @entity_id)
+      seq = seed(200, "del_entity", "MyApp.TypeOnlyThisTestNames", @entity_id)
 
-      assert [{200, [event]}] = read_window(200, 201)
+      assert [event] = read_window(seq - 1, seq)
       assert event.type == "MyApp.TypeOnlyThisTestNames"
     end
 
     test "keeps data keys as they were written" do
-      seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{
-        "never_compiled" => 1
-      })
+      seq =
+        seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{
+          "never_compiled" => 1
+        })
 
-      assert [{200, [event]}] = read_window(200, 201)
+      assert [event] = read_window(seq - 1, seq)
       assert event.data == %{"never_compiled" => 1}
     end
   end

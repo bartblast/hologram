@@ -45,6 +45,7 @@ defmodule Hologram.Sync.FinalLimit do
           candidates: list({non_neg_integer, MapSet.t(String.t())}),
           limit: non_neg_integer | nil,
           limit_entry: Oplog.log_entry() | nil,
+          losses: non_neg_integer,
           run: String.t() | nil,
           run_key_missing: boolean,
           through: non_neg_integer | nil
@@ -59,6 +60,7 @@ defmodule Hologram.Sync.FinalLimit do
       candidates: [],
       limit: nil,
       limit_entry: nil,
+      losses: 0,
       run: nil,
       run_key_missing: false,
       through: nil
@@ -87,6 +89,18 @@ defmodule Hologram.Sync.FinalLimit do
 
         advance(key_present, run, high, running, &Oplog.last_entry_through/1, &Oplog.entry_at/1)
     end
+  rescue
+    # A schema-only restore, or one that died before its last step, leaves the view naming the copy
+    # of the database empty, and no run can be read until it's filled.
+    error in MatchError ->
+      case error.term do
+        {:error, %Postgrex.Error{postgres: %{code: :object_not_in_prerequisite_state}}} ->
+          :ok = Oplog.populate_database_copy()
+          state
+
+        _other ->
+          reraise error, __STACKTRACE__
+      end
   end
 
   @doc """
@@ -116,10 +130,45 @@ defmodule Hologram.Sync.FinalLimit do
   end
 
   @doc """
+  Returns the saves the waiting rounds wait for, by the virtual transaction ids pg_locks names them
+  by.
+  """
+  @spec holders(t) :: MapSet.t(String.t())
+  def holders(state) do
+    Enum.reduce(state.candidates, MapSet.new(), fn {_high, holders}, all ->
+      MapSet.union(all, holders)
+    end)
+  end
+
+  @doc """
   Returns the highest serial known to be final, or nil before the first round to finish.
   """
   @spec limit(t) :: non_neg_integer | nil
   def limit(state), do: state.limit
+
+  @doc """
+  Returns how many times the limit was found standing on an entry the server lost. Each time, the
+  serials above what the server kept go to other saves, and anyone who read past it was told of
+  entries that are gone.
+  """
+  @spec losses(t) :: non_neg_integer
+  def losses(state), do: state.losses
+
+  @doc """
+  Returns the place of the limit (see `Hologram.DB.Oplog.place/1`), the place of the entry it stands
+  on, or nil before the first round to finish.
+  """
+  @spec place(t) :: Oplog.place() | nil
+  def place(%{limit: nil}), do: nil
+
+  def place(state), do: Oplog.place(state.limit_entry)
+
+  @doc """
+  Returns the server run the last round counted was read in (see
+  `Hologram.DB.Oplog.serials_in_flight/0`), or nil before the first.
+  """
+  @spec run(t) :: String.t() | nil
+  def run(state), do: state.run
 
   @doc """
   Returns whether a round is waiting for a save to end. A save that rolls back or loses its
@@ -137,9 +186,13 @@ defmodule Hologram.Sync.FinalLimit do
   defp enter_run(%{limit_entry: entry} = state, run, entry_at) do
     case entry_at.(entry.seq) do
       {^entry, ^run} -> {:ok, new_run(state, run)}
-      {_other_entry, ^run} -> {:ok, %{new_run(state, run) | limit: nil, limit_entry: nil}}
+      {_other_entry, ^run} -> {:ok, lose_limit(new_run(state, run))}
       {_entry, _other_run} -> :run_moved
     end
+  end
+
+  defp lose_limit(state) do
+    %{state | limit: nil, limit_entry: nil, losses: state.losses + 1}
   end
 
   defp new_run(state, run), do: %{state | candidates: [], run: run, through: nil}

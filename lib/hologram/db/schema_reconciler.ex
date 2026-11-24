@@ -906,19 +906,22 @@ defmodule Hologram.DB.SchemaReconciler do
   # for. A refused batch's claim rolls back with its transaction, and its row is written
   # afterwards, on its own statement.
   #
-  # The oplog is read by transaction id rather than by insert order, because a sequence
-  # hands out its numbers before the transaction holding them commits: a reader trusting
-  # seq order would pass a row whose transaction is still open and never come back for it.
-  # Hence the tx column, defaulted to the writing transaction's own id, and the index the
-  # windowed read walks.
+  # The oplog is read in seq order, up to the serial every save at or below has ended at (see
+  # `Hologram.Sync.FinalLimit`), so a row whose transaction is still open is never passed. The tx
+  # column, defaulted to the writing transaction's own id, and inserted_at tell an entry from a
+  # later one given the same seq after the server lost the first's commit.
+  #
+  # The marker's log_id names this log, taken when the claim writes the marker. A dropped and
+  # claimed again database starts its serials over, and a cursor from the old log would read as a
+  # place in the new one.
   #
   # The oplog's old column holds what the to-one references an update changed held before it,
   # which is what points sync at the rows a move took a row away from. It is NULL for an update
   # that changed no reference and for every other effect: a put has no before, a delete keeps the
   # whole row in data, and an edge names both ends.
   #
-  # The second oplog index is BRIN rather than btree, and pruning is what reads it. The
-  # table is append-only, so inserted_at runs with the physical order of the pages, which
+  # The oplog's one index besides its key is BRIN rather than btree, and pruning is what reads it.
+  # The table is append-only, so inserted_at runs with the physical order of the pages, which
   # is the one case BRIN is built for: kilobytes of index instead of gigabytes, and no
   # per-row tree descent on a table every entity write appends to. A btree here would put
   # its rightmost page in the path of every write in the system to speed up an hourly
@@ -939,7 +942,8 @@ defmodule Hologram.DB.SchemaReconciler do
         "managed_by" text NOT NULL,
         "hologram_version" text NOT NULL,
         "system_schema_version" integer NOT NULL,
-        "last_reconciled_at" timestamptz NOT NULL
+        "last_reconciled_at" timestamptz NOT NULL,
+        "log_id" uuid NOT NULL DEFAULT gen_random_uuid()
       )
       """,
       """
@@ -986,9 +990,6 @@ defmodule Hologram.DB.SchemaReconciler do
       ALTER SEQUENCE "#{system_schema}"."oplog_seq_seq" OWNED BY "#{system_schema}"."oplog"."seq"
       """,
       """
-      CREATE INDEX "oplog_tx_seq_$idx" ON "#{system_schema}"."oplog" ("tx", "seq")
-      """,
-      """
       CREATE INDEX "oplog_inserted_at_$idx" ON "#{system_schema}"."oplog"
       USING brin ("inserted_at")
       """,
@@ -1003,6 +1004,12 @@ defmodule Hologram.DB.SchemaReconciler do
       """,
       """
       INSERT INTO "#{system_schema}"."server_run" DEFAULT VALUES
+      """,
+      # One row naming this copy of the database (see `Hologram.DB.Oplog.log_id/0`). A view for
+      # what a dump does with it: it carries the query and not the row, and a restore runs the
+      # query again, so every restored copy names itself anew.
+      """
+      CREATE MATERIALIZED VIEW "#{system_schema}"."database_copy" AS SELECT gen_random_uuid() AS "id"
       """,
       """
       CREATE TABLE "#{system_schema}"."mutation" (

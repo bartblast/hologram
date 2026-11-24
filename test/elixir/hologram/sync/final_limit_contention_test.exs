@@ -293,6 +293,24 @@ defmodule Hologram.Sync.FinalLimitContentionTest do
     assert FinalLimit.limit(moved) == serial
   end
 
+  test "fills the view naming the copy of the database once a restore left it empty", %{
+    scratch: scratch
+  } do
+    serial = committed_serial(scratch)
+
+    {:ok, _result} =
+      route(scratch, fn ->
+        Connection.query(
+          ~s|REFRESH MATERIALIZED VIEW "hologram_system"."database_copy" WITH NO DATA|
+        )
+      end)
+
+    state = FinalLimit.new()
+
+    assert advance(scratch, state) == state
+    assert limit_after(scratch, state) == serial
+  end
+
   test "adds no run row while a restore has the table without its key", %{scratch: scratch} do
     route(scratch, fn ->
       {:ok, _result} =
@@ -378,7 +396,7 @@ defmodule Hologram.Sync.FinalLimitContentionTest do
       {:ok, _result} = Connection.query("SET DateStyle = 'German'")
 
       assert {_high, _running, ^run} = Oplog.serials_in_flight()
-      assert [_id, started_text, _file] = String.split(run, "/")
+      assert [_log_id, started_text] = String.split(run, "/")
       assert started_text == Integer.to_string(started)
     end)
   end
@@ -393,8 +411,64 @@ defmodule Hologram.Sync.FinalLimitContentionTest do
 
       {_high, _running, replaced} = Oplog.serials_in_flight()
 
-      assert replaced != run
+      assert Oplog.run_log_id(replaced) != Oplog.run_log_id(run)
     end)
+  end
+
+  test "keeps the log id across a clean restart, which only moves the start time", %{
+    scratch: scratch
+  } do
+    route(scratch, fn ->
+      {_high, _running, run} = Oplog.serials_in_flight()
+
+      assert Oplog.run_log_id(run) == Oplog.log_id()
+    end)
+  end
+
+  # Every node finding the same loss rotates it, and the ones after the first find it moved.
+  test "rotates the log id once between nodes finding the same loss", %{
+    scratch: scratch,
+    scratch_opts: scratch_opts
+  } do
+    log_id = route(scratch, &Oplog.log_id/0)
+    test_pid = self()
+
+    first =
+      Task.async(fn ->
+        {:ok, session} = Postgrex.start_link(scratch_opts)
+
+        Postgrex.transaction(session, fn tx ->
+          rotated =
+            Connection.with_connection(tx, fn ->
+              :ok = Oplog.rotate_log_id(log_id)
+              Oplog.log_id()
+            end)
+
+          send(test_pid, {:rotated, rotated})
+
+          receive do
+            :commit -> :committed
+          end
+        end)
+      end)
+
+    assert_receive {:rotated, rotated}, 5_000
+
+    second =
+      Task.async(fn ->
+        {:ok, session} = Postgrex.start_link(scratch_opts)
+
+        Connection.with_connection(session, fn -> Oplog.rotate_log_id(log_id) end)
+      end)
+
+    :ok = wait_for_blocked_sessions(scratch_opts, 1)
+
+    send(first.pid, :commit)
+    assert {:ok, :committed} = Task.await(first)
+    assert Task.await(second) == :ok
+
+    assert route(scratch, &Oplog.log_id/0) == rotated
+    refute rotated == log_id
   end
 
   test "names no run when the two reads were in different ones", %{

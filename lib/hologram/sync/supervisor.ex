@@ -12,11 +12,10 @@ defmodule Hologram.Sync.Supervisor do
   # A database that is away takes down nothing here. The listener waits for it rather than failing
   # (see Hologram.DB.Listener), and ends once when a session it had is lost, a LISTEN goes
   # unanswered for 4 seconds or its first statement for 150, taking the dispatcher with it. The
-  # dispatcher crashes on each round it cannot read, which a pool checkout gives up on after about
-  # 4 seconds with DBConnection's default queue settings: once per poll and checkout, about 9
-  # seconds, when it resumes from the read edge, and once per checkout when it has nothing to
-  # resume from and reads the log's edge as it starts. Either way it stays within 3 restarts in 5
-  # seconds, and only it restarts.
+  # dispatcher keeps its final limit through a round that can't work out a new one, which a pool
+  # checkout gives up on after about 4 seconds with DBConnection's default queue settings, and
+  # crashes only on a window it can't read, which it opens only after a round that read the
+  # database. So it stays within 3 restarts in 5 seconds, and only it restarts.
 
   use Supervisor
 
@@ -70,7 +69,7 @@ defmodule Hologram.Sync.Supervisor do
     # back to its poll and is merely slower forever.
     #
     # The session list comes after the read edge for the same reason, from the other side: a read
-    # edge replaced starts the dispatcher at the log's edge as it stands, past the batches it had
+    # edge replaced starts the dispatcher at the final limit as it stands, past the batches it had
     # not read yet, and a session left running would claim a place past them. Replacing the list
     # stops every session that registered in it (see `Hologram.Sync.Sessions`), so its client comes
     # back through the doors and is caught up.
@@ -83,6 +82,11 @@ defmodule Hologram.Sync.Supervisor do
     Supervisor.init(children, strategy: :rest_for_one)
   end
 
+  # A server that lost commits the dispatcher read stops every session: each was dated past them,
+  # and its client, back through the doors, is told to let go of what it holds when its place is
+  # gone (see `Hologram.Sync.Catchup.check/3`).
+  defp cut_sessions_on_loss, do: Sessions.cut_all({:shutdown, :commits_lost})
+
   # The dispatcher comes after what it hands work to: it starts reading straight away, and what it
   # reads goes to the sessions listed before it. It comes after the read edge for the same reason -
   # a restart resumes from what that kept, which it can only read from a read edge that is already
@@ -93,6 +97,10 @@ defmodule Hologram.Sync.Supervisor do
   # advancing from the batches it sends, and would be carried past the range of the log it was
   # reading if it resumed anywhere but where it left off.
   defp dispatcher_child do
-    {Dispatcher, handler: &Live.route/2, notifications: @notifications, read_edge: ReadEdge}
+    {Dispatcher,
+     handler: &Live.route/2,
+     notifications: @notifications,
+     on_loss: &cut_sessions_on_loss/0,
+     read_edge: ReadEdge}
   end
 end

@@ -171,6 +171,7 @@ defmodule Hologram.Sync.FinalLimitTest do
 
       assert limit(moved) == 10
       assert waiting?(moved)
+      assert losses(moved) == 0
     end
 
     test "goes back to no limit when the run changes and its entry is gone" do
@@ -180,6 +181,7 @@ defmodule Hologram.Sync.FinalLimitTest do
 
       assert limit(moved) == nil
       assert moved.limit_entry == nil
+      assert losses(moved) == 1
     end
 
     test "goes back to no limit when the run changes and another entry took the serial" do
@@ -190,6 +192,7 @@ defmodule Hologram.Sync.FinalLimitTest do
       moved = advance(state, 10, ["a"], run: "run-2", entry_at: fn 10 -> {other, "run-2"} end)
 
       assert limit(moved) == nil
+      assert losses(moved) == 1
     end
 
     test "goes back to no limit when another entry with the same transaction took the serial" do
@@ -240,6 +243,70 @@ defmodule Hologram.Sync.FinalLimitTest do
       released = advance(state, 100, [])
 
       assert limit(released) == 100
+    end
+  end
+
+  describe "holders/1" do
+    test "returns no saves when no round waits" do
+      assert holders(new()) == MapSet.new()
+    end
+
+    test "returns the saves the waiting rounds still wait for" do
+      state =
+        new()
+        |> advance(10, ["a", "b"])
+        |> advance(12, ["b", "c"])
+
+      assert holders(state) == MapSet.new(["b", "c"])
+    end
+
+    test "returns no saves once the rounds are over" do
+      state =
+        new()
+        |> advance(10, ["a"])
+        |> advance(10, [])
+
+      assert holders(state) == MapSet.new()
+    end
+  end
+
+  describe "losses/1" do
+    test "is none for a limit that knows of no serial yet" do
+      assert losses(new()) == 0
+    end
+  end
+
+  describe "run/1" do
+    test "returns nothing before the first round" do
+      assert run(new()) == nil
+    end
+
+    test "returns the run the last round read in" do
+      state =
+        new()
+        |> advance(10, [])
+        |> advance(11, [], run: "run-2")
+
+      assert run(state) == "run-2"
+    end
+  end
+
+  describe "place/1" do
+    test "returns nothing before the first round to finish" do
+      assert place(new()) == nil
+      assert place(advance(new(), 10, ["a"])) == nil
+    end
+
+    test "returns the place of the entry the limit stands on" do
+      state = advance(new(), 10, [])
+
+      assert place(state) == {10, 100, DateTime.to_unix(~U[2026-11-24 00:00:00Z], :microsecond)}
+    end
+
+    test "returns the place before the first entry while the log holds none" do
+      state = advance(new(), 10, [], last_entry_through: &{nil_entry(&1), @run})
+
+      assert place(state) == {0, 0, 0}
     end
   end
 end

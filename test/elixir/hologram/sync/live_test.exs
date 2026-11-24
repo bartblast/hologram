@@ -33,7 +33,7 @@ defmodule Hologram.Sync.LiveTest do
 
   setup :set_mox_global
 
-  @place {100, 0}
+  @place {100, 1_000, 1_700_000_000_000_000}
 
   # Module17 is readable when public, or by the users holding a membership of it (Module18). A
   # membership is readable when its seat is full. Module19 is a label, which no rule admits.
@@ -71,9 +71,11 @@ defmodule Hologram.Sync.LiveTest do
       data: data,
       entity_id: entity_id,
       mutation_ref: Keyword.get(opts, :mutation_ref),
+      inserted_at: ~U[2026-11-24 00:00:00Z],
       old: nil,
       op: op,
-      tx: Keyword.get(opts, :tx, 100),
+      seq: Keyword.get(opts, :seq, 100),
+      tx: Keyword.get(opts, :tx, 1_000),
       type: entity_type
     }
   end
@@ -82,6 +84,7 @@ defmodule Hologram.Sync.LiveTest do
     statement = """
     INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash", "mutation_ref")
     VALUES ('patch_entity', $1, $2, $3::text::xid8, 'h', $4)
+    RETURNING "seq"
     """
 
     params = [
@@ -91,9 +94,9 @@ defmodule Hologram.Sync.LiveTest do
       %{"replica_id" => replica_id, "seq" => seq}
     ]
 
-    {:ok, _result} = Connection.query(statement, params)
+    {:ok, %Postgrex.Result{rows: [[logged_seq]]}} = Connection.query(statement, params)
 
-    :ok
+    logged_seq
   end
 
   # What a part's packed ids hold, per entity type.
@@ -400,8 +403,8 @@ defmodule Hologram.Sync.LiveTest do
       project = create!(PolicyModule17, public: true)
 
       effects = [
-        effect(:patch_entity, PolicyModule17, project.id, %{"public" => true}, tx: 101),
-        effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}, tx: 100)
+        effect(:patch_entity, PolicyModule17, project.id, %{"public" => true}, seq: 101),
+        effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}, seq: 100)
       ]
 
       parts = parts(effects, context.sessions, context.edges, @synced, @place)
@@ -409,7 +412,7 @@ defmodule Hologram.Sync.LiveTest do
       for part <- Map.values(parts) do
         assert part.place == @place
         assert part.synced_types == @synced
-        assert part.tx_range == {100, 101}
+        assert part.seq_range == {100, 101}
 
         assert part.written == %{
                  project.id => MapSet.new(["name", "public", "server_updated_seq"])
@@ -581,18 +584,16 @@ defmodule Hologram.Sync.LiveTest do
       assert parts[nil].verdicts[PolicyModule17] == %{}
     end
 
-    # Read with the rows, so a replica's batch in a transaction above the batch's counts, while one
-    # in a transaction the batch holds doesn't. Logged by hand: every write a test makes is in the
-    # test's own transaction, so none can be above another.
-    test "gives each replica's highest batch in a transaction above the batch's", context do
+    # Read with the rows, so a replica's batch with an entry above the batch's counts, while one
+    # with entries only at or below it doesn't.
+    test "gives each replica's highest batch with an entry above the batch's", context do
       project = create!(PolicyModule17, public: true)
-      batch_tx = Oplog.current_xmax() + 1
 
-      log_batch(project, batch_tx, "replica_b", 3)
-      log_batch(project, batch_tx + 1, "replica_a", 8)
+      batch_seq = log_batch(project, 2_000, "replica_b", 3)
+      log_batch(project, 2_001, "replica_a", 8)
 
       effects = [
-        effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}, tx: batch_tx)
+        effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}, seq: batch_seq)
       ]
 
       parts = parts(effects, context.sessions, context.edges, @synced, @place)
@@ -605,12 +606,12 @@ defmodule Hologram.Sync.LiveTest do
       edges = %{{PolicyModule1, :read} => [{:own_grants, [:viewer]}]}
       user = DB.read(Module14, context.alice)
 
-      before = Oplog.read_type_after(RoleGrant, 0, 0, %{})
+      before = Oplog.read_type_after(RoleGrant, 0, %{})
       Auth.grant_role(user, :viewer, PolicyModule1)
 
       effects =
         RoleGrant
-        |> Oplog.read_type_after(0, 0, %{})
+        |> Oplog.read_type_after(0, %{})
         |> Enum.drop(length(before))
         |> Enum.map(&Map.put(&1, :mutation_ref, nil))
 
@@ -780,18 +781,17 @@ defmodule Hologram.Sync.LiveTest do
       assert part.place == @place
     end
 
-    test "gives each replica's highest batch in a transaction above the given one", context do
+    test "gives each replica's highest batch with an entry above the given seq", context do
       project = create!(PolicyModule17, public: true)
-      batch_tx = Oplog.current_xmax() + 2
 
-      log_batch(project, batch_tx - 1, "replica_b", 3)
-      log_batch(project, batch_tx + 1, "replica_a", 8)
+      first_seq = log_batch(project, 2_000, "replica_b", 3)
+      last_seq = log_batch(project, 2_001, "replica_a", 8)
 
       effects = [
-        effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}, tx: batch_tx)
+        effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}, seq: last_seq)
       ]
 
-      part = part(effects, context.alice, context.edges, @synced, @place, batch_tx - 2)
+      part = part(effects, context.alice, context.edges, @synced, @place, first_seq - 1)
 
       assert part.overtaking_seqs == %{"replica_a" => 8, "replica_b" => 3}
     end
@@ -960,7 +960,7 @@ defmodule Hologram.Sync.LiveTest do
       project = create!(PolicyModule17, public: true)
       effect = effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"})
 
-      assert route([{100, [effect]}], @place) == :ok
+      assert route([effect], @place) == :ok
 
       refute_received {:live, _part}
     end
@@ -974,7 +974,7 @@ defmodule Hologram.Sync.LiveTest do
       Sessions.register(context.alice)
       start_forwarding_session(context.bob)
 
-      assert route([{100, [effect]}], @place) == :ok
+      assert route([effect], @place) == :ok
 
       assert_received {:live, part}
       assert part.place == @place
@@ -997,7 +997,7 @@ defmodule Hologram.Sync.LiveTest do
 
       Sessions.register(context.alice)
 
-      route([{100, [effect]}], @place)
+      route([effect], @place)
 
       assert_received {:live, part}
       assert readable_ids(part, PolicyModule17) == MapSet.new([project.id])
@@ -1017,7 +1017,7 @@ defmodule Hologram.Sync.LiveTest do
 
       Sessions.register(context.alice)
 
-      route([{100, [effect]}], @place)
+      route([effect], @place)
 
       assert_received {:live, part}
       refute Map.has_key?(part.readable, PolicyModule17)

@@ -41,9 +41,14 @@ defmodule Hologram.DB.Oplog do
   # edges, goes in as several statements.
   @max_rows_per_insert div(65_535, length(@columns))
 
+  # The columns every read of effects ends with, after the seq, op, type, id and data.
+  @event_tail ~s|"tx", "model_hash", "actor_id", "revisions", "old", "mutation_ref", "inserted_at"|
+
   @relationship_ops [:add_relationship, :del_relationship]
 
   @type log_entry :: %{inserted_at: DateTime.t(), seq: pos_integer, tx: non_neg_integer}
+
+  @type place :: {non_neg_integer, non_neg_integer, integer}
 
   # Fixed application-defined key every save holds, shared, from before it takes its first serial
   # until it ends. Frozen forever: a node reading another key would not see the saves still
@@ -137,6 +142,31 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
+  Fills the view naming this copy of the database (see `log_id/0`) when it's empty, as a
+  schema-only restore leaves it, or one that died before its last step. Reading the log id raises
+  until it's filled. A view already filled is left alone, since filling it again names a new copy.
+  """
+  @spec populate_database_copy() :: :ok
+  def populate_database_copy do
+    schema = Mapper.system_schema()
+
+    statement = """
+    DO $body$
+    BEGIN
+      IF NOT (SELECT "relispopulated" FROM pg_catalog.pg_class
+              WHERE "oid" = '"#{schema}"."database_copy"'::pg_catalog.regclass) THEN
+        REFRESH MATERIALIZED VIEW "#{schema}"."database_copy";
+      END IF;
+    END
+    $body$
+    """
+
+    {:ok, _result} = Connection.query(statement)
+
+    :ok
+  end
+
+  @doc """
   Returns the log's entry at the given seq, or nil when it holds none, with the server run it was
   read in (see `serials_in_flight/0`).
 
@@ -171,12 +201,12 @@ defmodule Hologram.DB.Oplog do
   Postgres drops a save's lock after its commit is visible, so once a save is gone from this list a
   new read sees what it wrote.
 
-  The run names one life of the server. Its row is in an unlogged table, which PostgreSQL empties
-  after a crash and leaves empty on a promoted standby, and it's read with the time the server
-  started, which a clean restart moves, and the log's file, which restoring a dump replaces. Each
-  statement reads it itself, since one statement can't
-  span a crash: two reads naming one run happened in one life of the server. Nil means the row is
-  gone, or the two reads were in different runs.
+  The run names one life of the server: the log id (see `log_id/0`), whose part a row in an
+  unlogged table gives, which PostgreSQL empties after a crash and leaves empty on a promoted
+  standby, and the time the server started, which a clean restart moves (see `run_log_id/1`). Each
+  statement reads it itself, since one statement can't span a crash: two reads naming one run
+  happened in one life of the server. Nil means the row is gone, or the two reads were in
+  different runs.
   """
   @spec serials_in_flight() :: {non_neg_integer, MapSet.t(String.t()), String.t() | nil}
   def serials_in_flight do
@@ -193,91 +223,139 @@ defmodule Hologram.DB.Oplog do
   def next_seq_sql, do: ~s|#{Mapper.quote_identifier(Mapper.system_schema())}."next_seq"()|
 
   @doc """
-  Returns the transaction id below which every transaction has finished - the upper edge of the
-  next window to read.
-
-  A transaction takes its id when it first writes, and holds it until it commits or aborts, so
-  this value cannot pass one that is still open. That is what makes the windows gap-free: a row
-  written by a transaction still in flight sits above this edge and waits for a later window,
-  rather than being passed over because a later-numbered row committed first.
+  Returns the highest serial handed out so far, 0 before the first. A save whose every serial is
+  above it took them after this was read, so nothing read before saw what it wrote.
   """
-  @spec current_xmin() :: non_neg_integer
-  def current_xmin do
-    {:ok, %Postgrex.Result{rows: [[xmin]]}} =
-      Connection.query("SELECT pg_snapshot_xmin(pg_current_snapshot())")
+  @spec last_serial() :: non_neg_integer
+  def last_serial do
+    {serial, _run} = high_serial()
 
-    xmin
+    serial
   end
 
   @doc """
-  Returns one past the highest transaction id that had finished when this is read: a transaction at
-  or above it had not finished, so nothing read before saw what it wrote. Below it a transaction
-  may or may not have been seen - the opposite bound to `current_xmin/0`'s.
-  """
-  @spec current_xmax() :: non_neg_integer
-  def current_xmax do
-    {:ok, %Postgrex.Result{rows: [[xmax]]}} =
-      Connection.query("SELECT pg_snapshot_xmax(pg_current_snapshot())")
+  Returns the id this log goes by, as 32 hex digits, or nil for a database with no marker or no
+  server run (see `serials_in_flight/0`). A place is a place in the log only beside the id it was
+  taken under.
 
-    xmax
+  The id changes whenever the server may have lost commits a client was sent: a crash and a
+  promoted standby name a new run, a restored dump a new copy of the database (see
+  `populate_database_copy/0`), a reload of the log in place a new file for it, and a database
+  dropped and claimed again, which starts its serials over, a new marker. A clean restart loses
+  nothing, and keeps it. A client holds rows up to a window past the place it claims, so only a new id
+  reaches every one that holds a lost commit, offline ones included (see `rotate_log_id/1` for a
+  loss found otherwise).
+
+  Anything else that rewrites the log's file loses nothing but changes the id too, so every client
+  is sent everything again: `VACUUM FULL`, `CLUSTER`, `TRUNCATE`, a column change that rewrites the
+  table, or moving it to another tablespace. So does refreshing the database copy's view by hand.
+  """
+  @spec log_id() :: String.t() | nil
+  def log_id do
+    {:ok, %Postgrex.Result{rows: [[log_id]]}} = Connection.query("SELECT #{log_id_sql()}")
+
+    log_id
   end
 
   @doc """
-  Returns, for each replica with a batch whose effects are in a transaction above the given one, the
-  highest sequence number among those batches - what a read after a batch of transactions up to the
-  given one can hold of each replica's writes beyond the batch. A replica with none is left out.
+  Gives the log a new id (see `log_id/0`), unless it has moved off the given one already. For a
+  server found to have lost commits under the id it kept, so every cursor issued before the loss
+  is refused. Nodes finding the same loss rotate it once between them.
+  """
+  @spec rotate_log_id(String.t()) :: :ok
+  def rotate_log_id(log_id) do
+    schema = Mapper.system_schema()
 
-  Read through the log's index on the transaction, so it costs what the transactions above the
-  given one wrote, and nothing when none did.
+    # The marker's own column, not a read of the table it updates: every update evaluating a
+    # subquery over it sees the id before any of them, so each would rotate it.
+    statement = """
+    UPDATE "#{schema}"."database"
+    SET "log_id" = gen_random_uuid()
+    WHERE #{log_id_expression(~s|"database"."log_id"|, ~s|(SELECT "run" FROM "#{schema}"."server_run")|)} = $1
+    """
+
+    {:ok, _result} = Connection.query(statement, [log_id])
+
+    :ok
+  end
+
+  @doc """
+  Returns the log id the given server run was read under (see `log_id/0`).
+  """
+  @spec run_log_id(String.t()) :: String.t()
+  def run_log_id(run) do
+    [log_id, _started_at] = String.split(run, "/")
+
+    log_id
+  end
+
+  @doc """
+  Returns whether the log holds the entry the given place names (see `place/1`), the same seq with
+  the same transaction and time. The place before the log's first entry is always held. A place
+  the log holds another entry at is one whose commit the server lost.
+  """
+  @spec holds_place?(place) :: boolean
+  def holds_place?({0, 0, 0}), do: true
+
+  def holds_place?({seq, _tx, _inserted_at} = place) do
+    statement = """
+    SELECT "seq", "tx", "inserted_at"
+    FROM "#{Mapper.system_schema()}"."oplog"
+    WHERE "seq" = $1
+    """
+
+    case Connection.query(statement, [seq]) do
+      {:ok, %Postgrex.Result{rows: [[^seq, tx, inserted_at]]}} ->
+        place(%{inserted_at: inserted_at, seq: seq, tx: tx}) == place
+
+      {:ok, %Postgrex.Result{rows: []}} ->
+        false
+    end
+  end
+
+  @doc """
+  Returns the place the given entry names: its seq, its transaction and the microsecond it was
+  written at, which together tell it from a later entry given the same seq after the server lost
+  the first's commit. No entry is the place before the log's first, `{0, 0, 0}`.
+  """
+  @spec place(log_entry | nil) :: place
+  def place(nil), do: {0, 0, 0}
+
+  def place(%{seq: seq, tx: tx, inserted_at: inserted_at}) do
+    {seq, tx, DateTime.to_unix(inserted_at, :microsecond)}
+  end
+
+  @doc """
+  Returns, for each replica with a batch with an effect above the given seq, the highest sequence
+  number among those batches - what a read after a batch of effects up to the given seq can hold of
+  each replica's writes beyond the batch. A replica with none is left out. Every committed effect
+  counts, also one above a serial a save still running holds.
+
+  Read through the log's key, so it costs what was written above the given seq, and nothing when
+  nothing was.
   """
   @spec replica_seqs_after(non_neg_integer) :: %{String.t() => non_neg_integer}
-  def replica_seqs_after(tx) do
+  def replica_seqs_after(seq) do
     statement = """
     SELECT "mutation_ref"->>'replica_id', max(("mutation_ref"->>'seq')::bigint)
     FROM "#{Mapper.system_schema()}"."oplog"
-    WHERE "tx" > $1 AND "mutation_ref" IS NOT NULL
+    WHERE "seq" > $1 AND "mutation_ref" IS NOT NULL
     GROUP BY 1
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [tx])
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [seq])
 
     Map.new(rows, fn [replica_id, seq] -> {replica_id, seq} end)
   end
 
   @doc """
-  Returns the place of the oldest effect the log still holds, or nil when it holds none.
+  Returns at most `limit` effects with a seq above the given one, in seq order.
 
-  What it answers is whether a returning client's place is one the log can speak for. Every effect
-  since the log was created is still here, so the only place older than this one is a cursor from
-  before it existed - and what such a client missed cannot be told, which leaves sending it
-  everything as the one honest answer.
-  """
-  @spec oldest_place() :: {non_neg_integer, non_neg_integer} | nil
-  def oldest_place do
-    statement = """
-    SELECT "tx", "seq"
-    FROM "#{Mapper.system_schema()}"."oplog"
-    ORDER BY "tx", "seq"
-    LIMIT 1
-    """
-
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
-
-    case rows do
-      [[tx, seq]] -> {tx, seq}
-      [] -> nil
-    end
-  end
-
-  @doc """
-  Returns at most `limit` effects written after the given place, in the order a reader is told
-  about them.
-
-  The order is the windowed read's own - by transaction, then by insert order within it - so a
-  place names the same point for a returning client as it did for a connected one. Everything here
-  is committed, but a transaction below an effect returned can still be open and commit after - so
-  a caller dating a place by what this returns reads the edge every finished transaction is below
-  first (see `current_xmin/0` and `Hologram.Sync.Catchup.gap/4`).
+  The order is the windowed read's own, so a place names the same point for a returning client as
+  it did for a connected one. Everything here is committed, but a serial below an effect returned
+  can belong to a save still running, which commits after - so a caller dating a place by what this
+  returns takes the final limit before (see `Hologram.Sync.FinalLimit` and
+  `Hologram.Sync.Catchup.gap/4`).
 
   The limit is not a page - nothing here resumes from where it stopped. It is what keeps a reader
   from pulling an unbounded tail into memory, and a caller that gets `limit` rows back should treat
@@ -296,45 +374,44 @@ defmodule Hologram.DB.Oplog do
 
   Effects arrive flat rather than grouped, so that the count stays that bound.
   """
-  @spec read_after(non_neg_integer, non_neg_integer, pos_integer) :: list(map)
-  def read_after(tx, seq, limit) do
+  @spec read_after(non_neg_integer, pos_integer) :: list(map)
+  def read_after(seq, limit) do
     statement = """
     SELECT "seq", "op", "type", "entity_id",
            CASE WHEN "op" IN ('add_relationship', 'del_relationship') THEN "data" END AS "data",
-           "tx", "model_hash", "actor_id", "revisions", "old", "mutation_ref"
+           #{@event_tail}
     FROM "#{Mapper.system_schema()}"."oplog"
-    WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
-    ORDER BY "tx", "seq"
-    LIMIT $3
+    WHERE "seq" > $1
+    ORDER BY "seq"
+    LIMIT $2
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [tx, seq, limit])
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [seq, limit])
 
     Enum.map(rows, &event/1)
   end
 
   @doc """
-  Returns how many effects were written after the given place, counting no further than `limit`,
+  Returns how many effects have a seq above the given one, counting no further than `limit`,
   and whether any of the ones counted was written under a model other than the given hash's - the
   two things a returning client's resume is decided by, in one statement, with none of the effects
   read back.
   """
-  @spec count_after(non_neg_integer, non_neg_integer, pos_integer, String.t()) ::
-          {non_neg_integer, boolean}
-  def count_after(tx, seq, limit, model_hash) do
+  @spec count_after(non_neg_integer, pos_integer, String.t()) :: {non_neg_integer, boolean}
+  def count_after(seq, limit, model_hash) do
     statement = """
-    SELECT count(*), coalesce(bool_or("model_hash" <> $4), false)
+    SELECT count(*), coalesce(bool_or("model_hash" <> $3), false)
     FROM (
       SELECT "model_hash"
       FROM "#{Mapper.system_schema()}"."oplog"
-      WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
-      ORDER BY "tx", "seq"
-      LIMIT $3
+      WHERE "seq" > $1
+      ORDER BY "seq"
+      LIMIT $2
     ) AS "gap"
     """
 
     {:ok, %Postgrex.Result{rows: [[count, other_model?]]}} =
-      Connection.query(statement, [tx, seq, limit, model_hash])
+      Connection.query(statement, [seq, limit, model_hash])
 
     {count, other_model?}
   end
@@ -344,7 +421,7 @@ defmodule Hologram.DB.Oplog do
   values as the write encoded them. Every effect is stored with one (see `append/1`), so only a seq
   the log doesn't hold is left out.
 
-  What `read_after/3` leaves behind, read back for a few effects at a time: a caller holding a gap
+  What `read_after/2` leaves behind, read back for a few effects at a time: a caller holding a gap
   counted without its payloads fills them in for the part of it it is working on, so it never holds
   every payload of a long gap at once.
   """
@@ -365,7 +442,7 @@ defmodule Hologram.DB.Oplog do
 
   @doc """
   Returns whether the stored data of any effect of the given seqs holds every pair of the given
-  match, as `read_type_after/4` matches data - without reading any of it back. A seq the log doesn't
+  match, as `read_type_after/3` matches data - without reading any of it back. A seq the log doesn't
   hold matches nothing, and no seqs match nothing.
 
   For a question about a few effects of a gap of any size, answered without the payloads the gap
@@ -388,12 +465,12 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
-  Returns the effects written to rows of the given entity type since the given place, whose stored
-  data holds every pair of `data_match` - in place order, and carrying the data each was written
-  with. An empty match takes every effect of the type.
+  Returns the effects written to rows of the given entity type with a seq above the given one, whose
+  stored data holds every pair of `data_match` - in seq order, and carrying the data each was
+  written with. An empty match takes every effect of the type.
 
-  What one type's rows have been through since a place, where `read_after/3` answers WHICH rows
-  moved across every type. The payload is read here, which `read_after/3` deliberately does not
+  What one type's rows have been through since a place, where `read_after/2` answers WHICH rows
+  moved across every type. The payload is read here, which `read_after/2` deliberately does not
   do: this exists for a caller reconstructing what a small, insert-and-delete-only type held, and
   the values are the whole point of asking.
 
@@ -407,19 +484,16 @@ defmodule Hologram.DB.Oplog do
   An op or entity type this node does not know stays the label it was written with, exactly as
   `read_window/2` leaves it.
   """
-  @spec read_type_after(module, non_neg_integer, non_neg_integer, map) :: list(map)
-  def read_type_after(entity_type, tx, seq, data_match) do
+  @spec read_type_after(module, non_neg_integer, map) :: list(map)
+  def read_type_after(entity_type, seq, data_match) do
     statement = """
-    SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions",
-           "old", "mutation_ref"
+    SELECT "seq", "op", "type", "entity_id", "data", #{@event_tail}
     FROM "#{Mapper.system_schema()}"."oplog"
-    WHERE "type" = $1
-      AND ("tx" > $2 OR ("tx" = $2 AND "seq" > $3))
-      AND "data" @> $4::jsonb
-    ORDER BY "tx", "seq"
+    WHERE "type" = $1 AND "seq" > $2 AND "data" @> $3::jsonb
+    ORDER BY "seq"
     """
 
-    params = [Codec.encode_enum_value(entity_type), tx, seq, data_match]
+    params = [Codec.encode_enum_value(entity_type), seq, data_match]
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, params)
 
@@ -427,36 +501,32 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
-  Returns the effects written by transactions from `last_xmin` up to but excluding `current_xmin`,
-  grouped into `{transaction id, effects}` pairs and ordered by transaction and then by insert
-  order, so a transaction's effects arrive together and in the order they happened.
+  Returns the effects with a seq above `after_seq` and at or below `through_seq`, in seq order.
+  Read up to a final limit (see `Hologram.Sync.FinalLimit`), the window holds every effect that
+  will ever have a seq in it.
 
-  The order across transactions is stable but is NOT commit order - a transaction that committed
-  later can carry a smaller id. Nothing may materialize state by folding these in order: they say
-  which entity types and attributes a transaction touched, and a reader wanting values reads the
-  rows themselves.
+  The order is NOT commit order - a save takes its serials as it writes, and one that committed
+  later can hold smaller ones. Nor does a window hold a save whole: a save's later serials can be
+  above the limit. Nothing may materialize state by folding these in order: they say which entity
+  types and attributes a save touched, and a reader wanting values reads the rows themselves.
 
   An op or entity type this node does not know stays the label it was written with, and data keys
   stay strings, as do the keys of the revisions and the old references, because a peer running a
   newer build can write names this node has never heard of - names that match nothing here, which
   is exactly what they should do.
   """
-  @spec read_window(non_neg_integer, non_neg_integer) :: list({non_neg_integer, list(map)})
-  def read_window(last_xmin, current_xmin) do
+  @spec read_window(non_neg_integer, non_neg_integer) :: list(map)
+  def read_window(after_seq, through_seq) do
     statement = """
-    SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions",
-           "old", "mutation_ref"
+    SELECT "seq", "op", "type", "entity_id", "data", #{@event_tail}
     FROM "#{Mapper.system_schema()}"."oplog"
-    WHERE "tx" >= $1 AND "tx" < $2
-    ORDER BY "tx", "seq"
+    WHERE "seq" > $1 AND "seq" <= $2
+    ORDER BY "seq"
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [last_xmin, current_xmin])
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [after_seq, through_seq])
 
-    rows
-    |> Enum.map(&event/1)
-    |> Enum.chunk_by(& &1.tx)
-    |> Enum.map(fn [%{tx: tx} | _rest] = events -> {tx, events} end)
+    Enum.map(rows, &event/1)
   end
 
   defp attribute_type(entity_type, name) do
@@ -515,12 +585,14 @@ defmodule Hologram.DB.Oplog do
          actor_id,
          revisions,
          old,
-         mutation_ref
+         mutation_ref,
+         inserted_at
        ]) do
     %{
       actor_id: Codec.decode(actor_id, :uuid),
       data: data,
       entity_id: Codec.decode(entity_id, :uuid),
+      inserted_at: inserted_at,
       model_hash: model_hash,
       mutation_ref: mutation_ref,
       old: old,
@@ -619,15 +691,29 @@ defmodule Hologram.DB.Oplog do
     end
   end
 
-  # The start time as a number, since its text form follows each session's settings, and the log's
-  # file, which a restored dump replaces while the server keeps running.
-  defp run_sql do
+  # The copy of the database names a restored dump, into this cluster or another, which carries the
+  # marker and the run over and can land the log on the same file. The log's file names a reload
+  # in place, a data-only one into the truncated tables leaving the copy as it was.
+  defp log_id_expression(marker_id, run) do
     schema = Mapper.system_schema()
 
-    ~s|(SELECT "run"::text \|\| '/' \|\| | <>
-      ~s|(extract(epoch FROM pg_catalog.pg_postmaster_start_time()) * 1000000)::bigint::text | <>
-      ~s|\|\| '/' \|\| pg_catalog.pg_relation_filenode('"#{schema}"."oplog"'::pg_catalog.regclass)::text | <>
-      ~s|FROM "#{schema}"."server_run")|
+    ~s|md5(replace(#{marker_id}::text, '-', '') \|\| '/' \|\| #{run}::text \|\| '/' \|\| | <>
+      ~s|(SELECT "id" FROM "#{schema}"."database_copy")::text \|\| '/' \|\| | <>
+      ~s|pg_catalog.pg_relation_filenode('"#{schema}"."oplog"'::pg_catalog.regclass)::text)|
+  end
+
+  defp log_id_sql do
+    schema = Mapper.system_schema()
+
+    ~s|(SELECT #{log_id_expression(~s|"database"."log_id"|, ~s|"server_run"."run"|)} | <>
+      ~s|FROM "#{schema}"."database" CROSS JOIN "#{schema}"."server_run")|
+  end
+
+  # The log id and the start time as a number, since its text form follows each session's
+  # settings: a clean restart keeps the log id and starts a new run.
+  defp run_sql do
+    ~s|(#{log_id_sql()} \|\| '/' \|\| | <>
+      ~s|(extract(epoch FROM pg_catalog.pg_postmaster_start_time()) * 1000000)::bigint::text)|
   end
 
   # An advisory key of 64 bits shows in pg_locks as its high and low halves, and is scoped to one

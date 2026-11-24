@@ -1,8 +1,11 @@
 defmodule Hologram.Sync.Cursor do
   @moduledoc false
 
-  # Where a client got to in the oplog, under which rules and with which entity types synced, as a
-  # string it stores and hands back without reading. The rules ride along because a deploy can
+  # Where a client got to in the oplog, in which log, under which rules and with which entity types
+  # synced, as a string it stores and hands back without reading. The place is an entry's seq, with
+  # its transaction and the time it was written, which tell it from another entry given the same seq
+  # after the server lost the first's commit. The log id tells this log from one a dropped database
+  # was claimed again with, whose serials start over. The rules ride along because a deploy can
   # change them without moving a row: what a client holds at a place is what those rules let it
   # see, not what the current ones do. The types ride along for the same reason - a deploy that
   # starts syncing a type moves no row of it, and a client filled before holds none.
@@ -21,42 +24,47 @@ defmodule Hologram.Sync.Cursor do
   # would have answered "send everything again" raises instead, on a connection whose 200 has
   # already gone out.
 
-  # What the log's own columns hold: `tx` is an xid8, `seq` a bigserial. A place beyond either is
-  # one no row could carry, so it is unreadable in the only sense that matters.
+  # What the log's own columns hold: `tx` is an xid8, `seq` a bigint, the time a timestamptz read as
+  # microseconds, which fits a bigint. A place beyond any is one no row could carry, so it is
+  # unreadable in the only sense that matters.
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.DB.Codec
+  alias Hologram.DB.Oplog
 
-  @max_seq 9_223_372_036_854_775_807
+  @max_bigint 9_223_372_036_854_775_807
   @max_tx 18_446_744_073_709_551_615
 
   @doc """
-  Returns the cursor naming the given place in the log, under the rules with the given policy hash
+  Returns the cursor naming the given place (see `Hologram.DB.Oplog.place/1`) in the log with the
+  given id (see `Hologram.DB.Oplog.log_id/0`), under the rules with the given policy hash
   (see `Hologram.Policy.hash/1`) - the rules the rows a client holds there were judged by - and
   with the given types hash (see `types_hash/3`), naming the entity types sync sends and the model
   the rows were read under. A place is only worth resuming from under the rules that decided what
   it holds, with the types it was filled with, under the model it was filled under.
   """
-  @spec encode(non_neg_integer, non_neg_integer, String.t(), String.t()) :: String.t()
-  def encode(tx, seq, policy_hash, types_hash) do
-    "#{tx}.#{seq}.#{policy_hash}.#{types_hash}"
+  @spec encode(Oplog.place(), String.t(), String.t(), String.t()) :: String.t()
+  def encode({seq, tx, inserted_at}, log_id, policy_hash, types_hash) when is_binary(log_id) do
+    "#{seq}.#{tx}.#{inserted_at}.#{log_id}.#{policy_hash}.#{types_hash}"
   end
 
   @doc """
-  Returns the place the given cursor names, the policy hash it was judged under and the types hash
-  it was filled with, or `:error` for one this build cannot read - which includes a place no row of
-  the log could carry, since the columns it would be compared against have ceilings and an Elixir
-  integer does not, and a cursor naming no rules or no types, as one written before cursors named
-  them does.
+  Returns the place the given cursor names, the id of the log it is in, the policy hash it was
+  judged under and the types hash it was filled with, or `:error` for one this build cannot read -
+  which includes a place no row of the log could carry, since the columns it would be compared
+  against have ceilings and an Elixir integer does not, and a cursor naming no log, no rules or no
+  types, as one written before cursors named them does.
   """
-  @spec decode(term) ::
-          {:ok, non_neg_integer, non_neg_integer, String.t(), String.t()} | :error
+  @spec decode(term) :: {:ok, Oplog.place(), String.t(), String.t(), String.t()} | :error
   def decode(cursor) when is_binary(cursor) do
-    with [tx, seq, policy_hash, types_hash] <- String.split(cursor, "."),
-         {tx, ""} <- Integer.parse(tx),
+    with [seq, tx, inserted_at, log_id, policy_hash, types_hash] <- String.split(cursor, "."),
          {seq, ""} <- Integer.parse(seq),
-         true <- in_range?(tx, @max_tx) and in_range?(seq, @max_seq),
+         {tx, ""} <- Integer.parse(tx),
+         {inserted_at, ""} <- Integer.parse(inserted_at),
+         true <- in_range?(seq, @max_bigint) and in_range?(tx, @max_tx),
+         true <- in_range?(inserted_at, @max_bigint),
+         true <- String.match?(log_id, ~r/\A[0-9a-f]{32}\z/),
          true <- hex?(policy_hash) and hex?(types_hash) do
-      {:ok, tx, seq, policy_hash, types_hash}
+      {:ok, {seq, tx, inserted_at}, log_id, policy_hash, types_hash}
     else
       _unreadable -> :error
     end

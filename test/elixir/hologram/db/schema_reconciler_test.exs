@@ -503,6 +503,22 @@ defmodule Hologram.DB.SchemaReconcilerTest do
              ]
     end
 
+    test "names this copy of the database in a view a restore fills again" do
+      drop_hologram_schemas()
+      {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
+
+      assert create_system_tables() == :ok
+
+      statement = """
+      SELECT c.relispopulated
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'hologram_system' AND c.relname = 'database_copy' AND c.relkind = 'm'
+      """
+
+      assert {:ok, %{rows: [[true]]}} = Connection.query(statement)
+    end
+
     test "gives the oplog the indexes reading it forward and by time need" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
@@ -527,9 +543,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       # kept for the history-by-time read that comes next.
       assert rows == [
                ["oplog_inserted_at_$idx", "brin", "inserted_at"],
-               ["oplog_pkey", "btree", "seq"],
-               ["oplog_tx_seq_$idx", "btree", "tx"],
-               ["oplog_tx_seq_$idx", "btree", "seq"]
+               ["oplog_pkey", "btree", "seq"]
              ]
     end
 
