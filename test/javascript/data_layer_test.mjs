@@ -2106,4 +2106,28 @@ describe("DataLayer", () => {
       sinon.assert.calledOnceWithExactly(flushing);
     });
   });
+
+  describe("streamBeat()", () => {
+    it("wakes the sender when the queue is empty", () => {
+      const flushing = sinon.stub(Batches, "flush");
+
+      sinon.stub(Batches, "pendingCount").returns(0);
+
+      DataLayer.streamBeat();
+
+      sinon.assert.calledOnceWithExactly(flushing);
+    });
+
+    // A beat must never send a batch again: it would cut a retry's backoff short, and repeat a send
+    // that raised.
+    it("leaves a queue holding batches alone", () => {
+      const flushing = sinon.stub(Batches, "flush");
+
+      sinon.stub(Batches, "pendingCount").returns(1);
+
+      DataLayer.streamBeat();
+
+      sinon.assert.notCalled(flushing);
+    });
+  });
 });

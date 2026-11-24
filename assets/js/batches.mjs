@@ -43,6 +43,12 @@ export default class Batches {
   // TODO: filled when the sender loop records a refusal.
   static rejected = [];
 
+  // The numbers of the batches this tab has heard answered, whether or not it held them: an answer
+  // can reach a tab before the message announcing the batch does. Kept for the life of the page,
+  // because that message can arrive after the store has let go of the batch, so the store can't
+  // say the batch was ever there.
+  static #answered = new Set();
+
   // The batch of the action running right now, and nothing when no action is - a write outside an
   // action has nowhere to belong.
   // The tries a batch nobody answered has had so far, which is what the next delay is computed
@@ -82,10 +88,12 @@ export default class Batches {
   // row an earlier one created.
   //
   // Passed over three ways. A batch this tab already holds - its own, or one adopted twice - would
-  // otherwise be folded and sent twice. A batch of ANOTHER user is left where it is, since the
-  // server applies a batch under the user of the session that sends it, and the page mounted under
-  // its owner is what will take it up. And in both cases the counter still follows it: `#seq` is
-  // what this tab has SEEN, so a number spent by another tab is a number this one will not spend.
+  // otherwise be folded and sent twice. A batch already answered would be too, and its writes
+  // promoted over a base that has them: the message announcing a batch can arrive after its answer.
+  // A batch of ANOTHER user is left where it is, since the server applies a batch under the user of
+  // the session that sends it, and the page mounted under its owner is what will take it up. And in
+  // every case the counter still follows it: `#seq` is what this tab has SEEN, so a number spent by
+  // another tab is a number this one will not spend.
   //
   // The CLOCK follows the writes it takes, for the same reason it follows a frame's revisions: a
   // batch this tab seals next may name a row one of these wrote, and its `based_on` for that column
@@ -104,7 +112,12 @@ export default class Batches {
 
       const held = Batches.pending.some((batch) => batch.seq === record.seq);
 
-      if (held || record.actorUserId !== owner) {
+      if (
+        held ||
+        record.actorUserId !== owner ||
+        Batches.#answered.has(record.seq) ||
+        Durability.wasAnswered(record.seq)
+      ) {
         continue;
       }
 
@@ -117,7 +130,7 @@ export default class Batches {
       }
 
       Batches.pending.push(batch);
-      Overlay.push(batch);
+      Overlay.insert(batch);
 
       taken = true;
     }
@@ -293,22 +306,39 @@ export default class Batches {
     try {
       while (true) {
         // The queue as the STORE holds it, before every send rather than once: any tab can file a
-        // batch, and the message saying so can be missed by a tab that was starting up or never
-        // sent at all by a tab that closed straight after filing. Reading it back is reading it in
-        // number order, so what ships is the order the batches were made in whatever order this
-        // tab heard about them.
-        Batches.adopt(await Durability.batchesAbove(Batches.#seq));
+        // batch, and the message saying so can arrive late, be missed by a tab that was starting
+        // up or never be sent by a tab that closed straight after filing. So what ships is the
+        // order the batches were made in, whatever order this tab heard about them.
+        //
+        // The read starts once the head is filed, and that is what makes it enough. The store hands
+        // out numbers inside transactions it runs one at a time, so by the time a batch is filed
+        // every lower number is too, and this read sees them all. Started earlier, it could miss a
+        // batch another tab filed just ahead of the head. Only below the head, since nothing above
+        // it can go first: a batch above is found once the queue has drained down to it.
+        //
+        // Also what keeps a batch from going out under a number this browser could hand out again
+        // after a reload: it is written down before it leaves.
+        const head = Batches.pending[0];
+
+        await head?.recorded;
+
+        Batches.#takeUp(await Durability.queuedBatches(head?.seq ?? null));
 
         const batch = Batches.pending[0];
+
+        // The read found a lower batch, this one joined the queue while it ran, or the head left
+        // it. Either way the read says nothing about what goes next, so another one does: with no
+        // head it reads the whole queue, which is what finds a batch above the one that left.
+        if (batch !== head) {
+          continue;
+        }
 
         if (batch === undefined) {
           return;
         }
 
-        // Before anything leaves: a batch may not be answered under a number this browser could
-        // hand out again after a reload, nor under an identity still on its way to the store (see
+        // Nothing leaves under an identity still on its way to the store (see
         // Durability.replicaWritten).
-        await batch.recorded;
         await Durability.replicaWritten();
 
         // Either wait is long enough for the batch to be let go of (see disown) or answered through
@@ -383,8 +413,17 @@ export default class Batches {
         // the way in: the queue is still taken up, so a batch another tab filed is on this tab's
         // screen too, and a stop that arrives while a send is out stops the drain behind it.
         if (SyncStream.holdsWrites()) {
+          await Batches.#takeUpWhileHeld();
+
           return;
         }
+
+        // Told to every tab here, by the tab sending it, whoever filed it. The filing tab's own
+        // message can be late or never come, and a tab hearing a frame or an answer about a batch
+        // it doesn't hold can't tell what it already has: it would apply the write again over rows
+        // that hold it. Frames and answers reach the other tabs from this tab too, after this, and
+        // one tab's messages arrive in order.
+        Tabs.postNow({kind: "sealed", record: batch.record()});
 
         batch.mark("sending");
 
@@ -453,6 +492,10 @@ export default class Batches {
             `Hologram: batch ${batch.seq} was not answered (${answer.httpStatus}) - it stays pending and goes again shortly, on the next write, or on reconnect`,
           );
 
+          // Before the retry is set: one firing during this read would find the sender busy and
+          // be lost.
+          await Batches.#takeUpWhileHeld();
+
           Batches.#scheduleRetry();
 
           return;
@@ -475,6 +518,8 @@ export default class Batches {
 
           SyncStream.receiveFrame("sync_reload", frame);
           SyncStream.tell("sync_reload", frame);
+
+          await Batches.#takeUpWhileHeld();
 
           return;
         }
@@ -643,6 +688,7 @@ export default class Batches {
 
     Batches.pending = [];
     Batches.rejected = [];
+    Batches.#answered = new Set();
     Batches.#retryAttempts = 0;
     Batches.#running = null;
     Batches.#seq = 0;
@@ -654,11 +700,14 @@ export default class Batches {
   //
   // Written once and reached two ways: by the tab that sent the batch, and by every other tab of
   // the browser, which holds the same batch and is told the verdict. A tab that does not hold it -
-  // one that never took it up, or took it up and has already settled it - has nothing to do.
+  // one that never took it up, or took it up and has already settled it - only keeps the number,
+  // so the message announcing that batch doesn't bring it back if it arrives after this.
   //
   // Named by NUMBER rather than by the batch, because the batch a message reaches is not the object
   // the sender holds: it is that tab's own copy, built from the same record.
   static settle(seq, answer) {
+    Batches.#answered.add(seq);
+
     const batch = Batches.pending.find((held) => held.seq === seq);
 
     if (batch === undefined) {
@@ -819,6 +868,26 @@ export default class Batches {
 
       return left.seq - right.seq;
     });
+  }
+
+  // What a read of the store found, taken up and told to the other tabs, which may never hear of
+  // it from the tab that filed it. Only what's new, because a queue retrying while offline reads
+  // the store every few seconds.
+  static #takeUp(records) {
+    const held = new Set(Batches.pending);
+
+    Batches.adopt(records);
+
+    for (const batch of Batches.pending) {
+      if (!held.has(batch)) {
+        Tabs.postNow({kind: "sealed", record: batch.record()});
+      }
+    }
+  }
+
+  // For a queue that is about to stop, which doesn't drain down to what's above its head.
+  static async #takeUpWhileHeld() {
+    Batches.#takeUp(await Durability.queuedBatches());
   }
 
   // A network failure and a status carrying no verdict are the same thing to this loop: nobody

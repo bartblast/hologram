@@ -183,6 +183,22 @@ export default class Overlay {
     Overlay.remove(batch);
   }
 
+  // For a numbered batch taken up from elsewhere, which can arrive after a higher one: a row folds
+  // through the batches in this order, and the late one can hold the create the other updates.
+  //
+  // Right after the last LOWER number, since that's the batch it can build on. The numbers here
+  // aren't in order themselves: a batch takes its place when it opens and its number later. A batch
+  // with no number stays above it, since it has never left this tab, ships after this one, and its
+  // action can still write to a row this one creates.
+  static insert(batch) {
+    const index =
+      Overlay.#batches.findLastIndex(
+        (held) => held.seq !== null && held.seq < batch.seq,
+      ) + 1;
+
+    Overlay.#batches.splice(index, 0, batch);
+  }
+
   static push(batch) {
     Overlay.#batches.push(batch);
   }
