@@ -458,7 +458,7 @@ defmodule Hologram.Policy.ExpressionTest do
 
     test "raises on new() in a to: reference listed with other roles" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:12: to reads the stored row, got: {:member, new(project)} - a role on the row a change leads to goes in when: has_role(:member, new(project)) on a copy of this line with the role taken out of to:, since to: holds on any one of its roles",
+                   "lib/my_app/policies.ex:12: to reads the stored row, got: {:member, new(project)} - a role on the row a change leads to goes in when: has_role(:member, new(project)) on a copy of this line with no to:, while this line keeps the other roles in to:, since to: holds on any one of its roles",
                    fn -> lower_spec("[to: [:admin, {:member, new(project)}]]") end
     end
 
