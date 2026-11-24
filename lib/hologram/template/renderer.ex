@@ -557,6 +557,29 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
+  Returns the session user's row as the given user sees it, spelled the way a page carries its rows
+  (see `Hologram.Sync.Carry.take/1`), or nil when there's no row to carry: nobody is signed in, the
+  app designates no user entity type, the id isn't an entity id, or the user's read rules deny the
+  row. On a build checking permissions on the client, the rows its type's rules read through
+  relationships come with it.
+
+  Read the way a page reads the row it hands its components as `{Hologram, :user}`, for a stream
+  telling a tab that its session changed user, so the tab holds the new user's row before its
+  stream fills it. Called outside a render: it clears the rows the process gathered before it reads,
+  and takes the ones its read gathers.
+  """
+  @spec session_user_rows(Server.identity_id() | nil) :: map | nil
+  def session_user_rows(user_id) do
+    Carry.discard()
+
+    # Checks the id before the data model, which raises while a live reload holds it.
+    with id when id != nil <- Auth.canonical_id(user_id),
+         row when row != nil <- read_session_user(RoleGrant.user_entity(), id) do
+      Carry.take(id)
+    end
+  end
+
+  @doc """
   Renders the given DOM into an evaluated tree: expressions evaluated, components flattened into
   the nodes their templates render, slots expanded, attribute values collapsed to single strings.
   Text and attribute values are held unescaped - escaping is a projection concern, and belongs to

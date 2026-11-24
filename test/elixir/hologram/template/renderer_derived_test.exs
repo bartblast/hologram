@@ -1321,4 +1321,83 @@ defmodule Hologram.Template.RendererDerivedTest do
       assert String.contains?(html, "current user = none")
     end
   end
+
+  # What a stream tells a tab whose session changed user.
+  describe "session_user_rows/1" do
+    setup do
+      setup_page_rendering([{Module131, :dummy_module_131_digest}])
+
+      :ok
+    end
+
+    test "spells the session user's row the way a page carries it" do
+      user =
+        %{email: "renderer_7@example.com", password_hash: "hash_2mPx"}
+        |> Module14.new()
+        |> DB.create!()
+
+      assert %{put_entity: %{"Hologram.Test.Fixtures.Entity.Module14" => [row]}} =
+               session_user_rows(user.id)
+
+      assert row.id == user.id
+      assert row.email == "renderer_7@example.com"
+      refute Map.has_key?(row, :password_hash)
+    end
+
+    test "carries the row the page would" do
+      user =
+        %{email: "renderer_8@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      %{mount_data: mount_data} =
+        render_page(Module131, %{}, %Server{user_id: user.id}, @page_opts)
+
+      assert session_user_rows(user.id) == mount_data.sync_rows
+    end
+
+    test "leaves nothing gathered behind" do
+      user =
+        %{email: "renderer_9@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      session_user_rows(user.id)
+
+      assert Carry.take(user.id) == %{}
+    end
+
+    # A stream's process never renders, so nothing else clears what an earlier read that raised
+    # gathered, and those rows were read for another user.
+    test "carries none of the rows gathered before it" do
+      user =
+        %{email: "renderer_10@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      other_user =
+        %{email: "renderer_11@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      Carry.collect(other_user)
+
+      assert %{put_entity: %{"Hologram.Test.Fixtures.Entity.Module14" => [row]}} =
+               session_user_rows(user.id)
+
+      assert row.id == user.id
+    end
+
+    test "answers nil for an anonymous session" do
+      assert session_user_rows(nil) == nil
+    end
+
+    test "answers nil when no row carries the session user id" do
+      assert session_user_rows(Entity.generate_id()) == nil
+    end
+
+    test "answers nil for a session user id that is not a canonical entity id" do
+      assert session_user_rows(7) == nil
+    end
+  end
 end

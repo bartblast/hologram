@@ -1,6 +1,7 @@
 defmodule Hologram.Realtime.SSETest do
   use Hologram.Test.BasicCase, async: false
 
+  import ExUnit.CaptureLog
   import Hologram.Realtime.SSE
   import Hologram.Test.Stubs
   import Mox
@@ -1448,6 +1449,62 @@ defmodule Hologram.Realtime.SSETest do
 
       assert Regex.scan(~r/^event: (\w+)$/m, resynced_conn.resp_body, capture: :all_but_first) ==
                [["sync_identity"], ["sync_resync"]]
+    end
+
+    # A raise would end the stream, and the tab would never hear of the change. This suite stands
+    # up no query cache, so the read of a user's row raises.
+    test "tells the client without the user's row when reading it fails" do
+      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      send(self(), {:identity_changed, "session-1", user_id, "1.tag"})
+
+      log =
+        capture_log(fn ->
+          assert {:cont, updated_conn, _session_id, _user_id, nil} =
+                   process_message(conn, "session-1", 7)
+
+          send(self(), {:updated_conn, updated_conn})
+        end)
+
+      assert_received {:updated_conn, updated_conn}
+
+      assert "event: sync_identity\nid: " <> rest = updated_conn.resp_body
+      [_match, data] = Regex.run(~r/\A\d+\ndata: (.*)\n\n\z/, rest)
+
+      assert %{"actor_entity_id" => ^user_id, "identity_tag" => "1.tag"} =
+               payload = Jason.decode!(data)
+
+      refute Map.has_key?(payload, "user_row")
+
+      assert log =~ "reading the session user's row failed"
+    end
+
+    # The stream's fill after the hold brings the row, for a type the tab syncs.
+    test "tells the client without the user's row while the data model is held" do
+      on_exit(&Model.release/0)
+
+      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      Model.hold()
+      send(self(), {:identity_changed, "session-1", user_id, "1.tag"})
+
+      log =
+        capture_log(fn ->
+          assert {:cont, updated_conn, _session_id, _user_id, nil} =
+                   process_message(conn, "session-1", 7)
+
+          send(self(), {:updated_conn, updated_conn})
+        end)
+
+      assert_received {:updated_conn, updated_conn}
+
+      assert "event: sync_identity\nid: " <> rest = updated_conn.resp_body
+      [_match, data] = Regex.run(~r/\A\d+\ndata: (.*)\n\n\z/, rest)
+
+      payload = Jason.decode!(data)
+
+      refute Map.has_key?(payload, "user_row")
+      assert log == ""
     end
 
     test "carries the new identity in the return tuple" do

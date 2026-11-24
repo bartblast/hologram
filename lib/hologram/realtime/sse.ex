@@ -1,6 +1,8 @@
 defmodule Hologram.Realtime.SSE do
   @moduledoc false
 
+  require Logger
+
   alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Component.Action
@@ -25,6 +27,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Sync.Handshake, as: SyncHandshake
   alias Hologram.Sync.Rules
   alias Hologram.Sync.Session, as: SyncSession
+  alias Hologram.Template.Renderer
 
   # Read only when the host app enables the test seams - see maybe_delay_attach/1.
   @attach_delay_cookie "hologram_sse_attach_delay_ms"
@@ -1294,12 +1297,38 @@ defmodule Hologram.Realtime.SSE do
   # change's.
   defp tell_identity(conn, user_id, identity_tag) do
     id = System.unique_integer([:positive, :monotonic])
-    chunk_data = Frame.encode_identity_envelope(id, user_id, identity_tag)
+
+    chunk_data =
+      Frame.encode_identity_envelope(id, user_id, identity_tag, read_user_rows(user_id))
 
     case Plug.Conn.chunk(conn, chunk_data) do
       {:ok, conn} -> {:cont, conn}
       {:error, _reason} -> {:halt, conn}
     end
+  end
+
+  # The new user's row, which the tab's pages read as `{Hologram, :user}`. A failed read sends the
+  # event without it, since a raise would end the stream and the tab would never hear of the
+  # change. The tab then holds the row once its stream fills it or its next page carries it.
+  defp read_user_rows(user_id) do
+    Renderer.session_user_rows(user_id)
+  rescue
+    # A live reload holds the data model, which is no failure.
+    StaleModelError ->
+      nil
+
+    exception ->
+      Logger.warning(
+        "Hologram: reading the session user's row failed: " <> Exception.message(exception)
+      )
+
+      nil
+  catch
+    # A database pool that's down exits rather than raises.
+    :exit, reason ->
+      Logger.warning("Hologram: reading the session user's row failed: " <> inspect(reason))
+
+      nil
   end
 
   defp watch_client(conn, adapter) do

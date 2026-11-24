@@ -564,12 +564,12 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
-  describe "encode_identity_envelope/3" do
+  describe "encode_identity_envelope/4" do
     test "wraps who the session is now in a sync_identity SSE event envelope" do
       user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
 
       assert "event: sync_identity\nid: 42\ndata: " <> data =
-               encode_identity_envelope(42, user_id, "1.tag")
+               encode_identity_envelope(42, user_id, "1.tag", nil)
 
       assert Jason.decode!(data) == %{
                "actor_entity_id" => user_id,
@@ -582,15 +582,39 @@ defmodule Hologram.Sync.FrameTest do
     # The browser keys its store by the owner key, so an id past 2^53 or an integer and the same
     # digits as a string stay different users.
     test "names an integer user by its owner key, with no entity id" do
-      "event: sync_identity\nid: 42\ndata: " <> data = encode_identity_envelope(42, 7, "1.tag")
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, 7, "1.tag", nil)
 
       assert %{"actor_entity_id" => nil, "actor_user_id" => "i7"} = Jason.decode!(data)
     end
 
     test "names nobody for a session with no user" do
-      "event: sync_identity\nid: 42\ndata: " <> data = encode_identity_envelope(42, nil, "1.tag")
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, nil, "1.tag", nil)
 
       assert %{"actor_entity_id" => nil, "actor_user_id" => nil} = Jason.decode!(data)
+    end
+
+    # The tab holds the new user's row before its stream fills it, as a page's first render does.
+    test "carries the user's row the way a page carries it" do
+      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+      user_rows = %{put_entity: %{"MyApp.User" => [%{id: user_id, email: "a@example.com"}]}}
+
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, user_id, "1.tag", user_rows)
+
+      assert Jason.decode!(data)["user_row"] == %{
+               "put_entity" => %{"MyApp.User" => [%{"id" => user_id, "email" => "a@example.com"}]}
+             }
+    end
+
+    test "names no row when there's none to carry" do
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, 7, "1.tag", nil)
+
+      payload = Jason.decode!(data)
+
+      refute Map.has_key?(payload, "user_row")
     end
   end
 

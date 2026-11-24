@@ -137,6 +137,17 @@ defmodule Hologram.Sync.Carry do
   end
 
   @doc """
+  Clears the rows gathered so far and returns :ok, for a read outside a render, whose process no
+  render clears: a read that raised leaves its rows behind for the next one.
+  """
+  @spec discard() :: :ok
+  def discard do
+    Process.delete(@key)
+
+    :ok
+  end
+
+  @doc """
   Returns the rows gathered so far, grouped the way a frame groups them - by op, then by entity
   type - and clears what was gathered.
 
