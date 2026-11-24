@@ -31,6 +31,18 @@ defmodule Mix.Tasks.Holo.Db.ResetTest do
       end)
     end
 
+    # In prod, where every other refusal comes after the env's.
+    test "refuses any argument before anything else, leaving the start flag unset" do
+      System.put_env("HOLOGRAM_ENV", "prod")
+
+      message =
+        ~s(mix holo.db.reset takes no arguments - it got ["--help"] - mix help holo.db.reset shows what it does)
+
+      assert_raise Mix.Error, message, fn -> Task.run(["--help"]) end
+
+      assert System.get_env("HOLOGRAM_START") == nil
+    end
+
     test "refuses every env but dev and test, leaving the start flag unset" do
       System.put_env("HOLOGRAM_ENV", "prod")
 

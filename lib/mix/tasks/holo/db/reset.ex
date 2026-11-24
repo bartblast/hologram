@@ -28,6 +28,7 @@ defmodule Mix.Tasks.Holo.Db.Reset do
 
   The task refuses, changing nothing:
 
+    * when given any argument, `--help` included - `mix help holo.db.reset` shows this text,
     * in every env but dev and test,
     * while another client is connected to the database - stop the app and close psql first,
     * when the database belongs to another app or env, or its migrations build it,
@@ -54,7 +55,9 @@ defmodule Mix.Tasks.Holo.Db.Reset do
 
   @doc false
   @impl Mix.Task
-  def run(_args) do
+  def run(args) do
+    refuse_args!(args)
+
     env = Hologram.env()
     refuse_env!(env)
 
@@ -151,6 +154,17 @@ defmodule Mix.Tasks.Holo.Db.Reset do
       error
       |> Exception.message()
       |> Mix.raise()
+  end
+
+  # Mix hands a task's --help to the task itself, so a reset that ignored its arguments would
+  # delete the data of someone who only asked what it does.
+  defp refuse_args!([]), do: :ok
+
+  defp refuse_args!(args) do
+    Mix.raise(
+      "mix holo.db.reset takes no arguments - it got #{inspect(args)} - " <>
+        "mix help holo.db.reset shows what it does"
+    )
   end
 
   defp refuse_env!(env) when env in [:dev, :test], do: :ok
