@@ -55,6 +55,10 @@ defmodule Hologram.Sync.Live do
           written: %{String.t() => MapSet.t(String.t())}
         }
 
+  # The highest seq sent and the ranges below it not sent: every other seq at or below it has gone
+  # out, or never will.
+  @type sent :: {non_neg_integer, list({pos_integer, pos_integer})}
+
   @doc """
   Returns, for each user of the given sessions, what the given effects of one batch, read from the
   given place, mean for that user: keyed by the user as `Hologram.Sync.Sessions.list/0` names them,
@@ -90,11 +94,17 @@ defmodule Hologram.Sync.Live do
   - `own_seqs` - per replica, the highest sequence number among the batches of it the effects came
     from
   - `overtaking_seqs` - per replica, the highest sequence number among its batches with an entry
-    above the batch's (or above a given seq, see `part/6`), read in the same snapshot as the rows
-    (see
-    `Hologram.DB.Oplog.replica_seqs_after/1`). The rows are read after the effects, so they can
-    hold a replica's batch the effects don't - and what the rows have applied of a replica's
-    writes is the higher of this and `own_seqs` (see `Hologram.Sync.Session`)
+    the effects' read may not have seen: above the given seq or in the given ranges below it, or
+    above the place without them, read in the same snapshot as the rows (see
+    `Hologram.DB.Oplog.replica_seqs_after/2`). The rows are read after the effects, so they can
+    hold a replica's batch the effects don't, also one with entries below the effects' highest: a
+    batch holds the effects above the final limit that had committed, and a save running then can
+    commit into the seqs between them before the rows are read. The dispatcher gives the highest seq
+    it sent and the ranges below it it didn't (see `Hologram.Sync.Dispatcher`), so the read costs
+    what came after and a probe per range, not all that was written above a limit a long save holds
+    back.
+    What the rows have applied of a replica's writes is the higher of this and `own_seqs` (see
+    `Hologram.Sync.Session`)
   - `synced_types` - the given synced types, which decided what was asked about, so whoever reads
     the part judges it by the same ones
 
@@ -126,11 +136,14 @@ defmodule Hologram.Sync.Live do
           list({pid, String.t() | nil}),
           Edges.t(),
           list(module),
-          Oplog.place()
+          Oplog.place(),
+          sent | nil
         ) :: %{(String.t() | nil) => part}
-  def parts(effects, sessions, edges, synced_types, place) do
+  def parts(effects, sessions, edges, synced_types, place, sent \\ nil) do
     {:ok, parts} =
-      Connection.snapshot(fn -> parts_now(effects, sessions, edges, synced_types, place) end)
+      Connection.snapshot(fn ->
+        parts_now(effects, sessions, edges, synced_types, place, sent)
+      end)
 
     parts
   end
@@ -142,10 +155,10 @@ defmodule Hologram.Sync.Live do
   `Hologram.Auth.canonical_id/1`).
 
   Its `overtaking_seqs` are of the batches with an entry above the given seq rather than above the
-  effects' highest. A chunk of a gap isn't bounded the way a batch is: the gap holds every effect
-  committed when it was read, so a save with entries below the chunk's highest can have been
-  running then, and commit before the chunk's rows are read - and the rows hold it. And a chunk can
-  end inside a save, whose batches with effects only in a later chunk the rows hold too.
+  place. The gap holds every effect committed when it was read, so a save with entries below the
+  chunk's highest can have been running then, and commit before the chunk's rows are read - and the
+  rows hold it. And a chunk can end inside a save, whose batches with effects only in a later chunk
+  the rows hold too.
   """
   @spec part(
           list(map),
@@ -181,15 +194,15 @@ defmodule Hologram.Sync.Live do
     sessions = [{self(), canonical_user_id}]
 
     effects
-    |> parts_now(sessions, edges, synced_types, place, overtaken_above)
+    |> parts_now(sessions, edges, synced_types, place, {overtaken_above, []})
     |> Map.fetch!(canonical_user_id)
   end
 
   @doc """
   Reads what `parts/5` reads in whatever transaction the caller is in, which agrees with itself only
-  when that transaction reads every statement from one snapshot - what `parts/5` opens. Given a
-  seq, the overtaking batches are the ones with an entry above it (see `part/6`) rather than above
-  the effects' highest.
+  when that transaction reads every statement from one snapshot - what `parts/5` opens. Given what
+  was sent, the overtaking batches are the ones with an entry above its seq or in its ranges (see
+  `part/6`) rather than above the place.
   """
   @spec parts_now(
           list(map),
@@ -197,9 +210,9 @@ defmodule Hologram.Sync.Live do
           %{{module, atom} => list(tuple)},
           list(module),
           Oplog.place(),
-          non_neg_integer | nil
+          sent | nil
         ) :: %{(String.t() | nil) => part}
-  def parts_now(effects, sessions, edges, synced_types, place, overtaken_above \\ nil) do
+  def parts_now(effects, sessions, edges, synced_types, place, sent \\ nil) do
     synced = MapSet.new(synced_types)
     pair_effects = pair_effects(effects, synced)
 
@@ -235,8 +248,9 @@ defmodule Hologram.Sync.Live do
 
     pairs = pairs_touching(checked, synced_types)
 
-    {_lowest_seq, highest_seq} = seq_range
-    overtaking_seqs = Oplog.replica_seqs_after(overtaken_above || highest_seq)
+    {place_seq, _tx, _at} = place
+    {sent_through, unsent} = sent || {place_seq, []}
+    overtaking_seqs = Oplog.replica_seqs_after(sent_through, unsent)
 
     shared = %{
       checked: Map.new(checked, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end),
@@ -317,13 +331,15 @@ defmodule Hologram.Sync.Live do
 
   @doc """
   Hands the given effects, read from the given place, to every sync session on this node, each
-  sent `{:live, part}` with its user's part of the batch (see `parts/5`).
+  sent `{:live, part}` with its user's part of the batch (see `parts/6`). Given what was sent, the
+  overtaking batches are the ones with an entry above its seq or in its ranges rather than above the
+  place.
 
   With no session on the node, nothing is read for them. In a build where no client checks
   permissions, the rows carry no verdicts, so the search follows only the read rules' edges.
   """
-  @spec route(list(map), Oplog.place()) :: :ok
-  def route(effects, place) do
+  @spec route(list(map), Oplog.place(), sent | nil) :: :ok
+  def route(effects, place, sent \\ nil) do
     case Sessions.list() do
       [] ->
         :ok
@@ -334,7 +350,8 @@ defmodule Hologram.Sync.Live do
         # rules' edges.
         edges = Edges.index(QueryCache.permission_checking?())
 
-        parts = parts(effects, sessions, edges, QueryCache.synced_types(), place)
+        parts =
+          parts(effects, sessions, edges, QueryCache.synced_types(), place, sent)
 
         Enum.each(sessions, fn {pid, user_id} ->
           send(pid, {:live, Map.fetch!(parts, user_id)})

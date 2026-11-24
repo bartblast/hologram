@@ -84,6 +84,12 @@ defmodule Hologram.DB.OplogTest do
     end)
   end
 
+  defp unsent_seqs(sent_through, unsent) do
+    sent_through
+    |> read_unsent(unsent)
+    |> Enum.map(& &1.seq)
+  end
+
   defp seed(
          tx,
          op,
@@ -315,7 +321,7 @@ defmodule Hologram.DB.OplogTest do
     end
   end
 
-  describe "replica_seqs_after/1" do
+  describe "replica_seqs_after/2" do
     test "returns each replica's highest batch with an entry above the given seq" do
       entity_id = Hologram.Entity.generate_id()
 
@@ -357,6 +363,26 @@ defmodule Hologram.DB.OplogTest do
       seq = seed(201, "patch_entity", "Module2", Hologram.Entity.generate_id())
 
       assert replica_seqs_after(seq - 1) == %{}
+    end
+
+    test "returns the batches with entries in the given ranges, and none of the rest at or below the given seq" do
+      entity_id = Hologram.Entity.generate_id()
+
+      in_range =
+        seed(200, "patch_entity", "Module2", entity_id, nil, nil, %{
+          "replica_id" => "a",
+          "seq" => 3
+        })
+
+      sent =
+        seed(201, "patch_entity", "Module2", entity_id, nil, nil, %{
+          "replica_id" => "b",
+          "seq" => 9
+        })
+
+      seed(202, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "c", "seq" => 2})
+
+      assert replica_seqs_after(sent, [{in_range, in_range}]) == %{"a" => 3, "c" => 2}
     end
   end
 
@@ -451,8 +477,8 @@ defmodule Hologram.DB.OplogTest do
       assert [event] = read_after(0, 10)
       assert event.data == nil
 
-      # The windowed read, which diffs against values, still carries it.
-      assert [windowed] = read_window(seq - 1, seq)
+      # The live read, which diffs against values, still carries it.
+      assert [windowed] = read_unsent(seq - 1, [])
       assert windowed.data == %{"c" => "x"}
     end
 
@@ -661,15 +687,15 @@ defmodule Hologram.DB.OplogTest do
     end
   end
 
-  describe "read_window/2" do
-    test "returns nothing when the window holds no effects" do
-      assert read_window(0, 1) == []
+  describe "read_unsent/2" do
+    test "returns nothing when nothing was written above the highest sent" do
+      assert read_unsent(last_serial(), []) == []
     end
 
-    test "returns the effects inside the window" do
+    test "returns the effects above the highest sent" do
       seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert [event] = read_window(seq - 1, seq)
+      assert [event] = read_unsent(seq - 1, [])
       assert event.op == :del_entity
       assert event.type == Module2
       assert event.entity_id == @entity_id
@@ -682,7 +708,7 @@ defmodule Hologram.DB.OplogTest do
           a: 5
         })
 
-      assert [event] = read_window(seq - 1, seq)
+      assert [event] = read_unsent(seq - 1, [])
       assert event.revisions == %{"a" => 5}
     end
 
@@ -701,14 +727,14 @@ defmodule Hologram.DB.OplogTest do
           old
         )
 
-      assert [event] = read_window(seq - 1, seq)
+      assert [event] = read_unsent(seq - 1, [])
       assert event.old == old
     end
 
     test "returns no old references for an effect stored without them" do
       seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert [event] = read_window(seq - 1, seq)
+      assert [event] = read_unsent(seq - 1, [])
       assert event.old == nil
     end
 
@@ -719,27 +745,46 @@ defmodule Hologram.DB.OplogTest do
           seq: 7
         })
 
-      assert [event] = read_window(seq - 1, seq)
+      assert [event] = read_unsent(seq - 1, [])
       assert event.mutation_ref == %{"replica_id" => @replica_id, "seq" => 7}
     end
 
     test "returns no batch for an effect written outside one" do
       seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert [event] = read_window(seq - 1, seq)
+      assert [event] = read_unsent(seq - 1, [])
       assert event.mutation_ref == nil
     end
 
-    test "leaves out the effect at the window's lower edge, which the reader already has" do
+    test "leaves out the effect at the highest sent, which the reader already has" do
       seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
 
-      assert read_window(seq, seq + 1) == []
+      assert read_unsent(seq, []) == []
     end
 
-    test "leaves out effects above the window's upper edge" do
-      seq = seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+    test "returns the effects in the ranges not sent, and none of the rest at or below the highest sent" do
+      [first, second, third, fourth, fifth] =
+        Enum.map(
+          200..204,
+          &seed(&1, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+        )
 
-      assert read_window(seq - 2, seq - 1) == []
+      assert unsent_seqs(fourth, [{second, third}]) == [second, third, fifth]
+      assert unsent_seqs(fifth, [{first, first}, {fourth, fourth}]) == [first, fourth]
+    end
+
+    test "returns the effects in many ranges not sent at once" do
+      seqs =
+        Enum.map(
+          1..202,
+          &seed(&1, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+        )
+
+      every_other = Enum.take_every(seqs, 2)
+      unsent = Enum.map(every_other, &{&1, &1})
+
+      assert length(unsent) == 101
+      assert unsent_seqs(List.last(seqs), unsent) == every_other
     end
 
     test "returns the effects in seq order, whatever their transactions" do
@@ -747,9 +792,9 @@ defmodule Hologram.DB.OplogTest do
         seed(201, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{"c" => "x"})
 
       seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
-      last = seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
+      seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
 
-      assert [put, delete, other_delete] = read_window(first - 1, last)
+      assert [put, delete, other_delete] = read_unsent(first - 1, [])
       assert {put.op, put.tx} == {:put_entity, 201}
       assert {delete.op, delete.tx} == {:del_entity, 200}
       assert other_delete.entity_id == @target_id
@@ -770,7 +815,7 @@ defmodule Hologram.DB.OplogTest do
 
       {:ok, %Postgrex.Result{rows: [[seq]]}} = Connection.query(statement, params)
 
-      assert [event] = read_window(seq - 1, seq)
+      assert [event] = read_unsent(seq - 1, [])
       assert event.op == "op_from_a_newer_build"
     end
 
@@ -779,7 +824,7 @@ defmodule Hologram.DB.OplogTest do
       # atom exist for every test, and this one is about a type whose atom does not exist.
       seq = seed(200, "del_entity", "MyApp.TypeOnlyThisTestNames", @entity_id)
 
-      assert [event] = read_window(seq - 1, seq)
+      assert [event] = read_unsent(seq - 1, [])
       assert event.type == "MyApp.TypeOnlyThisTestNames"
     end
 
@@ -789,7 +834,7 @@ defmodule Hologram.DB.OplogTest do
           "never_compiled" => 1
         })
 
-      assert [event] = read_window(seq - 1, seq)
+      assert [event] = read_unsent(seq - 1, [])
       assert event.data == %{"never_compiled" => 1}
     end
   end

@@ -80,7 +80,7 @@ defmodule Hologram.Sync.SupervisorTest do
       spec = child_spec_of(Dispatcher)
 
       assert {Dispatcher, :start_link, [opts]} = spec.start
-      assert opts[:handler] == (&Live.route/2)
+      assert opts[:handler] == (&Live.route/3)
       assert opts[:notifications] == notifications()
     end
 

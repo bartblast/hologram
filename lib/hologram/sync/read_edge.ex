@@ -2,14 +2,14 @@ defmodule Hologram.Sync.ReadEdge do
   @moduledoc false
 
   # How far this node has read the oplog - the place of the entry it read up to (see
-  # `Hologram.DB.Oplog.place/1`), which is where the next window opens, beside the id of the log it
+  # `Hologram.DB.Oplog.place/1`), which is where the next read starts, beside the id of the log it
   # is a place in (see `Hologram.DB.Oplog.log_id/0`) - kept outside the process doing the reading.
   #
   # A dispatcher moves its edge only once a round has been handed on, so that dying halfway means
-  # reading the same window again rather than passing it silently. That holds for as long as the
+  # reading the same effects again rather than passing them silently. That holds for as long as the
   # process lives and no longer: one that died and came back with nowhere to resume from would
   # start at the final limit as it stands, and the rounds after it would carry every session on this node
-  # past the window nobody was told about - a client left claiming to have applied what was never
+  # past the effects nobody was told about - a client left claiming to have applied what was never
   # sent, with no door back to it. Keeping the edge here is what makes a restart resume.
   #
   # Node-local and node-lifetime, deliberately. It matters only while the sessions whose own places

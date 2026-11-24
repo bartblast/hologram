@@ -285,7 +285,7 @@ defmodule Hologram.Sync.FinalLimitContentionTest do
 
     after_empty = advance(scratch, state)
 
-    assert after_empty == state
+    assert after_empty == %{state | counted: false}
 
     moved = advance(scratch, after_empty)
 
@@ -307,7 +307,7 @@ defmodule Hologram.Sync.FinalLimitContentionTest do
 
     state = FinalLimit.new()
 
-    assert advance(scratch, state) == state
+    assert advance(scratch, %{state | counted: true}) == state
     assert limit_after(scratch, state) == serial
   end
 

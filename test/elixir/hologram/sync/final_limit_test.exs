@@ -205,11 +205,11 @@ defmodule Hologram.Sync.FinalLimitTest do
       assert limit(moved) == nil
     end
 
-    test "changes nothing when the run moves again while the limit's entry is read" do
+    test "changes nothing but the count when the run moves again while the limit's entry is read" do
       state = advance(new(), 10, [])
 
       assert advance(state, 12, [], run: "run-2", entry_at: fn _seq -> {nil, "run-3"} end) ==
-               state
+               %{state | counted: false}
     end
 
     test "releases nothing when the log was read in another run" do
@@ -219,6 +219,7 @@ defmodule Hologram.Sync.FinalLimitTest do
 
       assert limit(waiting) == nil
       assert waiting?(waiting)
+      refute counted?(waiting)
     end
 
     test "never moves down within a run" do
@@ -243,6 +244,31 @@ defmodule Hologram.Sync.FinalLimitTest do
       released = advance(state, 100, [])
 
       assert limit(released) == 100
+    end
+  end
+
+  describe "counted?/1" do
+    test "returns false before the first round" do
+      refute counted?(new())
+    end
+
+    test "returns true once a round reads the log in a run" do
+      assert counted?(advance(new(), 10, []))
+    end
+
+    test "returns false once a round finds the run moved while the limit's entry is read" do
+      state = advance(new(), 10, [])
+
+      refute counted?(
+               advance(state, 12, [], run: "run-2", entry_at: fn _seq -> {nil, "run-3"} end)
+             )
+    end
+
+    test "returns true again once a round after reads the log in a run" do
+      state = advance(new(), 10, [])
+      moved = advance(state, 12, [], run: "run-2", entry_at: fn _seq -> {nil, "run-3"} end)
+
+      assert counted?(advance(moved, 12, [], run: "run-2", entry_at: &{entry(&1), "run-2"}))
     end
   end
 

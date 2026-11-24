@@ -242,7 +242,7 @@ defmodule Hologram.DB.Oplog do
   promoted standby name a new run, a restored dump a new copy of the database (see
   `populate_database_copy/0`), a reload of the log in place a new file for it, and a database
   dropped and claimed again, which starts its serials over, a new marker. A clean restart loses
-  nothing, and keeps it. A client holds rows up to a window past the place it claims, so only a new id
+  nothing, and keeps it. A client holds rows sent above the place it claims, so only a new id
   reaches every one that holds a lost commit, offline ones included (see `rotate_log_id/1` for a
   loss found otherwise).
 
@@ -326,24 +326,38 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
-  Returns, for each replica with a batch with an effect above the given seq, the highest sequence
-  number among those batches - what a read after a batch of effects up to the given seq can hold of
-  each replica's writes beyond the batch. A replica with none is left out. Every committed effect
-  counts, also one above a serial a save still running holds.
+  Returns, for each replica with a batch with an effect above the given seq or in one of the given
+  ranges of seqs below it, the highest sequence number among those batches - what a read after a
+  batch of effects can hold of each replica's writes beyond the batch, given what was sent: every
+  seq at or below the given one outside the ranges has gone out, or never will. A replica with none
+  is left out. Every committed effect counts, also one above a serial a save still running holds.
 
-  Read through the log's key, so it costs what was written above the given seq, and nothing when
-  nothing was.
+  Read through the log's key like `read_unsent/2`, so it costs what was written above the given seq
+  and a probe per range, not what a save holding the lowest range back has seen written since.
   """
-  @spec replica_seqs_after(non_neg_integer) :: %{String.t() => non_neg_integer}
-  def replica_seqs_after(seq) do
+  @spec replica_seqs_after(non_neg_integer, list({pos_integer, pos_integer})) :: %{
+          String.t() => non_neg_integer
+        }
+  def replica_seqs_after(seq, unsent \\ []) do
+    {firsts, lasts} = Enum.unzip(unsent)
+
     statement = """
     SELECT "mutation_ref"->>'replica_id', max(("mutation_ref"->>'seq')::bigint)
-    FROM "#{Mapper.system_schema()}"."oplog"
-    WHERE "seq" > $1 AND "mutation_ref" IS NOT NULL
+    FROM (
+      SELECT "mutation_ref"
+      FROM "#{Mapper.system_schema()}"."oplog"
+      WHERE "seq" > $1
+      UNION ALL
+      SELECT "mutation_ref"
+      FROM "#{Mapper.system_schema()}"."oplog"
+      JOIN unnest($2::bigint[], $3::bigint[]) AS "unsent" ("first", "last")
+      ON "seq" BETWEEN "unsent"."first" AND "unsent"."last"
+    ) AS "unread"
+    WHERE "mutation_ref" IS NOT NULL
     GROUP BY 1
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [seq])
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [seq, firsts, lasts])
 
     Map.new(rows, fn [replica_id, seq] -> {replica_id, seq} end)
   end
@@ -351,11 +365,11 @@ defmodule Hologram.DB.Oplog do
   @doc """
   Returns at most `limit` effects with a seq above the given one, in seq order.
 
-  The order is the windowed read's own, so a place names the same point for a returning client as
-  it did for a connected one. Everything here is committed, but a serial below an effect returned
-  can belong to a save still running, which commits after - so a caller dating a place by what this
-  returns takes the final limit before (see `Hologram.Sync.FinalLimit` and
-  `Hologram.Sync.Catchup.gap/4`).
+  The order is the dispatcher's read's own (see `read_unsent/2`), so a place names the same point
+  for a returning client as it did for a connected one. Everything here is committed, but a serial
+  below an effect returned can belong to a save still running, which commits after - so a caller
+  dating a place by what this returns takes the final limit before (see
+  `Hologram.Sync.FinalLimit` and `Hologram.Sync.Catchup.gap/4`).
 
   The limit is not a page - nothing here resumes from where it stopped. It is what keeps a reader
   from pulling an unbounded tail into memory, and a caller that gets `limit` rows back should treat
@@ -482,7 +496,7 @@ defmodule Hologram.DB.Oplog do
   bound on a thing already bounded.
 
   An op or entity type this node does not know stays the label it was written with, exactly as
-  `read_window/2` leaves it.
+  `read_unsent/2` leaves it.
   """
   @spec read_type_after(module, non_neg_integer, map) :: list(map)
   def read_type_after(entity_type, seq, data_match) do
@@ -501,30 +515,48 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
-  Returns the effects with a seq above `after_seq` and at or below `through_seq`, in seq order.
-  Read up to a final limit (see `Hologram.Sync.FinalLimit`), the window holds every effect that
-  will ever have a seq in it.
+  Returns every committed effect with a seq above `sent_through` or in one of the given ranges of
+  seqs, each a `{first, last}` pair, inclusive, in seq order. A reader sending effects as they
+  commit names what it has sent so far: the highest seq it sent, and the seqs below it it hasn't
+  sent, which are the serials of saves still running, or of ones that rolled back.
+
+  The read is one statement, so a save's effects come back all together or not at all: a commit is
+  atomic. A seq below an effect returned can belong to a save still running, which commits after,
+  so a reader dating a place by what this returns dates it by the final limit (see
+  `Hologram.Sync.FinalLimit`).
 
   The order is NOT commit order - a save takes its serials as it writes, and one that committed
-  later can hold smaller ones. Nor does a window hold a save whole: a save's later serials can be
-  above the limit. Nothing may materialize state by folding these in order: they say which entity
-  types and attributes a save touched, and a reader wanting values reads the rows themselves.
+  later can hold smaller ones. Nothing may materialize state by folding these in order: they say
+  which entity types and attributes a save touched, and a reader wanting values reads the rows
+  themselves.
 
   An op or entity type this node does not know stays the label it was written with, and data keys
   stay strings, as do the keys of the revisions and the old references, because a peer running a
   newer build can write names this node has never heard of - names that match nothing here, which
   is exactly what they should do.
   """
-  @spec read_window(non_neg_integer, non_neg_integer) :: list(map)
-  def read_window(after_seq, through_seq) do
+  @spec read_unsent(non_neg_integer, list({pos_integer, pos_integer})) :: list(map)
+  def read_unsent(sent_through, unsent) do
+    {firsts, lasts} = Enum.unzip(unsent)
+
+    # The ranges go in as two arrays joined to the log, a range scan of its key each, so the read
+    # costs a probe per range beside what it returns: they grow with the serials of saves running
+    # while others commit, and with the rollbacks a limit held back hasn't passed yet.
     statement = """
     SELECT "seq", "op", "type", "entity_id", "data", #{@event_tail}
     FROM "#{Mapper.system_schema()}"."oplog"
-    WHERE "seq" > $1 AND "seq" <= $2
+    WHERE "seq" > $1
+    UNION ALL
+    SELECT "seq", "op", "type", "entity_id", "data", #{@event_tail}
+    FROM "#{Mapper.system_schema()}"."oplog"
+    JOIN unnest($2::bigint[], $3::bigint[]) AS "unsent" ("first", "last")
+    ON "seq" BETWEEN "unsent"."first" AND "unsent"."last"
     ORDER BY "seq"
     """
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [after_seq, through_seq])
+    params = [sent_through, firsts, lasts]
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, params)
 
     Enum.map(rows, &event/1)
   end
@@ -566,7 +598,7 @@ defmodule Hologram.DB.Oplog do
 
   # An op this build does not know stays the label it was written with, the same as an entity type
   # it has never compiled. A newer peer writing a seventh op is a thing a rolling deploy produces,
-  # and raising here would take the dispatcher down mid-window - it restarts with no cursor and
+  # and raising here would take the dispatcher down mid-round - it restarts with no cursor and
   # resumes at the log's edge, so everything between would be skipped rather than retried.
   defp operation(label) do
     String.to_existing_atom(label)

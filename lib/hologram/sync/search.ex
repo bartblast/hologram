@@ -37,7 +37,7 @@ defmodule Hologram.Sync.Search do
   Returns the rows whose read access or verdicts the given effects may have moved, per entity type,
   and the users for whom every row of a type may have.
 
-  Effects come as `Hologram.DB.Oplog.read_window/2` reads them: data and old references keyed by
+  Effects come as `Hologram.DB.Oplog.read_unsent/2` reads them: data and old references keyed by
   strings, as stored. A put, a patch, a delete or a pair without its data - the shape
   `read_after/2` returns the first three in - raises when a read edge or a verdict edge leads to
   its type, since a search without the values a write left misses rows. An effect of an entity

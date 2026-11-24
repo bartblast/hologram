@@ -47,7 +47,11 @@ defmodule Hologram.Sync.DispatcherTest do
   defp sandbox_advance(opts \\ []) do
     test_pid = self()
     high = Keyword.get(opts, :high)
-    running = MapSet.new(Keyword.get(opts, :running, []))
+
+    running =
+      opts
+      |> Keyword.get(:running, [])
+      |> MapSet.new()
 
     fn state ->
       DBConnection.Ownership.ownership_allow(DB.pool_name(), test_pid, self(), [])
@@ -66,17 +70,28 @@ defmodule Hologram.Sync.DispatcherTest do
     end
   end
 
-  defp seed(tx, entity_id) do
+  # Given a seq, the entry takes it, as a save that took its serial earlier commits it.
+  defp seed(tx, entity_id, seq \\ nil) do
     statement = """
-    INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash")
-    VALUES ('del_entity', 'Hologram.Test.Fixtures.Entity.Module2', $1, $2, 'seeded')
+    INSERT INTO "hologram_system"."oplog" ("seq", "op", "type", "entity_id", "tx", "model_hash")
+    VALUES (
+      COALESCE($3::bigint, #{Oplog.next_seq_sql()}),
+      'del_entity', 'Hologram.Test.Fixtures.Entity.Module2', $1, $2, 'seeded'
+    )
     RETURNING "seq", "tx", "inserted_at"
     """
 
     {:ok, %Postgrex.Result{rows: [[seq, tx, inserted_at]]}} =
-      Connection.query(statement, [Codec.encode(entity_id, :uuid), tx])
+      Connection.query(statement, [Codec.encode(entity_id, :uuid), tx, seq])
 
     Oplog.place(%{inserted_at: inserted_at, seq: seq, tx: tx})
+  end
+
+  # A serial a save still running took, which it fills once it commits.
+  defp take_serial do
+    {:ok, %Postgrex.Result{rows: [[seq]]}} = Connection.query("SELECT #{Oplog.next_seq_sql()}")
+
+    seq
   end
 
   # Every test that starts a dispatcher ends here. A dispatcher borrows the test's connection, so
@@ -106,7 +121,11 @@ defmodule Hologram.Sync.DispatcherTest do
 
   defp start_dispatcher!(opts) do
     test_pid = self()
-    handler = fn effects, place -> send(test_pid, {:dispatched, effects, place}) end
+
+    handler = fn effects, place, sent ->
+      send(test_pid, {:dispatched, effects, place})
+      send(test_pid, {:sent, sent})
+    end
 
     opts =
       opts
@@ -164,7 +183,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
     # The place is taken when the dispatcher starts, not when something first wakes it - and what
     # usually wakes it is the very append a client is waiting for. Taken then, the limit would
-    # already be above that append and the window opened over it would be empty, passing it by for
+    # already be above that append and nothing read from it would hold it, passing it by for
     # good.
     test "takes the final limit as its place at start, rather than at its first wake" do
       place = seed(200, @entity_id)
@@ -200,7 +219,7 @@ defmodule Hologram.Sync.DispatcherTest do
     end
 
     # What a dispatcher replacing a crashed one has to do: the state of the one that died is gone,
-    # and starting at the limit would skip the window it was reading - which the sessions that
+    # and starting at the limit would skip the effects it was reading - which the sessions that
     # outlived it would then be carried past, holding a place covering rows they were never sent.
     test "resumes from where the dispatcher it replaces got to" do
       first = seed(200, @entity_id)
@@ -210,6 +229,23 @@ defmodule Hologram.Sync.DispatcherTest do
 
       assert_receive {:dispatched, [%{tx: 201}], ^first}
       refute_received :lost
+
+      settle(dispatcher)
+    end
+
+    # A save running as it starts keeps the first limit back, and the effects above the place it
+    # resumed from go out meanwhile, from that place.
+    test "hands over the effects above where it resumed from before its first limit" do
+      first = seed(200, @entity_id)
+      seed(201, @entity_id)
+      read_edge = start_read_edge!({first, Oplog.log_id()})
+
+      dispatcher =
+        start_dispatcher!(advance: sandbox_advance(running: ["a"]), read_edge: read_edge)
+
+      assert_receive {:dispatched, [%{tx: 201}], ^first}
+      assert :sys.get_state(dispatcher).cursor == first
+      assert ReadEdge.get(read_edge) == {first, Oplog.log_id()}
 
       settle(dispatcher)
     end
@@ -264,7 +300,7 @@ defmodule Hologram.Sync.DispatcherTest do
   describe "handle :wake" do
     # The place is what a frame built from this batch may claim a client has reached: replaying
     # from it re-reads the whole batch, and never less.
-    test "hands over the place the window was read from" do
+    test "hands over the place the round read from" do
       place = seed(200, @entity_id)
       seed(201, @entity_id)
 
@@ -275,7 +311,7 @@ defmodule Hologram.Sync.DispatcherTest do
       settle(dispatcher)
     end
 
-    test "hands over the effects the window holds, in seq order" do
+    test "hands over the effects the round read, in seq order" do
       seed(201, @entity_id)
       seed(200, @target_id)
 
@@ -291,7 +327,7 @@ defmodule Hologram.Sync.DispatcherTest do
       settle(dispatcher)
     end
 
-    test "hands over nothing when the window is empty" do
+    test "hands over nothing when the round reads nothing" do
       dispatcher = start_dispatcher!(cursor: {0, 0, 0})
 
       wake(dispatcher)
@@ -301,19 +337,167 @@ defmodule Hologram.Sync.DispatcherTest do
       settle(dispatcher)
     end
 
-    test "reads no further than the final limit" do
+    # A save running holds the limit back, and not the saves committing around it. The place stays
+    # at the limit, so a client replaying from it gets them again.
+    test "hands over the committed effects above the final limit, from the limit's place" do
       first = seed(200, @entity_id)
       {first_seq, _tx, _at} = first
       seed(201, @entity_id)
 
-      dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
+      read_edge = start_read_edge!()
 
-      assert_receive {:dispatched, [%{tx: 200}], {0, 0, 0}}
+      dispatcher =
+        start_dispatcher!(
+          advance: sandbox_advance(high: first_seq),
+          cursor: {0, 0, 0},
+          read_edge: read_edge
+        )
+
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
 
       wake(dispatcher)
 
       refute_receive {:dispatched, _effects, _place}, 100
       assert :sys.get_state(dispatcher).cursor == first
+      assert ReadEdge.get(read_edge) == {first, Oplog.log_id()}
+
+      settle(dispatcher)
+    end
+
+    test "hands over a save that commits into a seq it passed over, once" do
+      first = seed(200, @entity_id)
+      {first_seq, _tx, _at} = first
+      skipped_seq = take_serial()
+      seed(201, @entity_id)
+
+      dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
+
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
+
+      seed(202, @entity_id, skipped_seq)
+      wake(dispatcher)
+
+      assert_receive {:dispatched, [%{tx: 202}], ^first}
+
+      wake(dispatcher)
+
+      refute_receive {:dispatched, _effects, _place}, 100
+
+      settle(dispatcher)
+    end
+
+    # The rows read for a batch can hold a save that commits into a seq passed over after the batch
+    # was read, or above the highest sent, and nothing else.
+    test "hands over the highest seq sent and the ones below it it passed over" do
+      first = seed(200, @entity_id)
+      {first_seq, _tx, _at} = first
+      skipped_seq = take_serial()
+      {last_seq, _tx, _at} = seed(201, @entity_id)
+
+      dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
+
+      assert_receive {:sent, {^last_seq, [{^skipped_seq, ^skipped_seq}]}}
+
+      seed(202, @entity_id, skipped_seq)
+      wake(dispatcher)
+
+      assert_receive {:sent, {^last_seq, []}}
+
+      settle(dispatcher)
+    end
+
+    test "hands over each save that commits into the seqs it passed over, in turn" do
+      first = seed(200, @entity_id)
+      {first_seq, _tx, _at} = first
+      first_skipped = take_serial()
+      second_skipped = take_serial()
+      seed(201, @entity_id)
+
+      dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
+
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
+
+      seed(202, @entity_id, first_skipped)
+      wake(dispatcher)
+
+      assert_receive {:dispatched, [%{tx: 202}], ^first}
+
+      seed(203, @entity_id, second_skipped)
+      wake(dispatcher)
+
+      assert_receive {:dispatched, [%{tx: 203}], ^first}
+
+      settle(dispatcher)
+    end
+
+    # A commit is atomic, so a save with serials both among the ones passed over and above the
+    # highest sent goes out whole.
+    test "hands over a save with entries in a seq it passed over and above, together" do
+      first = seed(200, @entity_id)
+      {first_seq, _tx, _at} = first
+      skipped_seq = take_serial()
+      seed(201, @entity_id)
+
+      dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
+
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
+
+      seed(202, @entity_id, skipped_seq)
+      seed(202, @entity_id)
+      wake(dispatcher)
+
+      assert_receive {:dispatched, [%{seq: ^skipped_seq, tx: 202}, %{tx: 202}], ^first}
+
+      settle(dispatcher)
+    end
+
+    test "hands over a save that commits into one of many seqs it passed over" do
+      first = seed(200, @entity_id)
+      {first_seq, _tx, _at} = first
+
+      skipped_seqs =
+        Enum.map(1..101, fn index ->
+          skipped_seq = take_serial()
+          seed(300 + index, @entity_id)
+
+          skipped_seq
+        end)
+
+      dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
+
+      assert_receive {:dispatched, effects, {0, 0, 0}}
+      assert length(effects) == 102
+
+      seed(202, @entity_id, Enum.at(skipped_seqs, 50))
+      wake(dispatcher)
+
+      assert_receive {:dispatched, [%{tx: 202}], ^first}
+
+      wake(dispatcher)
+
+      refute_receive {:dispatched, _effects, _place}, 100
+
+      settle(dispatcher)
+    end
+
+    # Every save at or below the limit has ended, so a seq there it never read never will be.
+    test "forgets a seq it passed over once the final limit passes it" do
+      first = seed(200, @entity_id)
+      {first_seq, _tx, _at} = first
+      skipped_seq = take_serial()
+      last = seed(201, @entity_id)
+      {last_seq, _tx, _at} = last
+
+      dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
+
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
+      assert :sys.get_state(dispatcher).unsent == [{skipped_seq, skipped_seq}]
+
+      :sys.replace_state(dispatcher, &%{&1 | advance: sandbox_advance(high: last_seq)})
+      wake(dispatcher)
+
+      assert %{cursor: ^last, sent_through: ^last_seq, unsent: []} = :sys.get_state(dispatcher)
+      refute_received {:dispatched, _effects, _place}
 
       settle(dispatcher)
     end
@@ -436,6 +620,46 @@ defmodule Hologram.Sync.DispatcherTest do
       settle(dispatcher)
     end
 
+    # The first round after a crash finds no run, and one can find the run moved while it reads:
+    # either leaves the limit as it was, and the log may be of a run that lost what was sent.
+    test "sends nothing in a round that couldn't date the log" do
+      place = seed(200, @entity_id)
+      seed(201, @entity_id)
+
+      advance = sandbox_advance()
+      uncounted = fn limit -> %{advance.(limit) | counted: false} end
+
+      dispatcher = start_dispatcher!(advance: uncounted, cursor: place)
+
+      :sys.get_state(dispatcher)
+
+      refute_received {:dispatched, _effects, _place}
+      assert :sys.get_state(dispatcher).cursor == place
+
+      settle(dispatcher)
+    end
+
+    test "sends nothing in a round that found a loss and couldn't give the log a new id" do
+      place = seed(200, @entity_id)
+      {seq, tx, inserted_at} = place
+      Enum.each(1..5, fn _index -> take_serial() end)
+      seed(201, @entity_id)
+
+      failing = fn _old_log_id -> raise DBConnection.ConnectionError, "the connection dropped" end
+
+      dispatcher =
+        start_dispatcher!(
+          advance: sandbox_advance(high: seq),
+          cursor: {seq + 5, tx, inserted_at},
+          rotate_log_id: failing
+        )
+
+      assert is_binary(:sys.get_state(dispatcher).pending_rotation)
+      refute_received {:dispatched, _effects, _place}
+
+      settle(dispatcher)
+    end
+
     test "stops the sessions once the log takes a new id, though the first try failed" do
       place = seed(200, @entity_id)
       {seq, tx, inserted_at} = place
@@ -503,7 +727,7 @@ defmodule Hologram.Sync.DispatcherTest do
       # A synchronous call is answered only after the round is over.
       :sys.get_state(dispatcher)
 
-      # Past the window just handed over rather than back at its start, which is the difference
+      # Past the effects just handed over rather than back at their place, which is the difference
       # between a replacement carrying on and one repeating what the client already has.
       assert ReadEdge.get(read_edge) == {last, Oplog.log_id()}
 
@@ -542,7 +766,7 @@ defmodule Hologram.Sync.DispatcherTest do
       test_pid = self()
       {:ok, calls} = Agent.start_link(fn -> 0 end)
 
-      handler = fn effects, place ->
+      handler = fn effects, place, _sent ->
         call = Agent.get_and_update(calls, &{&1 + 1, &1 + 1})
         send(test_pid, {:dispatched, call, effects, place})
 
@@ -593,7 +817,41 @@ defmodule Hologram.Sync.DispatcherTest do
       settle(dispatcher)
     end
 
-    # Whether draining the mailbox happens before or after the window is read cannot be told
+    # The database it would read is as likely out of reach, and a read raising every round would
+    # take the dispatcher down.
+    test "sends nothing in a round that can't work out the limit" do
+      seed(200, @entity_id)
+
+      test_pid = self()
+      {:ok, rounds} = Agent.start_link(fn -> 0 end)
+      advance = sandbox_advance()
+
+      failing_after_first = fn state ->
+        case Agent.get_and_update(rounds, &{&1 + 1, &1 + 1}) do
+          1 ->
+            advance.(state)
+
+          round ->
+            send(test_pid, {:round, round})
+            raise DBConnection.ConnectionError, "the database went away"
+        end
+      end
+
+      dispatcher = start_dispatcher!(advance: failing_after_first, cursor: {0, 0, 0})
+
+      assert_receive {:dispatched, [%{tx: 200}], {0, 0, 0}}
+
+      seed(201, @entity_id)
+      wake(dispatcher)
+
+      assert_receive {:round, 2}
+      :sys.get_state(dispatcher)
+      refute_received {:dispatched, _effects, _place}
+
+      settle(dispatcher)
+    end
+
+    # Whether draining the mailbox happens before or after the log is read cannot be told
     # apart here: the sandbox runs the test inside one transaction, so nothing commits while the
     # dispatcher is working. The cluster scenario where transactions really commit while a
     # dispatcher is working is where the placement is proven.

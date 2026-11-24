@@ -1,13 +1,16 @@
 defmodule Hologram.Sync.Dispatcher do
   @moduledoc false
 
-  # Reads the oplog forward, one window at a time, and hands each window's effects to whoever
-  # routes them. One of these runs per node: the log is shared, the reading is not, and two nodes
-  # reading it need no agreement because each keeps its own place.
+  # Reads the oplog forward and hands each round's effects to whoever routes them. One of these
+  # runs per node: the log is shared, the reading is not, and two nodes reading it need no agreement
+  # because each keeps its own place.
   #
-  # A window ends at the final limit (see `Hologram.Sync.FinalLimit`), the serial every save at or
-  # below has ended at, so no effect can still appear in a window once it's read. The limit waits
-  # only for the saves that hold the serial lock, so a long write outside Hologram delays nothing.
+  # The place is the final limit (see `Hologram.Sync.FinalLimit`), the serial every save at or below
+  # has ended at, so no effect can still appear at or below it once it's read. The limit waits only
+  # for the saves that hold the serial lock, so a long write outside Hologram delays nothing. A save
+  # running holds the limit back, but not the saves committing around it: each round sends every
+  # committed effect not yet sent, above the limit too, and keeps the seqs it skipped below the
+  # highest it sent, which a save still running fills once it commits.
 
   use GenServer
 
@@ -38,11 +41,15 @@ defmodule Hologram.Sync.Dispatcher do
   @doc """
   Starts the dispatcher.
 
-  `:handler` is called with the effects of each window, in seq order and never none, and the place
-  the window was read FROM (see `Hologram.DB.Oplog.place/1`), which is what a frame built from
-  these effects may claim a client has reached: a client replaying from there gets this whole batch
-  again, and never less. It is required, since a dispatcher with nowhere to send what it reads
-  would advance its place past effects nobody saw.
+  `:handler` is called with the effects of each round, in seq order and never none, the place the
+  round read FROM, and what has been sent: the highest seq, and the ranges below it not sent. The
+  place is the final limit before the round (see `Hologram.DB.Oplog.place/1`), which is what a
+  frame built from these effects may claim a client has reached: a client replaying from there gets
+  this whole batch again, and never less, and with it every effect sent above the limit before. An
+  effect above the seq or in a range can have committed after the round read, so rows read for the
+  batch can hold it; every other one at or below the seq has gone out, or never will. The handler
+  is required, since a dispatcher with nowhere to send what it reads would advance its place past
+  effects nobody saw.
 
   `:cursor` is the place reading starts from, and defaults to the first final limit, worked out in
   a round run as this dispatcher STARTS: a node begins with what happens from then on, because what
@@ -54,7 +61,7 @@ defmodule Hologram.Sync.Dispatcher do
   nicety. What wakes the dispatcher is usually the very append a client is waiting for - a limit
   worked out then can stand above that append and pass it by, for good. A client that filled from
   the rows before it and holds a store missing it would go on holding one until some later write to
-  the same window happened to refresh it.
+  the same rows happened to refresh it.
 
   `:advance` runs one round of the final limit, `Hologram.Sync.FinalLimit.advance/1` unless given.
   Tests give their own, since a save a test's transaction runs never ends.
@@ -77,7 +84,7 @@ defmodule Hologram.Sync.Dispatcher do
 
   `:read_edge` names a `Hologram.Sync.ReadEdge` process keeping how far the log has been read,
   which is what a dispatcher put there before this one started resumes from - a restart that began
-  at the edge as it stands would skip the window the last one was reading. It is optional: without
+  at the edge as it stands would skip the effects the last one was reading. It is optional: without
   one the edge lives in this process alone, and dies with it.
 
   `:recheck_interval_ms` is how soon a round waiting for a save looks again, 10 ms unless the
@@ -120,7 +127,11 @@ defmodule Hologram.Sync.Dispatcher do
       read_edge: Keyword.get(opts, :read_edge),
       recheck_interval_ms: Keyword.get(opts, :recheck_interval_ms, @default_recheck_interval_ms),
       recheck_scheduled: false,
-      rotate_log_id: Keyword.get(opts, :rotate_log_id, &Oplog.rotate_log_id/1)
+      rotate_log_id: Keyword.get(opts, :rotate_log_id, &Oplog.rotate_log_id/1),
+      # The highest seq sent, at or above the place, and the seqs between them not sent, as
+      # `{first, last}` ranges in order (see `Hologram.DB.Oplog.read_unsent/2`).
+      sent_through: nil,
+      unsent: []
     }
 
     {:ok, state, {:continue, :start_listening}}
@@ -163,10 +174,13 @@ defmodule Hologram.Sync.Dispatcher do
   defp advance_limit(state) do
     limit = state.advance.(state.limit)
 
-    state
-    |> Map.put(:limit, limit)
-    |> check_loss(state.limit)
-    |> watch_prepared(FinalLimit.holders(limit))
+    advanced =
+      state
+      |> Map.put(:limit, limit)
+      |> check_loss(state.limit)
+      |> watch_prepared(FinalLimit.holders(limit))
+
+    {:ok, advanced}
   rescue
     # A hot standby can't read the unlogged table naming the server's run, and a restore has the
     # system tables dropped for a while. Neither moves the log, so the limit stays where it was and
@@ -174,7 +188,7 @@ defmodule Hologram.Sync.Dispatcher do
     error in [DBConnection.ConnectionError, MatchError, Postgrex.Error] ->
       Logger.debug("Hologram: the final limit wasn't worked out: " <> Exception.message(error))
 
-      state
+      {:error, state}
   end
 
   # The server may have lost commits this dispatcher read when the run names another log id than
@@ -212,12 +226,25 @@ defmodule Hologram.Sync.Dispatcher do
     finish_recovery(state)
   end
 
+  # A round that couldn't work out the limit reads nothing: the database it would read is as likely
+  # out of reach. Nor does one that couldn't date the log, which may come from a run that lost what
+  # was sent (see `Hologram.Sync.FinalLimit.counted?/1`), and the round after finds out. Nor does
+  # one that found a loss and couldn't give the log a new id: its sessions are still running, under
+  # a place the server may have lost.
   defp dispatch(state) do
-    advanced = advance_limit(state)
+    case advance_limit(state) do
+      {:ok, advanced} ->
+        if advanced.pending_rotation == nil and FinalLimit.counted?(advanced.limit) do
+          advanced
+          |> read_to(FinalLimit.place(advanced.limit))
+          |> schedule_recheck()
+        else
+          schedule_recheck(advanced)
+        end
 
-    advanced
-    |> read_to(FinalLimit.place(advanced.limit))
-    |> schedule_recheck()
+      {:error, state} ->
+        schedule_recheck(state)
+    end
   end
 
   # Every announcement and every nudge asks the same question, so the ones already waiting are
@@ -243,7 +270,7 @@ defmodule Hologram.Sync.Dispatcher do
     send(self(), :wake)
     state.on_loss.()
 
-    %{state | cursor: nil, limit: FinalLimit.new(), log_id: nil}
+    %{state | cursor: nil, limit: FinalLimit.new(), log_id: nil, sent_through: nil, unsent: []}
   end
 
   defp finish_recovery(state) do
@@ -268,45 +295,86 @@ defmodule Hologram.Sync.Dispatcher do
     end
   end
 
+  defp max_place({seq, _tx, _at} = place, {other_seq, _other_tx, _other_at})
+       when seq >= other_seq,
+       do: place
+
+  defp max_place(_place, other_place), do: other_place
+
   # Kept where this process dying cannot take it, as well as in the process itself: the state of
   # one that crashed is gone, and its replacement resuming at the edge would leave every session on
-  # this node holding a place past a window none of them was sent.
+  # this node holding a place past effects none of them was sent.
   defp move_to(state, place) do
     if state.read_edge, do: ReadEdge.put(state.read_edge, {place, state.log_id})
 
     %{state | cursor: place}
   end
 
-  defp read_to(state, nil), do: state
+  # The seqs sent are taken out of the ranges not sent, and the ones skipped above the highest sent
+  # before go in. Every save at or below the limit has ended, so a seq there not sent never will be.
+  defp note_sent(state, seqs, sent_through, limit_seq) do
+    {filled, above} = Enum.split_with(seqs, &(&1 <= sent_through))
+
+    unsent =
+      state.unsent
+      |> punch(filled)
+      |> Kernel.++(skipped(sent_through, above))
+      |> Enum.flat_map(fn
+        {_first, last} when last <= limit_seq -> []
+        {first, last} -> [{max(first, limit_seq + 1), last}]
+      end)
+
+    %{state | sent_through: Enum.max([sent_through, limit_seq | above]), unsent: unsent}
+  end
+
+  # Both in order, so one walk takes every seq out of the ranges.
+  defp punch(ranges, []), do: ranges
+
+  defp punch([], _seqs), do: []
+
+  defp punch([{first, _last} | _ranges] = ranges, [seq | seqs]) when seq < first,
+    do: punch(ranges, seqs)
+
+  defp punch([{_first, last} = range | ranges], [seq | _seqs] = seqs) when seq > last,
+    do: [range | punch(ranges, seqs)]
+
+  defp punch([{first, last} | ranges], [seq | seqs]) do
+    left = if seq > first, do: [{first, seq - 1}], else: []
+    right = if seq < last, do: [{seq + 1, last}], else: []
+
+    left ++ punch(right ++ ranges, seqs)
+  end
+
+  defp read_to(%{cursor: nil} = state, nil), do: state
 
   # The first limit is where a dispatcher with nowhere to resume from begins.
   defp read_to(%{cursor: nil} = state, limit_place), do: move_to(state, limit_place)
 
+  # Without a limit yet, as one resumed has until its first round ends, the effects above the place
+  # go out and the place stays.
+  defp read_to(state, nil), do: read_to(state, state.cursor)
+
   defp read_to(
-         %{cursor: {from_seq, _tx, _at} = cursor} = state,
-         {to_seq, _to_tx, _to_at} = limit_place
-       )
-       when to_seq > from_seq do
-    case Oplog.read_window(from_seq, to_seq) do
-      [] ->
-        move_to(state, limit_place)
+         %{cursor: {cursor_seq, _tx, _at} = cursor} = state,
+         {limit_seq, _limit_tx, _limit_at} = limit_place
+       ) do
+    sent_through = max(state.sent_through || cursor_seq, cursor_seq)
 
-      effects ->
-        # The place moves only once the handler has taken them: a round that crashes halfway, or is
-        # skipped while the data model is held, reads the same window again, which routing must
-        # tolerate, rather than passing it silently.
-        state.handler.(effects, cursor)
+    effects = Oplog.read_unsent(sent_through, state.unsent)
+    noted = note_sent(state, Enum.map(effects, & &1.seq), sent_through, limit_seq)
 
-        move_to(state, limit_place)
-    end
+    # The place moves only once the handler has taken them: a round that crashes halfway, or is
+    # skipped while the data model is held, reads the same effects again, which routing must
+    # tolerate, rather than passing them silently.
+    if effects != [], do: state.handler.(effects, cursor, {noted.sent_through, noted.unsent})
+
+    move_to(noted, max_place(cursor, limit_place))
   rescue
     # A data model under a hold can't be routed against until it is released (see
     # Hologram.Entity.Model.hold/0). The round is skipped rather than crashed, which would restart
     # this process on every round for as long as the hold stands.
     Hologram.StaleModelError -> state
   end
-
-  defp read_to(state, _limit_place), do: state
 
   # The edge is cleared first, so a session joining from here on finds none and stops (see
   # `Hologram.Sync.Session`), and the sessions stopped are every one that may have read it.
@@ -343,6 +411,12 @@ defmodule Hologram.Sync.Dispatcher do
   end
 
   defp schedule_recheck(state), do: state
+
+  defp skipped(_previous, []), do: []
+
+  defp skipped(previous, [seq | seqs]) when seq == previous + 1, do: skipped(seq, seqs)
+
+  defp skipped(previous, [seq | seqs]), do: [{previous + 1, seq - 1} | skipped(seq, seqs)]
 
   defp wake_up(state) do
     # Draining first is what makes the drain safe: the round after it notes the serials handed out

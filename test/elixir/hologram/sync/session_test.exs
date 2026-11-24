@@ -651,17 +651,52 @@ defmodule Hologram.Sync.SessionTest do
       refute_received {:sync_deltas, _cursor, _deltas, _seq}
     end
 
-    # Its last save can have been running when the gap's edge was read, and commit after the gap was
-    # read, so the gap need not hold it.
-    test "tells a batch routed during the catch-up that reaches past the edge" do
-      row = create("after")
+    # Read in a round the dispatcher ended before the session read the edge, so the gap holds every
+    # effect it does, also the ones above the edge, which a round sends as they commit.
+    test "passes over a batch routed during the catch-up read from below the edge, though it reaches past it" do
+      row = create("before")
 
       batch = [
         logged(:patch_entity, Module2, row.id, %{"c" => "before"}, 191),
-        logged(:patch_entity, Module2, row.id, %{"c" => "after"}, 201)
+        logged(:patch_entity, Module2, row.id, %{"c" => "before"}, 201)
       ]
 
-      part = Live.part_now(batch, nil, Edges.index(), QueryCache.synced_types(), at_seq(190), 200)
+      part = Live.part_now(batch, nil, Edges.index(), QueryCache.synced_types(), at_seq(190), 190)
+
+      DB.update!(Module2, row.id, c: "after")
+
+      gap = [
+        logged(:patch_entity, Module2, row.id, %{"c" => "after"}, 195),
+        logged(:patch_entity, Module2, row.id, %{"c" => "before"}, 201)
+      ]
+
+      session =
+        start_session!(
+          edge: 200,
+          read_gap: fn ->
+            send(self(), {:live, part})
+
+            {:ok, gap}
+          end
+        )
+
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert id == row.id
+      assert data.c == "after"
+
+      assert_receive {:sync_synced, :all, _all_cursor}
+
+      await_live(session)
+      refute_received {:sync_deltas, _cursor, _deltas, _seq}
+    end
+
+    # Read once every save at or below the edge had ended, so its rows are no older than any of
+    # them, and a save in it can have committed after the gap was read.
+    test "tells a batch routed during the catch-up read from the edge" do
+      row = create("after")
+
+      batch = [logged(:patch_entity, Module2, row.id, %{"c" => "after"}, 201)]
+      part = Live.part_now(batch, nil, Edges.index(), QueryCache.synced_types(), at_seq(200), 200)
 
       start_session!(
         edge: 200,
@@ -1838,7 +1873,10 @@ defmodule Hologram.Sync.SessionTest do
 
       assert deltas == [
                %{
-                 data: WireData.row(EntityOperations.get(Module2, task.id)),
+                 data:
+                   Module2
+                   |> EntityOperations.get(task.id)
+                   |> WireData.row(),
                  id: task.id,
                  op: :put_entity,
                  type: "Hologram.Test.Fixtures.Entity.Module2"
@@ -2175,7 +2213,7 @@ defmodule Hologram.Sync.SessionTest do
       await_fill()
 
       DB.update!(Module2, task.id, c: "after")
-      route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], 200)
+      route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], 199)
       await_live(session)
 
       refute_received {:sync_deltas, _cursor, _deltas, _applied_seq}

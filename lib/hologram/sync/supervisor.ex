@@ -14,7 +14,7 @@ defmodule Hologram.Sync.Supervisor do
   # unanswered for 4 seconds or its first statement for 150, taking the dispatcher with it. The
   # dispatcher keeps its final limit through a round that can't work out a new one, which a pool
   # checkout gives up on after about 4 seconds with DBConnection's default queue settings, and
-  # crashes only on a window it can't read, which it opens only after a round that read the
+  # crashes only on a read it can't make, which it makes only after a round that read the
   # database. So it stays within 3 restarts in 5 seconds, and only it restarts.
 
   use Supervisor
@@ -98,7 +98,7 @@ defmodule Hologram.Sync.Supervisor do
   # reading if it resumed anywhere but where it left off.
   defp dispatcher_child do
     {Dispatcher,
-     handler: &Live.route/2,
+     handler: &Live.route/3,
      notifications: @notifications,
      on_loss: &cut_sessions_on_loss/0,
      read_edge: ReadEdge}

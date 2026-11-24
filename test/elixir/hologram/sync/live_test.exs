@@ -584,22 +584,25 @@ defmodule Hologram.Sync.LiveTest do
       assert parts[nil].verdicts[PolicyModule17] == %{}
     end
 
-    # Read with the rows, so a replica's batch with an entry above the batch's counts, while one
-    # with entries only at or below it doesn't.
-    test "gives each replica's highest batch with an entry above the batch's", context do
+    # Read with the rows, so a replica's batch with an entry above the place counts, also one
+    # committed into the seqs below the effects' highest, which a save running when the effects were
+    # read held, while one with entries only at or below the place doesn't.
+    test "gives each replica's highest batch with an entry above the place", context do
       project = create!(PolicyModule17, public: true)
 
-      batch_seq = log_batch(project, 2_000, "replica_b", 3)
-      log_batch(project, 2_001, "replica_a", 8)
+      place_seq = log_batch(project, 2_000, "replica_c", 5)
+      log_batch(project, 2_001, "replica_b", 3)
+      batch_seq = log_batch(project, 2_002, "replica_a", 8)
 
       effects = [
         effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}, seq: batch_seq)
       ]
 
-      parts = parts(effects, context.sessions, context.edges, @synced, @place)
+      place = {place_seq, 2_000, 1_700_000_000_000_000}
+      parts = parts(effects, context.sessions, context.edges, @synced, place)
 
-      assert parts[nil].overtaking_seqs == %{"replica_a" => 8}
-      assert parts[context.alice].overtaking_seqs == %{"replica_a" => 8}
+      assert parts[nil].overtaking_seqs == %{"replica_a" => 8, "replica_b" => 3}
+      assert parts[context.alice].overtaking_seqs == %{"replica_a" => 8, "replica_b" => 3}
     end
 
     test "names the types a grant moved every row of, for its holder alone", context do
@@ -944,7 +947,7 @@ defmodule Hologram.Sync.LiveTest do
     end
   end
 
-  describe "route/2" do
+  describe "route/3" do
     setup do
       setup_query_cache(QueryCacheStub, false)
 
@@ -1001,6 +1004,25 @@ defmodule Hologram.Sync.LiveTest do
 
       assert_received {:live, part}
       assert readable_ids(part, PolicyModule17) == MapSet.new([project.id])
+    end
+
+    test "counts the batches with an entry above the given seq sent or below it not sent as overtaking",
+         context do
+      project = create!(PolicyModule17, public: true)
+
+      unsent_seq = log_batch(project, 2_000, "replica_b", 3)
+      log_batch(project, 2_001, "replica_c", 5)
+      batch_seq = log_batch(project, 2_002, "replica_a", 8)
+
+      effect =
+        effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}, seq: batch_seq)
+
+      Sessions.register(context.alice)
+
+      route([effect], @place, {batch_seq - 1, [{unsent_seq, unsent_seq}]})
+
+      assert_received {:live, part}
+      assert part.overtaking_seqs == %{"replica_a" => 8, "replica_b" => 3}
     end
 
     # No client checks permissions, so no row carries a verdict, and a change only a verdict reads

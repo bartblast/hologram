@@ -43,6 +43,7 @@ defmodule Hologram.Sync.FinalLimit do
 
   @type t :: %{
           candidates: list({non_neg_integer, MapSet.t(String.t())}),
+          counted: boolean,
           limit: non_neg_integer | nil,
           limit_entry: Oplog.log_entry() | nil,
           losses: non_neg_integer,
@@ -58,6 +59,7 @@ defmodule Hologram.Sync.FinalLimit do
   def new do
     %{
       candidates: [],
+      counted: false,
       limit: nil,
       limit_entry: nil,
       losses: 0,
@@ -96,7 +98,7 @@ defmodule Hologram.Sync.FinalLimit do
       case error.term do
         {:error, %Postgrex.Error{postgres: %{code: :object_not_in_prerequisite_state}}} ->
           :ok = Oplog.populate_database_copy()
-          state
+          %{state | counted: false}
 
         _other ->
           reraise error, __STACKTRACE__
@@ -120,14 +122,22 @@ defmodule Hologram.Sync.FinalLimit do
   def advance(state, run, high, running, last_entry_through, entry_at) do
     case enter_run(state, run, entry_at) do
       {:ok, entered} ->
-        entered
+        %{entered | counted: true}
         |> note(high, running)
         |> settle(running, last_entry_through)
 
       :run_moved ->
-        state
+        %{state | counted: false}
     end
   end
+
+  @doc """
+  Returns whether the last round read the log in a run it could count, so what the log holds at or
+  below the limit is final in the run the reader is in. One that found no run, a run moved under it
+  or the system tables mid-restore left the limit where it was without dating the log it would read.
+  """
+  @spec counted?(t) :: boolean
+  def counted?(state), do: state.counted
 
   @doc """
   Returns the saves the waiting rounds wait for, by the virtual transaction ids pg_locks names them
@@ -217,6 +227,8 @@ defmodule Hologram.Sync.FinalLimit do
   # A restore passes through a missing key on its way, but a crash during one leaves it missing, and
   # the limit can't move until the restore is run again. Warns once per stretch.
   defp put_run_back(state) do
+    state = %{state | counted: false}
+
     case {Oplog.ensure_server_run(), state.run_key_missing} do
       {:ok, _key_missing} ->
         state
@@ -252,7 +264,7 @@ defmodule Hologram.Sync.FinalLimit do
         raise_limit(%{state | candidates: kept, through: through}, entry)
 
       {_entry, _other_run} ->
-        %{state | candidates: candidates}
+        %{state | candidates: candidates, counted: false}
     end
   end
 

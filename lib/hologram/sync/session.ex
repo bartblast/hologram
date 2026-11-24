@@ -104,8 +104,8 @@ defmodule Hologram.Sync.Session do
   every batch read after that reaches the session, and the fill, read after it, holds every
   save that ended before. Each type ends with a marker saying the client holds all of it, and the
   last with one saying it holds everything, dated by the edge read. A batch the session handles
-  after the fill claims the place it was read from, and one wholly at or below that edge is passed
-  over: the fill holds it, and its rows can be older than the fill's.
+  after the fill claims the place it was read from, and one read from a place below that edge is
+  passed over: the fill holds it, and its rows can be older than the fill's.
 
   `:read_gap` reads what a returning client missed - absent for one arriving with nothing, in which
   case every row it may see is sent. It answers what `Hologram.Sync.Catchup.gap/4` answers: the
@@ -117,10 +117,9 @@ defmodule Hologram.Sync.Session do
   process. Whether a gap can be had at all is decided before the session starts, since it is a
   question about the log rather than about this client - the session's own read finding it can't
   is the log having moved since, a gap that outgrew a replay or a deploy landing in between. A
-  batch wholly at or below the edge read before the gap is passed over whenever it reaches the
-  session, as a first arrival's is: the gap holds it, and its rows can be older than the
-  catch-up's. Any other batch reaching the session during the catch-up is told
-  after it.
+  batch read from a place below the edge read before the gap is passed over whenever it reaches
+  the session, as a first arrival's is: the gap holds it, and its rows can be older than the
+  catch-up's. Any other batch reaching the session during the catch-up is told after it.
 
   `:read_fill` reads what a client arriving with nothing is sent of one entity type, answering what
   `Hologram.Sync.Fill.read/4` answers, which it defaults to. Handed over as a reader for the same
@@ -483,10 +482,10 @@ defmodule Hologram.Sync.Session do
   # The batches that reach the session meanwhile queue behind this callback. One whose rows were
   # read before a save at or below the edge committed holds rows older than the chunks', which hold
   # that save, so told after the catch-up it would put a row back as it stood before it. Such a
-  # batch was read up to a limit at or below the edge, which the dispatcher reached before the
-  # session read it, so its own effects are all at or below the edge too: the gap holds them, and
-  # the batch is passed over (see `tell_part_unless_held/2`). The rest are told after the catch-up
-  # (see `trusts_held?/2`).
+  # batch was read from a limit below the edge, in a round the dispatcher ended before the session
+  # read the edge, so every effect it holds, also one above the edge, had committed before the gap
+  # was read: the gap holds them, and the batch is passed over (see `tell_part_unless_held/2`). The
+  # rest are told after the catch-up (see `trusts_held?/2`).
   defp catch_up(state) do
     :ok = Sessions.register(state.actor_user_id)
 
@@ -535,7 +534,7 @@ defmodule Hologram.Sync.Session do
     context = %{
       edge: edge_seq,
       edge_place: edge,
-      # As the dispatcher reads its batches (see `Hologram.Sync.Live.route/2`): a build where no
+      # As the dispatcher reads its batches (see `Hologram.Sync.Live.route/3`): a build where no
       # client checks permissions sends rows without verdicts, so the search follows only the read
       # rules' edges.
       edges: Edges.index(QueryCache.permission_checking?()),
@@ -692,7 +691,7 @@ defmodule Hologram.Sync.Session do
   end
 
   # Once the gap is told, the client holds what every save at or below the edge wrote, so the
-  # marker claims the edge, and a batch wholly at or below it is passed over. A batch told after
+  # marker claims the edge, and a batch read from below it is passed over. A batch told after
   # with a serial at or below the last one read now - also one starting at or below the gap's edge
   # and ending above it - can be in some of what the catch-up read and not in the rest, so it hands
   # its rows over whole (see `trusts_held?/2`).
@@ -923,13 +922,16 @@ defmodule Hologram.Sync.Session do
 
   defp translate(lens, message), do: Lens.message(lens, message)
 
-  # A batch wholly at or below the edge read before a first arrival's fill is one the fill read,
-  # and one wholly at or below a returning client's is one its catch-up read. Either way its rows
-  # can be older than what the client was told, so it is passed over. What it would tell went out
-  # with the fill or the catch-up: the gap holds every effect at or below the edge since the
-  # client's place, and its chunks judge them on rows read after.
-  defp tell_part_unless_held(%{held_below: below} = state, %{seq_range: {_lowest, highest}})
-       when is_integer(below) and highest <= below do
+  # A batch read from a place below the edge read before a first arrival's fill is one the fill
+  # read, and one below a returning client's is one its catch-up read: the dispatcher ended its
+  # round before the session read the edge, since the edge is where a round ends, and a round reads
+  # every effect committed by then. Either way its rows can be older than what the client was told,
+  # so it is passed over, though it holds effects above the edge. What it would tell went out with
+  # the fill or the catch-up: the gap holds every effect committed since the client's place when it
+  # was read, and its chunks judge them on rows read after. A batch read from the edge or above was
+  # read after every save at or below the edge ended.
+  defp tell_part_unless_held(%{held_below: below} = state, %{place: {place_seq, _tx, _at}})
+       when is_integer(below) and place_seq < below do
     state
   end
 
