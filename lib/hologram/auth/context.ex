@@ -113,9 +113,10 @@ defmodule Hologram.Auth.Context do
   ended ancestor stops the search, so a process started by a supervised task that has ended isn't
   found. Neither is work handed to a process that was already running or that a supervisor started
   with no record of who asked for it, nor a stream's workers when its enumeration began outside the
-  session. A process with the :sensitive flag, set before or during the session, passes on no mark,
-  so what it spawns isn't found either, while a task it hands to a supervisor is still judged by
-  its record.
+  session. Nor is a process started from another node, or a task whose caller is on one, since each
+  node keeps its marks in its own trace session. A process with the :sensitive flag, set before or
+  during the session, passes on no mark, so what it spawns isn't found either, while a task it hands
+  to a supervisor is still judged by its record.
 
   without_session/1 clears the mark for what the process spawns inside it, but a supervisor's task
   has no mark to clear: a task whose caller has served a session or has ended counts, even one
