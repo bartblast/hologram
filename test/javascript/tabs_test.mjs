@@ -2457,7 +2457,16 @@ describe("Tabs", () => {
         Tabs.receive({event: "synced", frame: marker, kind: "frame"});
 
         sinon.assert.calledTwice(SyncStream.receiveFrame);
-        sinon.assert.calledWith(SyncStream.receiveFrame, "synced", marker);
+        sinon.assert.calledWithExactly(
+          SyncStream.receiveFrame.firstCall,
+          "sync_resync",
+          resync,
+        );
+        sinon.assert.calledWithExactly(
+          SyncStream.receiveFrame.secondCall,
+          "synced",
+          marker,
+        );
       });
 
       // Leading from a place it never held, it would be told only what changed since.
