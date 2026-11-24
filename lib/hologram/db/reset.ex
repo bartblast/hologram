@@ -6,6 +6,7 @@ defmodule Hologram.DB.Reset do
   # connection options, guards the env, and rebuilds and seeds afterwards.
 
   alias Hologram.DB.Mapper
+  alias Hologram.Migration.ShadowVerifier
   alias Hologram.Test.DatabaseBootstrap
   alias Hologram.Test.DatabaseBootstrap.Connection
 
@@ -13,6 +14,11 @@ defmodule Hologram.DB.Reset do
   # besides the configured one: the test env reset drops them by name. No marker guard could
   # tell the cluster tests' migrations database, which they claim as the prod env's.
   @legacy_databases %{hologram_cluster_tests: ["hologram_cluster_tests_migrations"]}
+
+  # When the pg_stat_activity row aliased "a" is a client session of its database, in the session
+  # check and the sweep's listing alike (see check_no_other_sessions!/2).
+  @client_session ~s{("a"."backend_type" = 'client backend' } <>
+                    ~s{OR ("a"."backend_type" IS NULL AND "a"."usesysid" IS NOT NULL))}
 
   # How long apart the leftover sweep lists the databases. A database a run has just created has
   # no session until the run connects to it, a moment later, so only a database both listings
@@ -37,13 +43,12 @@ defmodule Hologram.DB.Reset do
 
   @typedoc """
   The databases drop_leftovers!/4 removes: the ones named, every run database of a run base (see
-  Hologram.Test.DatabaseBootstrap.run_database_name/2), the shadow verifier's scratch database of
-  a run base or a run database, and, with a scratch prefix, the scratch databases named with it.
+  Hologram.Test.DatabaseBootstrap.run_database_name/2), and the shadow verifier's scratch database
+  of a run base or a run database.
   """
   @type leftovers :: %{
           databases: list(String.t()),
-          run_bases: list(String.t()),
-          scratch_prefix: String.t() | nil
+          run_bases: list(String.t())
         }
 
   @typedoc """
@@ -99,8 +104,7 @@ defmodule Hologram.DB.Reset do
   Returns the leftovers the test env reset of the given app drops (see drop_leftovers!/4), besides
   the given configured test database, which it keeps: the app's legacy shared databases, the run
   databases of the configured one and of those, the shadows of all of them, among them the
-  configured one's from before runs had databases of their own, and, for Hologram's own suite,
-  its scratch databases.
+  configured one's from before runs had databases of their own.
   """
   @spec leftovers(atom, String.t()) :: leftovers
   def leftovers(otp_app, database) do
@@ -108,8 +112,7 @@ defmodule Hologram.DB.Reset do
 
     %{
       databases: legacy_databases -- [database],
-      run_bases: Enum.uniq([database | legacy_databases]),
-      scratch_prefix: if(otp_app == :hologram, do: DatabaseBootstrap.scratch_prefix())
+      run_bases: Enum.uniq([database | legacy_databases])
     }
   end
 
@@ -121,7 +124,8 @@ defmodule Hologram.DB.Reset do
   schemas and nothing else, so tables of an Ecto repo sharing it stay. Refuses, changing
   nothing, while another client is connected to the database, when its marker says it belongs
   to another app, another env, or the migrator - the given app and env are the current ones -
-  or when something outside the two schemas depends on them, which the drop would take along.
+  or when it has more than one row, when something outside the two schemas depends on them, which the
+  drop would take along, or when the database name is longer than PostgreSQL's 63 bytes.
 
   Runs in the dev and test envs only.
   """
@@ -135,11 +139,17 @@ defmodule Hologram.DB.Reset do
     {:ok, _started} = Application.ensure_all_started(:postgrex)
 
     with_connection(database_opts, "postgres", fn maintenance_pid ->
-      if database_exists?(maintenance_pid, database) do
-        with_connection(database_opts, database, &clear!(&1, database, otp_app, env))
-      else
-        create_database!(maintenance_pid, database)
-        :created
+      cond do
+        # The maintenance connection would count as another session of it.
+        database == "postgres" ->
+          clear!(maintenance_pid, database, otp_app, env)
+
+        database_exists?(maintenance_pid, database) ->
+          with_connection(database_opts, database, &clear!(&1, database, otp_app, env))
+
+        true ->
+          DatabaseBootstrap.create_database!(maintenance_pid, database)
+          :created
       end
     end)
   end
@@ -176,10 +186,10 @@ defmodule Hologram.DB.Reset do
   # many sessions the role couldn't see the kind of, and how to let it see.
   defp check_no_other_sessions!(pid, database) do
     statement = """
-    SELECT count(*), count(*) FILTER (WHERE "backend_type" IS NULL), current_user
-    FROM pg_catalog.pg_stat_activity
-    WHERE "datname" = current_database() AND "pid" <> pg_backend_pid()
-      AND ("backend_type" = 'client backend' OR ("backend_type" IS NULL AND "usesysid" IS NOT NULL))
+    SELECT count(*), count(*) FILTER (WHERE "a"."backend_type" IS NULL), current_user
+    FROM pg_catalog.pg_stat_activity AS "a"
+    WHERE "a"."datname" = current_database() AND "a"."pid" <> pg_backend_pid()
+      AND #{@client_session}
     """
 
     case Connection.query!(pid, statement).rows do
@@ -266,11 +276,6 @@ defmodule Hologram.DB.Reset do
       end
   end
 
-  # Created from template0, which holds nothing: template1 may have been customised.
-  defp create_database!(pid, database) do
-    Connection.query!(pid, "CREATE DATABASE #{quote_name(database)} TEMPLATE template0")
-  end
-
   defp database_exists?(pid, database) do
     statement = """
     SELECT 1 FROM pg_catalog.pg_database WHERE "datname" = #{literal(database)}
@@ -320,7 +325,7 @@ defmodule Hologram.DB.Reset do
   defp drop_listed_leftovers(pid, listed, first_listing) do
     shadows =
       for {name, _listed} <- listed,
-          shadow = shadow_name(name),
+          shadow = ShadowVerifier.shadow_database_name(name),
           Map.has_key?(listed, shadow),
           into: %{},
           do: {name, shadow}
@@ -398,9 +403,7 @@ defmodule Hologram.DB.Reset do
     SELECT "d"."oid", "d"."datname", pg_catalog.pg_has_role(current_user, "d"."datdba", 'USAGE'),
       EXISTS (
         SELECT 1 FROM pg_catalog.pg_stat_activity AS "a"
-        WHERE "a"."datid" = "d"."oid"
-          AND ("a"."backend_type" = 'client backend'
-            OR ("a"."backend_type" IS NULL AND "a"."usesysid" IS NOT NULL))
+        WHERE "a"."datid" = "d"."oid" AND #{@client_session}
       )
     FROM pg_catalog.pg_database AS "d"
     WHERE NOT "d"."datistemplate" AND #{condition}
@@ -421,12 +424,12 @@ defmodule Hologram.DB.Reset do
       |> Map.keys()
       |> Enum.filter(&run_database?(&1, leftovers.run_bases))
 
-    shadows = MapSet.new(leftovers.run_bases ++ run_databases, &shadow_name/1)
+    shadows =
+      MapSet.new(leftovers.run_bases ++ run_databases, &ShadowVerifier.shadow_database_name/1)
 
     Map.filter(databases, fn {name, _listed} ->
       name in leftovers.databases or name in run_databases or MapSet.member?(shadows, name) or
-        orphan_shadow?(name, leftovers.run_bases) or
-        scratch_database?(name, leftovers.scratch_prefix)
+        orphan_shadow?(name, leftovers.run_bases)
     end)
   end
 
@@ -537,23 +540,9 @@ defmodule Hologram.DB.Reset do
     end
   end
 
-  # What Hologram.Test.ScratchDatabaseCase names them: the prefix, the run's OS process id and a
-  # counter.
-  defp scratch_database?(_name, nil), do: false
-
-  defp scratch_database?(name, prefix) do
-    case String.split_at(name, String.length(prefix)) do
-      {^prefix, rest} -> Regex.match?(~r/^[0-9]+_[0-9]+$/, rest)
-      _other -> false
-    end
-  end
-
   defp sessions("1"), do: "1 other session is"
 
   defp sessions(count), do: "#{count} other sessions are"
-
-  # As the shadow verifier names it.
-  defp shadow_name(database), do: Mapper.fit_identifier([database], [], "shadow")
 
   defp with_connection(database_opts, database, fun) do
     connection_opts = [

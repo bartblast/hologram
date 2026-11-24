@@ -1,14 +1,13 @@
 defmodule Hologram.Test.DatabaseBootstrap do
   @moduledoc false
 
-  # This is not public API yet - it is consumed by the Hologram test suite and by the
-  # feature, cluster and sync test apps.
-  # TODO: consider promoting to public API (docs, stable surface), so that client apps
-  # can bootstrap their own test databases with it.
+  # Not public API: apps reach it through Hologram.Test.setup/0, while Hologram's own suite and
+  # test apps call it directly.
 
   alias Hologram.DB.Config
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
+  alias Hologram.Migration.ShadowVerifier
   alias Hologram.Test.DatabaseBootstrap.Connection
 
   # What a later run's sweep tells a test database by - never its name, so a database whose name
@@ -17,9 +16,16 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
   @ran_key {__MODULE__, :ran}
 
-  # What the names of Hologram's own scratch databases start with, a run's OS process id and a
-  # counter following.
-  @scratch_prefix "hologram_scratch_"
+  @doc """
+  Creates the given database through the given connection, empty.
+  """
+  @spec create_database!(pid, String.t()) :: Postgrex.Result.t()
+  # From template0, which holds nothing: template1 may have been customised, and a database
+  # cannot be copied from a template anyone is connected to.
+  def create_database!(maintenance_pid, database) do
+    quoted_database = Mapper.quote_identifier(database)
+    Connection.query!(maintenance_pid, "CREATE DATABASE #{quoted_database} TEMPLATE template0")
+  end
 
   @doc """
   Returns the comment a test database carries for a later run to drop it once nothing is
@@ -154,13 +160,6 @@ defmodule Hologram.Test.DatabaseBootstrap do
     :ok
   end
 
-  @doc """
-  Returns what the names of Hologram's own scratch databases start with, before the OS process
-  id of the run that made one and a counter.
-  """
-  @spec scratch_prefix() :: String.t()
-  def scratch_prefix, do: @scratch_prefix
-
   # No handshake timeout: the handshake starts once the server accepted the TCP connection,
   # and a server that is up either finishes it, however long its cold start takes, or closes
   # the socket. The TCP connect itself keeps the driver's timeout. No ping timeout either, for the
@@ -180,13 +179,6 @@ defmodule Hologram.Test.DatabaseBootstrap do
     ]
   end
 
-  # Created from template0, which holds nothing: template1 may have been customised, and a
-  # database cannot be copied from a template anyone is connected to.
-  defp create_database!(maintenance_pid, database) do
-    quoted_database = Mapper.quote_identifier(database)
-    Connection.query!(maintenance_pid, "CREATE DATABASE #{quoted_database} TEMPLATE template0")
-  end
-
   # IF EXISTS: another run's sweep, or a test dropping its own databases, may have got there
   # first.
   defp drop_database_if_exists!(maintenance_pid, database) do
@@ -200,7 +192,7 @@ defmodule Hologram.Test.DatabaseBootstrap do
   # later one to find both by. Without FORCE, so a session the listing missed is never ended:
   # a database someone connected to since is left for a later run.
   defp drop_leftover_database!(maintenance_pid, database) do
-    drop_database_if_exists!(maintenance_pid, Mapper.fit_identifier([database], [], "shadow"))
+    drop_database_if_exists!(maintenance_pid, ShadowVerifier.shadow_database_name(database))
     drop_database_if_exists!(maintenance_pid, database)
   rescue
     error in Postgrex.Error ->

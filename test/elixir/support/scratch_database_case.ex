@@ -55,9 +55,7 @@ defmodule Hologram.Test.ScratchDatabaseCase do
   end
 
   setup do
-    database =
-      "#{DatabaseBootstrap.scratch_prefix()}#{System.pid()}_#{System.unique_integer([:positive])}"
-
+    database = "hologram_scratch_#{System.pid()}_#{System.unique_integer([:positive])}"
     quoted_database = Mapper.quote_identifier(database)
 
     with_maintenance_connection(fn connection ->

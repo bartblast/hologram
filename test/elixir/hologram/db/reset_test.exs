@@ -103,8 +103,7 @@ defmodule Hologram.DB.ResetTest do
   # The reset refuses while another client is connected, and the case template's pool is one, so
   # each test builds the database's state through it and then stops it. A closed session leaves
   # pg_stat_activity a moment after its socket does. The mark goes first: a marked database with
-  # no session is one another run's bootstrap drops. A run killed after that leaves the database
-  # unmarked, for the test env reset to drop by its scratch name.
+  # no session is one another run's bootstrap drops.
   defp disconnect(scratch_opts) do
     with_scratch(scratch_opts, fn connection ->
       query!(
@@ -176,7 +175,7 @@ defmodule Hologram.DB.ResetTest do
   # database of anyone else's.
   defp own_leftovers(scratch_opts, overrides \\ []) do
     Map.merge(
-      %{databases: [], run_bases: [scratch_opts[:database]], scratch_prefix: nil},
+      %{databases: [], run_bases: [scratch_opts[:database]]},
       Map.new(overrides)
     )
   end
@@ -333,29 +332,6 @@ defmodule Hologram.DB.ResetTest do
              }
 
       assert existing_databases(scratch_opts, databases) == []
-    end
-
-    test "drops the scratch databases named with the prefix", %{
-      database_opts: database_opts,
-      scratch_opts: scratch_opts
-    } do
-      prefix = scratch_opts[:database] <> "_scratch_"
-      scratch_database = create_database(scratch_opts, prefix <> "123_456")
-
-      kept =
-        Enum.map(
-          [prefix <> "123", prefix <> "12a_456", prefix <> "123_456_7"],
-          &create_database(scratch_opts, &1)
-        )
-
-      leftovers = own_leftovers(scratch_opts, scratch_prefix: prefix)
-
-      assert drop_leftovers!(database_opts, leftovers) == %{
-               dropped: [scratch_database],
-               skipped: []
-             }
-
-      assert existing_databases(scratch_opts, [scratch_database | kept]) == Enum.sort(kept)
     end
 
     test "skips a database a session is connected to", %{
@@ -603,32 +579,21 @@ defmodule Hologram.DB.ResetTest do
     test "names the configured database's run databases" do
       assert leftovers(:my_app, "my_app_test") == %{
                databases: [],
-               run_bases: ["my_app_test"],
-               scratch_prefix: nil
+               run_bases: ["my_app_test"]
              }
     end
 
     test "names the cluster tests' migrations database and its run databases" do
       assert leftovers(:hologram_cluster_tests, "hologram_cluster_tests_test") == %{
                databases: ["hologram_cluster_tests_migrations"],
-               run_bases: ["hologram_cluster_tests_test", "hologram_cluster_tests_migrations"],
-               scratch_prefix: nil
-             }
-    end
-
-    test "names Hologram's own scratch databases for its own suite" do
-      assert leftovers(:hologram, "hologram_test") == %{
-               databases: [],
-               run_bases: ["hologram_test"],
-               scratch_prefix: DatabaseBootstrap.scratch_prefix()
+               run_bases: ["hologram_cluster_tests_test", "hologram_cluster_tests_migrations"]
              }
     end
 
     test "leaves the configured database out when it has a legacy database's name" do
       assert leftovers(:hologram_cluster_tests, "hologram_cluster_tests_migrations") == %{
                databases: [],
-               run_bases: ["hologram_cluster_tests_migrations"],
-               scratch_prefix: nil
+               run_bases: ["hologram_cluster_tests_migrations"]
              }
     end
   end
