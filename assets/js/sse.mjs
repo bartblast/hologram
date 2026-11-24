@@ -234,8 +234,8 @@ export default class Sse {
         : null;
 
     try {
-      const presentedKeys = Array.from(
-        App.subscriptionReceiptRegistry.entries.keys(),
+      const presentedReceipts = new Map(
+        App.subscriptionReceiptRegistry.entries,
       );
 
       const response = await fetch($.HANDSHAKE_PATH, {
@@ -295,8 +295,8 @@ export default class Sse {
       );
 
       if ($.#hasIdentityMoved()) {
-        $.#dropRefusedReceipts(presentedKeys, refreshed);
-      } else if (presentedKeys.length > 0 && refreshed.data.length === 0) {
+        $.#dropRefusedReceipts(presentedReceipts, refreshed);
+      } else if (presentedReceipts.size > 0 && refreshed.data.length === 0) {
         // A write held for that identity exists only in this tab's memory, so it goes out before
         // the page does. A sender that failed says so in the check below.
         await sending?.catch(() => {});
@@ -573,16 +573,20 @@ export default class Sse {
     $.closeStream();
   }
 
-  // Leaves any receipt added while the handshake was under way, which it didn't present.
-  static #dropRefusedReceipts(presentedKeys, refreshed) {
+  // Leaves any receipt added while the handshake was under way, which it didn't present - one
+  // that replaced a presented receipt under the same key too.
+  static #dropRefusedReceipts(presentedReceipts, refreshed) {
     const refreshedKeys = new Set(
       refreshed.data.map((triple) =>
         Type.encodeMapKey(Type.tuple(triple.data.slice(0, 2))),
       ),
     );
 
-    for (const key of presentedKeys) {
-      if (!refreshedKeys.has(key)) {
+    for (const [key, receipt] of presentedReceipts) {
+      if (
+        !refreshedKeys.has(key) &&
+        App.subscriptionReceiptRegistry.entries.get(key) === receipt
+      ) {
         App.subscriptionReceiptRegistry.entries.delete(key);
       }
     }

@@ -1571,6 +1571,32 @@ describe("Sse", () => {
         assert.isTrue(SubscriptionReceiptRegistry.entries.has(keptKey));
       });
 
+      // The page the new user mounted meanwhile can hold a subscription the old one held too.
+      it("keeps a receipt that replaced a refused one while the handshake was under way", async () => {
+        const renewed = receipt(Type.atom("room_a"), "page", "renewed-token");
+
+        fetchStub.callsFake(async () => {
+          SubscriptionReceiptRegistry.entries.set(refusedKey, renewed);
+
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              handshakeId: "handshake",
+              heartbeatIntervalMs: 15_000,
+              refreshedReceipts: serializedValue(Type.list()),
+            }),
+          };
+        });
+
+        await Sse.connect();
+
+        assert.strictEqual(
+          SubscriptionReceiptRegistry.entries.get(refusedKey),
+          renewed,
+        );
+      });
+
       it("expects its receipts to be honored from then on", async () => {
         stubHandshakeResponse({refreshedReceipts: Type.list()});
 
