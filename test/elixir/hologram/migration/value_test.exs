@@ -339,14 +339,23 @@ defmodule Hologram.Migration.ValueTest do
     end
 
     test "refuses a function nested inside another word" do
-      op =
-        put_in(
-          function_op(MyApp.Migration).opts[:backfill].term,
-          {:coalesce, [{:function, MyApp.Migration, :f, []}, {:value, "a"}]}
-        )
+      module =
+        compile_migration("20260813091522", """
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: fn title -> String.upcase(title) end
+        end
+        """)
+
+      path = "app/migrations/20260813091522.ex"
+      root = function_op(module)
+      term = root.opts[:backfill].term
+
+      assert Value.validate_ops!([root], path, module) == :ok
+
+      nested = put_in(root.opts[:backfill].term, {:coalesce, [term, {:value, "a"}]})
 
       assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
-        Value.validate_ops!([op], "app/migrations/20260813091522.ex", MyApp.Migration)
+        Value.validate_ops!([nested], path, module)
       end
     end
   end
