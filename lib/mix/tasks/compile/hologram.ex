@@ -1127,8 +1127,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # The copy of the graph the runtime's MFAs and the chunks' are listed on, and the data layer's
-  # reach of every page it lists again, without the manually ported MFAs. None when all three are
-  # kept: nothing lists them then.
+  # reach of every page it lists again or walks for the types it holds through rows, without the
+  # manually ported MFAs. None when the runtime, the chunk analysis and the data layer are all kept
+  # and no page is listed again: nothing reads it then.
   defp build_runtime_graph(_call_graph, true, _sup), do: nil
 
   defp build_runtime_graph(call_graph, false, sup) do
