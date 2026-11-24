@@ -525,7 +525,6 @@ function refusedAmounts(deltas) {
 // Judges where the moves would land from the value this client holds. That value can be out of
 // date, so the answer is never grounds for refusing a write: only the server judges a move, on
 // what its statement returns.
-// eslint-disable-next-line no-unused-vars
 function validateMoves(entityType, held, deltas) {
   const moved = Object.entries(deltas).map(([name, amount]) => [
     Type.atom(name),
