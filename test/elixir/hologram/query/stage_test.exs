@@ -4149,7 +4149,7 @@ defmodule Hologram.Query.StageTest do
 
     test "refuses a mistyped value for a name of the row above" do
       assert_error MisuseError,
-                   "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string",
+                   "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
                    fn -> new_row_triples!(Module2, [{{:outer, 1, :c}, {:==, 5}}], []) end
     end
 
