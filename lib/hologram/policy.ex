@@ -2107,7 +2107,8 @@ defmodule Hologram.Policy do
   # the row, of one a path or a set leads to, or of one above inside a quantifier. A derived field
   # never reads one, which the build refuses, so the names the clause writes are all there is. No
   # client ever holds such a value, so it answers the clause as unknown, and the server's verdict on
-  # the operation answers the rule.
+  # the operation answers the rule. The build renders every predicate reading one as a marker
+  # (see Compiler.reads_server_only?/2), which waits for that verdict, so the two must agree.
   defp reads_server_only?(entity_type, clause) do
     entity_type
     |> server_only_references(clause)

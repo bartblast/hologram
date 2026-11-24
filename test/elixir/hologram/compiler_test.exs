@@ -3144,12 +3144,23 @@ defmodule Hologram.CompilerTest do
 
       relationship :notes, [Hologram.CompilerTest.BakedSecretNote], inverse: board
 
-      allow :read, when: any(note <- notes, note.secret == "secret-x")
-      allow :read, when: any(note <- notes, any(tag <- note.tags, tag.label == "secret-y"))
-      allow :read, when: any(note <- notes, code == "secret-w")
-      allow :read, when: any(note <- notes, note.title == "t" or note.secret == "secret-z")
-      allow :read, when: all(note <- notes, note.board.code != "secret-v")
-      allow :read, when: any(note <- notes, any(tag <- note.tags, tag.name == code))
+      allow :read, as: :peek_note, when: any(note <- notes, note.secret == "secret-x")
+
+      allow :read,
+        as: :peek_tag,
+        when: any(note <- notes, any(tag <- note.tags, tag.label == "secret-y"))
+
+      allow :read, as: :peek_code, when: any(note <- notes, code == "secret-w")
+
+      allow :read,
+        as: :peek_title,
+        when: any(note <- notes, note.title == "t" or note.secret == "secret-z")
+
+      allow :read, as: :peek_path, when: any(note <- notes, note.board.code != "secret-v")
+
+      allow :read,
+        as: :peek_name,
+        when: any(note <- notes, any(tag <- note.tags, tag.name == code))
     end
 
     defmodule BakedSecretNote do
@@ -3161,7 +3172,7 @@ defmodule Hologram.CompilerTest do
       relationship :board, BakedSecretBoard, optional: true
       relationship :tags, [Hologram.CompilerTest.BakedSecretTag], inverse: note
 
-      allow :read, when: any(tag <- tags, tag.label == "secret-u")
+      allow :read
     end
 
     defmodule BakedSecretTag do
@@ -3883,28 +3894,37 @@ defmodule Hologram.CompilerTest do
             any_notes_js.(~s/{"filter":[#{marker_js}],"quantifier":"any","source":["tags"]}/),
             any_notes_js.(marker_js),
             any_notes_js.(~s/{"or":[[["title","==","t"]],[#{marker_js}]]}/),
-            ~s/{"predicates":[{"filter":[#{marker_js}],"quantifier":"all","source":["notes"]}],"to":null,"via":null}/,
+            any_notes_js.(marker_js),
             any_notes_js.(~s/{"filter":[#{marker_js}],"quantifier":"any","source":["tags"]}/)
           ],
           ","
         )
 
-      assert String.contains?(js, ~s/"policy":{"read":[#{rules_js}]}/)
+      assert String.contains?(js, ~s/"read":[#{rules_js}]}/)
 
-      read_js =
-        verdict_entry_js(BakedSecretBoard, :read, [
-          BakedSecretBoard,
-          BakedSecretNote,
-          BakedSecretTag
-        ])
+      # Everyone may read the notes and tags, so an any over them decides nothing by itself, and
+      # each line's verdict stands only because its condition reads a server-only attribute.
+      notes_types = [BakedSecretBoard, BakedSecretNote]
+      tags_types = [BakedSecretBoard, BakedSecretNote, BakedSecretTag]
 
-      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
+      verdicts_js =
+        Enum.map_join(
+          [
+            peek_code: notes_types,
+            peek_name: tags_types,
+            peek_note: notes_types,
+            peek_path: notes_types,
+            peek_tag: tags_types,
+            peek_title: notes_types,
+            read: tags_types
+          ],
+          ",",
+          fn {operation, read_types} ->
+            ~s/"#{operation}":#{verdict_entry_js(BakedSecretBoard, operation, read_types)}/
+          end
+        )
 
-      # An any over a stored set decides nothing by itself, so the note's read verdict stands only
-      # because its condition reads a server-only attribute.
-      note_read_js = verdict_entry_js(BakedSecretNote, :read, [BakedSecretNote, BakedSecretTag])
-
-      assert String.contains?(js, ~s/"verdicts":{"read":#{note_read_js}}/)
+      assert String.contains?(js, ~s/"verdicts":{#{verdicts_js}}/)
 
       refute String.contains?(js, "secret-")
     end

@@ -6269,7 +6269,9 @@ defmodule Hologram.Compiler do
 
   # Whether the given predicate, read on the rows of the given types nearest first, reads a
   # server-only attribute - of the row it is read on, of one a path leads to, or of a row above
-  # inside a quantifier - by its name or by an attribute operand.
+  # inside a quantifier - by its name or by an attribute operand. A predicate this renders as the
+  # marker has its client answer wait for the operation's verdict, so Policy.reads_server_only?/2
+  # must find it too, or the operation gets no verdict and the client never grants it.
   defp reads_server_only?(types, {name, _operator, {:attribute, other}}) do
     server_only_name?(name, types) or server_only_name?(other, types)
   end
