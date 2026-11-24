@@ -10,6 +10,7 @@ defmodule Hologram.DB.EntityOperations do
 
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Commons.KernelUtils
   alias Hologram.DB
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
@@ -318,6 +319,7 @@ defmodule Hologram.DB.EntityOperations do
     sorted_deltas = Enum.sort(deltas_map)
 
     validate_changes!(entity_type, sorted_changes, sorted_deltas, columns_by_field)
+    validate_id!(id)
 
     # Values are judged before the statement is built - nothing is written for changes the
     # declarations already refuse, or for an amount the statement couldn't be handed.
@@ -381,9 +383,13 @@ defmodule Hologram.DB.EntityOperations do
 
           changed_values = Enum.map(set_entries, fn {{_column, value}, _form} -> value end)
 
-          stamp = Keyword.get_lazy(opts, :stamp, &Clock.stamp/0)
+          # A caller that judged the row this leaves read the clock for it, so what it ranked by
+          # these timestamps is what lands.
+          clock_stamp = opts[:clock_stamp]
+
+          stamp = Keyword.get_lazy(opts, :stamp, fn -> clock_stamp || Clock.stamp() end)
           updated_at = written_at(stamp)
-          server_updated_at = server_written_at(opts[:stamp], updated_at)
+          server_updated_at = server_written_at(opts[:stamp], updated_at, clock_stamp)
           encoded_updated_at = Codec.encode(updated_at, :datetime)
           encoded_server_updated_at = Codec.encode(server_updated_at, :datetime)
           encoded_id = Codec.encode(id, :uuid)
@@ -430,10 +436,26 @@ defmodule Hologram.DB.EntityOperations do
   def validate_id!(id) do
     if not Validator.attribute_value_valid?(id, :uuid) do
       raise MisuseError,
-            "invalid id #{inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+            "invalid id #{KernelUtils.inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
     end
 
     :ok
+  end
+
+  # The timestamps an update sets, given the stamp it was authored under (nil being this node) and
+  # the node's clock reading - for a caller judging the row the update will leave.
+  @doc false
+  @spec written_timestamps(pos_integer | nil, pos_integer) :: %{
+          server_updated_at: DateTime.t(),
+          updated_at: DateTime.t()
+        }
+  def written_timestamps(stamp, clock_stamp) do
+    updated_at = written_at(stamp || clock_stamp)
+
+    %{
+      server_updated_at: server_written_at(stamp, updated_at, clock_stamp),
+      updated_at: updated_at
+    }
   end
 
   # The names update/4 refuses, refused for a caller that judges the update before making it - so a
@@ -443,12 +465,12 @@ defmodule Hologram.DB.EntityOperations do
   def validate_update!(RoleGrant, _changes), do: raise_grant_update!()
 
   def validate_update!(entity_type, changes) do
-    sorted_changes =
+    given_changes =
       changes
       |> Map.new()
-      |> Enum.sort()
+      |> Map.to_list()
 
-    validate_changes!(entity_type, sorted_changes, [], columns_by_field(entity_type))
+    validate_changes!(entity_type, given_changes, [], columns_by_field(entity_type))
   end
 
   # A unique attribute is worth asking about only when the value could be compared at all: a
@@ -1330,7 +1352,14 @@ defmodule Hologram.DB.EntityOperations do
     if violations == %{}, do: :ok, else: {:error, violations}
   end
 
-  defp validate_changes!(entity_type, sorted_changes, sorted_deltas, columns_by_field) do
+  # The refusals below name keys in the order of their printed text, which the client reproduces
+  # for any key - their term order can turn on the VM's atom table and a large map's hash.
+  #
+  # WARNING: must match validateChangeNames in assets/js/elixir/hologram/db.mjs.
+  defp validate_changes!(entity_type, changes, deltas, columns_by_field) do
+    sorted_changes = sort_by_printed_key(changes)
+    sorted_deltas = sort_by_printed_key(deltas)
+
     if sorted_changes == [] and sorted_deltas == [] do
       raise MisuseError,
             "invalid changes for #{inspect(entity_type)} - at least one declared attribute or to-one relationship must be changed"
@@ -1376,13 +1405,17 @@ defmodule Hologram.DB.EntityOperations do
       |> Enum.reject(&Map.has_key?(columns_by_field, &1))
 
     if unknown_names != [] do
-      listed_names = Enum.map_join(unknown_names, ", ", &inspect/1)
+      listed_names = Enum.map_join(unknown_names, ", ", &KernelUtils.inspect/1)
 
       raise MisuseError,
             "invalid changes for #{inspect(entity_type)} - only declared attributes and to-one relationships can be updated: #{listed_names}"
     end
 
     :ok
+  end
+
+  defp sort_by_printed_key(entries) do
+    Enum.sort_by(entries, fn {key, _value} -> KernelUtils.inspect(key) end)
   end
 
   defp validate_entity!(entity_type, entity) do
@@ -1463,7 +1496,11 @@ defmodule Hologram.DB.EntityOperations do
   # has no other moment, so it takes its own writer's timestamp and the two pairs agree exactly;
   # a stamp authored elsewhere is the writer's alone, and the node's clock answers beside it. The
   # same shape of number either way, milliseconds of a stamp, so the two pairs compare cleanly.
-  defp server_written_at(nil = _given_stamp, own_written_at), do: own_written_at
+  defp server_written_at(given_stamp, own_written_at, clock_stamp \\ nil)
 
-  defp server_written_at(_given_stamp, _own_written_at), do: written_at(Clock.stamp())
+  defp server_written_at(nil = _given_stamp, own_written_at, _clock_stamp), do: own_written_at
+
+  defp server_written_at(_given_stamp, _own_written_at, clock_stamp) do
+    written_at(clock_stamp || Clock.stamp())
+  end
 end

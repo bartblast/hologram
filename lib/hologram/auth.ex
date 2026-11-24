@@ -6,6 +6,7 @@ defmodule Hologram.Auth do
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
+  alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
@@ -27,6 +28,35 @@ defmodule Hologram.Auth do
   # The shape refusal can?/3 shares with its client twin (operationKey in
   # assets/js/elixir/hologram/auth.mjs) - a hand-ported pair, pinned on both tiers.
   @operation_shape_message "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
+
+  # Marks a struct as a row of the database as a change would leave it. Kept on the struct rather
+  # than in its metadata, whose fields travel to the browser with every entity: a marked row lives
+  # only for the length of a rule's evaluation.
+  @after_change :__after_change__
+
+  # The checker a rule's exact clauses are evaluated with (see Hologram.Policy.Evaluator): what it
+  # reads from a row marked by after_row/4, and from the rows reached from one, is the database as
+  # the change would leave it. An unmarked row reads as stored, so a bare name keeps meaning the
+  # stored value. The source is the one can_from?/4 takes.
+  @doc false
+  @spec after_checker(struct, list(struct) | :held | :stored) :: fun
+  def after_checker(new_row, source) do
+    &check_after_requirement(&1, &2, &3, source, new_row)
+  end
+
+  # The given stored row as the given change leaves it: the values put, the amounts moved and the
+  # edges the call adds or deletes, marked for after_checker/2 to read.
+  @doc false
+  @spec after_row(struct, map, map, %{{atom, Entity.id()} => :add | :delete}) :: struct
+  def after_row(row, values, deltas, edge_ops) do
+    moved = Map.new(deltas, fn {name, amount} -> {name, Map.fetch!(row, name) + amount} end)
+
+    row
+    |> Map.merge(values)
+    |> Map.merge(moved)
+    |> Map.put(:__meta__, %{row.__meta__ | relationship_ops: edge_ops})
+    |> Map.put(@after_change, true)
+  end
 
   @doc """
   Returns the grant rows answering the permission checks a render ran - the rows the given
@@ -110,34 +140,58 @@ defmodule Hologram.Auth do
   # write, never between its evaluation and its commit.
   # Outside a transaction the lock ends with the statement, so it holds nothing there.
   @doc false
+  @spec can_from?(
+          struct | Server.identity_id() | nil,
+          atom | {atom, atom | list(atom)},
+          struct,
+          list(struct) | :held | :stored
+        ) ::
+          boolean
+  def can_from?(user_or_id, operation, entity, source) do
+    evaluate(user_or_id, operation, entity, source)
+  end
+
+  # Whether the given user may make one specific change to the given stored row, the values named
+  # as DB.update/3 names them: the rules reading the row after the change read it with those values
+  # on it. :update asks what the Writer asks, every field the values change covered by a line that
+  # holds. A name asks that name's rules, and {:update, field} or {:update, fields} those fields'.
+  @doc false
   @spec can?(
           struct | Server.identity_id() | nil,
           atom | {atom, atom | list(atom)},
           struct,
-          list(struct) | :held
+          keyword | map
         ) ::
           boolean
-  def can?(user_or_id, operation, entity, source) do
-    evaluate(user_or_id, operation, entity, source)
+  def can?(user_or_id, operation, %entity_type{} = row, values) do
+    validate_change_row!(row)
+    validate_change_values!(entity_type, values)
+
+    changes = Map.new(values)
+    new_row = if reads_changed_row?(entity_type), do: row_with_values(row, changes)
+
+    evaluate_change(user_or_id, operation, row, changes, new_row)
   end
 
   # The fields among the given ones of an update of the given row that no update rule holding for the
   # given user covers, sorted - none when the user may change them all. A field is covered by the
   # field-limited lines covering it and by every line covering the whole row (see
   # Hologram.Policy.field_rules/2). Each rule is evaluated once however many fields it covers, with
-  # the grants taken from the given source as can?/4 takes them. The fields are not validated: the
-  # Writer passes what a write changed, and can? what it validated.
+  # the grants taken from the given source as can_from?/4 takes them. The fields are not validated: the
+  # Writer passes what a write changed, and can? what it validated. Given the row the change leaves
+  # (see after_row/4), a rule reading it is judged on it, and otherwise asked whether some change
+  # could pass.
   @doc false
   @spec uncovered_fields(
           struct | Server.identity_id() | nil,
           struct,
           list(atom),
-          list(struct) | :held | :stored
+          list(struct) | :held | :stored,
+          struct | nil
         ) :: list(atom)
-  def uncovered_fields(user_or_id, %entity_type{} = row, fields, source) do
+  def uncovered_fields(user_or_id, %entity_type{} = row, fields, source, new_row \\ nil) do
     policy = Policy.build(entity_type)
-    checker = &check_requirement(&1, &2, &3, source)
-    actor_user_id = acting_user_id(user_or_id)
+    judge = rule_judge(row, new_row, acting_user_id(user_or_id), source)
 
     {uncovered, _held_by_rule} =
       fields
@@ -145,7 +199,7 @@ defmodule Hologram.Auth do
       |> Enum.reduce({[], %{}}, fn field, {uncovered, held_by_rule} ->
         rules = Policy.field_rules(policy, field)
 
-        case covered?(rules, row, actor_user_id, checker, held_by_rule) do
+        case covered?(rules, judge, held_by_rule) do
           {true, held_by_rule} -> {uncovered, held_by_rule}
           {false, held_by_rule} -> {[field | uncovered], held_by_rule}
         end
@@ -557,8 +611,8 @@ defmodule Hologram.Auth do
             {key, operation}, held_by_rule ->
               rules = Policy.operation_rules(policy, operation)
 
-              {holds?, held_by_rule} =
-                covered?(rules, row, canonical_user_id, checker, held_by_rule)
+              judge = &Evaluator.rule_matches?(&1, row, canonical_user_id, checker)
+              {holds?, held_by_rule} = covered?(rules, judge, held_by_rule)
 
               {{key, holds?}, held_by_rule}
           end)
@@ -627,7 +681,7 @@ defmodule Hologram.Auth do
   # read and the write it authorizes. A gate line reads nothing of the row but its id, so an
   # id-only struct is the whole entity it needs.
   defp check_authority!(entity, operation, role, actor_user_id) do
-    if not can?(actor_user_id, {operation, role}, entity, :held) do
+    if not can_from?(actor_user_id, {operation, role}, entity, :held) do
       raise Hologram.AccessDeniedError,
             unqualified_role_message(
               entity.__struct__,
@@ -740,6 +794,288 @@ defmodule Hologram.Auth do
     |> delegates?(actor_user_id, delegated_operation, source)
   end
 
+  # What a rule can read as the row after a change, from the values it states: a value failing its
+  # declaration or naming a row that doesn't exist can't be on that row, so the column reads as
+  # stored and its name comes back, apart for each reason: whether a row exists isn't something a
+  # refusal may say. A target found under :held stays locked, so it can't go between this read and
+  # a rule's hop to it.
+  @doc false
+  @spec judged_values(module, map, list(struct) | :held | :stored) ::
+          {map, list(atom), list(atom)}
+  def judged_values(entity_type, values, source) do
+    invalid =
+      case Entity.validate(entity_type, values) do
+        :ok -> []
+        {:error, violations} -> Map.keys(violations)
+      end
+
+    valid = Map.drop(values, invalid)
+    missing = missing_references(entity_type, valid, delegation_read_opts(source))
+
+    {Map.drop(valid, missing), invalid, missing}
+  end
+
+  # What a rule can read as the row after a change, from the amounts it moves counters by: an amount
+  # the column can't take, or a move to a value failing its declaration, can't be on that row, so
+  # the column reads as stored and its name comes back.
+  @doc false
+  @spec judged_deltas(struct, %{atom => integer}) :: {%{atom => integer}, list(atom)}
+  def judged_deltas(%entity_type{} = row, deltas) do
+    {valid, invalid} =
+      Enum.split_with(deltas, fn {name, amount} ->
+        Validator.attribute_value_valid?(amount, :integer) and
+          Entity.validate(entity_type, %{name => Map.fetch!(row, name) + amount}) == :ok
+      end)
+
+    {Map.new(valid), Keyword.keys(invalid)}
+  end
+
+  # The edges among the given ones that add a target with no row, which a rule reads as left out of
+  # the set. A target found under :held stays locked, as a reference's does.
+  @doc false
+  @spec missing_edge_targets(
+          module,
+          %{{atom, Entity.id()} => :add | :delete},
+          list(struct) | :held | :stored
+        ) :: list({atom, Entity.id()})
+  def missing_edge_targets(entity_type, edges, source) do
+    read_opts = delegation_read_opts(source)
+
+    for {{name, target_id} = edge, :add} <- edges,
+        Validator.attribute_value_valid?(target_id, :uuid),
+        target_type = Entity.related_type(entity_type, name),
+        EntityOperations.get(target_type, target_id, read_opts) == nil do
+      edge
+    end
+  end
+
+  defp missing_references(entity_type, values, read_opts) do
+    entity_type.__relationships__()
+    |> Enum.reject(fn {_name, target, _opts} -> is_list(target) end)
+    |> Enum.flat_map(fn {name, target_type, _opts} ->
+      field = String.to_existing_atom("#{name}_id")
+      target_id = Map.get(values, field)
+
+      if target_id == nil or EntityOperations.get(target_type, target_id, read_opts),
+        do: [],
+        else: [field]
+    end)
+  end
+
+  # What a rule reads from a row of the database as a change would leave it. Each hop applies the
+  # change, since a set read by id can't see it: the changed row is presented as it will be, and joins
+  # or leaves the sets its new values and edges put it in or take it out of. A role is looked up, and
+  # a delegated rule judged, against the database as stored, on the row the chain leads to.
+  defp check_after_requirement(
+         {:related, relationship_names},
+         %{@after_change => true} = row,
+         _actor_user_id,
+         source,
+         new_row
+       ) do
+    after_chain_row(row, relationship_names, delegation_read_opts(source), new_row)
+  end
+
+  defp check_after_requirement(
+         {:set, relationship_names},
+         %{@after_change => true} = row,
+         _actor_user_id,
+         source,
+         new_row
+       ) do
+    after_set_rows(row, relationship_names, delegation_read_opts(source), false, new_row)
+  end
+
+  defp check_after_requirement(
+         {:set, relationship_names, :whole},
+         %{@after_change => true} = row,
+         _actor_user_id,
+         source,
+         new_row
+       ) do
+    read_opts = delegation_read_opts(source)
+
+    after_set_rows(row, relationship_names, read_opts, source == :held, new_row)
+  end
+
+  defp check_after_requirement(
+         {:rel, relationship_names, role_names},
+         %{@after_change => true} = row,
+         actor_user_id,
+         source,
+         new_row
+       ) do
+    {hops, [last_name]} = Enum.split(relationship_names, -1)
+
+    with %{} = end_row <- after_chain_row(row, hops, delegation_read_opts(source), new_row),
+         target_id when target_id != nil <- related_id(end_row, last_name) do
+      target_type = Entity.path_target(row.__struct__, relationship_names)
+
+      grant_exists?(actor_user_id, {:instance, target_type, target_id}, role_names, source)
+    else
+      nil -> false
+    end
+  end
+
+  defp check_after_requirement(
+         {:via, delegated_operation, relationship_names},
+         %{@after_change => true} = row,
+         actor_user_id,
+         source,
+         new_row
+       ) do
+    read_opts = delegation_read_opts(source)
+
+    row
+    |> after_chain_row(relationship_names, read_opts, new_row)
+    |> stored_target(read_opts, new_row)
+    |> delegates?(actor_user_id, delegated_operation, source)
+  end
+
+  defp check_after_requirement(requirement, row, actor_user_id, source, _new_row) do
+    check_requirement(requirement, row, actor_user_id, source)
+  end
+
+  # A delegated rule is asked about a row as it stands, so a chain leading back to the changed row
+  # asks about the row as stored.
+  defp stored_target(%new_type{id: new_id}, read_opts, %new_type{id: new_id}),
+    do: EntityOperations.get(new_type, new_id, read_opts)
+
+  defp stored_target(target, _read_opts, _new_row), do: target
+
+  defp after_chain_row(nil, _relationship_names, _read_opts, _new_row), do: nil
+
+  defp after_chain_row(row, [], _read_opts, _new_row), do: row
+
+  defp after_chain_row(row, [relationship_name | rest], read_opts, new_row) do
+    row
+    |> after_to_one(relationship_name, read_opts, new_row)
+    |> after_chain_row(rest, read_opts, new_row)
+  end
+
+  # A reference naming the changed row leads to it as it will be, with no read.
+  defp after_to_one(row, relationship_name, read_opts, %new_type{id: new_id} = new_row) do
+    target_type = relationship_target(row.__struct__, relationship_name)
+
+    case related_id(row, relationship_name) do
+      nil ->
+        nil
+
+      ^new_id when target_type == new_type ->
+        new_row
+
+      target_id ->
+        with %{} = target <- EntityOperations.get(target_type, target_id, read_opts) do
+          Map.put(target, @after_change, true)
+        end
+    end
+  end
+
+  defp after_set_rows(row, relationship_names, read_opts, hold_set?, new_row) do
+    Enum.reduce(relationship_names, [row], fn relationship_name, rows ->
+      rows
+      |> Enum.flat_map(&after_linked_rows(&1, relationship_name, read_opts, hold_set?, new_row))
+      |> Enum.uniq_by(& &1.id)
+    end)
+  end
+
+  # In id order, as a set is read, so a derived set's bounds see what the database would return.
+  defp after_linked_rows(row, relationship_name, read_opts, hold_set?, new_row) do
+    entity_type = row.__struct__
+
+    cond do
+      to_one?(entity_type, relationship_name) ->
+        row
+        |> after_to_one(relationship_name, read_opts, new_row)
+        |> List.wrap()
+
+      row.id == nil ->
+        []
+
+      true ->
+        if hold_set?, do: SetLock.hold!(entity_type, row.id)
+
+        entity_type
+        |> EntityOperations.related_rows(row.id, relationship_name, read_opts)
+        |> after_set_members(row, relationship_name, read_opts, new_row)
+        |> Enum.map(&Map.put(&1, @after_change, true))
+        |> Enum.sort_by(& &1.id)
+    end
+  end
+
+  # The members of the set the given owner holds under the given relationship, once the change has
+  # applied, from the ones stored.
+  defp after_set_members(rows, %owner_type{} = owner, relationship_name, read_opts, new_row) do
+    %new_type{id: new_id} = new_row
+
+    case Entity.inverse_relationship(owner_type, relationship_name) do
+      %{reference?: true, forward: forward, target: ^new_type} ->
+        after_reference_members(rows, owner, forward, new_row)
+
+      %{forward: forward, target: ^new_type} ->
+        after_pair_members(rows, owner, forward, new_row)
+
+      nil when owner_type == new_type and owner.id == new_id ->
+        rows
+        |> with_call_edges(owner_type, relationship_name, read_opts, new_row)
+        |> present_row(new_row)
+
+      _other_set ->
+        present_row(rows, new_row)
+    end
+  end
+
+  # The changed row belongs to the set its reference names, whatever it held before.
+  defp after_reference_members(rows, owner, forward, new_row) do
+    others = without_row(rows, new_row)
+    reference_field = String.to_existing_atom("#{forward}_id")
+
+    if Map.fetch!(new_row, reference_field) == owner.id, do: [new_row | others], else: others
+  end
+
+  # A pair of the changed row's own to-many: the call's edge on this owner overrides the stored one.
+  defp after_pair_members(rows, owner, forward, new_row) do
+    case Map.get(new_row.__meta__.relationship_ops, {forward, owner.id}) do
+      :add -> [new_row | without_row(rows, new_row)]
+      :delete -> without_row(rows, new_row)
+      nil -> present_row(rows, new_row)
+    end
+  end
+
+  # The changed row's own to-many with the call's edges applied: an add already stored and a delete
+  # not stored change nothing, and a target that is gone is left out for the edge write to refuse.
+  defp with_call_edges(rows, entity_type, relationship_name, read_opts, new_row) do
+    target_type = Entity.related_type(entity_type, relationship_name)
+
+    new_row.__meta__.relationship_ops
+    |> Enum.filter(fn {{name, _target_id}, _op} -> name == relationship_name end)
+    |> Enum.reduce(rows, fn
+      {{_name, target_id}, :delete}, members ->
+        Enum.reject(members, &(&1.id == target_id))
+
+      {{_name, target_id}, :add}, members ->
+        if Enum.any?(members, &(&1.id == target_id)) do
+          members
+        else
+          target_type
+          |> EntityOperations.get(target_id, read_opts)
+          |> List.wrap()
+          |> Enum.concat(members)
+        end
+    end)
+  end
+
+  defp present_row(rows, %new_type{id: new_id} = new_row) do
+    Enum.map(rows, fn
+      %^new_type{id: ^new_id} -> new_row
+      row -> row
+    end)
+  end
+
+  defp without_row(rows, %new_type{id: new_id}) do
+    Enum.reject(rows, &match?(%^new_type{id: ^new_id}, &1))
+  end
+
   # The gate a revocation passes, asked the same way by the verb and by a batch's revocation write
   # so the two cannot drift: dropping one's own role needs no permission, taking someone else's is
   # the per-role question. Whether an entity may lose its last manager is the app's rule.
@@ -792,23 +1128,23 @@ defmodule Hologram.Auth do
 
   # Whether one of the given rules holds, reusing the answers already known for rules other fields
   # share - a rule covering several fields reads the grants and rows it rests on once.
-  defp covered?([], _row, _actor_user_id, _checker, held_by_rule), do: {false, held_by_rule}
+  defp covered?([], _judge, held_by_rule), do: {false, held_by_rule}
 
-  defp covered?([rule | later_rules], row, actor_user_id, checker, held_by_rule) do
+  defp covered?([rule | later_rules], judge, held_by_rule) do
     {holds?, held_by_rule} =
       case Map.fetch(held_by_rule, rule) do
         {:ok, holds?} ->
           {holds?, held_by_rule}
 
         :error ->
-          holds? = Evaluator.rule_matches?(rule, row, actor_user_id, checker)
+          holds? = judge.(rule)
 
           {holds?, Map.put(held_by_rule, rule, holds?)}
       end
 
     if holds?,
       do: {true, held_by_rule},
-      else: covered?(later_rules, row, actor_user_id, checker, held_by_rule)
+      else: covered?(later_rules, judge, held_by_rule)
   end
 
   defp delegates?(nil, _actor_user_id, _operation, _source), do: false
@@ -926,6 +1262,84 @@ defmodule Hologram.Auth do
     checker = &check_requirement(&1, &2, &3, source)
 
     Evaluator.grants?(policy, operation, entity, acting_user_id(user_or_id), checker)
+  end
+
+  defp evaluate_change(user_or_id, :update, %entity_type{} = row, changes, new_row) do
+    fields = Policy.changed_field_names(entity_type, Map.keys(changes))
+
+    uncovered_fields(user_or_id, row, fields, :stored, new_row) == []
+  end
+
+  defp evaluate_change(user_or_id, {:update, field_names} = operation, row, _changes, new_row)
+       when is_atom(field_names) or is_list(field_names) do
+    Policy.validate_operation!(row.__struct__, operation)
+
+    uncovered_fields(user_or_id, row, List.wrap(field_names), :stored, new_row) == []
+  end
+
+  defp evaluate_change(user_or_id, operation, %entity_type{} = row, _changes, new_row)
+       when is_atom(operation) do
+    Policy.validate_operation!(entity_type, operation)
+
+    if operation not in Policy.update_names(entity_type) do
+      raise MisuseError, change_operation_message(operation)
+    end
+
+    judge = rule_judge(row, new_row, acting_user_id(user_or_id), :stored)
+
+    entity_type
+    |> Policy.build()
+    |> Map.get(operation, [])
+    |> Enum.any?(judge)
+  end
+
+  defp evaluate_change(_user_or_id, operation, _row, _changes, _new_row) do
+    raise MisuseError, change_operation_message(operation)
+  end
+
+  defp change_operation_message(operation) do
+    "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got #{inspect(operation)}"
+  end
+
+  defp reads_changed_row?(entity_type) do
+    entity_type
+    |> Policy.build()
+    |> Map.values()
+    |> Enum.any?(fn rules -> Enum.any?(rules, &Map.has_key?(&1, :exact)) end)
+  end
+
+  # The row the given values leave, carrying the timestamps a write of them would set, so a rule
+  # ranking a set by them reads what the write would.
+  defp row_with_values(%entity_type{} = row, changes) do
+    {values, _invalid, _missing} = judged_values(entity_type, changes, :stored)
+
+    written =
+      if values == %{},
+        do: values,
+        else: Map.merge(values, EntityOperations.written_timestamps(nil, Clock.stamp()))
+
+    after_row(row, written, %{}, %{})
+  end
+
+  defp validate_change_row!(%{__meta__: %{attribute_ops: attribute_ops, relationship_ops: edges}})
+       when attribute_ops == %{} and edges == %{},
+       do: :ok
+
+  defp validate_change_row!(%entity_type{id: id}) do
+    raise MisuseError,
+          "can? with values asks about a row as stored - #{inspect(entity_type)} #{inspect(id)} carries recorded changes, so its fields no longer hold the stored values"
+  end
+
+  # A keyword list holding a __struct__ key becomes a struct once it's a map, so it's judged as one.
+  defp validate_change_values!(entity_type, values) do
+    changes = if Keyword.keyword?(values), do: Map.new(values), else: values
+
+    if is_struct(changes) or not is_map(changes) do
+      raise MisuseError,
+            "can? takes the values of a change as a keyword list or a map - got #{inspect(values)}"
+    end
+
+    EntityOperations.validate_update!(entity_type, changes)
   end
 
   defp grant_answer(rows, :held), do: rows != []
@@ -1118,6 +1532,20 @@ defmodule Hologram.Auth do
       end)
 
     target_type
+  end
+
+  # How a rule is judged for an update: on the row the change leaves when given one, and otherwise
+  # on the stored row alone.
+  defp rule_judge(row, nil, actor_user_id, source) do
+    checker = &check_requirement(&1, &2, &3, source)
+
+    &Evaluator.rule_matches?(&1, row, actor_user_id, checker)
+  end
+
+  defp rule_judge(row, new_row, actor_user_id, source) do
+    checker = after_checker(new_row, source)
+
+    &Evaluator.rule_matches?(&1, row, new_row, actor_user_id, checker)
   end
 
   # Private for the reason grant_global_role/3 is.

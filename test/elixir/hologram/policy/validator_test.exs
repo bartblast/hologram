@@ -10,6 +10,30 @@ defmodule Hologram.Policy.ValidatorTest do
   alias Hologram.Test.Fixtures.Role
 
   describe "validate_model!/2" do
+    defmodule NewRowValidatorUser do
+      use Hologram.Entity, user: true
+
+      allow :read
+    end
+
+    defmodule NewRowValidatorFixture8 do
+      use Hologram.Entity
+
+      role :member
+
+      allow :read
+      allow :update, as: :edit, to: :member
+    end
+
+    defmodule NewRowValidatorFixture12 do
+      use Hologram.Entity
+
+      attribute :priority, :integer
+
+      allow :read
+      allow :update, when: new(priority) >= 3
+    end
+
     test "returns :ok for empty model" do
       assert validate_model!([], []) == :ok
     end
@@ -1644,6 +1668,286 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       assert validate_model!([InlinePolicyFixture91], []) == :ok
+    end
+
+    test "returns :ok for an update line reading the row after the change" do
+      defmodule NewRowValidatorFixture1 do
+        use Hologram.Entity
+
+        attribute :status, :enum, values: [:approved, :pending], default: :pending
+
+        allow :read
+        allow :update, when: status == :pending and new(status) == :approved
+      end
+
+      assert validate_model!([NewRowValidatorFixture1], []) == :ok
+    end
+
+    test "rejects new() on a server-only attribute" do
+      defmodule NewRowValidatorFixture2 do
+        use Hologram.Entity
+
+        attribute :secret, :boolean, server_only: true
+
+        allow :read
+        allow :update, when: new(secret) == true
+      end
+
+      expected_msg =
+        "invalid predicate :secret for allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture2 - :secret is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NewRowValidatorFixture2], [])
+      end
+    end
+
+    test "rejects new() on a path ending at a derived field counting a related set" do
+      defmodule NewRowValidatorFixture3 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+
+        relationship :channel, Module32
+
+        allow :read
+        allow :update, when: new(channel.message_count) > 3
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture3 - channel.message_count counts messages - a policy condition reads a related set only through any, none or all"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NewRowValidatorFixture3], [])
+      end
+    end
+
+    test "rejects a derived field counting a related set compared with new() written first" do
+      defmodule NewRowValidatorFixture19 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+
+        attribute :limit, :integer
+
+        relationship :channel, Module32
+
+        allow :read
+        allow :update, when: new(limit) >= channel.message_count
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture19 - channel.message_count counts messages - a policy condition reads a related set only through any, none or all"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NewRowValidatorFixture19], [])
+      end
+    end
+
+    test "rejects a pinned condition reading the row above on a line for another operation" do
+      expected_msg =
+        ~s/invalid when option [{{:outer, 1, :title}, {:==, "x"}}] for allow :read in Hologram.Policy.ValidatorTest.NewRowValidatorFixture4 - a pinned condition must be a list of predicates, each pairing a name or a path with a value/
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NewRowValidatorFixture4 do
+          use Hologram.Entity
+
+          attribute :title, :string
+
+          allow :read, when: ^[{{:outer, 1, :title}, {:==, "x"}}]
+        end
+      end
+    end
+
+    test "rejects new() on a path through a type nobody may read" do
+      defmodule NewRowValidatorFixture6 do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        allow :create
+      end
+
+      defmodule NewRowValidatorFixture7 do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Policy.ValidatorTest.NewRowValidatorFixture6
+
+        allow :update, when: new(parent.archived) == false
+      end
+
+      expected_msg =
+        "allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture7 reads Hologram.Policy.ValidatorTest.NewRowValidatorFixture6 through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.NewRowValidatorFixture6: a browser holding the row answers such a check itself"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NewRowValidatorFixture6, NewRowValidatorFixture7], [])
+      end
+    end
+
+    test "returns :ok for role and operation checks on the new row" do
+      defmodule NewRowValidatorFixture9 do
+        use Hologram.Entity
+
+        relationship :project, Hologram.Policy.ValidatorTest.NewRowValidatorFixture8
+
+        allow :read
+
+        allow :update,
+          only: [:project],
+          when: has_role(:member, new(project)) and can(:edit, new(project))
+      end
+
+      assert validate_model!(
+               [NewRowValidatorUser, NewRowValidatorFixture8, NewRowValidatorFixture9],
+               []
+             ) == :ok
+    end
+
+    test "rejects has_role naming a role the new row's type doesn't declare" do
+      defmodule NewRowValidatorFixture10 do
+        use Hologram.Entity
+
+        relationship :project, Hologram.Policy.ValidatorTest.NewRowValidatorFixture8
+
+        allow :read
+        allow :update, when: has_role(:nope, new(project))
+      end
+
+      expected_msg =
+        "unknown role :nope in has_role(:nope, new(project)) of allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture10 - declared roles of Hologram.Policy.ValidatorTest.NewRowValidatorFixture8 are: :member"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!(
+          [NewRowValidatorUser, NewRowValidatorFixture8, NewRowValidatorFixture10],
+          []
+        )
+      end
+    end
+
+    test "rejects can through a to-many relationship" do
+      defmodule NewRowValidatorFixture11 do
+        use Hologram.Entity
+
+        relationship :projects, [Hologram.Policy.ValidatorTest.NewRowValidatorFixture8]
+
+        allow :read
+        allow :update, when: can(:edit, new(projects))
+      end
+
+      expected_msg =
+        "invalid when option can(:edit, new(projects)) for allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture11 - relationship :projects is to-many, but can requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!(
+          [NewRowValidatorUser, NewRowValidatorFixture8, NewRowValidatorFixture11],
+          []
+        )
+      end
+    end
+
+    test "rejects a via: reaching a rule that reads the row after a change" do
+      defmodule NewRowValidatorFixture13 do
+        use Hologram.Entity
+
+        relationship :task, Hologram.Policy.ValidatorTest.NewRowValidatorFixture12
+
+        allow :read
+        allow :update, via: task
+      end
+
+      expected_msg =
+        "allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture13 asks allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture12 through task, whose rules read the row after a change with new(), but nothing changes that row here - give it a line without new() and ask that one, like allow :update, as: :edit, except: [:field], ... with via: {:edit, task}"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NewRowValidatorFixture12, NewRowValidatorFixture13], [])
+      end
+    end
+
+    test "rejects a can() reaching a rule that reads the row after a change" do
+      defmodule NewRowValidatorFixture14 do
+        use Hologram.Entity
+
+        relationship :task, Hologram.Policy.ValidatorTest.NewRowValidatorFixture12
+
+        allow :read
+        allow :update, only: [:task], when: can(:update, new(task))
+      end
+
+      expected_msg =
+        "allow :update, only: [:task] in Hologram.Policy.ValidatorTest.NewRowValidatorFixture14 asks allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture12 through task, whose rules read the row after a change with new(), but nothing changes that row here - give it a line without new() and ask that one, like allow :update, as: :edit, except: [:field], ... with can(:edit, new(task))"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NewRowValidatorFixture12, NewRowValidatorFixture14], [])
+      end
+    end
+
+    test "rejects can naming an operation with anything but an atom" do
+      defmodule NewRowValidatorFixture17 do
+        use Hologram.Entity
+
+        relationship :task, Hologram.Policy.ValidatorTest.NewRowValidatorFixture12
+
+        allow :read
+        allow :update, only: [:task], when: can(^{:update, :priority}, new(task))
+      end
+
+      expected_msg =
+        "invalid when option can({:update, :priority}, new(task)) for allow :update, only: [:task] in Hologram.Policy.ValidatorTest.NewRowValidatorFixture17 - can names an operation with an atom"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NewRowValidatorFixture12, NewRowValidatorFixture17], [])
+      end
+    end
+
+    test "rejects a pinned role check with a chain that names no relationships" do
+      expected_msg =
+        "invalid when option [{{:can, :update}, [{:a}]}] for allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture18 - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NewRowValidatorFixture18 do
+          use Hologram.Entity
+
+          allow :update, when: ^[{{:can, :update}, [{:a}]}]
+        end
+      end
+    end
+
+    test "returns :ok for a via: past a field-limited line using new()" do
+      defmodule NewRowValidatorFixture15 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+        attribute :title, :string
+
+        allow :read
+        allow :update, only: [:priority], when: new(priority) >= 3
+        allow :update, as: :edit, except: [:priority]
+      end
+
+      defmodule NewRowValidatorFixture16 do
+        use Hologram.Entity
+
+        relationship :task, Hologram.Policy.ValidatorTest.NewRowValidatorFixture15
+
+        allow :read
+        allow :update, via: {:edit, task}
+      end
+
+      assert validate_model!([NewRowValidatorFixture15, NewRowValidatorFixture16], []) == :ok
+    end
+
+    test "rejects a pinned condition wrapping the row above twice" do
+      expected_msg =
+        ~s/invalid when option [{{:outer, 1, {:outer, 1, :title}}, {:==, "x"}}] for allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture5 - a pinned condition must be a list of predicates, each pairing a name or a path with a value/
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NewRowValidatorFixture5 do
+          use Hologram.Entity
+
+          attribute :title, :string
+
+          allow :update, when: ^[{{:outer, 1, {:outer, 1, :title}}, {:==, "x"}}]
+        end
+      end
     end
 
     test "rejects a condition through a path ending at a derived field counting a related set" do
