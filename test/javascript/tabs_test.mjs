@@ -151,6 +151,8 @@ describe("Tabs", () => {
   afterEach(async () => {
     await Tabs.leave();
 
+    Durability.noteStoredReplica({id: null});
+
     globalThis.Hologram.sync = originalSync;
 
     releases.forEach((release) => release());
@@ -204,7 +206,8 @@ describe("Tabs", () => {
       assert.isFalse(reconnecting.called);
     });
 
-    it("takes a fresh identity and lets the batches go in a tab that was following", async () => {
+    // The page's own pair won't do: a browser can serve one cached page to two tabs.
+    it("asks for an identity and lets the batches go in a tab that was following", async () => {
       const group = nextGroup();
 
       await holdLeaderLock(group);
@@ -214,8 +217,29 @@ describe("Tabs", () => {
 
       Tabs.dissolve();
 
-      assert.equal(Replica.id, "r-fresh");
+      assert.isTrue(Replica.awaitingMint);
       assert.isTrue(disowning.calledOnce);
+    });
+
+    // Asked before the reconnect, whose handshake is what carries the request.
+    it("asks for the identity ahead of the stream it opens", async () => {
+      const asking = sinon.spy(Replica, "requestMint");
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      Tabs.dissolve();
+
+      assert.isTrue(asking.calledBefore(reconnecting));
+    });
+
+    it("asks for no identity in the tab that was leading", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      Tabs.dissolve();
+
+      assert.isFalse(Replica.awaitingMint);
     });
 
     // The frames it was being handed stop here, so it needs a stream the server serves sync on.
@@ -315,6 +339,251 @@ describe("Tabs", () => {
       Tabs.dissolve();
 
       assert.isTrue(disowning.calledOnce);
+    });
+
+    // Nobody else will send what it holds now.
+    it("wakes the sender", async () => {
+      const flushing = sinon.stub(Batches, "flush");
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      Tabs.dissolve();
+
+      assert.isTrue(flushing.calledOnce);
+      assert.isTrue(flushing.calledAfter(disowning));
+    });
+
+    it("does nothing outside a group", async () => {
+      const flushing = sinon.stub(Batches, "flush");
+
+      await Tabs.dissolve();
+
+      assert.isFalse(disowning.called);
+      assert.isFalse(reconnecting.called);
+      assert.isFalse(flushing.called);
+    });
+  });
+
+  // A tab whose own write failed.
+  describe("storeLost()", () => {
+    const heardBy = (channel) =>
+      new Promise((resolve) => {
+        channel.onmessage = (event) => resolve(event.data);
+      });
+
+    beforeEach(() => {
+      sinon.stub(Batches, "flush");
+      sinon.stub(Batches, "disown");
+      sinon.stub(Sse, "reconnect");
+    });
+
+    it("tells the group and leaves it", async () => {
+      const group = nextGroup();
+
+      await Tabs.join(group, stubs());
+
+      const listener = sibling(group);
+      const heard = heardBy(listener);
+
+      await Tabs.storeLost();
+
+      assert.deepStrictEqual(await heard, {kind: "storage_failed"});
+      assert.isNull(Tabs.name);
+    });
+
+    // Leaving drops the messages waiting behind a store write, and this one has to arrive.
+    it("tells the group ahead of a message waiting on a store write", async () => {
+      const group = nextGroup();
+
+      await Tabs.join(group, stubs());
+
+      Tabs.post({kind: "frame"}, new Promise(() => {}));
+
+      const listener = sibling(group);
+      const heard = heardBy(listener);
+
+      Tabs.storeLost();
+
+      assert.deepStrictEqual(await heard, {kind: "storage_failed"});
+    });
+
+    // It writes neither rows nor a place, so they stay true for the tabs that go on using them.
+    it("tells nobody when it was following", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      const posting = sinon.spy(BroadcastChannel.prototype, "postMessage");
+
+      await Tabs.storeLost();
+
+      assert.isFalse(posting.called);
+      assert.isNull(Tabs.name);
+    });
+
+    it("lets a later tab lead after the tab that led has failed", async () => {
+      const group = nextGroup();
+
+      await Tabs.join(group, stubs());
+      await Tabs.storeLost();
+
+      assert.isTrue(await isLockFree(group));
+    });
+
+    // Handed the lead later, it would send under the group's identity with a count of its own.
+    it("never takes the lead after failing as a follower", async () => {
+      const group = nextGroup();
+      const led = sinon.spy();
+      const release = await holdLeaderLock(group);
+
+      await Tabs.join(group, {onLead: led, onMessage: () => {}});
+      await Tabs.storeLost();
+
+      release();
+      await waitForEventLoop();
+
+      assert.isFalse(led.called);
+      assert.isTrue(await isLockFree(group));
+    });
+
+    // Kept, every tab opened later would follow a leader that doesn't exist.
+    it("lets the lock go when the store fails while the tab takes the lead", async () => {
+      const group = nextGroup();
+      const release = await holdLeaderLock(group);
+
+      await Tabs.join(group, {
+        onLead: () => Tabs.storeLost(),
+        onMessage: () => {},
+      });
+
+      Tabs.ready();
+
+      release();
+      await waitForEventLoop();
+
+      assert.isNull(Tabs.name);
+      assert.isTrue(await isLockFree(group));
+    });
+
+    // It hasn't taken the lead, so its stream is still the one a follower greeted the server with.
+    it("opens a stream of its own when a held message loses the store before a handed lead is taken", async () => {
+      const group = nextGroup();
+      const led = sinon.spy();
+      const release = await holdLeaderLock(group);
+      const wasStarted = Sse.isStarted;
+
+      await Tabs.join(group, {
+        onLead: led,
+        onMessage: () => Tabs.storeLost(),
+      });
+
+      sibling(group).postMessage({answer: {}, kind: "answered", seq: 1});
+      await waitForEventLoop();
+
+      release();
+      await waitForEventLoop();
+
+      Sse.isStarted = true;
+
+      try {
+        Tabs.ready();
+      } finally {
+        Sse.isStarted = wasStarted;
+      }
+
+      sinon.assert.calledOnce(Sse.reconnect);
+      assert.isFalse(led.called);
+      assert.isNull(Tabs.name);
+    });
+
+    it("leaves even when the channel can't take the message", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      sinon
+        .stub(BroadcastChannel.prototype, "postMessage")
+        .throws(new DOMException("closed", "InvalidStateError"));
+
+      await Tabs.storeLost();
+
+      assert.isNull(Tabs.name);
+    });
+
+    // The tab that failed let the lock go, and this one was granted it before the message came. It
+    // holds the group's identity as a leader would, but has no store to record a number in.
+    describe("a tab handed the lead just before it hears of the failure", () => {
+      const closeBatch = () => {
+        Batches.open("todos");
+        Batches.current().append({
+          id: "t1",
+          op: "delete",
+          stamp: 1,
+          type: "MyApp.Todo",
+        });
+
+        return Batches.close();
+      };
+
+      const handedTheLead = async ({ready}) => {
+        const group = nextGroup();
+        const release = await holdLeaderLock(group);
+
+        await Tabs.join(group, {onLead: () => {}, onMessage: () => {}});
+
+        if (ready) {
+          Tabs.ready();
+        }
+
+        Replica.adopt({id: "r-group", token: "statement-group"});
+        Durability.noteStoredReplica(Replica.current());
+
+        release();
+        await waitForEventLoop();
+      };
+
+      beforeEach(() => {
+        Durability.hadStore = true;
+        Batches.reset();
+      });
+
+      afterEach(() => {
+        Batches.reset();
+        Durability.hadStore = false;
+        Replica.reset();
+      });
+
+      for (const ready of [true, false]) {
+        it(`numbers nothing under the group's identity (${ready ? "ready" : "starting"})`, async () => {
+          await handedTheLead({ready});
+
+          assert.isTrue(Tabs.leader);
+
+          await Tabs.dissolve();
+
+          assert.isNull(closeBatch().seq);
+        });
+      }
+
+      // The group's state can name a pair the tab's own read of the store didn't find.
+      it("numbers nothing under a pair the store isn't known to hold", async () => {
+        await handedTheLead({ready: false});
+
+        Replica.adopt({id: "r-newer", token: "statement-newer"});
+
+        await Tabs.dissolve();
+
+        assert.isNull(closeBatch().seq);
+      });
+    });
+
+    it("says nothing outside a group", async () => {
+      const posting = sinon.spy(BroadcastChannel.prototype, "postMessage");
+
+      await Tabs.storeLost();
+
+      assert.isFalse(posting.called);
     });
   });
 
@@ -1513,16 +1782,36 @@ describe("Tabs", () => {
       assert.isTrue(settling.calledOnceWithExactly(3, answer));
     });
 
-    // What that tab wiped it wiped for the whole browser, so this one stops writing too - and the
-    // group ends, because the store was what made it one.
-    it("lets the store go, and the group with it, when another tab could not write", () => {
+    // What the tab that led wiped it wiped for the whole browser, so this one stops using the store
+    // too - and the group ends, because the store was what made it one.
+    it("lets the store go, and the group with it, when the tab that led could not write", () => {
       const detaching = sinon.stub(Durability, "detach");
       const dissolving = sinon.stub(Tabs, "dissolve");
 
-      Tabs.receive({kind: "storage_failed"});
+      Tabs.leader = false;
+
+      try {
+        Tabs.receive({kind: "storage_failed"});
+      } finally {
+        Tabs.leader = true;
+      }
 
       assert.isTrue(detaching.calledOnce);
       assert.isTrue(dissolving.calledOnce);
+    });
+
+    // The lock reached it after the wipe, so it finds no place and starts over, as it does when a
+    // leader simply closes.
+    it("keeps the store in a tab that leads by the time it hears", () => {
+      const detaching = sinon.stub(Durability, "detach");
+      const dissolving = sinon.stub(Tabs, "dissolve");
+
+      Tabs.leader = true;
+
+      Tabs.receive({kind: "storage_failed"});
+
+      assert.isFalse(detaching.called);
+      assert.isFalse(dissolving.called);
     });
 
     it("answers a tab that has joined with the group's state, when it leads", async () => {
@@ -1801,6 +2090,33 @@ describe("Tabs", () => {
 
       afterEach(() => {
         LocalDatabase.actorUserId = actor;
+      });
+
+      // A state names an identity only once it's written down.
+      it("counts the identity the group names as the one the store holds", async () => {
+        await follow();
+
+        Tabs.receive(
+          state("place-1", {
+            replica: {id: "r-group", token: "statement-group"},
+          }),
+        );
+
+        assert.isTrue(Durability.holdsIdentity());
+      });
+
+      // Its own restore can have written another pair over this one, and #lead writes down the one
+      // it settles on.
+      it("doesn't count the identity the group names as stored in a tab that leads", async () => {
+        await Tabs.join(nextGroup(), {onLead: () => {}});
+
+        Tabs.receive(
+          state("place-1", {
+            replica: {id: "r-group", token: "statement-group"},
+          }),
+        );
+
+        assert.isFalse(Durability.holdsIdentity());
       });
 
       it("takes up the store when the group's state names another place", async () => {
@@ -2319,7 +2635,7 @@ describe("Tabs", () => {
         const detaching = sinon.stub(Durability, "detach");
         const disowning = sinon.stub(Batches, "disown");
         const reconnecting = sinon.stub(Sse, "reconnect");
-        const refreshing = sinon.stub(Replica, "refresh");
+        const asking = sinon.stub(Replica, "requestMint");
         const wasStarted = Sse.isStarted;
 
         Sse.isStarted = true;
@@ -2334,7 +2650,7 @@ describe("Tabs", () => {
           assert.isTrue(Tabs.leader);
           assert.isTrue(detaching.calledOnce);
           assert.isTrue(disowning.calledOnce);
-          assert.isTrue(refreshing.calledOnce);
+          assert.isTrue(asking.calledOnce);
 
           // A stream of its own, greeting the server from nowhere: the place it holds is in doubt.
           assert.isTrue(reconnecting.calledOnce);
@@ -2427,7 +2743,7 @@ describe("Tabs", () => {
           release();
           await waitForEventLoop();
 
-          Tabs.receive({kind: "storage_failed"});
+          Tabs.storeLost();
 
           read({cursor: "place-2", records: []});
           await waitForEventLoop();
@@ -3880,7 +4196,9 @@ describe("Tabs", () => {
             return native.call(this, message);
           });
 
-        sinon.stub(Logger, "debug").throws(new Error("storage full"));
+        const logging = sinon
+          .stub(Object.getPrototypeOf(sessionStorage), "setItem")
+          .throws(new DOMException("full", "QuotaExceededError"));
 
         Tabs.post({kind: "frame"}, Promise.resolve());
         Tabs.post({kind: "frame", later: true}, write);
@@ -3888,9 +4206,37 @@ describe("Tabs", () => {
         await waitForEventLoop();
 
         sinon.assert.calledOnce(posting);
-        sinon.assert.calledOnce(Logger.debug);
+        sinon.assert.calledOnce(logging);
 
         const heard = await hear(group, 1, finishWrite);
+
+        assert.deepStrictEqual(heard, [{kind: "frame", later: true}]);
+      });
+
+      it("keeps posting after a post threw something that can't be logged", async () => {
+        const group = nextGroup();
+
+        await Tabs.join(group, stubs());
+
+        const native = BroadcastChannel.prototype.postMessage;
+
+        sinon
+          .stub(BroadcastChannel.prototype, "postMessage")
+          .onFirstCall()
+          .callsFake(() => {
+            throw Symbol("unprintable");
+          })
+          .callsFake(function (message) {
+            return native.call(this, message);
+          });
+
+        Tabs.post({kind: "frame"}, Promise.resolve());
+
+        await waitForEventLoop();
+
+        const heard = await hear(group, 1, () => {
+          Tabs.post({kind: "frame", later: true}, Promise.resolve());
+        });
 
         assert.deepStrictEqual(heard, [{kind: "frame", later: true}]);
       });

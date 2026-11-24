@@ -247,6 +247,35 @@ describe("Batches", () => {
       assert.equal(Overlay.durability(TODO, "t1"), "applied");
     });
 
+    // Sent now, it would go out under a pair another tab can hold.
+    it("holds every batch while the tab waits for an identity", async () => {
+      Replica.requestMint();
+
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.isFalse(sendStub.called);
+      assert.equal(Batches.pending.length, 1);
+    });
+
+    it("sends once the identity has arrived", async () => {
+      sendStub.resolves(confirmed());
+
+      Replica.requestMint();
+
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      Replica.takeMinted({id: "r-minted", token: "statement"});
+
+      await Batches.flush();
+
+      assert.isTrue(sendStub.calledOnce);
+      assert.equal(Batches.pending.length, 0);
+    });
+
     // The write endpoint compares the model and nothing else, so these still land.
     it("sends while the server stopped the tab over its protocol", async () => {
       SyncStream.stopReason = "protocol_version";
@@ -280,6 +309,7 @@ describe("Batches", () => {
 
     // Held only after the store is read, so a batch another tab filed is on this tab's screen too.
     it("takes up what the store holds while holding it", async () => {
+      Durability.mode = "indexeddb";
       SyncStream.stopReason = "model_hash";
 
       sinon.stub(Durability, "batchesAbove").resolves([
@@ -442,12 +472,398 @@ describe("Batches", () => {
 
       reading.onFirstCall().resolves([filed]);
 
+      Durability.mode = "indexeddb";
       sendStub.resolves(confirmed());
 
       await Batches.flush();
 
       assert.isTrue(sendStub.calledOnce);
       assert.equal(sendStub.firstCall.args[0].seq, 3);
+    });
+
+    describe("in a tab that has lost its store", () => {
+      const STORED = {id: "r-stored", token: "statement-stored"};
+      const MINTED = {id: "r-minted", token: "statement-minted"};
+
+      let reconnecting, sent, wasStarted;
+
+      const record = (seq) => ({
+        actorUserId: null,
+        landed: [],
+        seq,
+        writes: [creating(`t${seq}`, "stored")],
+      });
+
+      // Closes a batch whose filing settles when told to, stored under the given number or not at
+      // all. The store is working when it closes, and fails when the filing is told it didn't land.
+      const filing = (id) => {
+        Durability.mode = "indexeddb";
+
+        let settle;
+
+        Durability.fileBatch.callsFake(
+          (batch) =>
+            new Promise((resolve) => {
+              settle = (seq) => {
+                if (seq === null) {
+                  Durability.mode = "memory";
+                } else {
+                  batch.seal(seq);
+                }
+
+                resolve(seq !== null);
+              };
+            }),
+        );
+
+        const batch = sealed(creating(id, id));
+
+        // Whatever closes after this one files nothing, unless it asks for a filing of its own.
+        Durability.fileBatch.callsFake(async () => false);
+
+        return {batch, settle};
+      };
+
+      const mint = async () => {
+        Replica.takeMinted(MINTED);
+
+        await Batches.flush();
+      };
+
+      beforeEach(() => {
+        sent = [];
+        wasStarted = Sse.isStarted;
+        Sse.isStarted = true;
+
+        reconnecting = sinon.stub(Sse, "reconnect");
+
+        sinon.stub(Durability, "fileBatch").resolves(false);
+
+        sendStub.callsFake(async (batch) => {
+          sent.push(`${Replica.id}:${batch.seq}`);
+
+          return confirmed();
+        });
+
+        Durability.hadStore = true;
+
+        Replica.adopt(STORED);
+        Durability.noteStoredReplica(STORED);
+      });
+
+      afterEach(() => {
+        Sse.isStarted = wasStarted;
+        Durability.hadStore = false;
+        Durability.noteStoredReplica({id: null});
+      });
+
+      // A number spent under the stored identity would be recorded nowhere, so the next load could
+      // spend it again on another write.
+      it("gives a new batch no number under the identity the store holds", () => {
+        assert.isNull(sealed(creating("t1", "first")).seq);
+      });
+
+      // Its pair can be on its way into the store, or be what another tab wrote there.
+      it("gives a new batch no number under a pair the store isn't known to hold", () => {
+        Replica.adopt({id: "r-other", token: "statement-other"});
+
+        assert.isNull(sealed(creating("t1", "first")).seq);
+      });
+
+      it("sends the stored batches under the stored identity", async () => {
+        Batches.adopt([record(3), record(4)]);
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, ["r-stored:3", "r-stored:4"]);
+        assert.isFalse(Replica.awaitingMint);
+        assert.isFalse(reconnecting.called);
+      });
+
+      it("asks for an identity once the stored batches are out, and sends nothing new until it comes", async () => {
+        Batches.adopt([record(3)]);
+        sealed(creating("t5", "new"));
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, ["r-stored:3"]);
+        assert.isTrue(Replica.awaitingMint);
+        assert.isTrue(reconnecting.calledOnce);
+        assert.equal(Batches.pending.length, 1);
+      });
+
+      it("opens no stream to ask when the page has not started one", async () => {
+        Sse.isStarted = false;
+
+        sealed(creating("t5", "new"));
+
+        await Batches.flush();
+
+        assert.isTrue(Replica.awaitingMint);
+        assert.isFalse(reconnecting.called);
+      });
+
+      it("numbers new batches in the order made under the identity it was given", async () => {
+        Batches.adopt([record(3)]);
+        sealed(creating("t5", "first new"));
+        sealed(creating("t6", "second new"));
+
+        await Batches.flush();
+        await mint();
+
+        assert.deepStrictEqual(sent, [
+          "r-stored:3",
+          "r-minted:4",
+          "r-minted:5",
+        ]);
+      });
+
+      it("numbers a batch closed after the identity arrived under it", async () => {
+        sealed(creating("t5", "first new"));
+
+        await Batches.flush();
+        await mint();
+
+        sealed(creating("t6", "second new"));
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, ["r-minted:1", "r-minted:2"]);
+      });
+
+      it("sends a later filing the store took ahead of an earlier one it didn't", async () => {
+        const first = filing("t1");
+        const second = filing("t2");
+
+        first.settle(null);
+        await first.batch.recorded;
+
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(sent, []);
+
+        second.settle(7);
+
+        await flushing;
+        await mint();
+
+        assert.deepStrictEqual(sent, ["r-stored:7", "r-minted:8"]);
+      });
+
+      // It goes ahead of the batch the sender was waiting on, and has to go under the stored identity.
+      it("sends a filing that lands while the sender waits on an earlier one", async () => {
+        const first = filing("t1");
+        const second = filing("t2");
+
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        first.settle(null);
+        second.settle(7);
+
+        await flushing;
+        await mint();
+
+        assert.deepStrictEqual(sent, ["r-stored:7", "r-minted:8"]);
+      });
+
+      it("sends an earlier filing that lands ahead of a batch closed once the store had gone", async () => {
+        const first = filing("t1");
+
+        Durability.mode = "memory";
+
+        const second = sealed(creating("t2", "second"));
+
+        assert.isNull(second.seq);
+
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        first.settle(4);
+
+        await flushing;
+        await mint();
+
+        assert.deepStrictEqual(sent, ["r-stored:4", "r-minted:5"]);
+      });
+
+      it("keeps the order made when an earlier filing fails after the store had gone", async () => {
+        const first = filing("t1");
+
+        Durability.mode = "memory";
+
+        sealed(creating("t2", "second"));
+
+        first.settle(null);
+        await first.batch.recorded;
+
+        await Batches.flush();
+        await mint();
+
+        assert.deepStrictEqual(sent, ["r-minted:1", "r-minted:2"]);
+
+        assert.deepStrictEqual(
+          sendStub.getCalls().map((call) => call.args[0].writes[0].id),
+          ["t1", "t2"],
+        );
+      });
+
+      it("keeps the order made around a filing still in flight", async () => {
+        const first = filing("t1");
+        const second = filing("t2");
+
+        first.settle(null);
+        await first.batch.recorded;
+
+        const third = sealed(creating("t3", "third"));
+
+        assert.isNull(third.seq);
+
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        second.settle(6);
+
+        await flushing;
+        await mint();
+
+        assert.deepStrictEqual(sent, [
+          "r-stored:6",
+          "r-minted:7",
+          "r-minted:8",
+        ]);
+
+        assert.deepStrictEqual(
+          sendStub.getCalls().map((call) => call.args[0].writes[0].id),
+          ["t2", "t1", "t3"],
+        );
+      });
+
+      // The identity can arrive while earlier filings are still in flight. A later batch may name a
+      // row one of them created, so it can't take a number ahead of them.
+      it("keeps the order made for a batch closed after the identity arrived", async () => {
+        const first = filing("t1");
+        const second = filing("t2");
+
+        Batches.disown();
+        Replica.requestMint();
+        Replica.takeMinted(MINTED);
+
+        Durability.mode = "memory";
+
+        const third = sealed(creating("t3", "third"));
+
+        assert.isNull(third.seq);
+
+        first.settle(null);
+        second.settle(null);
+
+        await Promise.all([first.batch.recorded, second.batch.recorded]);
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, [
+          "r-minted:1",
+          "r-minted:2",
+          "r-minted:3",
+        ]);
+
+        assert.deepStrictEqual(
+          sendStub.getCalls().map((call) => call.args[0].writes[0].id),
+          ["t1", "t2", "t3"],
+        );
+      });
+
+      it("numbers a batch behind an earlier filing that fails after the identity arrived", async () => {
+        const first = filing("t1");
+
+        Batches.disown();
+        Replica.requestMint();
+        Replica.takeMinted(MINTED);
+
+        Durability.mode = "memory";
+
+        const second = sealed(creating("t2", "second"));
+
+        first.settle(null);
+        await first.batch.recorded;
+        await Batches.flush();
+
+        assert.isBelow(first.batch.seq, second.seq);
+      });
+
+      // Somebody else holds the session now, and these writes are the tab's owner's.
+      it("sends nothing and asks no more once the server refused an identity", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+
+        reconnecting.resetHistory();
+        Replica.refuseMint();
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, []);
+        assert.isFalse(Replica.awaitingMint);
+        assert.isFalse(reconnecting.called);
+        assert.equal(Batches.pending.length, 1);
+      });
+
+      it("holds a batch numbered in a page that never had a store once refused", async () => {
+        Durability.hadStore = false;
+        Replica.requestMint();
+
+        assert.isNotNull(sealed(creating("t1", "first")).seq);
+
+        Replica.refuseMint();
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, []);
+      });
+
+      // Under another identity the server has no record of it, and would apply it again.
+      it("lets a stored batch go rather than send it under an identity the store doesn't hold", async () => {
+        Batches.adopt([record(3)]);
+        Replica.adopt({id: "r-other", token: "statement-other"});
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, []);
+        assert.deepStrictEqual(Batches.pending, []);
+      });
+
+      it("keeps a batch only this tab holds when it lets the stored ones go", async () => {
+        Replica.adopt({id: "r-other", token: "statement-other"});
+
+        Batches.adopt([record(3)]);
+        sealed(creating("t5", "new"));
+
+        await Batches.flush();
+        await mint();
+
+        assert.deepStrictEqual(sent, ["r-minted:4"]);
+      });
+
+      // The first send may have landed, and a second under a new identity would apply it again.
+      it("lets a stored batch go on a 403 rather than move it to another identity", async () => {
+        Replica.offer({id: "r-fresh", token: "statement-fresh"});
+
+        sendStub.resetBehavior();
+        sendStub.resolves({httpStatus: 403, status: "failed"});
+
+        Batches.adopt([record(3)]);
+
+        await Batches.flush();
+
+        assert.isTrue(sendStub.calledOnce);
+        assert.equal(Replica.id, "r-stored");
+        assert.deepStrictEqual(Batches.pending, []);
+      });
     });
 
     it("tells the group what the server answered", async () => {
@@ -769,6 +1185,22 @@ describe("Batches", () => {
       await Batches.flush();
 
       assert.isTrue(forgetting.calledOnceWithExactly(1));
+    });
+
+    // A delete that fails on the spot ends the group, and a tab that never heard would resend it.
+    it("tells the group about the answer before forgetting the batch", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+      const posting = sinon.stub(Tabs, "post");
+
+      sealed(creating("t1", "first"));
+      sendStub.resolves(confirmed());
+
+      await Batches.flush();
+
+      sinon.assert.callOrder(
+        posting.withArgs(sinon.match({kind: "answered", seq: 1})),
+        forgetting,
+      );
     });
 
     it("forgets nothing about a batch nobody answered", async () => {
@@ -2196,6 +2628,187 @@ describe("Batches", () => {
       wrote("t1");
 
       assert.equal(Batches.close().seq, 10);
+    });
+
+    describe("a batch this tab made", () => {
+      let filings, sendStub;
+
+      // Closes a batch whose filing settles when told to, stored under number 5 or not at all.
+      const closeFiled = () => {
+        Batches.open("todos");
+        Batches.current().append({
+          data: {done: false, title: "mine"},
+          id: "t1",
+          op: "create",
+          stamp: STAMP,
+          type: TODO,
+        });
+
+        const batch = Batches.close();
+
+        return {batch, file: filings.at(-1)};
+      };
+
+      beforeEach(() => {
+        filings = [];
+
+        Durability.mode = "indexeddb";
+
+        sinon.stub(Durability, "fileBatch").callsFake((batch) => {
+          if (Durability.mode === "memory") return Promise.resolve(false);
+
+          return new Promise((resolve) => {
+            filings.push((stored) => {
+              if (stored) {
+                batch.seal(5);
+              }
+
+              resolve(stored);
+            });
+          });
+        });
+
+        sendStub = sinon.stub(Mutations, "send");
+      });
+
+      afterEach(() => {
+        Durability.hadStore = false;
+      });
+
+      it("is let go of when the store holds it", async () => {
+        const {batch, file} = closeFiled();
+
+        file(true);
+        await batch.recorded;
+
+        Batches.disown();
+
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+      });
+
+      // No other tab holds it, so letting it go would lose the write.
+      it("is kept when the store never took it", async () => {
+        const {batch, file} = closeFiled();
+
+        file(false);
+        await batch.recorded;
+
+        Batches.disown();
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.equal(LocalDatabase.getRow(TODO, "t1").title, "mine");
+      });
+
+      it("is kept when there was no store to file it in", async () => {
+        Durability.mode = "memory";
+
+        const {batch} = closeFiled();
+
+        await batch.recorded;
+
+        assert.isFalse(batch.filed);
+
+        Batches.disown();
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+      });
+
+      // An action can run the next one in the same turn, so the second batch may update a row the
+      // first created. They go out in the order they were made.
+      it("numbers batches in order after a store that failed on the spot", async () => {
+        const sent = [];
+
+        Durability.hadStore = true;
+
+        Durability.fileBatch.callsFake(async () => {
+          Durability.mode = "memory";
+
+          return false;
+        });
+
+        sendStub.callsFake(async (batch) => {
+          sent.push(`${Replica.id}:${batch.seq}`);
+
+          return {dropped: {}, kept: {}, status: "confirmed"};
+        });
+
+        const first = closeFiled().batch;
+
+        // Known in the turn it closed, so it keeps its place ahead of the next batch.
+        assert.isFalse(first.filed);
+
+        const second = closeFiled().batch;
+
+        await Promise.all([first.recorded, second.recorded]);
+
+        assert.isNull(first.seq);
+        assert.isNull(second.seq);
+
+        Replica.requestMint();
+        Replica.takeMinted({id: "r-minted", token: "statement-minted"});
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, ["r-minted:1", "r-minted:2"]);
+        assert.equal(first.seq, 1);
+        assert.equal(second.seq, 2);
+      });
+
+      it("is let go of once a filing in flight turns out to have stored it", async () => {
+        const {batch, file} = closeFiled();
+
+        Batches.disown();
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+
+        file(true);
+        await batch.recorded;
+
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+      });
+
+      it("counts on from a filing let go of in flight", async () => {
+        const {batch, file} = closeFiled();
+
+        Batches.disown();
+
+        file(true);
+        await batch.recorded;
+
+        Durability.mode = "memory";
+
+        assert.equal(closeFiled().batch.seq, 6);
+      });
+
+      it("is kept once a filing in flight turns out to have failed", async () => {
+        const {batch, file} = closeFiled();
+
+        Batches.disown();
+
+        file(false);
+        await batch.recorded;
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.equal(LocalDatabase.getRow(TODO, "t1").title, "mine");
+      });
+
+      it("is not sent when it was let go of while the sender waited on its filing", async () => {
+        const {batch, file} = closeFiled();
+
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        Batches.disown();
+
+        file(true);
+        await batch.recorded;
+        await flushing;
+
+        sinon.assert.notCalled(sendStub);
+      });
     });
   });
 
