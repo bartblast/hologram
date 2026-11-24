@@ -92,6 +92,21 @@ defmodule HologramFeatureTests.MultiTabTest do
     assert System.monotonic_time(:millisecond) - opened_at < @bundle_hold_ms
   end
 
+  defp await_server_todo_title(title, attempts_left \\ 100)
+
+  defp await_server_todo_title(_title, 0), do: false
+
+  defp await_server_todo_title(title, attempts_left) do
+    todos = DB.read(Todo)
+
+    if Enum.any?(todos, &(&1.title == title)) do
+      true
+    else
+      Process.sleep(50)
+      await_server_todo_title(title, attempts_left - 1)
+    end
+  end
+
   defp replica_id(session) do
     script_result(session, "return globalThis.Hologram.durability.replicaId();")
   end
@@ -132,6 +147,61 @@ defmodule HologramFeatureTests.MultiTabTest do
     |> assert_text(css("#todos"), "alpha 0")
     |> focus_tab(first)
     |> assert_text(css("#todos"), "alpha 0")
+  end
+
+  # The tab whose write failed goes on with no store, and the tab that leads keeps it. Counting under
+  # the identity they shared, both would take the same next number, and the server would answer one
+  # write from the record of the other.
+  feature "lands the writes of each tab after one tab's store write fails", %{session: session} do
+    leading =
+      session
+      |> visit(WriteQueuePage)
+      |> click(button("Create alpha"))
+
+    first = tab_handle(leading)
+    replica = replica_id(leading)
+
+    assert [%Todo{title: "alpha"}] = await_server_todos(1)
+
+    following =
+      leading
+      |> await_pending_writes(0)
+      |> open_tab(WriteQueuePage)
+
+    refute leader?(following)
+    assert replica_id(following) == replica
+
+    failing =
+      following
+      |> fail_store_writes()
+      |> click(button("Create gamma"))
+      |> await_memory_mode()
+      |> assert_text(css("#todos"), "gamma 0")
+
+    failing_tab = tab_handle(failing)
+
+    assert length(await_server_todos(2)) == 2
+
+    # Closed once the tab holds an identity of its own, so it's numbered under it from the start.
+    failing
+    |> await_pending_writes(0)
+    |> click(button("Create gamma"))
+
+    assert length(await_server_todos(3)) == 3
+
+    failing
+    |> await_pending_writes(0)
+    |> focus_tab(first)
+    |> click(button("Rename alpha"))
+    |> assert_text(css("#todos"), "beta 0")
+
+    assert await_server_todo_title("beta")
+
+    leading_replica = replica_id(failing)
+
+    focus_tab(failing, failing_tab)
+
+    refute leading_replica == replica_id(failing)
   end
 
   # The write is made in the tab that does NOT send, and the server has not heard of it while the

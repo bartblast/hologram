@@ -406,13 +406,16 @@ defmodule Hologram.Compiler.CallGraph do
     # rows it holds in the browser. A grant verb differs at the end - the server writes the store,
     # the browser appends a create or a delete of the grant row to the running batch, and the
     # server replays the gate when the batch lands. The grant verbs' /2 forms are ported only to
-    # refuse: a global grant is trusted-only.
+    # refuse, since a global grant is trusted-only, and their /4 forms only to refuse the trust
+    # claim, which is the server's to make.
     {Hologram.Auth, :grant_role, 2},
     {Hologram.Auth, :grant_role, 3},
+    {Hologram.Auth, :grant_role, 4},
     {Hologram.Auth, :has_role?, 2},
     {Hologram.Auth, :has_role?, 3},
     {Hologram.Auth, :revoke_role, 2},
     {Hologram.Auth, :revoke_role, 3},
+    {Hologram.Auth, :revoke_role, 4},
     # The data verbs, hand-written for the client the way the query stages are: one spelling on
     # both tiers, so a domain helper reading and writing through them moves between an action, a
     # command and a job untouched. What differs underneath is only where the rows are.
@@ -1316,8 +1319,9 @@ defmodule Hologram.Compiler.CallGraph do
   implementations for the built-in types with what those call.
 
   A type the page reaches only through a relationship or derived field name is not one it can hold
-  here: its rows sync, but its implementations are not listed and the page doesn't preload them. The
-  browser gets them when the server sends it a struct or the module of that type.
+  here, unless it's among the seeds' types, which is how `Hologram.Compiler.fold_held_impls/5` walks
+  a page again with the types it holds through rows. Every page preloads the implementations of
+  those types, in one chunk (see `Hologram.Compiler.merge_held_chunks/2`).
 
   Give it the graph without the manually ported functions, as `list_client_protocols/4` asks, or the
   walk follows their Elixir bodies, which don't run on the client. `analyses` is taken as

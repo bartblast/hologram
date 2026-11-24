@@ -32,8 +32,10 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.GuestEntry
   alias HologramFeatureTests.Entities.Inspection
   alias HologramFeatureTests.Entities.Item
+  alias HologramFeatureTests.Entities.Jar
   alias HologramFeatureTests.Entities.Label
   alias HologramFeatureTests.Entities.Leg
+  alias HologramFeatureTests.Entities.Lid
   alias HologramFeatureTests.Entities.Locker
   alias HologramFeatureTests.Entities.Membership
   alias HologramFeatureTests.Entities.Memo
@@ -41,6 +43,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Milestone
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Notice
+  alias HologramFeatureTests.Entities.Pantry
   alias HologramFeatureTests.Entities.Parcel
   alias HologramFeatureTests.Entities.Permit
   alias HologramFeatureTests.Entities.Post
@@ -71,6 +74,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTests.Jobs.SlowRun
+  alias HologramFeatureTests.Jobs.UpdateMemo
   alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
@@ -426,6 +430,14 @@ defmodule HologramFeatureTests.Helpers do
     else
       await_local_read(clicked, button_text, element_id, expected, attempts_left - 1)
     end
+  end
+
+  @doc """
+  Blocks until this tab has let go of its local store, then returns the `session`.
+  """
+  @spec await_memory_mode(Wallaby.Session.t()) :: Wallaby.Session.t()
+  def await_memory_mode(session) do
+    await_script_result(session, "return globalThis.Hologram.durability.mode() === 'memory';")
   end
 
   @doc """
@@ -804,6 +816,35 @@ defmodule HologramFeatureTests.Helpers do
         # Element not found - return immediately (fast path)
         error
     end
+  end
+
+  @doc """
+  Makes every later write to the `queue` object store of this tab's local store fail, until the
+  page goes away, then returns the `session`.
+
+  The store's connection is private to the page, so this wraps the browser's own `put` and
+  `delete`. A write is aborted once its request has succeeded, which is how a full disk fails a
+  transaction when it commits, after the transaction has read what it needed.
+  """
+  @spec fail_store_writes(Wallaby.Session.t()) :: Wallaby.Session.t()
+  def fail_store_writes(session) do
+    script = """
+    for (const method of ["delete", "put"]) {
+      const original = IDBObjectStore.prototype[method];
+
+      IDBObjectStore.prototype[method] = function (...args) {
+        const request = original.apply(this, args);
+
+        if (this.name === "queue") {
+          request.addEventListener("success", () => this.transaction.abort());
+        }
+
+        return request;
+      };
+    }
+    """
+
+    Browser.execute_script(session, script)
   end
 
   def go_back(session) do
@@ -1302,9 +1343,11 @@ defmodule HologramFeatureTests.Helpers do
         HoldRun,
         Inspection,
         Item,
+        Jar,
         KillRun,
         Label,
         Leg,
+        Lid,
         Locker,
         Membership,
         Memo,
@@ -1312,6 +1355,7 @@ defmodule HologramFeatureTests.Helpers do
         Milestone,
         Note,
         Notice,
+        Pantry,
         Parcel,
         Permit,
         Post,
@@ -1336,6 +1380,7 @@ defmodule HologramFeatureTests.Helpers do
         Tool,
         Topic,
         Trip,
+        UpdateMemo,
         User,
         Vault,
         Waybill,

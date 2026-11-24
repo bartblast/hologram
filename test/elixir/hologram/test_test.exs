@@ -29,16 +29,17 @@ defmodule Hologram.TestTest do
       assert as_user("user_id_2") == "user_id_2"
     end
 
-    test "runs anonymously from this point on for a nil id" do
+    test "runs as a signed-out visitor from this point on for a nil id" do
       as_user("user_id_7")
 
       assert as_user(nil) == nil
       assert Context.actor_user_id() == nil
+      assert Context.session?()
     end
 
     test "raises for a user struct with a nil id" do
       expected_msg =
-        "cannot act as Hologram.Test.Fixtures.Entity.Module14 with a nil id - an unset actor reads as an anonymous session and writes as trusted code, so an authorization test would pass for the wrong reason"
+        "cannot act as Hologram.Test.Fixtures.Entity.Module14 with a nil id - it would run as a signed-out visitor instead of that user, so an authorization test would pass for the wrong reason"
 
       assert_error MisuseError, expected_msg, fn -> as_user(%Module14{}) end
     end
@@ -63,16 +64,16 @@ defmodule Hologram.TestTest do
       assert Context.actor_user_id() == "user_id_4"
     end
 
-    test "runs the function with no actor for a nil id" do
+    test "runs the function as a signed-out visitor for a nil id" do
       as_user("user_id_6")
 
-      assert as_user(nil, fn -> Context.actor_user_id() end) == nil
+      assert as_user(nil, fn -> {Context.actor_user_id(), Context.session?()} end) == {nil, true}
       assert Context.actor_user_id() == "user_id_6"
     end
 
     test "raises for a user struct with a nil id" do
       expected_msg =
-        "cannot act as Hologram.Test.Fixtures.Entity.Module14 with a nil id - an unset actor reads as an anonymous session and writes as trusted code, so an authorization test would pass for the wrong reason"
+        "cannot act as Hologram.Test.Fixtures.Entity.Module14 with a nil id - it would run as a signed-out visitor instead of that user, so an authorization test would pass for the wrong reason"
 
       assert_error MisuseError, expected_msg, fn -> as_user(%Module14{}, fn -> :ok end) end
     end

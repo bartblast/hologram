@@ -57,24 +57,30 @@ describe("Elixir_Hologram_Job", () => {
             error: "string",
             id: "uuid",
             reason: "string",
+            run_as_server: "boolean",
             scheduled_at: "datetime",
             status: "enum",
             updated_at: "datetime",
           },
           // The ones the framework fills, declared the way use Hologram.Job declares them: the
           // actor, the failure record and the due time optional, the attempt count defaulted to 0
-          // and the status to :queued.
+          // the server mark to false, and the status to :queued.
           constraints: {
             actor_id: {optional: true},
             error: {optional: true},
             scheduled_at: {optional: true},
           },
-          defaults: {attempt: Type.integer(0), status: Type.atom("queued")},
+          defaults: {
+            attempt: Type.integer(0),
+            run_as_server: Type.boolean(false),
+            status: Type.atom("queued"),
+          },
           enumValues: {status: ["queued", "running", "done", "failed"]},
           frameworkAttributes: [
             "actor_id",
             "attempt",
             "error",
+            "run_as_server",
             "scheduled_at",
             "status",
           ],
@@ -137,6 +143,7 @@ describe("Elixir_Hologram_Job", () => {
       assert.notProperty(write.data, "actor_id");
       assert.notProperty(write.data, "attempt");
       assert.notProperty(write.data, "error");
+      assert.notProperty(write.data, "run_as_server");
       assert.notProperty(write.data, "scheduled_at");
       assert.notProperty(write.data, "status");
     });
@@ -265,6 +272,7 @@ describe("Elixir_Hologram_Job", () => {
           Type.atom("actor_id"),
           Type.atom("attempt"),
           Type.atom("error"),
+          Type.atom("run_as_server"),
           Type.atom("scheduled_at"),
           Type.atom("status"),
         ]),

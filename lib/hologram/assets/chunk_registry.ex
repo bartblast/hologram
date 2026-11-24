@@ -50,8 +50,10 @@ defmodule Hologram.Assets.ChunkRegistry do
   end
 
   @doc """
-  Returns the digests of the chunks the given page module preloads, sorted. A chunk's digest names
-  its file (see `Hologram.Router.Helpers.chunk_bundle_path/1`).
+  Returns the digests of the chunks the given page module preloads, sorted: the ones the types its
+  client code and the runtime's name need, and the one with the implementations of the types synced
+  rows can hold (see `Hologram.Compiler.merge_held_chunks/2`). A chunk's digest names its file (see
+  `Hologram.Router.Helpers.chunk_bundle_path/1`).
   """
   @spec lookup_page(module) :: [String.t()]
   def lookup_page(page_module) do

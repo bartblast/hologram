@@ -8,7 +8,9 @@ import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
 import ManuallyPortedElixirHologramDB from "./elixir/hologram/db.mjs";
-import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
+import ManuallyPortedElixirHologramEntity, {
+  defineStructFunctions,
+} from "./elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "./elixir/hologram/query/stage.mjs";
 import Model from "./model.mjs";
@@ -17,6 +19,7 @@ import QueryKernel from "./query_kernel.mjs";
 import QuerySpelling from "./query_spelling.mjs";
 import ReloadNotice from "./reload_notice.mjs";
 import Replica from "./replica.mjs";
+import Sse from "./sse.mjs";
 import SyncStream from "./sync_stream.mjs";
 import Tabs from "./tabs.mjs";
 import Type from "./type.mjs";
@@ -185,8 +188,11 @@ export default class DataLayer {
 
   // Defines the hand-written client versions of the Hologram.Auth, Hologram.DB, Hologram.Entity,
   // Hologram.Job and Hologram.Query.Stage functions as the functions of their modules. No bundle
-  // carries their Elixir originals.
+  // carries their Elixir originals. With them, the struct functions of the model's entity types,
+  // before any chunk's definitions run, so that a chunk's own functions replace them.
   static defineManuallyPortedFunctions() {
+    defineStructFunctions();
+
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Auth",
       "can?/3",
@@ -206,6 +212,13 @@ export default class DataLayer {
       "grant_role/3",
       "public",
       ManuallyPortedElixirHologramAuth["grant_role/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "grant_role/4",
+      "public",
+      ManuallyPortedElixirHologramAuth["grant_role/4"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -234,6 +247,13 @@ export default class DataLayer {
       "revoke_role/3",
       "public",
       ManuallyPortedElixirHologramAuth["revoke_role/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "revoke_role/4",
+      "public",
+      ManuallyPortedElixirHologramAuth["revoke_role/4"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -563,6 +583,19 @@ export default class DataLayer {
     Batches.flush();
   }
 
+  // Whether this tab holds writes only in its memory that it can still send, which a reload would
+  // lose. A tab stopped over its model, or refused an identity, is left out: only a reload moves it
+  // on.
+  static holdsUnsentWrites() {
+    return (
+      Durability.mode === "memory" &&
+      Batches.pendingCount() > 0 &&
+      Tabs.sends() &&
+      !SyncStream.holdsWrites() &&
+      !Replica.mintRefused
+    );
+  }
+
   // Before the first render, so that a prop reading a query answers from the database rather than
   // from nothing - the rows the server read to render this page are the rows those queries need,
   // and they go in through the same ingest the stream uses. Every page visit carries again, which
@@ -605,9 +638,17 @@ export default class DataLayer {
     }
   }
 
-  // The four sync kinds the stream delivers (see SyncStream.listen).
+  // The four sync kinds the stream delivers (see SyncStream.listen). A tab the server refused an
+  // identity shows its pair only on a handshake, so when the signed-in user changes it asks again,
+  // since its owner may be back.
   static listenToStream(eventSource) {
     SyncStream.listen(eventSource);
+
+    eventSource.addEventListener("sync_resync", (event) => {
+      if (JSON.parse(event.data).reason === "identity" && Replica.mintRefused) {
+        Sse.askForReplica();
+      }
+    });
   }
 
   // Called by every render: the rows the derived fields read are now the ones it computed them
@@ -700,6 +741,12 @@ export default class DataLayer {
   // (see ReloadNotice).
   static rendered() {
     ReloadNotice.update(SyncStream.stopReason !== null);
+  }
+
+  // The pair a stream handshake shows the server when this tab needs a new one, which it mints for
+  // the same owner (see Replica.requestMint).
+  static replicaToReplace() {
+    return Replica.withoutIdentity() ? Replica.current() : null;
   }
 
   // Takes up what a previous page load left - the place to resume the stream from, the number to
@@ -820,6 +867,25 @@ export default class DataLayer {
     if (Batches.pendingCount() === 0) {
       Batches.flush();
     }
+  }
+
+  // Takes up the identity a stream handshake brought, if this tab asked for one, and wakes the
+  // sender that was holding for it. Answers the sender's promise, so a page about to reload can let
+  // it finish. A handshake that refused the pair it showed ends the asking, so the stream can open.
+  static takeReplica(replica, refused = false, presentedId = undefined) {
+    if (refused) {
+      Replica.refuseMint(presentedId);
+
+      return null;
+    }
+
+    return Replica.takeMinted(replica) ? Batches.flush() : null;
+  }
+
+  // Whether the next stream handshake should ask the server for an identity (see
+  // Replica.requestMint).
+  static wantsReplica() {
+    return Replica.awaitingMint;
   }
 
   // What a render that handed a page over counted, for as long as this client's own database cannot
