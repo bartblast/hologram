@@ -1232,9 +1232,15 @@ defmodule Hologram.Migration.BackfillTest do
         insert_row("my_app_task", code: "a", rank: 1)
         insert_row("my_app_task", code: nil, rank: 2)
 
-        assert_error RuntimeError, ~r/column "title".* leaves 1 row without a value/, fn ->
-          apply_file([tighten(:title, copy_of(:code))], create, first_model)
-        end
+        assert_error RuntimeError,
+                     ~s(the backfill of column "title" on table "my_app_task" leaves 1 row ) <>
+                       "without a value - give the expression a value for them, like " <>
+                       "coalesce(..., <value>), or keep optional: true on the attribute in the " <>
+                       "entity type and remove optional: false and backfill: from the op, or the whole op " <>
+                       "when it changes nothing else",
+                     fn ->
+                       apply_file([tighten(:title, copy_of(:code))], create, first_model)
+                     end
 
         assert rows_by_code(["title"]) == [[nil], [nil]]
         assert nullable?("title")
@@ -1640,6 +1646,60 @@ defmodule Hologram.Migration.BackfillTest do
 
         assert apply_file([add_to_one(%Value{term: term})], create, first_model) == :ok
         assert ids_by_code("my_app_task", "owner_id") == [common]
+      end)
+    end
+
+    test "refuses a required to-one the expression leaves nil on an add", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a")
+
+        assert_error RuntimeError,
+                     ~s(the backfill of column "owner_id" on table "my_app_task" leaves 1 row ) <>
+                       "without a value - give the expression a value for them, like " <>
+                       "coalesce(..., <value>), or make the relationship optional: true",
+                     fn ->
+                       apply_file(
+                         [add_to_one(%Value{term: {:name, [:creator_id]}})],
+                         create,
+                         first_model
+                       )
+                     end
+
+        refute has_column?("my_app_task", "owner_id")
+      end)
+    end
+
+    test "refuses a to-one tightening the expression leaves nil, rows unchanged", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a")
+
+        assert_error RuntimeError,
+                     ~s(the backfill of column "reviewer_id" on table "my_app_task" leaves 1 ) <>
+                       "row without a value - give the expression a value for them, like " <>
+                       "coalesce(..., <value>), or keep optional: true on the relationship in " <>
+                       "the entity type and remove optional: false and backfill: from the op, or the " <>
+                       "whole op when it changes nothing else",
+                     fn ->
+                       apply_file(
+                         [tighten_reviewer(%Value{term: {:name, [:creator_id]}})],
+                         create,
+                         first_model
+                       )
+                     end
+
+        assert ids_by_code("my_app_task", "reviewer_id") == [nil]
       end)
     end
 
@@ -2229,7 +2289,7 @@ defmodule Hologram.Migration.BackfillTest do
         context,
         rows,
         [add_filled(:copy, :string, term)],
-        ~r/leaves 1 row without a value - return a value from the fn for them/
+        ~r/leaves 1 row without a value - return a value from the fn for them, or make the attribute optional: true$/
       )
     end
 
@@ -2247,6 +2307,18 @@ defmodule Hologram.Migration.BackfillTest do
         assert rows_by_code(["title", "title_$sort"]) ==
                  [["kept", "kept-key"], ["B", SortKey.compute("B")]]
       end)
+    end
+
+    test "refuses nil on a tightening", context do
+      value = elixir_fn(~s|fn code -> if code == "x", do: code end|)
+      rows = fn -> insert_row("my_app_task", code: "a") end
+
+      assert_row_fill_refused(
+        context,
+        rows,
+        [tighten_title(value)],
+        ~r/leaves 1 row without a value - return a value from the fn for them, or keep optional: true on the attribute in the entity type and remove optional: false and backfill: from the op, or the whole op when it changes nothing else$/
+      )
     end
 
     test "refuses a unique value repeating, naming the key and the rows", context do

@@ -1215,8 +1215,20 @@ defmodule Hologram.Migrator do
           else: "give the expression a value for them, like coalesce(..., <value>)"
 
       raise ~s(the backfill of column "#{op.column}" on table "#{op.table}" leaves #{count} ) <>
-              "#{rows} without a value - #{fix}, or make the attribute optional: true"
+              "#{rows} without a value - #{fix}, or #{optional_remedy(op)}"
     end
+  end
+
+  # A member staying optional takes the whole tightening out of the op, since a fill of the rows
+  # holding nil is there only for it, and the entity type has to keep saying so too.
+  defp optional_remedy(op) do
+    member = if op.fill_target, do: "relationship", else: "attribute"
+
+    if op.nulls_only,
+      do:
+        "keep optional: true on the #{member} in the entity type and remove optional: false " <>
+          "and backfill: from the op, or the whole op when it changes nothing else",
+      else: "make the #{member} optional: true"
   end
 
   defp log_row_fill(op, count) do
