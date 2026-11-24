@@ -52,7 +52,17 @@ defmodule HologramFeatureTests.IdentityChangeDestinationPage do
 
             if (ready) {
               clearInterval(pressBack);
-              globalThis.__mountedBeforeBack = (shim.mountedPage ?? null) !== null;
+
+              // Read as Back arrives rather than as it is pressed, since the page could mount
+              // in between.
+              addEventListener(
+                "popstate",
+                () => {
+                  globalThis.__mountedBeforeBack = (shim.mountedPage ?? null) !== null;
+                },
+                {capture: true, once: true}
+              );
+
               history.back();
             }
           }, 5);
