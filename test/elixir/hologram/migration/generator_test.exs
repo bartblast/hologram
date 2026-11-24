@@ -815,6 +815,35 @@ defmodule Hologram.Migration.GeneratorTest do
       assert render(plan, @module) == module_text(@module, expected)
     end
 
+    test "leaves the default answer out of a fill question for a unique attribute" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:slug],
+            members: [{:add_attribute, :slug, :string, [unique: true]}],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      expected = """
+      change_entity MyApp.Task do
+        # RESOLVE: :slug is required, and MyApp.Task already holds rows - they need a value.
+        # Write the op with one of these, then delete the resolve! line. API:
+        #   add_attribute :slug, :string, unique: true, backfill: <value or expression>  - existing rows receive it, once, computed from each row when it names the row's fields
+        #   add_attribute :slug, :string, unique: true, backfill: fn field -> <query words> end  - the same, in one update
+        #   add_attribute :slug, :string, unique: true, backfill: fn field -> <Elixir> end  - the same, run row by row
+        #   add_attribute :slug, :string, unique: true, optional: true  - existing rows stay empty
+        resolve! :fill, attributes: [:slug]
+      end
+      """
+
+      assert render(plan, @module) == module_text(@module, expected)
+    end
+
     test "renders every entity-scoped op kind" do
       plan = %{
         ops: [

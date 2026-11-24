@@ -144,9 +144,9 @@ defmodule Hologram.Migration do
 
   A backfill must carry a value. `backfill: nil` is refused, because nil is the absence a
   backfill exists to fill. Adding a required attribute to a table that already holds rows
-  needs one of these: a `backfill:`, a `default:` on the declaration, or making the
-  attribute optional. Without any of them the apply refuses, naming the table and how many
-  rows would have been left without a value.
+  needs one of these: a `backfill:`, a `default:` on the declaration (not for a unique
+  attribute, which can't declare one), or making the attribute optional. Without any of them
+  the apply refuses, naming the table and how many rows would have been left without a value.
 
   A key declared with `unique` is a member of its entity type like any other: `add_unique`
   and `delete_unique` take the key's fields in declared order. A key follows a rename of a

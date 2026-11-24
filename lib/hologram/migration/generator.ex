@@ -193,23 +193,26 @@ defmodule Hologram.Migration.Generator do
         declared_opts = render_opts(opts)
         suffix = if declared_opts == "", do: "", else: ", " <> declared_opts
 
-        fill_lines(kind, "#{kind} #{inspect(name)}, #{inspect(type)}#{suffix}")
+        fill_lines(kind, "#{kind} #{inspect(name)}, #{inspect(type)}#{suffix}", opts)
     end)
   end
 
   # A to-one takes no default, since a default id would point every new row at one target.
-  defp fill_lines(:add_relationship, call) do
+  defp fill_lines(:add_relationship, call, _opts) do
     call
     |> backfill_lines("<id or expression>", "existing rows")
     |> Enum.concat(["#{call}, optional: true  - existing rows stay empty"])
   end
 
-  defp fill_lines(_kind, call) do
+  # Nor does a unique attribute, since a default is one value for every row that omits it.
+  defp fill_lines(_kind, call, opts) do
+    default_lines =
+      if opts[:unique] == true,
+        do: [],
+        else: ["#{call}, default: <value>  - every row created without one, from now on"]
+
     backfill_lines(call, "<value or expression>", "existing rows") ++
-      [
-        "#{call}, default: <value>  - every row created without one, from now on",
-        "#{call}, optional: true  - existing rows stay empty"
-      ]
+      default_lines ++ ["#{call}, optional: true  - existing rows stay empty"]
   end
 
   defp format(text) do
