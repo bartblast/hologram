@@ -1131,6 +1131,15 @@ defmodule Hologram.Policy.EvaluatorTest do
 
       assert rule_matches?(rule, %Module28{body: "open"}, %Module28{}, "user", &deny/3)
       refute rule_matches?(rule, %Module28{body: "shut"}, %Module28{}, "user", &deny/3)
+
+      checker = fn {:rel, [:channel], [:member]}, %Module28{channel_id: id}, "user" ->
+        id == "new"
+      end
+
+      stored = %Module28{body: "shut", channel_id: "stored"}
+      new_row = %Module28{body: "shut", channel_id: "new"}
+
+      assert rule_matches?(rule, stored, new_row, "user", checker)
     end
 
     test "judges a rule with no exact clauses without the new row" do
