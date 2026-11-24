@@ -163,6 +163,7 @@ describe("Overlay", () => {
           "actor_id",
           "attempt",
           "error",
+          "run_as_server",
           "scheduled_at",
           "status",
         ],
@@ -989,14 +990,102 @@ describe("Overlay", () => {
         };
 
         Model.reset();
+
+        LocalDatabase.putRow(TODO, base());
+        LocalDatabase.putRow(LABEL, {id: "l1", name: "Urgent"});
       });
 
-      const labelEdge = (op) => ({
-        id: "t1",
-        op,
-        relationship: "labels",
-        target_id: "l1",
-        type: TODO,
+      const labelEdge = (op, overrides = {}) =>
+        Object.assign(
+          {
+            id: "t1",
+            op,
+            relationship: "labels",
+            target_id: "l1",
+            type: TODO,
+          },
+          overrides,
+        );
+
+      // The label left while the batch waited, and sync tells nothing of a pair naming a row the
+      // client doesn't hold, so a pair filed here would stay.
+      it("files neither side of a pair whose target the base doesn't hold", () => {
+        LocalDatabase.deleteRow(LABEL, "l1");
+        LocalDatabase.replaceFacts(LABEL, "todos", "l1", ["t2"]);
+
+        Overlay.promote(pushed(labelEdge("add_relationship")), {});
+
+        assert.isFalse(LocalDatabase.hasFacts(TODO, "labels", "t1"));
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(LABEL, "todos", "l1"),
+          new Set(["t2"]),
+        );
+      });
+
+      it("files neither side of a pair whose source the base doesn't hold", () => {
+        LocalDatabase.replaceFacts(LABEL, "todos", "l1", ["t2"]);
+        LocalDatabase.deleteRow(TODO, "t1");
+
+        Overlay.promote(pushed(labelEdge("add_relationship")), {});
+
+        assert.isFalse(LocalDatabase.hasFacts(TODO, "labels", "t1"));
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(LABEL, "todos", "l1"),
+          new Set(["t2"]),
+        );
+      });
+
+      it("files a pair to a row the batch created, but not to one a marker ruled out", () => {
+        const create = (id) =>
+          createWrite({data: {name: "New"}, id, type: LABEL});
+
+        const batch = pushed(
+          create("l2"),
+          create("l3"),
+          labelEdge("add_relationship", {target_id: "l2"}),
+          labelEdge("add_relationship", {target_id: "l3"}),
+        );
+
+        batch.landed.add(1);
+
+        Overlay.promote(batch, {});
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(TODO, "labels", "t1"),
+          new Set(["l2"]),
+        );
+      });
+
+      it("judges only a pair whose target type the model names", () => {
+        globalThis.Hologram.sync.model[TODO].relationships.notes = {
+          optional: false,
+          toMany: true,
+          type: "MyApp.Note",
+        };
+
+        Model.reset();
+
+        LocalDatabase.deleteRow(LABEL, "l1");
+
+        Overlay.promote(
+          pushed(
+            labelEdge("add_relationship"),
+            labelEdge("add_relationship", {
+              relationship: "notes",
+              target_id: "n1",
+            }),
+          ),
+          {},
+        );
+
+        assert.isFalse(LocalDatabase.hasFacts(TODO, "labels", "t1"));
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(TODO, "notes", "t1"),
+          new Set(["n1"]),
+        );
       });
 
       // The answer can land before the frame carrying the same edge on the label, and the label's

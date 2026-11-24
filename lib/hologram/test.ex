@@ -12,12 +12,17 @@ defmodule Hologram.Test do
         {:ok, user: as_user(create_user())}
       end
 
-  Takes the user entity, a bare user id, or nil to run anonymously from this point on. A test
-  that sets no actor at all is anonymous too.
+  Takes the user entity, a bare user id, or nil to run as a signed-out visitor from this
+  point on, whom the rules judge as an anonymous session. A test that sets no actor at all runs as
+  trusted server code, past every rule.
 
-  Raises Hologram.MisuseError when given a user struct whose id is nil - an unset actor reads as an
-  anonymous session and writes as trusted code, so the silent outcome would be a test passing
-  without exercising what it was written for.
+  The session lives in the test process, so a controller test of an app's own route runs under it,
+  while in production that route has no session and reads and writes past the rules. Don't rely on
+  such a test to show that a rule protects the route.
+
+  Raises Hologram.MisuseError when given a user struct whose id is nil - the test would run as a
+  signed-out visitor instead of the user it names, and could pass without exercising what it was
+  written for.
   """
   @spec as_user(struct | Hologram.Server.identity_id() | nil) ::
           struct | Hologram.Server.identity_id() | nil
@@ -39,8 +44,8 @@ defmodule Hologram.Test do
   evaluated against the verb's own rules, an update's by the fields it changes. A read inside
   the block is filtered by the user's :read policies the same way.
 
-  Takes the user entity, a bare user id, or nil to run the function anonymously - the spelling
-  for a block that must not carry the enclosing actor.
+  Takes the user entity, a bare user id, or nil to run the function as a signed-out visitor,
+  whom the rules judge as an anonymous session.
 
   Raises Hologram.MisuseError when given a user struct whose id is nil, as its single-argument
   counterpart does.
@@ -89,13 +94,13 @@ defmodule Hologram.Test do
     :ok
   end
 
-  # An unset actor is a legal state, and a bare nil asks for it deliberately - but a user struct
-  # carrying a nil id asks for it by accident, and the outcome is silent: the test would exercise
-  # neither the policy nor the gate it was written for.
+  # A bare nil asks for a signed-out visitor deliberately, but a user struct carrying a nil id asks
+  # for one by accident, and the outcome is silent: the test would exercise neither the policy nor
+  # the gate it was written for.
   defp actor_user_id(%{__struct__: module, id: nil}) do
     raise MisuseError,
       message:
-        "cannot act as #{inspect(module)} with a nil id - an unset actor reads as an anonymous session and writes as trusted code, so an authorization test would pass for the wrong reason"
+        "cannot act as #{inspect(module)} with a nil id - it would run as a signed-out visitor instead of that user, so an authorization test would pass for the wrong reason"
   end
 
   defp actor_user_id(%{id: id}), do: id

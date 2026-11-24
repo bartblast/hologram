@@ -59,7 +59,7 @@ export default class Mutations {
         "Content-Type": "application/json",
         "X-Csrf-Token": globalThis.Hologram.csrfToken,
       },
-      body: Utils.stringify($.buildPayload(batch)),
+      body: Utils.stringifyWellFormed($.buildPayload(batch)),
       signal: controller.signal,
     };
 

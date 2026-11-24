@@ -60,9 +60,11 @@ defmodule Hologram.Compiler do
   @permission_mfas [
     {Hologram.Auth, :can?, 3},
     {Hologram.Auth, :grant_role, 3},
+    {Hologram.Auth, :grant_role, 4},
     {Hologram.Auth, :has_role?, 2},
     {Hologram.Auth, :has_role?, 3},
-    {Hologram.Auth, :revoke_role, 3}
+    {Hologram.Auth, :revoke_role, 3},
+    {Hologram.Auth, :revoke_role, 4}
   ]
 
   # The functions that run only on the server: the SQL surface, which reads the database through

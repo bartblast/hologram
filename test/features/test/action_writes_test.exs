@@ -23,6 +23,111 @@ defmodule HologramFeatureTests.ActionWritesTest do
     script_result(session, "return globalThis.Hologram.replicaId;")
   end
 
+  defp record_envelope(replica_id, seq) do
+    {:ok, %Postgrex.Result{rows: [[envelope]]}} =
+      Connection.query(
+        ~s|SELECT "envelope" FROM "hologram_system"."mutation" WHERE "replica_id" = $1 AND "seq" = $2|,
+        [replica_id, seq]
+      )
+
+    envelope
+  end
+
+  defp await_stored_title_rewritten(session) do
+    rewritten? =
+      Enum.reduce_while(1..100, false, fn _attempt, _acc ->
+        if script_result(session, "return globalThis.__storedTitleRewritten === true;") do
+          {:halt, true}
+        else
+          Process.sleep(50)
+          {:cont, false}
+        end
+      end)
+
+    assert rewritten?
+
+    session
+  end
+
+  # Puts a NUL into the title of the write in this browser's stored queue, the shape of a batch
+  # queued before the browser's validator refused such a value. Waits for both batches to be filed,
+  # since the reload that follows would lose one that wasn't.
+  defp put_nul_in_stored_title(session) do
+    execute_script(session, """
+    globalThis.__storedTitleRewritten = false;
+
+    const modelHash = globalThis.Hologram.sync.modelHash;
+
+    indexedDB.databases().then((databases) => {
+      const name = databases
+        .map((database) => database.name)
+        .find((name) => name.startsWith("hologram.") && name.endsWith(modelHash));
+
+      const attempt = () => {
+        const opening = indexedDB.open(name);
+
+        opening.onsuccess = () => {
+          const db = opening.result;
+          const transaction = db.transaction("queue", "readwrite");
+          const queue = transaction.objectStore("queue");
+          let rewritten = false;
+
+          queue.getAll().onsuccess = (event) => {
+            const records = event.target.result;
+
+            if (records.length !== 2) {
+              return;
+            }
+
+            for (const record of records) {
+              const write = record.writes.find(
+                (each) => each.data?.title === "corrupt-me",
+              );
+
+              if (write) {
+                write.data.title = "corrupt\\u0000me";
+                queue.put(record);
+                rewritten = true;
+              }
+            }
+          };
+
+          transaction.oncomplete = () => {
+            db.close();
+
+            if (rewritten) {
+              globalThis.__storedTitleRewritten = true;
+            } else {
+              setTimeout(attempt, 50);
+            }
+          };
+        };
+      };
+
+      attempt();
+    });
+    """)
+
+    await_stored_title_rewritten(session)
+  end
+
+  defp reload_page(session) do
+    session
+    |> mark_document()
+    |> reload()
+    |> wait_for_unmarked_document()
+    |> assert_page(ActionWritesPage)
+  end
+
+  # A command changes the session and not the page already mounted, so the page is reloaded.
+  defp sign_in(session) do
+    session
+    |> visit(ActionWritesPage)
+    |> click(button("Log in"))
+    |> assert_text(css("#result"), "logged_in")
+    |> reload_page()
+  end
+
   feature "writes a row into the list before it is sent, and the server receives it", %{
     session: session
   } do
@@ -38,6 +143,58 @@ defmodule HologramFeatureTests.ActionWritesTest do
     |> assert_same_page_load()
 
     assert [%Todo{title: "alpha", done: false, votes: 0}] = await_server_todos(1)
+  end
+
+  feature "refuses a value the database can't store, and the next write lands", %{
+    session: session
+  } do
+    session = visit(session, ActionWritesPage)
+
+    session
+    |> click(button("Add a todo holding a NUL"))
+    |> assert_text(css("#result"), "refused_nul")
+
+    await_pending_writes(session, 0)
+
+    session
+    |> click(button("Add one todo"))
+    |> assert_text(css("#result"), "created_alpha")
+
+    assert [%Todo{title: "alpha"}] = await_server_todos(1)
+
+    # The refused write took no number, so it was never queued.
+    assert [%{seq: 1}] = mutation_record_rows(page_replica_id(session))
+  end
+
+  # The bug this guards: the server answered such a batch with a 500, the browser kept it at the
+  # head of its queue, and nothing from that device ever reached the server again.
+  feature "a stored write the database can't store is refused, and the write behind it lands", %{
+    session: session
+  } do
+    truncate_every_entity_table()
+
+    session = sign_in(session)
+
+    session
+    |> hold_mutation_requests()
+    |> click(button("Add a todo the test corrupts"))
+    |> assert_text(css("#result"), "created_to_corrupt")
+    |> click(button("Add one todo"))
+    |> assert_text(css("#result"), "created_alpha")
+    |> await_pending_writes(2)
+    |> put_nul_in_stored_title()
+    |> reload_page()
+
+    assert [%{"seq" => seq, "write" => 0}] = await_rejected_writes(session)
+
+    refute_text(session, css("#todos"), "corrupt")
+
+    assert [%Todo{title: "alpha"}] = await_server_todos(1)
+
+    replica_id = script_result(session, "return globalThis.Hologram.durability.replicaId();")
+
+    assert %{"writes" => [%{"data" => %{"title" => "corrupt\uFFFDme"}}]} =
+             record_envelope(replica_id, seq)
   end
 
   feature "ships the writes of one action as a single batch", %{session: session} do
@@ -317,5 +474,76 @@ defmodule HologramFeatureTests.ActionWritesTest do
     |> assert_text(css("#todos"), "alpha 6")
 
     assert [%Todo{votes: 6}] = await_server_todos(1)
+  end
+
+  # The browser holds 0 votes while the server holds 6, so the move looks like it crosses the
+  # floor from here and doesn't from there. The server's answer carries no moved value, so the
+  # browser keeps its estimate until the move's frame arrives.
+  feature "sends a move the value it holds would refuse, and the server lands it", %{
+    session: session
+  } do
+    session =
+      session
+      |> visit(ActionWritesPage)
+      |> click(button("Add one todo"))
+      |> assert_text(css("#todos"), "alpha 0")
+      |> await_pending_writes(0)
+
+    [%Todo{id: todo_id}] = await_server_todos(1)
+
+    hold_sync_frames(session)
+
+    session
+    |> current_instance_id()
+    |> simulate_sse_disconnect()
+
+    :ok = update(Todo, todo_id, %{votes: 6})
+
+    session
+    |> click(button("Retract a vote"))
+    |> assert_text(css("#result"), "retracted_1")
+    |> assert_text(css("#todos"), "alpha -1")
+
+    await_server_votes(5)
+
+    await_pending_writes(session, 0)
+
+    # The answer's render waits for an animation frame, so the value read next is the promoted one.
+    assert script_result(session, """
+           return new Promise((resolve) =>
+             requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)))
+           );
+           """)
+
+    session
+    |> assert_text(css("#todos"), "alpha -1")
+    |> release_sync_frames()
+    |> assert_text(css("#todos"), "alpha 5")
+
+    assert script_result(session, "return globalThis.Hologram.writes.rejected();") == []
+
+    assert [%Todo{votes: 5}] = await_server_todos(1)
+  end
+
+  feature "rolls back a move the server refuses", %{session: session} do
+    session =
+      session
+      |> visit(ActionWritesPage)
+      |> click(button("Add one todo"))
+      |> assert_text(css("#todos"), "alpha 0")
+      |> await_pending_writes(0)
+
+    session
+    |> hold_mutation_requests()
+    |> click(button("Retract a vote"))
+    |> assert_text(css("#result"), "retracted_1")
+    |> assert_text(css("#todos"), "alpha -1")
+    |> release_mutations()
+
+    assert [%{"seq" => 2, "write" => 0}] = await_rejected_writes(session)
+
+    assert_text(session, css("#todos"), "alpha 0")
+
+    assert [%Todo{votes: 0}] = DB.read(Todo)
   end
 end

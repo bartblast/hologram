@@ -29,6 +29,21 @@ const ROLE_GRANT = "Hologram.Auth.RoleGrant";
 
 const SERVER_ONLY_STRUCT = "Hologram.Entity.ServerOnly";
 
+// The fields typeValid reads of each temporal struct.
+const DATE_FIELDS = ["calendar", "day", "month", "year"];
+
+const TIME_FIELDS = ["calendar", "hour", "microsecond", "minute", "second"];
+
+const DATETIME_FIELDS = [
+  ...DATE_FIELDS,
+  "hour",
+  "microsecond",
+  "minute",
+  "second",
+  "std_offset",
+  "utc_offset",
+];
+
 function attributeValue(entry, given, name) {
   if (given.has(name)) {
     return given.get(name);
@@ -372,6 +387,70 @@ function validDateFields(struct) {
   );
 }
 
+// Whether the struct's own calendar is ISO, the only one this client can read: a temporal value
+// reaches the wire by its fields, so one in another calendar would be sent as a different value.
+function isoCalendar(struct) {
+  const calendar = structField(struct, "calendar");
+
+  return (
+    Type.isAlias(calendar) &&
+    Interpreter.moduleExName(calendar) === "Calendar.ISO"
+  );
+}
+
+// Only ISO dates, and only the days a date column holds. Asked after validDateFields, so every
+// field is a boxed integer.
+function storableDateFields(struct) {
+  return (
+    isoCalendar(struct) &&
+    Calendar.storableDate(
+      structField(struct, "year").value,
+      structField(struct, "month").value,
+      structField(struct, "day").value,
+    )
+  );
+}
+
+// The instant the struct names, moved by its offsets, as the server judges it. A struct literal can
+// hold anything in the offsets, and one that isn't an integer names no instant. Asked after the
+// date and time checks, so the other fields are boxed integers.
+//
+// Stricter than the server in one way: a DateTime in another calendar is refused here, where the
+// server converts it, because this client would spell its fields as if they were ISO and send a
+// different instant.
+function storableDateTimeFields(struct) {
+  const utcOffset = structField(struct, "utc_offset");
+  const stdOffset = structField(struct, "std_offset");
+
+  if (
+    !isoCalendar(struct) ||
+    !safeOffset(utcOffset) ||
+    !safeOffset(stdOffset)
+  ) {
+    return false;
+  }
+
+  return Calendar.storableDateTime(
+    structField(struct, "year").value,
+    structField(struct, "month").value,
+    structField(struct, "day").value,
+    structField(struct, "hour").value,
+    structField(struct, "minute").value,
+    structField(struct, "second").value,
+    utcOffset.value + stdOffset.value,
+  );
+}
+
+// An offset the wire spelling can add up exactly, which it does in Numbers. No real zone is near
+// this, so only a hand-built struct is refused.
+function safeOffset(term) {
+  return (
+    Type.isInteger(term) &&
+    term.value >= BigInt(Number.MIN_SAFE_INTEGER) &&
+    term.value <= BigInt(Number.MAX_SAFE_INTEGER)
+  );
+}
+
 function validTimeFields(struct) {
   const microsecond = structField(struct, "microsecond");
 
@@ -483,6 +562,12 @@ function lengthSatisfied(count, key, bound) {
 
 function hasField(struct, name) {
   return Type.encodeMapKey(Type.atom(name)) in struct.data;
+}
+
+// A struct with a field dropped is no value of its type. The server's clause head doesn't match
+// it and answers false, where reading the field here would throw.
+function hasFields(struct, names) {
+  return names.every((name) => hasField(struct, name));
 }
 
 function structField(struct, name) {
@@ -691,19 +776,27 @@ export function typeValid(value, attributeType) {
       return Type.isBoolean(value);
 
     case "date":
-      return Type.isStruct(value, "Date") && validDateFields(value);
+      return (
+        Type.isStruct(value, "Date") &&
+        hasFields(value, DATE_FIELDS) &&
+        validDateFields(value) &&
+        storableDateFields(value)
+      );
 
-    // The zone fields are deliberately not read: the codec normalizes every instant to UTC through
-    // a unix round trip, so a zone question is not a calendar question.
+    // The zone name is deliberately not read: the codec normalizes every instant to UTC through a
+    // unix round trip, using the offsets, and the storable check judges the instant they give.
     case "datetime":
       return (
         Type.isStruct(value, "DateTime") &&
+        hasFields(value, DATETIME_FIELDS) &&
         validDateFields(value) &&
-        validTimeFields(value)
+        validTimeFields(value) &&
+        storableDateTimeFields(value)
       );
 
+    // JSON writes a non-finite number as null, so the server would store nothing in its place.
     case "float":
-      return Type.isFloat(value);
+      return Type.isFloat(value) && Number.isFinite(Number(value.value));
 
     // Postgres int8 bounds, which is what an integer attribute is stored in.
     case "integer":
@@ -713,11 +806,21 @@ export function typeValid(value, attributeType) {
         value.value <= 9223372036854775807n
       );
 
+    // A NUL is valid UTF-8, and a PostgreSQL text column can't hold it.
     case "string":
-      return Type.isBinary(value) && Bitstring.isText(value);
+      return (
+        Type.isBinary(value) &&
+        Bitstring.isText(value) &&
+        !Bitstring.toText(value).includes("\u0000")
+      );
 
     case "time":
-      return Type.isStruct(value, "Time") && validTimeFields(value);
+      return (
+        Type.isStruct(value, "Time") &&
+        hasFields(value, TIME_FIELDS) &&
+        isoCalendar(value) &&
+        validTimeFields(value)
+      );
 
     default:
       return uuidValue(value);

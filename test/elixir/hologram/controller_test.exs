@@ -75,6 +75,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module54
   alias Hologram.Test.Fixtures.Controller.Module55
   alias Hologram.Test.Fixtures.Controller.Module56
+  alias Hologram.Test.Fixtures.Controller.Module57
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
   alias Hologram.Test.Fixtures.Controller.Module9
@@ -1142,6 +1143,25 @@ defmodule Hologram.ControllerTest do
                serialized_term(%Component.Action{
                  name: :my_action,
                  params: %{actor: "019ff5c2-0000-7000-8000-000000000001"},
+                 target: "my_target_1"
+               })
+    end
+
+    test "runs a signed-out visitor's middleware in a session" do
+      conn =
+        execute_command_request(%{
+          module: Module50,
+          name: :my_command_reporting_middleware_session,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response["action"] ==
+               serialized_term(%Component.Action{
+                 name: :my_action,
+                 params: %{in_session: true},
                  target: "my_target_1"
                })
     end
@@ -3282,6 +3302,18 @@ defmodule Hologram.ControllerTest do
         |> handle_initial_page_request(Module38)
 
       assert Plug.Conn.get_resp_header(conn, "x-my-header") == ["my_value"]
+    end
+
+    test "runs a signed-out visitor's middleware in a session" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module57, :dummy_module_57_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module57")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module57)
+
+      assert Plug.Conn.get_resp_header(conn, "x-in-session") == ["true"]
     end
 
     test "sends the response headers a layout's init/3 set" do

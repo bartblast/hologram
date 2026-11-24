@@ -3,8 +3,11 @@ defmodule Hologram.DB.ConnectionTest do
 
   import Hologram.DB.Connection
 
+  alias Ecto.Adapters.SQL.Sandbox
+  alias Hologram.DB
   alias Hologram.DB.Config
   alias Hologram.MisuseError
+  alias Hologram.Test.EctoRepo
 
   # Reaches the server outside the sandbox: this is the transaction machinery the sandbox
   # routes through, so it is tested on a real connection.
@@ -88,6 +91,79 @@ defmodule Hologram.DB.ConnectionTest do
     end
   end
 
+  describe "inside an Ecto transaction" do
+    setup do
+      [repo_pid: EctoRepo.start_for_test!()]
+    end
+
+    defp assert_refused(fun) do
+      assert {:ok, :refused} =
+               EctoRepo.transaction(fn ->
+                 assert_raise MisuseError, ~r/inside a Hologram\.Test\.EctoRepo transaction/, fun
+
+                 :refused
+               end)
+    end
+
+    test "execute/3 is refused" do
+      {:ok, prepared} = prepare("SELECT 1")
+
+      assert_refused(fn -> execute(prepared, []) end)
+    end
+
+    test "prepare/2 is refused" do
+      assert_refused(fn -> prepare("SELECT 1") end)
+    end
+
+    test "query/3 is refused" do
+      assert_refused(fn -> query("SELECT 1") end)
+    end
+
+    test "retry_on_deadlock/1 is refused without running the function" do
+      assert_refused(fn -> retry_on_deadlock(fn -> flunk("the function ran") end) end)
+    end
+
+    test "snapshot/1 is refused without running the function" do
+      assert_refused(fn -> snapshot(fn -> flunk("the function ran") end) end)
+    end
+
+    test "transaction/2 is refused without running the function" do
+      assert_refused(fn -> transaction(fn -> flunk("the function ran") end) end)
+    end
+
+    test "a refused write leaves no row" do
+      id = :crypto.strong_rand_bytes(16)
+
+      assert_refused(fn -> query(@insert_given_id_sql, [id]) end)
+
+      assert count_by_id(id) == 0
+    end
+
+    test "a call works again once the Ecto transaction has ended" do
+      {:ok, :done} = EctoRepo.transaction(fn -> :done end)
+
+      assert {:ok, %Postgrex.Result{rows: [[1]]}} = query("SELECT 1")
+    end
+
+    test "a call under Hologram's sandbox with no transaction of its own isn't refused" do
+      task =
+        Task.async(fn ->
+          enter_sandbox()
+          query("SELECT 1")
+        end)
+
+      assert {:ok, %Postgrex.Result{rows: [[1]]}} = Task.await(task)
+    end
+
+    test "a call under Ecto's SQL sandbox with no transaction of its own isn't refused", %{
+      repo_pid: repo_pid
+    } do
+      :ok = Sandbox.checkout(repo_pid)
+
+      assert {:ok, %Postgrex.Result{rows: [[1]]}} = query("SELECT 1")
+    end
+  end
+
   describe "query/3" do
     test "executes the statement with the given params" do
       assert {:ok, %Postgrex.Result{rows: [[42]]}} = query("SELECT $1::int8 + 1", [41])
@@ -95,6 +171,355 @@ defmodule Hologram.DB.ConnectionTest do
 
     test "returns errors as tagged tuples" do
       assert {:error, %Postgrex.Error{}} = query("SELECT * FROM nonexistent_table")
+    end
+  end
+
+  describe "record_ecto_call/2" do
+    @ecto_call_msg "SomeRepo ran \"INSERT INTO audit\" inside a data layer transaction - Ecto commits on a connection of its own, so anything it wrote may already be committed while this transaction rolls back. Run Ecto calls before or after the transaction."
+
+    # A transaction the way the test sandbox holds one: opened outside the code under test, with
+    # the code's outermost transaction emulated by a savepoint.
+    defp in_sandbox(fun) do
+      task =
+        Task.async(fn ->
+          pool_name = DB.pool_name()
+          Postgrex.query!(pool_name, "BEGIN", [])
+          enter_sandbox()
+
+          try do
+            fun.()
+          after
+            Postgrex.query!(pool_name, "ROLLBACK", [])
+          end
+        end)
+
+      Task.await(task)
+    end
+
+    defp insert_row do
+      id = :crypto.strong_rand_bytes(16)
+      {:ok, _result} = query(@insert_given_id_sql, [id])
+
+      id
+    end
+
+    # A rollback that goes ahead throws, which an assertion on what it raises can't see, and the
+    # end of the transaction then raises the same error.
+    defp refused_rollback do
+      rollback(:some_reason)
+    catch
+      :throw, _value -> flunk("the rollback went ahead")
+    end
+
+    test "fails the transaction at its next statement and rolls its writes back" do
+      id = :crypto.strong_rand_bytes(16)
+
+      assert_error MisuseError, @ecto_call_msg, fn ->
+        transaction(fn ->
+          {:ok, _result} = query(@insert_given_id_sql, [id])
+          record_ecto_call(SomeRepo, "INSERT INTO audit")
+          query("SELECT 1")
+          flunk("the statement ran")
+        end)
+      end
+
+      assert count_by_id(id) == 0
+    end
+
+    test "fails the transaction at the end of its block and rolls its writes back" do
+      id = :crypto.strong_rand_bytes(16)
+
+      assert_error MisuseError, @ecto_call_msg, fn ->
+        transaction(fn ->
+          {:ok, _result} = query(@insert_given_id_sql, [id])
+          record_ecto_call(SomeRepo, "INSERT INTO audit")
+        end)
+      end
+
+      assert count_by_id(id) == 0
+    end
+
+    test "fails the emulated transaction of the test sandbox and rolls its writes back" do
+      in_sandbox(fn ->
+        id = :crypto.strong_rand_bytes(16)
+
+        assert_error MisuseError, @ecto_call_msg, fn ->
+          transaction(fn ->
+            {:ok, _result} = query(@insert_given_id_sql, [id])
+            record_ecto_call(SomeRepo, "INSERT INTO audit")
+          end)
+        end
+
+        assert count_by_id(id) == 0
+        assert transaction(fn -> :ok end) == {:ok, :ok}
+      end)
+    end
+
+    test "still fails the transaction when the caller rescues the first raise" do
+      id = :crypto.strong_rand_bytes(16)
+
+      assert_error MisuseError, @ecto_call_msg, fn ->
+        transaction(fn ->
+          {:ok, _result} = query(@insert_given_id_sql, [id])
+          record_ecto_call(SomeRepo, "INSERT INTO audit")
+
+          assert_error MisuseError, @ecto_call_msg, fn -> query("SELECT 1") end
+        end)
+      end
+
+      assert count_by_id(id) == 0
+    end
+
+    test "still fails the outermost block when the caller rescues a nested block's raise" do
+      id = :crypto.strong_rand_bytes(16)
+
+      assert_error MisuseError, @ecto_call_msg, fn ->
+        transaction(fn ->
+          {:ok, _result} = query(@insert_given_id_sql, [id])
+
+          assert_error MisuseError, @ecto_call_msg, fn ->
+            transaction(fn -> record_ecto_call(SomeRepo, "INSERT INTO audit") end)
+          end
+        end)
+      end
+
+      assert count_by_id(id) == 0
+    end
+
+    test "makes rollback/1 raise rather than return the reason" do
+      id = :crypto.strong_rand_bytes(16)
+
+      assert_error MisuseError, @ecto_call_msg, fn ->
+        transaction(fn ->
+          {:ok, _result} = query(@insert_given_id_sql, [id])
+          record_ecto_call(SomeRepo, "INSERT INTO audit")
+          refused_rollback()
+        end)
+      end
+
+      assert count_by_id(id) == 0
+    end
+
+    test "leaves an exception the block raises itself as it is" do
+      assert_error RuntimeError, "raised by the block", fn ->
+        transaction(fn ->
+          record_ecto_call(SomeRepo, "INSERT INTO audit")
+          raise "raised by the block"
+        end)
+      end
+    end
+
+    test "fails the test sandbox's emulated transaction at its next statement" do
+      in_sandbox(fn ->
+        id = :crypto.strong_rand_bytes(16)
+
+        assert_error MisuseError, @ecto_call_msg, fn ->
+          transaction(fn ->
+            {:ok, _result} = query(@insert_given_id_sql, [id])
+            record_ecto_call(SomeRepo, "INSERT INTO audit")
+            query("SELECT 1")
+            flunk("the statement ran")
+          end)
+        end
+
+        assert count_by_id(id) == 0
+      end)
+    end
+
+    test "refuses every kind of data layer call that follows it" do
+      {:ok, prepared} = prepare("SELECT 1")
+
+      calls = [
+        fn -> execute(prepared, []) end,
+        fn -> prepare("SELECT 1") end,
+        fn -> query("SELECT 1") end,
+        fn -> retry_on_deadlock(fn -> flunk("the function ran") end) end,
+        fn -> snapshot(fn -> flunk("the function ran") end) end,
+        fn -> transaction(fn -> flunk("the function ran") end) end
+      ]
+
+      Enum.each(calls, fn call ->
+        assert_error MisuseError, @ecto_call_msg, fn ->
+          transaction(fn ->
+            record_ecto_call(SomeRepo, "INSERT INTO audit")
+
+            assert_error MisuseError, @ecto_call_msg, fn -> call.() end
+          end)
+        end
+      end)
+    end
+
+    test "reports a call made while a rollback unwinds the block" do
+      assert_error MisuseError, @ecto_call_msg, fn ->
+        transaction(fn ->
+          try do
+            rollback(:some_reason)
+          after
+            record_ecto_call(SomeRepo, "INSERT INTO audit")
+          end
+        end)
+      end
+
+      assert transaction(fn -> :ok end) == {:ok, :ok}
+    end
+
+    test "reports a call made while a rollback unwinds the test sandbox's transaction" do
+      in_sandbox(fn ->
+        assert_error MisuseError, @ecto_call_msg, fn ->
+          transaction(fn ->
+            try do
+              rollback(:some_reason)
+            after
+              record_ecto_call(SomeRepo, "INSERT INTO audit")
+            end
+          end)
+        end
+
+        assert transaction(fn -> :ok end) == {:ok, :ok}
+      end)
+    end
+
+    test "names the statement rather than the begin before it" do
+      assert_error MisuseError, @ecto_call_msg, fn ->
+        transaction(fn ->
+          record_ecto_call(SomeRepo, "begin")
+          record_ecto_call(SomeRepo, "INSERT INTO audit")
+          record_ecto_call(SomeRepo, "commit")
+        end)
+      end
+    end
+
+    test "names the begin of an Ecto transaction that ran no statement" do
+      assert_error MisuseError, ~r/^SomeRepo ran "begin" inside/, fn ->
+        transaction(fn ->
+          record_ecto_call(SomeRepo, "begin")
+          record_ecto_call(SomeRepo, "commit")
+        end)
+      end
+    end
+
+    test "a call inside an Ecto transaction opened in the block is told to move out of it" do
+      EctoRepo.start_for_test!()
+
+      assert_error MisuseError, ~r/^Hologram\.Test\.EctoRepo ran "begin" inside/, fn ->
+        transaction(fn ->
+          record_ecto_call(EctoRepo, "begin")
+
+          EctoRepo.transaction(fn ->
+            assert_error MisuseError, ~r/^cannot run a data layer statement inside a/, fn ->
+              query("SELECT 1")
+            end
+          end)
+        end)
+      end
+    end
+
+    test "a rollback inside an Ecto transaction opened in the block is told to move out of it" do
+      EctoRepo.start_for_test!()
+
+      assert_error MisuseError, ~r/^Hologram\.Test\.EctoRepo ran "begin" inside/, fn ->
+        transaction(fn ->
+          record_ecto_call(EctoRepo, "begin")
+
+          EctoRepo.transaction(fn ->
+            assert_error MisuseError, ~r/^cannot run a data layer statement inside a/, fn ->
+              refused_rollback()
+            end
+          end)
+        end)
+      end
+    end
+
+    test "names the first call" do
+      assert_error MisuseError, @ecto_call_msg, fn ->
+        transaction(fn ->
+          record_ecto_call(SomeRepo, "INSERT INTO audit")
+          record_ecto_call(OtherRepo, "DELETE FROM audit")
+        end)
+      end
+    end
+
+    test "shows the first 200 characters of the statement" do
+      statement = String.duplicate("a", 201)
+      shown = String.duplicate("a", 200)
+
+      assert_error MisuseError, ~r/^SomeRepo ran "#{shown}" inside/, fn ->
+        transaction(fn -> record_ecto_call(SomeRepo, statement) end)
+      end
+    end
+
+    test "says a query when the statement is unknown" do
+      assert_error MisuseError, ~r/^SomeRepo ran a query inside/, fn ->
+        transaction(fn -> record_ecto_call(SomeRepo, nil) end)
+      end
+    end
+
+    test "doesn't carry over into the next transaction" do
+      assert_error MisuseError, @ecto_call_msg, fn ->
+        transaction(fn -> record_ecto_call(SomeRepo, "INSERT INTO audit") end)
+      end
+
+      assert transaction(fn -> :ok end) == {:ok, :ok}
+    end
+
+    test "doesn't carry over after the block raised on its own" do
+      assert_error RuntimeError, "raised by the block", fn ->
+        transaction(fn ->
+          record_ecto_call(SomeRepo, "INSERT INTO audit")
+          raise "raised by the block"
+        end)
+      end
+
+      assert transaction(fn -> :ok end) == {:ok, :ok}
+    end
+
+    test "records nothing outside a transaction" do
+      assert record_ecto_call(SomeRepo, "INSERT INTO audit") == :ok
+
+      assert {:ok, %Postgrex.Result{rows: [[1]]}} = query("SELECT 1")
+      assert transaction(fn -> :ok end) == {:ok, :ok}
+    end
+
+    test "records nothing in the test sandbox outside a transaction" do
+      in_sandbox(fn ->
+        assert record_ecto_call(SomeRepo, "INSERT INTO audit") == :ok
+
+        id = insert_row()
+
+        assert count_by_id(id) == 1
+        assert transaction(fn -> :ok end) == {:ok, :ok}
+      end)
+    end
+
+    test "with_connection/2 keeps the outer transaction's record" do
+      {:ok, connection} = Postgrex.start_link(Config.connection_opts())
+
+      assert_error MisuseError, @ecto_call_msg, fn ->
+        transaction(fn ->
+          record_ecto_call(SomeRepo, "INSERT INTO audit")
+
+          {:ok, :ok} = with_connection(connection, fn -> transaction(fn -> :ok end) end)
+        end)
+      end
+
+      GenServer.stop(connection)
+    end
+
+    test "with_connection/2 keeps an inner transaction's record from reaching the outer one" do
+      {:ok, connection} = Postgrex.start_link(Config.connection_opts())
+
+      assert {:ok, :rescued} =
+               transaction(fn ->
+                 with_connection(connection, fn ->
+                   try do
+                     transaction(fn -> record_ecto_call(SomeRepo, "INSERT INTO audit") end)
+                   rescue
+                     MisuseError -> :rescued
+                   end
+                 end)
+               end)
+
+      GenServer.stop(connection)
     end
   end
 

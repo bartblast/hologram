@@ -121,12 +121,14 @@ const Elixir_Hologram_Job = {
     createEntity(build(jobType, values, opts), validateJobType(jobType)),
 
   // Sorted, the way every job type's are - the acting user at the enqueue, how many runs have
-  // started, the failure record, when the job is next due, and the status.
+  // started, the failure record, whether it runs as the server, when the job is next due, and the
+  // status.
   "framework_attribute_names/0": () =>
     Type.list([
       Type.atom("actor_id"),
       Type.atom("attempt"),
       Type.atom("error"),
+      Type.atom("run_as_server"),
       Type.atom("scheduled_at"),
       Type.atom("status"),
     ]),

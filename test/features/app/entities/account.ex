@@ -5,4 +5,5 @@ defmodule HologramFeatureTests.Entities.Account do
   attribute :handle, :string, unique: true
 
   allow :read
+  allow :update
 end

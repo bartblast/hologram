@@ -16,6 +16,7 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Bench
+  alias HologramFeatureTests.Entities.Binder
   alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Bookmark
   alias HologramFeatureTests.Entities.Bottle
@@ -23,6 +24,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Crate
+  alias HologramFeatureTests.Entities.Decal
   alias HologramFeatureTests.Entities.Docket
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Event
@@ -72,6 +74,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTests.Jobs.SlowRun
+  alias HologramFeatureTests.Jobs.UpdateMemo
   alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
@@ -1285,6 +1288,7 @@ defmodule HologramFeatureTests.Helpers do
       [
         Account,
         Bench,
+        Binder,
         Booking,
         Bookmark,
         Bottle,
@@ -1292,6 +1296,7 @@ defmodule HologramFeatureTests.Helpers do
         Cabin,
         Channel,
         Crate,
+        Decal,
         Docket,
         Document,
         Event,
@@ -1338,6 +1343,7 @@ defmodule HologramFeatureTests.Helpers do
         Tool,
         Topic,
         Trip,
+        UpdateMemo,
         User,
         Vault,
         Waybill,
@@ -1345,6 +1351,7 @@ defmodule HologramFeatureTests.Helpers do
       ]
       |> Enum.map(&Mapper.table_name/1)
       |> Enum.concat([
+        DB.join_table_name(Binder, :decals),
         DB.join_table_name(Docket, :stickers),
         DB.join_table_name(Message, :labels)
       ])

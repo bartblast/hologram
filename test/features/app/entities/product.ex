@@ -3,5 +3,6 @@ defmodule HologramFeatureTests.Entities.Product do
 
   attribute :name, :string
 
+  allow :delete
   allow :read
 end

@@ -43,6 +43,54 @@ defmodule Hologram.Auth.ContextTest do
 
       assert actor_user_id() == "user_id_10"
     end
+
+    test "sets a signed-out visitor's session for a nil user id" do
+      put_actor(nil)
+
+      assert actor_user_id() == nil
+      assert session?()
+    end
+  end
+
+  describe "session?/0" do
+    test "is false by default" do
+      refute session?()
+    end
+
+    test "is true for a user's session" do
+      assert with_actor("user_id_12", fn -> session?() end)
+    end
+
+    test "is true for a signed-out visitor's session" do
+      assert with_actor(nil, fn -> session?() end)
+    end
+
+    test "is true for an atom user id" do
+      assert with_actor(:admin, fn -> session?() end)
+    end
+
+    test "is false again after with_actor/2" do
+      with_actor(nil, fn -> :ok end)
+
+      refute session?()
+    end
+
+    test "is false again after with_actor/2 raises" do
+      assert_raise RuntimeError, fn ->
+        with_actor(nil, fn -> raise "error_2" end)
+      end
+
+      refute session?()
+    end
+
+    test "stays true after a nested call ends" do
+      with_actor(nil, fn ->
+        with_actor("user_id_13", fn -> :ok end)
+
+        assert session?()
+        assert actor_user_id() == nil
+      end)
+    end
   end
 
   describe "with_actor/2" do
@@ -85,18 +133,18 @@ defmodule Hologram.Auth.ContextTest do
       assert result == "user_id_4"
     end
 
-    # The actor lives in the process dictionary, so work moved off the request process starts
+    # The session lives in the process dictionary, so work moved off the request process starts
     # with none - which is the trusted tier, not an anonymous session. Pinned here because the
     # boundary decides which tier spawned work runs in.
-    test "leaves a spawned process without an actor" do
-      spawned_actor_user_id =
+    test "leaves a spawned process without a session" do
+      spawned_state =
         with_actor("user_id_8", fn ->
-          fn -> actor_user_id() end
+          fn -> {actor_user_id(), session?()} end
           |> Task.async()
           |> Task.await()
         end)
 
-      assert spawned_actor_user_id == nil
+      assert spawned_state == {nil, false}
     end
 
     test "restores the enclosing actor when the function raises" do
@@ -109,6 +157,53 @@ defmodule Hologram.Auth.ContextTest do
       end)
 
       assert actor_user_id() == nil
+    end
+  end
+
+  describe "without_session/1" do
+    test "runs the function with no session" do
+      result =
+        with_actor("user_id_14", fn ->
+          without_session(fn -> {actor_user_id(), session?()} end)
+        end)
+
+      assert result == {nil, false}
+    end
+
+    test "returns the function result" do
+      assert without_session(fn -> :result_3 end) == :result_3
+    end
+
+    test "restores a user's session afterwards" do
+      with_actor("user_id_15", fn ->
+        without_session(fn -> :ok end)
+
+        assert actor_user_id() == "user_id_15"
+      end)
+    end
+
+    test "restores a signed-out visitor's session afterwards" do
+      with_actor(nil, fn ->
+        without_session(fn -> :ok end)
+
+        assert session?()
+      end)
+    end
+
+    test "restores the session when the function raises" do
+      with_actor("user_id_16", fn ->
+        assert_raise RuntimeError, fn ->
+          without_session(fn -> raise "error_3" end)
+        end
+
+        assert actor_user_id() == "user_id_16"
+      end)
+    end
+
+    test "leaves no session when there was none" do
+      without_session(fn -> :ok end)
+
+      refute session?()
     end
   end
 end

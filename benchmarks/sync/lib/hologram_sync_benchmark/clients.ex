@@ -13,6 +13,12 @@ defmodule HologramSyncBenchmark.Clients do
 
   @fill_poll_ms 100
 
+  @marker_poll_ms 20
+
+  # The most a group connects at a time, what a step's connects are limited to, so a big group
+  # can't overflow a listen backlog the limits check took to be safe.
+  @most_connects_at_once 50
+
   @doc """
   Raises when the machine can't hold the given number of clients, and warns when the given
   burst of connects can overflow the listen backlog.
@@ -53,11 +59,46 @@ defmodule HologramSyncBenchmark.Clients do
   end
 
   @doc """
+  Waits until every given client that came back holds its whole pot again or failed, or the timeout
+  passes, and returns their reports in the clients' order.
+  """
+  @spec await_caught_up([pid], non_neg_integer) :: [Client.report()]
+  def await_caught_up(clients, timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+
+    await_reports(clients, deadline, &(&1.caught_up_at != nil or &1.failure != nil))
+  end
+
+  @doc """
+  Returns the one client count a case running at a single count was given, or the given default,
+  raising on several rather than quietly taking one of them.
+  """
+  @spec single_count!([pos_integer] | nil, pos_integer) :: pos_integer
+  def single_count!(nil, default), do: default
+
+  def single_count!([count], _default), do: count
+
+  def single_count!(counts, _default) do
+    raise ArgumentError, "this case runs at one client count, got: #{inspect(counts)}"
+  end
+
+  @doc """
   Closes the given clients and returns :ok.
   """
   @spec close_all([pid]) :: :ok
   def close_all(clients) do
     Enum.each(clients, &Client.close/1)
+  end
+
+  @doc """
+  Has each given client come back at its own uniformly random moment within the given
+  milliseconds, the way browsers retrying with jitter spread over a moment, and returns :ok.
+  """
+  @spec come_back_all([pid], non_neg_integer) :: :ok
+  def come_back_all(clients, spread_ms) do
+    Enum.each(clients, fn client ->
+      :ok = Client.come_back(client, :rand.uniform(spread_ms + 1) - 1)
+    end)
   end
 
   @doc """
@@ -67,6 +108,114 @@ defmodule HologramSyncBenchmark.Clients do
   @spec connect_all([pid], pos_integer) :: [{pid, term}]
   def connect_all(clients, concurrency) do
     run_all(clients, concurrency, &Client.connect/1)
+  end
+
+  @doc """
+  Closes the stream of each given client, keeping what it knows, and returns the ones that
+  couldn't leave as `{client, reason}` pairs.
+  """
+  @spec leave_all([pid]) :: [{pid, term}]
+  def leave_all(clients) do
+    Enum.flat_map(clients, fn client ->
+      case Client.leave(client) do
+        :ok -> []
+        {:error, reason} -> [{client, reason}]
+      end
+    end)
+  end
+
+  @doc """
+  Waits for the marker with the given number to reach every given client, and returns the
+  milliseconds from the given commit to the last arrival, or nil when one never got it: past the
+  given limit, or for having lost its stream, since it doesn't come back. Waits on the others past
+  a client that failed, so what's read next covers them too.
+  """
+  @spec delivery_ms([pid], non_neg_integer, integer, pos_integer) :: float | nil
+  def delivery_ms(clients, number, committed_at, limit_ms) do
+    deadline = System.monotonic_time(:millisecond) + limit_ms
+
+    if await_marker(clients, number, deadline) do
+      last_at =
+        clients
+        |> Enum.map(&Map.fetch!(Client.report(&1).markers, number))
+        |> Enum.max()
+
+      (last_at - committed_at) / 1_000
+    end
+  end
+
+  defp await_marker(clients, number, deadline) do
+    waiting = Enum.reject(clients, &Client.has_marker?(&1, number))
+
+    cond do
+      waiting == [] ->
+        true
+
+      Enum.all?(waiting, &Client.failed?/1) or System.monotonic_time(:millisecond) >= deadline ->
+        false
+
+      true ->
+        Process.sleep(@marker_poll_ms)
+        await_marker(waiting, number, deadline)
+    end
+  end
+
+  @doc """
+  Connects the given clients a group at a time, each group once the one before it is filled, and
+  returns the failures to connect, and the reports in the clients' order. Each group gets the given
+  time. After a group that ran out of it, the rest aren't connected: one stuck client mustn't hold
+  a step up once per group, and with no wait to hold them back they'd all fill at once.
+
+  For a case whose fills aren't what it measures. A connect returns as soon as the stream's headers
+  are in, so connecting a limited number at a time doesn't limit how many fill at once, and each
+  holds its rows in memory while it sends them.
+  """
+  @spec fill_in_groups([pid], pos_integer, non_neg_integer) :: {[{pid, term}], [Client.report()]}
+  def fill_in_groups(clients, group_size, timeout_ms) do
+    {failures, reports, _stuck?} =
+      clients
+      |> Enum.chunk_every(group_size)
+      |> Enum.reduce({[], [], false}, &fill_group(&1, &2, group_size, timeout_ms))
+
+    {failures
+     |> Enum.reverse()
+     |> Enum.concat(),
+     reports
+     |> Enum.reverse()
+     |> Enum.concat()}
+  end
+
+  defp fill_group(group, {failures, reports, true}, _group_size, _timeout_ms) do
+    {failures, [await_fills(group, 0) | reports], true}
+  end
+
+  defp fill_group(group, {failures, reports, false}, group_size, timeout_ms) do
+    group_failures = connect_all(group, min(group_size, @most_connects_at_once))
+    group_reports = await_fills(group, timeout_ms)
+    stuck? = Enum.any?(group_reports, &(&1.synced_all_at == nil and &1.failure == nil))
+
+    {[group_failures | failures], [group_reports | reports], stuck?}
+  end
+
+  @doc """
+  Prepares and connects the given clients, at most `concurrency` at a time, waits for their fills
+  and returns :ok, raising when one couldn't connect or fill within the given time.
+  """
+  @spec fill!([pid], pos_integer, non_neg_integer) :: :ok
+  def fill!(clients, concurrency, timeout_ms) do
+    prepare_all!(clients, concurrency)
+
+    case connect_all(clients, concurrency) do
+      [] -> :ok
+      [{_client, reason} | _more] -> raise "a client couldn't connect: #{inspect(reason)}"
+    end
+
+    reports = await_fills(clients, timeout_ms)
+
+    case Enum.find(reports, &(&1.synced_all_at == nil or &1.failure != nil)) do
+      nil -> :ok
+      report -> raise "a client never filled: #{inspect(report.failure)}"
+    end
   end
 
   @doc """
@@ -111,18 +260,17 @@ defmodule HologramSyncBenchmark.Clients do
   def await_fills(clients, timeout_ms) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
 
-    await_fills_until(clients, deadline)
+    await_reports(clients, deadline, &(&1.synced_all_at != nil or &1.failure != nil))
   end
 
-  defp await_fills_until(clients, deadline) do
+  defp await_reports(clients, deadline, settled?) do
     reports = Enum.map(clients, &Client.report/1)
-    settled? = Enum.all?(reports, &(&1.synced_all_at != nil or &1.failure != nil))
 
-    if settled? or System.monotonic_time(:millisecond) >= deadline do
+    if Enum.all?(reports, settled?) or System.monotonic_time(:millisecond) >= deadline do
       reports
     else
       Process.sleep(@fill_poll_ms)
-      await_fills_until(clients, deadline)
+      await_reports(clients, deadline, settled?)
     end
   end
 

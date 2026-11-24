@@ -101,6 +101,25 @@ describe("Mutations", () => {
       );
     });
 
+    // A batch queued before the browser mended these holds the surrogate as it was typed, and the
+    // server's JSON parser would refuse the whole body for it.
+    it("sends a lone surrogate as U+FFFD", async () => {
+      responding({dropped: {}, status: "confirmed"});
+
+      await Mutations.send({
+        ...batch,
+        writes: [{data: {title: "a\uD800b"}}],
+      });
+
+      const {body} = fetchStub.firstCall.args[1];
+
+      assert.notInclude(body.toLowerCase(), "\\ud800");
+
+      assert.deepStrictEqual(JSON.parse(body).writes, [
+        {data: {title: "a\uFFFDb"}},
+      ]);
+    });
+
     // Both halves of a confirmation reach the caller: what this client's write lost, and the value
     // standing in its place with the revision it carries. The second is what lets a losing write
     // give way to the winner as the answer lands, rather than to whatever the row held before
