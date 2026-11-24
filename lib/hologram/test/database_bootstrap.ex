@@ -17,6 +17,10 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
   @ran_key {__MODULE__, :ran}
 
+  # What the names of Hologram's own scratch databases start with, a run's OS process id and a
+  # counter following.
+  @scratch_prefix "hologram_scratch_"
+
   @doc """
   Returns the comment a test database carries for a later run to drop it once nothing is
   connected to it.
@@ -114,6 +118,18 @@ defmodule Hologram.Test.DatabaseBootstrap do
   end
 
   @doc """
+  Returns the name of the run database a run with the given id makes for the given configured
+  database.
+  """
+  @spec run_database_name(String.t(), String.t()) :: String.t()
+  # Fitted rather than concatenated: PostgreSQL truncates an over-long identifier to 63 bytes
+  # without saying so, and a configured name at the limit would lose the run's suffix, so every
+  # run would get the same name.
+  def run_database_name(database, run_id) do
+    Mapper.fit_identifier([database], [], "run_" <> run_id)
+  end
+
+  @doc """
   Runs run!/1 with no extra databases when the app declares entities and this VM hasn't run it
   yet, so a test helper that ran it first, for databases of its own beside the configured one,
   keeps the ones it got.
@@ -137,6 +153,13 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
     :ok
   end
+
+  @doc """
+  Returns what the names of Hologram's own scratch databases start with, before the OS process
+  id of the run that made one and a counter.
+  """
+  @spec scratch_prefix() :: String.t()
+  def scratch_prefix, do: @scratch_prefix
 
   # No handshake timeout: the handshake starts once the server accepted the TCP connection,
   # and a server that is up either finishes it, however long its cold start takes, or closes
@@ -267,13 +290,6 @@ defmodule Hologram.Test.DatabaseBootstrap do
               "When neither HOLOGRAM_ENV nor MIX_ENV is set, the test env is recognized by the " <>
               "running ExUnit server, so call #{function} after ExUnit.start()."
     end
-  end
-
-  # Fitted rather than concatenated: PostgreSQL truncates an over-long identifier to 63 bytes
-  # without saying so, and a configured name at the limit would lose the run's suffix, so every
-  # run would get the same name.
-  defp run_database_name(database, run_id) do
-    Mapper.fit_identifier([database], [], "run_" <> run_id)
   end
 
   # The maintenance database always exists, so connecting to it doubles as the server

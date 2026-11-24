@@ -31,11 +31,11 @@ defmodule Mix.Tasks.Holo.Db.ResetTest do
       end)
     end
 
-    test "refuses every env but dev, leaving the start flag unset" do
+    test "refuses every env but dev and test, leaving the start flag unset" do
       System.put_env("HOLOGRAM_ENV", "prod")
 
       assert_raise Mix.Error,
-                   "mix holo.db.reset runs in the dev env only - the current env is :prod",
+                   "mix holo.db.reset runs in the dev and test envs only - the current env is :prod",
                    fn -> Task.run([]) end
 
       assert System.get_env("HOLOGRAM_START") == nil
