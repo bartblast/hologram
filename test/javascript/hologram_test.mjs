@@ -6829,12 +6829,24 @@ describe("Hologram", () => {
       });
 
       it("keeps the document on a jump to a #fragment", async () => {
+        const originalState = history.state;
+        const originalUrl = window.location.href;
         Hologram.documentUrl = ownUrl();
+        history.pushState(null, "", `${ownUrl()}#section`);
 
-        await Hologram.handlePopstateEvent({state: null});
+        try {
+          await Hologram.handlePopstateEvent({state: null});
 
-        sinon.assert.notCalled(reloadStub);
-        sinon.assert.calledOnce(replaceStateStub);
+          sinon.assert.notCalled(reloadStub);
+          sinon.assert.calledOnce(replaceStateStub);
+        } finally {
+          replaceStateStub.wrappedMethod.call(
+            history,
+            originalState,
+            "",
+            originalUrl,
+          );
+        }
       });
 
       it("leaves a document that has rendered to its own handling", async () => {
@@ -8793,6 +8805,10 @@ describe("Hologram", () => {
 
     // A jump to a #fragment shows the same page, so it has nothing to take over.
     it("still mounts after a jump to a #fragment", async () => {
+      const originalState = history.state;
+      const originalUrl = window.location.href;
+      history.pushState(null, "", `${window.location.pathname}#section`);
+
       const replaceStateStub = sinon.stub(history, "replaceState");
       Hologram.pagePath = window.location.pathname;
 
@@ -8808,6 +8824,7 @@ describe("Hologram", () => {
         sinon.assert.calledOnce(mountStub);
       } finally {
         replaceStateStub.restore();
+        history.replaceState(originalState, "", originalUrl);
       }
     });
   });
