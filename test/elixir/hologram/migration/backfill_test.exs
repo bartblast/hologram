@@ -35,6 +35,10 @@ defmodule Hologram.Migration.BackfillTest do
   # search key is a value rather than NULL.
   @note String.duplicate("Zed ", 20)
 
+  # The values of the paged fills, as SQL over n: each folds to a key unlike itself, and the last
+  # is past the key cap, so it takes a search key too.
+  @paged_value ~s|CASE WHEN n = 1005 THEN repeat('Zed ', 20) ELSE 'Straße ' \|\| n END|
+
   @add_note %{
     op: :add_attribute,
     entity: MyApp.Task,
@@ -69,6 +73,20 @@ defmodule Hologram.Migration.BackfillTest do
 
   # What the column itself carries afterwards: whether it is required, and whether the
   # database holds a default for it.
+  # Each row's keys, as computed from its value, so a key written from another row, copied raw or
+  # left unwritten fails when the values allow it - @paged_value does.
+  defp assert_keys(column) do
+    {:ok, %{rows: keys}} =
+      Connection.query(
+        ~s|SELECT "#{column}", "#{column}_$sort", "#{column}_$search" | <>
+          ~s|FROM "hologram_data"."my_app_task"|
+      )
+
+    assert Enum.all?(keys, fn [value, sort_key, search_key] ->
+             sort_key == SortKey.compute(value) and search_key == SortKey.search_key(value)
+           end)
+  end
+
   defp column_flags(table, column) do
     statement = """
     SELECT a.attnotnull, pg_catalog.pg_get_expr(d.adbin, d.adrelid)
@@ -1181,7 +1199,7 @@ defmodule Hologram.Migration.BackfillTest do
           Connection.query(
             ~s|INSERT INTO "hologram_data"."my_app_task" ("id", "code", "created_at", | <>
               ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
-              ~s|SELECT gen_random_uuid(), 'c' \|\| n, now(), now(), now(), now(), '{}' | <>
+              ~s|SELECT gen_random_uuid(), #{@paged_value}, now(), now(), now(), now(), '{}' | <>
               ~s|FROM generate_series(1, 1005) AS n|
           )
       end
@@ -1197,6 +1215,8 @@ defmodule Hologram.Migration.BackfillTest do
 
         assert total == 1005
         assert wrong == 0
+
+        assert_keys("title")
       end)
     end
 
@@ -2208,7 +2228,7 @@ defmodule Hologram.Migration.BackfillTest do
           Connection.query(
             ~s|INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", | <>
               ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
-              ~s|SELECT gen_random_uuid(), 'Title ' \|\| n, now(), now(), now(), now(), '{}' | <>
+              ~s|SELECT gen_random_uuid(), #{@paged_value}, now(), now(), now(), now(), '{}' | <>
               ~s|FROM generate_series(1, 1005) AS n|
           )
       end
@@ -2227,15 +2247,13 @@ defmodule Hologram.Migration.BackfillTest do
         assert total == 1005
         assert wrong == 0
 
-        {:ok, %{rows: keys}} =
-          Connection.query(~s|SELECT "copy", "copy_$sort" FROM "hologram_data"."my_app_task"|)
-
-        assert Enum.all?(keys, fn [copy, sort_key] -> sort_key == SortKey.compute(copy) end)
+        assert_keys("copy")
       end)
     end
 
     # The rows are read in id order, and the one the fn raises on holds the largest id a random
-    # uuid can take, so it comes on the second page, after the first page is written.
+    # uuid can take, so it comes on the second page, after the first page is written. Its fixed
+    # value is past the key cap, so the retry writes a search key too.
     test "keeps nothing of a fill whose fn raises on a later page, and applies on a retry", %{
       create: create,
       first_model: first_model,
@@ -2282,7 +2300,8 @@ defmodule Hologram.Migration.BackfillTest do
 
         {:ok, _result} =
           Connection.query(
-            ~s|UPDATE "hologram_data"."my_app_task" SET "code" = 'fixed' WHERE "id" = $1::text::uuid|,
+            ~s|UPDATE "hologram_data"."my_app_task" SET "code" = repeat('fixed ', 20) | <>
+              ~s|WHERE "id" = $1::text::uuid|,
             [last_id]
           )
 
@@ -2296,6 +2315,7 @@ defmodule Hologram.Migration.BackfillTest do
 
         assert total == 1005
         assert wrong == 0
+        assert_keys("title")
         refute nullable?("title")
         assert applied_versions() == MapSet.new(["20260813091522", "20260813142237"])
       end)
