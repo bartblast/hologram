@@ -4,11 +4,11 @@ defmodule Hologram.Auth.Context do
   # The session the current process is working for. Framework wrappers set it around the work they
   # run, and Hologram.Test.as_user/1,2 is the sanctioned test-only door.
   #
-  # A process is in one of two states. With a session, it is doing a request's work, for the
-  # session's user or, with a nil user id, for a signed-out visitor, whom the rules judge as an
-  # anonymous session. With no session, it is server code outside Hologram's request handling, like
-  # a seed, a Mix task, a console, a worker or an app's own plug or controller, and that is the
-  # trusted tier.
+  # With a session, a process is doing a request's work, for the session's user or, with a nil user
+  # id, for a signed-out visitor, whom the rules judge as an anonymous session. With no session, it
+  # is server code outside Hologram's request handling, like a seed, a Mix task, a console, a worker
+  # or an app's own plug or controller, and that is the trusted tier - unless a session's process
+  # started it, as the paragraph after next says.
   #
   # The guarantee is about where identity comes from, not about what server code is able to
   # call: the actor always traces to an authenticated session, and nothing a client sends -

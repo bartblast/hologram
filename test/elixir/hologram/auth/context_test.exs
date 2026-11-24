@@ -239,7 +239,11 @@ defmodule Hologram.Auth.ContextTest do
     # inside it trusted, and such a task usually makes its first call after the function returned.
     test "leaves a process that ran the function counted as having served a session" do
       supervisor = start_supervised!(Task.Supervisor)
-      fun = with_actor("user_id_53", fn -> capture(fn -> :ok end) end)
+      fun = in_spawned(fn -> with_actor("user_id_53", fn -> capture(fn -> :ok end) end) end)
+
+      refute supervisor
+             |> Task.Supervisor.async(&started_by_request?/0)
+             |> Task.await()
 
       fun.()
 

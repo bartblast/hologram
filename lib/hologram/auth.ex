@@ -500,6 +500,9 @@ defmodule Hologram.Auth do
   A user id no user entity can have - an app's own serial id, say - is returned as it is. The data
   layer reads such a session as one with no user: its rules answer it as an anonymous session, and
   its writes are judged by them rather than trusted.
+
+  Raises Hologram.MisuseError in a process started for a request's work that doesn't carry the user
+  (see `as_current_user/1`), since nil there would read as a signed-out visitor.
   """
   @spec user_id() :: Server.identity_id() | nil
   defdelegate user_id, to: Context

@@ -21,6 +21,10 @@ defmodule Hologram.Application do
     Edges.reset_index_cache()
     Rules.reset_cache()
 
+    # An earlier start in the same VM that ran a tracer leaves its handle behind, and with that
+    # tracer gone every session would be refused. A start that runs a tracer puts a new one.
+    SpawnMark.forget()
+
     # Before anything starts, so a policy no page could be served under fails the boot of the app
     # rather than its first request.
     if Hologram.enabled?() do
@@ -82,10 +86,6 @@ defmodule Hologram.Application do
     if Model.exists?() do
       [SpawnMark, Hologram.DB.Supervisor]
     else
-      # A start in the same VM from when the app still had a data model leaves its tracer's handle,
-      # and with that tracer gone every session would be refused.
-      SpawnMark.forget()
-
       []
     end
   end

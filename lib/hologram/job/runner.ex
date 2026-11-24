@@ -167,6 +167,10 @@ defmodule Hologram.Job.Runner do
     # the ordinary verb rather than a statement of its own: with nobody acting there is nothing to
     # filter, and the rows come back as the structs run/1 is handed. The same goes for sweep/2.
     #
+    # The read claims trust, as does sweep/2's, since a worker can be started by a process working
+    # for a session, like a test's after as_user/1, and would otherwise be refused as that session's
+    # work.
+    #
     # The queued and the running rows are read apart, two reads where one would do, because only
     # this one is bounded - the index on status and due time keeps both cheap (see
     # Hologram.DB.IndexPlan.framework_needs/1).

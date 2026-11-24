@@ -4,7 +4,7 @@ defmodule Hologram.Auth.SpawnMark do
   # Marks the processes a session's process starts, so work moved off a request can be told from
   # server code no request started. The BEAM runs no code when a process starts, and a process
   # can't learn later what its starter was doing at that moment, since one connection process
-  # serves many users in turn. The one thing it copies to a new process at spawn is its trace
+  # serves many users in turn. What it does copy to a new process at spawn includes its trace
   # flags, so a process working for a session holds set_on_spawn in a trace session of its own.
   #
   # It also holds timestamp, which stays after the session ends, as the record that the process
@@ -114,12 +114,15 @@ defmodule Hologram.Auth.SpawnMark do
   end
 
   @doc """
-  Drops the handle a previous start left behind, for an app restarting with no data model, which
-  runs no tracer and whose sessions have nothing to be marked for.
+  Drops the handle a previous start left behind when no tracer is running, for an app starting
+  again with no data model or with Hologram not started, which runs no tracer and whose sessions
+  have nothing to be marked for. Leaves a running tracer's handle in place.
   """
   @spec forget() :: :ok
   def forget do
-    :persistent_term.erase(@session_key)
+    if Process.whereis(__MODULE__) == nil do
+      :persistent_term.erase(@session_key)
+    end
 
     :ok
   end
