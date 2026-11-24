@@ -211,8 +211,10 @@ defmodule Hologram.Migration.Generator do
         do: [],
         else: ["#{call}, default: <value>  - every row created without one, from now on"]
 
-    backfill_lines(call, "<value or expression>", "existing rows") ++
-      default_lines ++ ["#{call}, optional: true  - existing rows stay empty"]
+    call
+    |> backfill_lines("<value or expression>", "existing rows")
+    |> Enum.concat(default_lines)
+    |> Enum.concat(["#{call}, optional: true  - existing rows stay empty"])
   end
 
   defp format(text) do
