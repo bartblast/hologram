@@ -3551,13 +3551,15 @@ describe("Batches", () => {
         assert.isFalse(Overlay.names(TODO, "t1"));
       });
 
-      it("doesn't bring back one that closed while away", () => {
+      // As a sealed batch, where no store holds it (see the tests below).
+      it("brings back once one that closed while away", () => {
         LocalDatabase.actorUserId = "u2";
-        Batches.close();
+        const batch = Batches.close();
 
         Batches.releaseForeign("u1");
 
-        assert.isFalse(Overlay.names(TODO, "t1"));
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.equal(Overlay.removeWhere(() => true).length, 1);
       });
 
       it("doesn't bring back one discarded while away", () => {
@@ -3585,6 +3587,117 @@ describe("Batches", () => {
       Batches.releaseForeign("u1");
 
       assert.deepStrictEqual(Batches.pending, [own]);
+    });
+
+    // Nothing else holds them, and nothing else will send them.
+    describe("of a batch no store holds, when its user returns", () => {
+      let batch;
+
+      beforeEach(() => {
+        batch = made("u1", "t1");
+
+        Batches.releaseForeign("u2");
+      });
+
+      it("is held for that user while away", () => {
+        assert.isTrue(Batches.heldFor("u1"));
+        assert.isFalse(Batches.heldFor("u2"));
+      });
+
+      it("puts it back in the queue and on the screen", () => {
+        Batches.releaseForeign("u1");
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.isTrue(Overlay.names(TODO, "t1"));
+        assert.isFalse(Batches.heldFor("u1"));
+      });
+
+      it("puts it back once", () => {
+        Batches.releaseForeign("u1");
+        Batches.releaseForeign("u1");
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.equal(Overlay.removeWhere(() => true).length, 1);
+      });
+
+      it("doesn't put it back for another user", () => {
+        Batches.releaseForeign("u3");
+
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+
+      // Its send was out when the user changed, and its answer came after.
+      it("doesn't put back one answered while away", () => {
+        Batches.settle(batch.seq, {dropped: {}, kept: {}, status: "confirmed"});
+
+        Batches.releaseForeign("u1");
+
+        assert.deepStrictEqual(Batches.pending, []);
+      });
+
+      it("puts it ahead of the batches made since", () => {
+        const later = made("u1", "t2");
+
+        Batches.releaseForeign("u1");
+
+        assert.deepStrictEqual(Batches.pending, [batch, later]);
+      });
+    });
+
+    // Its owner's next page takes it up from there.
+    it("holds nothing for a batch the store holds", () => {
+      made("u1", "t1").filed = true;
+
+      Batches.releaseForeign("u2");
+      Batches.releaseForeign("u1");
+
+      assert.isFalse(Batches.heldFor("u1"));
+      assert.deepStrictEqual(Batches.pending, []);
+    });
+
+    it("holds a batch whose filing settles with no store", async () => {
+      let file;
+
+      sinon
+        .stub(Durability, "fileBatch")
+        .returns(new Promise((resolve) => (file = resolve)));
+
+      Durability.mode = "indexeddb";
+      const batch = made("u1", "t1");
+
+      LocalDatabase.actorUserId = "u2";
+      Batches.releaseForeign("u2");
+
+      Durability.mode = "memory";
+      file(false);
+      await batch.recorded;
+      await Promise.resolve();
+
+      assert.isTrue(Batches.heldFor("u1"));
+    });
+
+    it("puts back a batch whose filing settles with no store after its user returned", async () => {
+      let file;
+
+      sinon
+        .stub(Durability, "fileBatch")
+        .returns(new Promise((resolve) => (file = resolve)));
+
+      sinon.stub(Batches, "flush");
+
+      Durability.mode = "indexeddb";
+      const batch = made("u1", "t1");
+
+      Batches.releaseForeign("u2");
+
+      Durability.mode = "memory";
+      file(false);
+      await batch.recorded;
+      await Promise.resolve();
+
+      assert.deepStrictEqual(Batches.pending, [batch]);
+      assert.isTrue(Overlay.names(TODO, "t1"));
     });
   });
 

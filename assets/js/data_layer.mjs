@@ -67,6 +67,10 @@ export default class DataLayer {
   // once the mount is done (see #followMountedIdentity).
   static #reconnectsAfterMount = false;
 
+  // The pairs of the users whose batches wait in this tab with no store to hold them, by user (see
+  // followIdentity).
+  static #heldPairs = new Map();
+
   // Made public to make tests easier
   //
   // The tag the tab last opened a new stream to catch up with, until a handshake names a tag or the
@@ -730,7 +734,8 @@ export default class DataLayer {
     }
 
     const owner = actorUserId ?? null;
-    const isSameUser = owner === (LocalDatabase.actorUserId ?? null);
+    const previous = LocalDatabase.actorUserId ?? null;
+    const isSameUser = owner === previous;
 
     IdentityTracker.observe(identityTag);
     SyncStream.followedTag = identityTag ?? null;
@@ -755,6 +760,8 @@ export default class DataLayer {
       SyncStream.syncCursor = null;
       SyncStream.rowsChangedSinceRender = true;
 
+      const isReturning = Batches.heldFor(owner);
+
       Batches.releaseForeign(owner);
       SyncStream.scheduleRender();
 
@@ -763,9 +770,26 @@ export default class DataLayer {
       // or a handshake gives it the new user's (see SyncStream.awaitingPair). The page's offer was
       // minted for the previous user too. So does any pair this tab asked the server for: it was
       // minted for the previous user, or refused them.
+      //
+      // Except where the tab holds batches of a user that no store has: those wait here, and go out
+      // under that user's pair once the user is signed in again. The server may have applied one
+      // whose answer never came, and only that pair tells it so.
+      if (Batches.heldFor(previous) && Replica.id !== null) {
+        $.#heldPairs.set(previous, Replica.current());
+      }
+
+      const heldPair = isReturning ? $.#heldPairs.get(owner) : undefined;
+
+      $.#heldPairs.delete(owner);
+
       Replica.owner = owner;
       Replica.endMint();
       $.#holdNoPair();
+
+      if (heldPair !== undefined) {
+        Replica.adoptOwn(heldPair);
+        SyncStream.awaitingPair = false;
+      }
     }
 
     if (!isSameUser && Tabs.name !== null) {

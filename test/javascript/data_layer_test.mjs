@@ -1519,6 +1519,64 @@ describe("DataLayer", () => {
       }
     };
 
+    // The server may have applied one whose answer never came, and only the pair it went under
+    // tells it so.
+    describe("and back, with batches no store holds", () => {
+      let originalMode;
+
+      const followBack = () =>
+        DataLayer.followIdentity({
+          actorEntityId: "entity-1",
+          actorUserId: "u1",
+          identityTag: "3.tag-3",
+        });
+
+      beforeEach(() => {
+        originalMode = Durability.mode;
+        Durability.mode = "memory";
+      });
+
+      afterEach(() => {
+        Durability.mode = originalMode;
+      });
+
+      it("sends them under the pair they went under", () => {
+        const batch = sealed("t1");
+
+        followToSecondUser();
+        Replica.adoptOwn({id: "replica-2", token: "token-2"});
+        followBack();
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.deepStrictEqual(Replica.current(), {
+          id: "replica-1",
+          token: "token-1",
+        });
+        assert.isFalse(SyncStream.holdsWrites());
+      });
+
+      it("holds no pair for a user with none waiting", () => {
+        followToSecondUser();
+        followBack();
+
+        assert.isNull(Replica.id);
+      });
+
+      it("keeps the pair until its user returns", () => {
+        sealed("t1");
+
+        followToSecondUser();
+        DataLayer.followIdentity({actorUserId: "u3", identityTag: "3.tag-3"});
+        DataLayer.followIdentity({
+          actorEntityId: "entity-1",
+          actorUserId: "u1",
+          identityTag: "4.tag-4",
+        });
+
+        assert.equal(Replica.id, "replica-1");
+      });
+    });
+
     describe("to another user", () => {
       it("drops the previous user's rows", () => {
         followToSecondUser();

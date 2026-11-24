@@ -73,6 +73,11 @@ export default class Batches {
   // them for the overlay, so this is what puts them back if their user returns before they close.
   static #releasedOpen = new Set();
 
+  // Sealed batches of other users that no store holds, by user: the ones this tab made where there
+  // was nowhere to file them. A change of user takes them off the queue, and nothing else holds
+  // them, so this is what sends them once their user is signed in again.
+  static #setAside = new Map();
+
   // One batch is in flight at a time, and the loop that keeps it that way must not be entered
   // twice - every close calls flush, and an answer can arrive while another action is running. Held
   // while it runs, for a caller that has to know when it has finished.
@@ -187,12 +192,13 @@ export default class Batches {
 
     // The user changed while the action was suspended, so this tab can't send the batch: the server
     // applies a batch under the user of the session that sends it. It waits in the store for a page
-    // of its owner. Where there is no store, it has nowhere to wait and ends with the tab.
+    // of its owner. Where there is no store, it waits in this tab (see releaseForeign).
     if (batch.actorUserId !== (LocalDatabase.actorUserId ?? null)) {
       Overlay.remove(batch);
 
       batch.recorded = Batches.#number(batch);
       Batches.#trackFiling(batch);
+      Batches.#putAside([batch]);
 
       return batch;
     }
@@ -271,16 +277,20 @@ export default class Batches {
   // Lets go of every batch of a user other than the given one: out of the queue, so this tab does
   // not send it under the new user's session, and out of the overlay, so the new user doesn't see
   // it. An action still open counts, since its batch is in the overlay from the moment it opens.
-  // One of the given user's that an earlier change took off the screen comes back.
+  // The given user's that an earlier change took off the queue or the screen come back.
   //
   // Unlike disown, nothing else holds these for this tab. They stay in the store, which is where
-  // their owner's next page takes them up.
+  // their owner's next page takes them up. The ones no store holds stay in this tab, which sends
+  // them once their owner is signed in again. Until then they're the reason to keep the owner's
+  // pair (see heldFor).
   static releaseForeign(owner) {
     // A mount can leave the actor undefined, and batches of a visitor are stamped null.
     const current = owner ?? null;
     const isForeign = (batch) => batch.actorUserId !== current;
+    const foreign = Batches.pending.filter(isForeign);
 
-    Batches.pending.filter(isForeign).forEach(Batches.#trackFiling);
+    foreign.forEach(Batches.#trackFiling);
+    Batches.#putAside(foreign);
     Batches.pending = Batches.pending.filter((batch) => !isForeign(batch));
 
     for (const batch of Overlay.removeWhere(isForeign)) {
@@ -289,12 +299,37 @@ export default class Batches {
       }
     }
 
+    // Ahead of the open ones, which were made after them. One answered while it waited is done.
+    const returning = (Batches.#setAside.get(current) ?? []).filter(
+      (batch) => batch.seq === null || !Batches.#answered.has(batch.seq),
+    );
+
+    Batches.#setAside.delete(current);
+
+    for (const batch of returning) {
+      Batches.pending.push(batch);
+
+      if (batch.seq === null) {
+        Overlay.push(batch);
+      } else {
+        Overlay.insert(batch);
+      }
+    }
+
+    Batches.#sort();
+
     for (const batch of Batches.#releasedOpen) {
       if (!isForeign(batch)) {
         Batches.#releasedOpen.delete(batch);
         Overlay.push(batch);
       }
     }
+  }
+
+  // Whether this tab holds batches of the given user that no store holds, set aside at a change of
+  // user until that user is signed in again.
+  static heldFor(owner) {
+    return Batches.#setAside.has(owner ?? null);
   }
 
   // The landed marks the store records, taken into the batches this tab holds - for a tab taking
@@ -779,6 +814,7 @@ export default class Batches {
 
     Batches.#filing.clear();
     Batches.#releasedOpen.clear();
+    Batches.#setAside.clear();
     Batches.pending = [];
     Batches.rejected = [];
     Batches.#answered = new Set();
@@ -945,6 +981,26 @@ export default class Batches {
       batch.actorUserId === (LocalDatabase.actorUserId ?? null)
     ) {
       Tabs.post({kind: "sealed", record: batch.record()});
+    }
+  }
+
+  // Only the ones the store never got. One whose filing is still in flight is decided when it
+  // settles, and goes straight back if its owner is signed in again by then.
+  static #putAside(batches) {
+    for (const batch of batches) {
+      if (batch.filed === false) {
+        const held = Batches.#setAside.get(batch.actorUserId) ?? [];
+
+        Batches.#setAside.set(batch.actorUserId, [...held, batch]);
+      } else if (batch.filed === null) {
+        batch.recorded.then(() => {
+          if (batch.filed === false) {
+            Batches.#putAside([batch]);
+            Batches.releaseForeign(LocalDatabase.actorUserId);
+            Batches.flush();
+          }
+        });
+      }
     }
   }
 
