@@ -14,7 +14,7 @@ defmodule HologramCowboyTests.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "1c532e6f758e30b6dbbd04418e59fd9ec3d3169f"},
+       ref: "a8302941de77c91df273aba9d6f7631dd05bd6f4"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
       {:plug_cowboy, "~> 2.0"},
