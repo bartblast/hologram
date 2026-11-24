@@ -680,6 +680,62 @@ defmodule Hologram.Migration.Value do
 
   defp path(_ast, _names), do: nil
 
+  defp pattern_variables(pattern) do
+    {_ast, names} =
+      pattern
+      |> without_guards()
+      |> Macro.prewalk([], fn
+        {:^, _meta, _args}, found ->
+          {nil, found}
+
+        # A segment's size reads a value rather than binding one.
+        {:"::", meta, [value, _spec]}, found ->
+          {{:__block__, meta, [value]}, found}
+
+        {name, _meta, context} = node, found when is_atom(name) and is_atom(context) ->
+          {node, [name | found]}
+
+        node, found ->
+          {node, found}
+      end)
+
+    names
+  end
+
+  # The names a pinned expression binds itself, which aren't the row's. One it also reads from
+  # outside its binding is unbound where the pin runs, so the compiler refuses it.
+  defp pin_bindings(expr, env) do
+    {_ast, names} =
+      Macro.prewalk(expr, [], fn
+        # A cond's heads are expressions, whatever the arrows around them look like.
+        {:cond, _meta, [[do: _clauses]]} = node, found ->
+          {without_pattern(node, env), found}
+
+        {kind, _meta, [pattern, _right]} = node, found when kind in [:->, :<-, :=, :match?] ->
+          {node, Enum.concat(pattern_variables(pattern), found)}
+
+        {{:., _dot_meta, [receiver, :match?]}, _meta, [pattern, _right]} = node, found ->
+          if Macro.expand(receiver, env) == Kernel do
+            {node, Enum.concat(pattern_variables(pattern), found)}
+          else
+            {node, found}
+          end
+
+        # In a bitstring generator only the last segment sits inside the <- node.
+        {:<<>>, _meta, [_first | _rest] = parts} = node, found ->
+          if match?({:<-, _arrow_meta, _args}, List.last(parts)) do
+            {node, Enum.concat(pattern_variables(Enum.drop(parts, -1)), found)}
+          else
+            {node, found}
+          end
+
+        node, found ->
+          {node, found}
+      end)
+
+    names
+  end
+
   # A pin in a pattern matches against a variable, which Elixir allows anywhere in a body.
   defp pin_outside_pattern?(ast, env) do
     {_ast, found?} =
@@ -997,6 +1053,18 @@ defmodule Hologram.Migration.Value do
     {:constant, normalize_constant(value, type)}
   end
 
+  defp segment_sizes({:-, _meta, [left, right]}) do
+    left
+    |> segment_sizes()
+    |> Enum.concat(segment_sizes(right))
+  end
+
+  defp segment_sizes({:*, _meta, [size, _unit]}), do: [size]
+
+  defp segment_sizes({:size, _meta, [size]}), do: [size]
+
+  defp segment_sizes(_spec), do: []
+
   defp separator({:^, _meta, [expr]}, _scope), do: {:value, expr}
 
   defp separator("", scope) do
@@ -1124,6 +1192,19 @@ defmodule Hologram.Migration.Value do
   end
 
   defp unpiped_call(node, _env), do: node
+
+  defp unquoted(ast) do
+    {_ast, values} =
+      Macro.prewalk(ast, [], fn
+        {form, _meta, [value]}, found when form in [:unquote, :unquote_splicing] ->
+          {nil, [value | found]}
+
+        node, found ->
+          {node, found}
+      end)
+
+    values
+  end
 
   defp valid_args?(args),
     do: is_list(args) and not List.improper?(args) and Enum.all?(args, &is_atom/1)
@@ -1313,13 +1394,30 @@ defmodule Hologram.Migration.Value do
   end
 
   defp validate_pin!(expr, inner, scope) do
+    readable = scope.args -- pin_bindings(expr, scope.env)
+
     {_ast, pinned} =
-      Macro.prewalk(expr, [], fn
+      expr
+      |> Macro.prewalk(&unpiped_call(&1, scope.env))
+      |> Macro.prewalk([], fn
         {:@, _meta, _args}, found ->
           {nil, found}
 
+        # A capture's name is a function, whatever variable shares it.
+        {:&, _meta, [{:/, _slash_meta, [{_name, _name_meta, context}, arity]}]}, found
+        when is_atom(context) and is_integer(arity) ->
+          {nil, found}
+
+        # A segment's type is a word, so only its value and size are read.
+        {:"::", meta, [value, spec]}, found ->
+          {{:__block__, meta, [value | segment_sizes(spec)]}, found}
+
+        # Quoted code is data, so only what it unquotes is read.
+        {:quote, meta, args}, found when is_list(args) ->
+          {{:__block__, meta, unquoted(args)}, found}
+
         {name, _meta, context} = node, found when is_atom(name) and is_atom(context) ->
-          {node, if(name in scope.args, do: [name | found], else: found)}
+          {node, if(name in readable, do: [name | found], else: found)}
 
         node, found ->
           {node, found}

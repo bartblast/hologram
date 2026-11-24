@@ -880,6 +880,100 @@ defmodule Hologram.Migration.ValueTest do
       assert refusal(~s|fn title -> query("x") end|) =~ "write it without the fn"
     end
 
+    test "accepts a function inside a pin binding an argument's name" do
+      module =
+        compile_migration(
+          "20260813091522",
+          op_with(
+            ~s|fn title -> coalesce(title, ^Enum.map_join(["F"], fn title -> title end)) end|,
+            ""
+          )
+        )
+
+      assert [%{opts: [backfill: %Value{args: [:title], term: {:coalesce, _terms}}]}] =
+               module.__hologram_migration__().ops
+    end
+
+    test "accepts a match? inside a pin binding an argument's name" do
+      body =
+        ~S|fn title -> coalesce(title, ^to_string(match?({title, _} when is_binary(title), {"a", 1}))) end|
+
+      module = compile_migration("20260813091522", op_with(body, ""))
+
+      assert [%{opts: [backfill: %Value{term: {:coalesce, _terms}}]}] =
+               module.__hologram_migration__().ops
+    end
+
+    test "accepts a bitstring generator inside a pin binding an argument's name" do
+      body =
+        ~S|fn title -> coalesce(title, ^(for <<title, _rest <- "ab">>, into: "", do: <<title>>)) end|
+
+      module = compile_migration("20260813091522", op_with(body, ""))
+
+      assert [%{opts: [backfill: %Value{term: {:coalesce, _terms}}]}] =
+               module.__hologram_migration__().ops
+    end
+
+    test "accepts Kernel.match? inside a pin binding an argument's name" do
+      body =
+        ~S|fn title -> coalesce(title, ^to_string(Kernel.match?({title, _} when is_binary(title), {"a", 1}))) end|
+
+      module = compile_migration("20260813091522", op_with(body, ""))
+
+      assert [%{opts: [backfill: %Value{term: {:coalesce, _terms}}]}] =
+               module.__hologram_migration__().ops
+    end
+
+    test "accepts a capture inside a pin named like an argument" do
+      body = ~S|fn title -> coalesce(title, ^Enum.map_join(["F"], &title/1)) end|
+
+      module = compile_migration("20260813091522", op_with(body, "def title(x), do: x"))
+
+      assert [%{opts: [backfill: %Value{term: {:coalesce, _terms}}]}] =
+               module.__hologram_migration__().ops
+    end
+
+    test "accepts a pin with a segment type named like an argument" do
+      for pin <- [~S|"a#{1}"|, ~S|<<"a1"::binary>>|] do
+        assert %Value{term: {:coalesce, [{:name, [:binary]}, {:value, "a1"}]}} =
+                 backfill("fn binary -> coalesce(binary, ^#{pin}) end")
+      end
+    end
+
+    test "accepts a pin piping into a function named like an argument" do
+      body = ~S[fn title -> coalesce(title, ^("F" |> title)) end]
+
+      module = compile_migration("20260813091522", op_with(body, "def title(x), do: x"))
+
+      assert [%{opts: [backfill: %Value{term: {:coalesce, [_title, {:value, "F"}]}}]}] =
+               module.__hologram_migration__().ops
+    end
+
+    test "accepts quoted code inside a pin naming an argument" do
+      assert %Value{term: {:coalesce, [_title, {:value, "title"}]}} =
+               backfill(
+                 ~S|fn title -> coalesce(title, ^to_string(elem(quote(do: title), 0))) end|
+               )
+    end
+
+    test "names an argument a pin reads where no pattern binds it" do
+      for pin <- [
+            ~S|to_string(String.match?(title, ~r/a/))|,
+            ~S|(cond do title -> "a"; true -> "b" end)|,
+            ~S|(case "a" do x when x == title -> x end)|,
+            ~S|(<<x::size(title), _::bitstring>> = "ab"; to_string(x))|
+          ] do
+        assert refusal("fn title -> coalesce(title, ^#{pin}) end") =~
+                 "a backfill fn reads its argument title by name, not pinned"
+      end
+    end
+
+    test "names the argument a pin reads beside a binding of another argument's name" do
+      assert refusal(
+               ~s|fn title, other -> coalesce(title, other, ^Enum.map_join([other], fn title -> title end)) end|
+             ) =~ "a backfill fn reads its argument other by name, not pinned"
+    end
+
     test "accepts a pinned attribute named like an argument" do
       body = """
       @title "Untitled"
