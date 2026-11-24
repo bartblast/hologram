@@ -750,8 +750,7 @@ defmodule Hologram.Migration.Renderer do
   end
 
   defp tightening(op, chunk, mapping, next_model) do
-    {entity_type, entry} = Enum.find(mapping, fn {_type, entry} -> entry.table == op.table end)
-    {kind, name} = Enum.find(entry.columns, &(&1.name == op.column)).source
+    {entity_type, kind, name} = column_member(mapping, op.table, op.column)
 
     # A declared default fills a tightening only when the column keeps its type.
     takes_default =
@@ -781,6 +780,36 @@ defmodule Hologram.Migration.Renderer do
       {^name, _type, opts} -> opts[:unique] == true
       nil -> false
     end
+  end
+
+  # A required add nothing fills is refused over rows the way a tightening is, naming what the
+  # member can take. A declared default fills an add whatever type the chunk gives it.
+  defp mark_unfilled_add(
+         %{op: :add_column, definition: %{null: false}} = op,
+         chunk,
+         mapping,
+         model
+       )
+       when not is_map_key(op, :backfill) do
+    {entity_type, kind, name} = column_member(mapping, op.table, op.column)
+
+    unfilled = %{
+      kind: kind,
+      takes_default: kind == :attribute and not unique_attribute?(model, entity_type, name),
+      type_stated: Enum.any?(chunk, &states_type?(&1, entity_type, name))
+    }
+
+    Map.put(op, :unfilled, unfilled)
+  end
+
+  defp mark_unfilled_add(op, _chunk, _mapping, _model), do: op
+
+  # The entity type, kind and name of the member the given table's column stores.
+  defp column_member(mapping, table, column) do
+    {entity_type, entry} = Enum.find(mapping, fn {_type, entry} -> entry.table == table end)
+    {kind, name} = Enum.find(entry.columns, &(&1.name == column)).source
+
+    {entity_type, kind, name}
   end
 
   defp unfilled_tightening?(
@@ -950,6 +979,7 @@ defmodule Hologram.Migration.Renderer do
       |> Enum.concat(Schema.diff(cleared_term, Schema.from_mapping(next_mapping), renames: false))
       |> attach_backfills(chunk, next_model, next_mapping)
       |> Enum.map(&put_declared_default(&1, next_mapping))
+      |> Enum.map(&mark_unfilled_add(&1, chunk, next_mapping, next_model))
       |> prepend_grant_deletes(chunk)
 
     {physical_ops, next_model}

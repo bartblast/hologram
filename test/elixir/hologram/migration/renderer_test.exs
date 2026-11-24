@@ -1281,6 +1281,71 @@ defmodule Hologram.Migration.RendererTest do
       assert [%{op: :add_column, backfill: 0}] = result.transactional
     end
 
+    # The refusal over rows reads what the member can take for its ways out: a relationship and a
+    # unique attribute take no default.
+    test "stamps what the member of a required add nothing fills can take" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}, MyApp.User => %{}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :code,
+          type: :integer,
+          opts: [optional: true],
+          line: 3
+        },
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :author,
+          type: MyApp.User,
+          opts: [optional: true],
+          line: 4
+        },
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :serial,
+          type: :integer,
+          opts: [optional: true, unique: true],
+          line: 5
+        },
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :code,
+          changes: [type: :float, optional: false],
+          line: 6
+        },
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :author,
+          changes: [optional: false],
+          line: 7
+        },
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :serial,
+          changes: [optional: false],
+          line: 8
+        }
+      ]
+
+      stamps =
+        for %{op: :add_column, column: column} = op <- render(ops, pre).transactional,
+            into: %{},
+            do: {column, op[:unfilled]}
+
+      assert stamps == %{
+               "author_id" => %{kind: :relationship, takes_default: false, type_stated: false},
+               "code" => %{kind: :attribute, takes_default: true, type_stated: true},
+               "serial" => %{kind: :attribute, takes_default: false, type_stated: false}
+             }
+    end
+
     test "returns the added columns under the names the file leaves them with" do
       pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 

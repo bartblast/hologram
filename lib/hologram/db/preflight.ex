@@ -20,11 +20,12 @@ defmodule Hologram.DB.Preflight do
 
   A column counts as filled only when the op carries its fill - the renderer stamps a
   declared default where the op sits, as :backfill on an add and :fill on a tightening. A
-  lookup in the mapping the file leaves would find the column under the name of whatever
-  holds it at the end of the file: nothing, after a rename, or another column that took
-  the name over, and the check would pass a fill the migrator never runs. Whether a
-  tightening's fill makes rows repeat a unique key is asked when the fill runs (see
-  check_fill!/1).
+  required add nothing fills carries :unfilled instead. It and a tightening's :tightening say
+  what the member can take, which decides the ways out the refusal offers. A lookup in the
+  mapping the file leaves would find the column under the name of whatever holds it at the
+  end of the file: nothing, after a rename, or another column that took the name over, and
+  the check would pass a fill the migrator never runs. Whether a tightening's fill makes rows
+  repeat a unique key is asked when the fill runs (see check_fill!/1).
 
   The schema is read only for an op the checks can refuse, so a file of renames, plain
   indexes or safe casts costs no catalog reads.
@@ -311,6 +312,27 @@ defmodule Hologram.DB.Preflight do
       "the next migration file"
   end
 
+  # A migration's add nothing fills is one its chunk makes required, so it takes a backfill on the
+  # op doing that, though not beside a type change. The renderer stamps what its member can take,
+  # since a migration checks without a mapping. Schema reconciliation reads the member from the
+  # mapping it converges to, and has no op to add a backfill to.
+  defp add_ways_out(%{unfilled: %{type_stated: true} = unfilled}, _mapping) do
+    "change the type in an op of its own, then add backfill: " <>
+      "#{backfill_spelling(unfilled)} to the op making it required, " <>
+      cleared_ways_out(unfilled, "keep")
+  end
+
+  defp add_ways_out(%{unfilled: unfilled}, _mapping) do
+    "add backfill: #{backfill_spelling(unfilled)} to the op making it required, " <>
+      cleared_ways_out(unfilled, "keep")
+  end
+
+  defp add_ways_out(op, mapping) do
+    mapping
+    |> mapped_member(op.table, op.column)
+    |> cleared_ways_out("make")
+  end
+
   defp backfill_spelling(%{kind: :attribute}), do: "<value or expression>"
 
   defp backfill_spelling(%{kind: :relationship}), do: "<id or expression>"
@@ -332,7 +354,7 @@ defmodule Hologram.DB.Preflight do
     if count > 0 do
       raise ~s(cannot add required column "#{op.column}" to table "#{op.table}" - ) <>
               "#{count} existing #{pluralize_rows(count)} would have no value - " <>
-              "declare default: <value>, make the attribute optional: true, or clear the rows"
+              add_ways_out(op, mapping)
     end
   end
 
@@ -448,7 +470,7 @@ defmodule Hologram.DB.Preflight do
 
     if count > 0 do
       raise ~s(cannot make column "#{op.column}" on table "#{op.table}" required - ) <>
-              "found #{count} #{pluralize_rows(count)} with NULL - #{null_ways_out(op)}"
+              "found #{count} #{pluralize_rows(count)} with NULL - #{null_ways_out(op, mapping)}"
     end
   end
 
@@ -481,6 +503,16 @@ defmodule Hologram.DB.Preflight do
       end
     end
   end
+
+  defp cleared_ways_out(%{kind: :attribute, takes_default: true}, verb) do
+    "declare default: <value>, #{verb} the attribute optional: true, or clear the rows"
+  end
+
+  defp cleared_ways_out(%{kind: kind}, verb),
+    do: "#{verb} the #{kind} optional: true, or clear the rows"
+
+  # A column no member declares, like the id, takes neither a default nor optional: true.
+  defp cleared_ways_out(nil, _verb), do: "clear the rows"
 
   # Every check here counts the rows that cannot follow a change, and a table the ops
   # create has none to count - absent from the schema this runs against, the query would
@@ -559,24 +591,57 @@ defmodule Hologram.DB.Preflight do
     end
   end
 
+  # What the member a mapped column stores can take, as the renderer stamps it on a migration's
+  # add: a unique attribute declares no default. Nil for a column no member declares, or one the
+  # mapping doesn't hold, like a join table's.
+  defp mapped_member(mapping, table, column_name) do
+    entry = entity_mapping(mapping, table)
+    column = entry && Enum.find(entry.columns, &(&1.name == column_name))
+
+    case column && column.source do
+      {:relationship, _name} ->
+        %{kind: :relationship, takes_default: false}
+
+      {:attribute, _name} ->
+        unique? =
+          mapping
+          |> unique_indexes(table)
+          |> Enum.any?(&(&1.columns == [column_name]))
+
+        %{kind: :attribute, takes_default: not unique?}
+
+      _system_or_unmapped ->
+        nil
+    end
+  end
+
   defp not_ready_invalid_indexes do
     for {index, %{ready?: false}} <- invalid_indexes(), into: MapSet.new(), do: index
   end
 
   # A migration's op can take a backfill, but not beside a type change, and only an attribute that
-  # isn't unique can declare a default. Schema reconciliation has no op to add a backfill to.
-  defp null_ways_out(%{tightening: %{type_stated: true} = tightening}) do
+  # isn't unique can declare a default. Schema reconciliation has no op to add a backfill to,
+  # and reads the member from the mapping it converges to.
+  defp null_ways_out(%{tightening: %{type_stated: true} = tightening}, _mapping) do
     "change the type in an op of its own, then add backfill: " <>
       "#{backfill_spelling(tightening)} to the op making it required, " <>
       optional_ways_out(tightening)
   end
 
-  defp null_ways_out(%{tightening: tightening}) do
+  defp null_ways_out(%{tightening: tightening}, _mapping) do
     "add backfill: #{backfill_spelling(tightening)} to the op, #{optional_ways_out(tightening)}"
   end
 
-  defp null_ways_out(_op) do
-    "declare default: <value>, keep the attribute optional: true, or fix the data"
+  # A declared default fills a tightening only when the column keeps its type.
+  defp null_ways_out(op, mapping) do
+    case mapped_member(mapping, op.table, op.column) do
+      nil ->
+        "fix the data"
+
+      member ->
+        takes_default = member.takes_default and op.before.type == op.after.type
+        optional_ways_out(%{member | takes_default: takes_default})
+    end
   end
 
   defp optional_ways_out(%{kind: :attribute, takes_default: true}) do
