@@ -3,7 +3,7 @@ defmodule Hologram.Template.RendererDerivedTest do
   # restart the asset path registry under its registered name, both shared by the whole node.
   use Hologram.Test.DatabaseCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
+  import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1, update: 3]
   import Hologram.Query, only: [filter: 2, sort: 2]
   import Hologram.Template.Renderer
   import Hologram.Test.Stubs
@@ -23,6 +23,7 @@ defmodule Hologram.Template.RendererDerivedTest do
   alias Hologram.Policy
   alias Hologram.Server
   alias Hologram.Sync.Carry
+  alias Hologram.Sync.FinalSeq
   alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module13
@@ -629,6 +630,35 @@ defmodule Hologram.Template.RendererDerivedTest do
 
       refute String.contains?(html, "</script><script>alert(1)")
       assert String.contains?(html, ~S|"c":"\u003C/script>\u003Cscript>alert(1)\u003C/script>"|)
+    end
+
+    # The carry spells the numbers as the render read them, so a number above the limit the
+    # render pinned travels nil, as the page showed it.
+    test "carries a number above the render's limit as nil" do
+      {:ok, required} = create(Module1.new())
+
+      {:ok, target} =
+        %{a: true, c: "the embedded row"}
+        |> Entity2.new()
+        |> create()
+
+      {:ok, source} =
+        %{c_id: required.id}
+        |> Module3.new()
+        |> create()
+
+      :ok = add_relationship(Module3, source.id, :a, target.id)
+      :ok = update(Entity2, target.id, %{c: "the updated row"})
+
+      stored = DB.read(Entity2, target.id)
+
+      html =
+        FinalSeq.with_pinned(stored.server_updated_seq - 1, fn ->
+          render_page_html(Module167)
+        end)
+
+      assert String.contains?(html, ~s|"server_created_seq":#{stored.server_created_seq}|)
+      assert String.contains?(html, ~s|"server_updated_seq":null|)
     end
 
     test "carries nothing for a page whose fields read no rows" do

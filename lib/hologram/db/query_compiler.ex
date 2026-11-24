@@ -21,6 +21,8 @@ defmodule Hologram.DB.QueryCompiler do
   # The signed-in users a recheck is given, each a row of its own.
   @recheck_users_sql ~s|SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user")|
 
+  @range_operators [:<, :<=, :>, :>=]
+
   # Each search operator as the shape of the pattern it matches and how it matches the bytes.
   @search_operators %{
     contains: {:infix, :loose},
@@ -197,7 +199,7 @@ defmodule Hologram.DB.QueryCompiler do
       )
 
     {order_sql, all_reversed_params} =
-      order_clause(term.sort, statement_scope, params_after_policy)
+      order_clause(term, statement_scope, params_after_policy)
 
     where_sql = where_clause(authored_conditions ++ policy_conditions)
     sql = statement(term, entity_mapping, where_sql, order_sql, include_sql)
@@ -519,6 +521,18 @@ defmodule Hologram.DB.QueryCompiler do
     {"$#{length(reversed_params) + 1}", [{:value, encoded_value} | reversed_params]}
   end
 
+  # Like the actor, the limit binds one slot for the whole statement, so every number in it is read
+  # against the same limit.
+  defp final_seq_slot(reversed_params) do
+    case Enum.find_index(reversed_params, &(&1 == :final_seq)) do
+      nil ->
+        {"$#{length(reversed_params) + 1}", [:final_seq | reversed_params]}
+
+      reversed_index ->
+        {"$#{length(reversed_params) - reversed_index}", reversed_params}
+    end
+  end
+
   defp enum_list_slot(values, column, reversed_params) do
     encoded_values = Enum.map(values, &Codec.encode(&1, column.type))
     {placeholder, new_params} = bind_slot_value(encoded_values, reversed_params)
@@ -603,6 +617,21 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp column_sql(_scope, column), do: Mapper.quote_identifier(column.name)
+
+  # What a column reads as in a condition, an ordering or a computed value: a sequence number above
+  # the limit is not final yet, so it reads as nil, the way a row in the browser holds it.
+  defp masked_column_sql(scope, column, reversed_params) do
+    column_sql = column_sql(scope, column)
+
+    if Mapper.sequence?(column) do
+      {limit_slot, new_params} = final_seq_slot(reversed_params)
+
+      {"CASE WHEN #{column_sql} <= #{limit_slot} THEN #{column_sql} END",
+       Map.put(column, :null, true), new_params}
+    else
+      {column_sql, column, reversed_params}
+    end
+  end
 
   # A quantifier is a correlated subquery over the related rows its source leads to - see the
   # moduledoc for what each one asks of them.
@@ -710,17 +739,31 @@ defmodule Hologram.DB.QueryCompiler do
     {"#{subject_sql} LIKE #{pattern_slot}", new_params}
   end
 
+  # A row's own sequence number against a literal, or ranged against another value, compiles on its
+  # raw column, which an index serves, with the limit bounding it apart: the column holds a number
+  # on every row, and nil is a number above the limit. Anything else of a sequence field - equality
+  # against another value, a path's, a derived field's - compares the masked value.
+  defp condition({name, operator, value} = clause, scope, reversed_params) do
+    case own_sequence_sql(scope, name, operator, value) do
+      nil ->
+        compared_condition(clause, scope, reversed_params)
+
+      {column_sql, column} ->
+        sequence_condition(column_sql, column, clause, scope, reversed_params)
+    end
+  end
+
   # Two columns of one row. SQL's = and != are unknown when either side is NULL, so the equality
   # family uses the DISTINCT forms, which read nil as a value - the meaning a literal comparison
   # has. An ordering comparison is unknown over a NULL on its own, which is the meaning it has too.
-  defp condition({name, :==, {:attribute, other}}, scope, reversed_params) do
+  defp compared_condition({name, :==, {:attribute, other}}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
     {operand_sql, new_params} = attribute_operand_sql(scope, column, other, params_after_subject)
 
     {"#{subject_sql} IS NOT DISTINCT FROM #{operand_sql}", new_params}
   end
 
-  defp condition({name, :!=, {:attribute, other}}, scope, reversed_params) do
+  defp compared_condition({name, :!=, {:attribute, other}}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
     {operand_sql, new_params} = attribute_operand_sql(scope, column, other, params_after_subject)
 
@@ -729,7 +772,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   # Two strings compare by the pairs their ordering sorts by, each side its own key and value, so
   # the comparison agrees with ORDER BY on both columns.
-  defp condition({name, operator, {:attribute, other}}, scope, reversed_params) do
+  defp compared_condition({name, operator, {:attribute, other}}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
     case sort_key_sql(scope, name, params_after_subject) do
@@ -754,7 +797,7 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  defp condition({name, :==, nil}, scope, reversed_params) do
+  defp compared_condition({name, :==, nil}, scope, reversed_params) do
     {subject_sql, _column, new_params} = subject_sql(scope, name, reversed_params)
 
     {"#{subject_sql} IS NULL", new_params}
@@ -763,7 +806,7 @@ defmodule Hologram.DB.QueryCompiler do
   # A string of the row compares its sort key beside its value, so the key's index serves the
   # equality - the raw column is unbounded and has none. The value still decides it, since two
   # values can share a key.
-  defp condition({name, :==, value}, scope, reversed_params) do
+  defp compared_condition({name, :==, value}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
     case own_sort_key_column(scope, name) do
@@ -782,13 +825,13 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  defp condition({name, :!=, nil}, scope, reversed_params) do
+  defp compared_condition({name, :!=, nil}, scope, reversed_params) do
     {subject_sql, _column, new_params} = subject_sql(scope, name, reversed_params)
 
     {"#{subject_sql} IS NOT NULL", new_params}
   end
 
-  defp condition({name, :!=, value}, scope, reversed_params) do
+  defp compared_condition({name, :!=, value}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
     {placeholder, new_params} = value_slot(value, scope, column, params_after_subject)
 
@@ -797,7 +840,7 @@ defmodule Hologram.DB.QueryCompiler do
     {null_inclusive(condition_sql, subject_sql, column), new_params}
   end
 
-  defp condition({name, :in, values}, scope, reversed_params) do
+  defp compared_condition({name, :in, values}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
     case Enum.reject(values, &is_nil/1) do
@@ -821,7 +864,7 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  defp condition({name, :not_in, values}, scope, reversed_params) do
+  defp compared_condition({name, :not_in, values}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
     case Enum.reject(values, &is_nil/1) do
@@ -848,7 +891,7 @@ defmodule Hologram.DB.QueryCompiler do
   # settles what the key cannot - so a bound is a position in the list the attribute sorts into,
   # and the comparison agrees with ORDER BY by construction. A computed enum compares by its
   # label's declared position, and every other type by its value alone.
-  defp condition({name, operator, value}, scope, reversed_params) do
+  defp compared_condition({name, operator, value}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
     case sort_key_sql(scope, name, params_after_subject) do
@@ -995,7 +1038,7 @@ defmodule Hologram.DB.QueryCompiler do
           {coalesced_sql(scope.row_prefix, columns), List.last(columns), reversed_params}
 
         column ->
-          {column_sql(scope, column), column, reversed_params}
+          masked_column_sql(scope, column, reversed_params)
       end
     end
   end
@@ -1737,7 +1780,7 @@ defmodule Hologram.DB.QueryCompiler do
   defp rows_include_sql({:query, term}, scope, rows_term, cardinality, acc) do
     {reversed_params, index} = acc
     {from_sql, inner_scope, params_after_from} = sourced_from_sql(scope, term, reversed_params)
-    {order_sql, params_after_order} = order_clause(term.sort, inner_scope, params_after_from)
+    {order_sql, params_after_order} = order_clause(term, inner_scope, params_after_from)
     target_mapping = Map.fetch!(scope.mapping, term.entity)
     quoted_wrapper = Mapper.quote_identifier("$i#{index}")
 
@@ -1771,7 +1814,7 @@ defmodule Hologram.DB.QueryCompiler do
         wrapper_scope = %{inner_scope | qualified: true, row_prefix: quoted_wrapper}
 
         {aggregate_order_sql, new_params} =
-          order_clause(term.sort, wrapper_scope, params_after_nested)
+          order_clause(term, wrapper_scope, params_after_nested)
 
         set_sql =
           "(SELECT COALESCE(jsonb_agg(#{object_sql}#{aggregate_order_sql}), '[]'::jsonb) " <>
@@ -1815,7 +1858,7 @@ defmodule Hologram.DB.QueryCompiler do
       if bounds_sql == "" do
         {"", params_after_from}
       else
-        order_clause(term.sort, inner_scope, params_after_from)
+        order_clause(term, inner_scope, params_after_from)
       end
 
     rows_sql = ~s|SELECT #{inner_scope.row_prefix}."id" #{from_sql}#{order_sql}#{bounds_sql}|
@@ -1891,6 +1934,135 @@ defmodule Hologram.DB.QueryCompiler do
         {inverse.target, inverse_membership(inverse, mapping, owner_id_sql)}
     end
   end
+
+  # The raw column of a sequence number on the row the condition is about, or of a row above it,
+  # when the condition compares it to a literal or ranges it against another value - the shapes
+  # compiled on the raw column. Equality against another value compares the masked values, since
+  # two numbers above the limit both read nil and so equal each other.
+  defp own_sequence_sql(scope, {:outer, levels, name}, operator, value) do
+    scope
+    |> outer_scope(levels)
+    |> own_sequence_sql(name, operator, value)
+  end
+
+  defp own_sequence_sql(scope, name, operator, value) when is_atom(name) do
+    with true <- sequence_shape?(operator, value),
+         false <- Derived.declared?(scope.entity_type, name),
+         %{} = column <- name_column(scope.entity_mapping, name),
+         true <- Mapper.sequence?(column) do
+      {column_sql(scope, column), column}
+    else
+      _not_own -> nil
+    end
+  end
+
+  defp own_sequence_sql(_scope, _path, _operator, _value), do: nil
+
+  defp sequence_shape?(operator, {:attribute, _other}), do: operator in @range_operators
+
+  defp sequence_shape?(operator, values) when operator in [:in, :not_in], do: is_list(values)
+
+  defp sequence_shape?(operator, value)
+       when operator in [:==, :!=] or operator in @range_operators,
+       do: is_nil(value) or is_integer(value)
+
+  defp sequence_shape?(_operator, _value), do: false
+
+  # The condition on the raw column, bounded by the limit the way its nil is judged: AND'ed below
+  # the limit when nil fails it, OR'ed above it when nil passes it.
+  defp sequence_condition(column_sql, column, clause, scope, reversed_params) do
+    {limit_slot, params_after_limit} = final_seq_slot(reversed_params)
+    final_sql = "#{column_sql} <= #{limit_slot}"
+    pending_sql = "#{column_sql} > #{limit_slot}"
+
+    case raw_sequence_condition(column_sql, column, clause, scope, params_after_limit) do
+      {nil, new_params} ->
+        {if(nil_matches?(clause), do: pending_sql, else: final_sql), new_params}
+
+      {raw_sql, new_params} ->
+        if nil_matches?(clause) do
+          {"(#{raw_sql} OR #{pending_sql})", new_params}
+        else
+          {"(#{raw_sql} AND #{final_sql})", new_params}
+        end
+    end
+  end
+
+  # What the raw column must hold besides being final or not: nil when nothing - a condition on nil
+  # alone, or a list holding nothing but nil.
+  defp raw_sequence_condition(
+         _column_sql,
+         _column,
+         {_name, operator, nil},
+         _scope,
+         reversed_params
+       )
+       when operator in [:==, :!=] do
+    {nil, reversed_params}
+  end
+
+  defp raw_sequence_condition(
+         column_sql,
+         column,
+         {_name, operator, values},
+         _scope,
+         reversed_params
+       )
+       when operator in [:in, :not_in] do
+    case Enum.reject(values, &is_nil/1) do
+      [] when values != [] ->
+        {nil, reversed_params}
+
+      stripped_values ->
+        {placeholder, new_params} = membership_slot(stripped_values, column, reversed_params)
+
+        case operator do
+          :in -> {"#{column_sql} = ANY(#{placeholder})", new_params}
+          :not_in -> {"#{column_sql} != ALL(#{placeholder})", new_params}
+        end
+    end
+  end
+
+  defp raw_sequence_condition(
+         column_sql,
+         column,
+         {_name, operator, {:attribute, other}},
+         scope,
+         reversed_params
+       ) do
+    {operand_sql, new_params} = attribute_operand_sql(scope, column, other, reversed_params)
+
+    {"#{column_sql} #{operator} #{operand_sql}", new_params}
+  end
+
+  defp raw_sequence_condition(
+         column_sql,
+         column,
+         {_name, operator, value},
+         _scope,
+         reversed_params
+       ) do
+    {placeholder, new_params} = bind_slot(value, column, reversed_params)
+    operator_sql = if operator == :==, do: "=", else: to_string(operator)
+
+    {"#{column_sql} #{operator_sql} #{placeholder}", new_params}
+  end
+
+  @doc false
+  # Whether a value of nil passes the comparison, as the browser and the interpreter judge it: nil
+  # equals only nil, is in a list holding it, and is ordered against nothing. A placeholder, which
+  # only the index plan's templates hold, is judged as a value other than nil and a list without
+  # one, as the plan judges every placeholder: a nil bound to it later is planned for by no need.
+  @spec nil_matches?({any, atom, any}) :: boolean
+  def nil_matches?({_name, :==, value}), do: is_nil(value)
+
+  def nil_matches?({_name, :!=, value}), do: not is_nil(value)
+
+  def nil_matches?({_name, :in, values}), do: is_list(values) and nil in values
+
+  def nil_matches?({_name, :not_in, values}), do: not is_list(values) or nil not in values
+
+  def nil_matches?({_name, _operator, _value}), do: false
 
   # The sort key of the string a condition names on its own row - nil for a value of another type,
   # a derived value, a path or a name of a row above, none of which an index on the row's key
@@ -2394,12 +2566,16 @@ defmodule Hologram.DB.QueryCompiler do
   # past the key cap break on the full original bytes), both in the entry's
   # direction. Without a companion the raw column orders alone, and a derived
   # field by the value its definition computes - an enum by its label's position.
-  defp order_clause([], _scope, reversed_params), do: {"", reversed_params}
+  #
+  # A sequence number orders by its masked value, so nil sorts where the browser sorts it - unless
+  # the same level's filter already holds only final numbers, where the raw column is the same
+  # value and an index serves it.
+  defp order_clause(%{sort: []}, _scope, reversed_params), do: {"", reversed_params}
 
-  defp order_clause(entries, scope, reversed_params) do
+  defp order_clause(%{sort: entries, filter: filter}, scope, reversed_params) do
     {rendered_entries, new_params} =
       Enum.map_reduce(entries, reversed_params, fn {name, direction}, acc_params ->
-        {keys_sql, next_params} = order_keys_sql(scope, name, acc_params)
+        {keys_sql, next_params} = order_keys_sql(scope, name, filter, acc_params)
 
         rendered_entry = Enum.map_join(keys_sql, ", ", &"#{&1} #{direction_sql(direction)}")
 
@@ -2409,14 +2585,24 @@ defmodule Hologram.DB.QueryCompiler do
     {" ORDER BY " <> Enum.join(rendered_entries, ", "), new_params}
   end
 
-  defp order_keys_sql(scope, name, reversed_params) do
+  defp order_keys_sql(scope, name, filter, reversed_params) do
     if Derived.declared?(scope.entity_type, name) do
       {value_sql, column, new_params} = derived_sql(scope, name, reversed_params)
 
       {[position_sql(value_sql, column)], new_params}
     else
-      column = fetch_column!(scope.entity_mapping, name)
+      scope.entity_mapping
+      |> fetch_column!(name)
+      |> column_keys_sql(scope, name, filter, reversed_params)
+    end
+  end
 
+  defp column_keys_sql(column, scope, name, filter, reversed_params) do
+    if Mapper.sequence?(column) and not final_by_filter?(filter, name) do
+      {masked_sql, _column, new_params} = masked_column_sql(scope, column, reversed_params)
+
+      {[masked_sql], new_params}
+    else
       columns =
         case companion_column(scope.entity_mapping, name) do
           nil -> [column]
@@ -2425,6 +2611,23 @@ defmodule Hologram.DB.QueryCompiler do
 
       {Enum.map(columns, &column_sql(scope, &1)), reversed_params}
     end
+  end
+
+  @doc false
+  # Whether the filter's top-level conditions hold the named sequence number to final values only -
+  # one of them fails for nil - so that its raw column orders the rows as its masked value does.
+  @spec final_by_filter?(list, atom) :: boolean
+  def final_by_filter?(filter, name) do
+    Enum.any?(filter, fn
+      {^name, operator, {:attribute, _other}} ->
+        operator in @range_operators
+
+      {^name, operator, _value} = clause ->
+        not is_map_key(@search_operators, operator) and not nil_matches?(clause)
+
+      _clause ->
+        false
+    end)
   end
 
   # The scope of the row the given number of levels out, its columns qualified, since the current
@@ -2565,7 +2768,7 @@ defmodule Hologram.DB.QueryCompiler do
     else
       column = fetch_column!(scope.entity_mapping, name)
 
-      {column_sql(scope, column), column, reversed_params}
+      masked_column_sql(scope, column, reversed_params)
     end
   end
 
@@ -2620,10 +2823,10 @@ defmodule Hologram.DB.QueryCompiler do
       )
 
     {order_sql, params_after_order} =
-      order_clause(sub_term.sort, filter_scope, params_after_nested)
+      order_clause(sub_term, filter_scope, params_after_nested)
 
     {aggregate_order_sql, new_params} =
-      order_clause(sub_term.sort, wrapper_scope, params_after_order)
+      order_clause(sub_term, wrapper_scope, params_after_order)
 
     # The membership condition is a nested subselect or a plain comparison (not a
     # join) so that only the target table is in scope where the sub-term's filter

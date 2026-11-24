@@ -68,6 +68,17 @@ defmodule Hologram.DB.Connection do
     end
   end
 
+  @doc false
+  # Whether the calling process runs in a test's sandbox, whose transaction never commits.
+  @spec sandboxed?() :: boolean
+  def sandboxed? do
+    case Process.get(@transaction_key) do
+      {:sandbox, _pool_name} -> true
+      {:sandbox_transaction, _pool_name, _depth} -> true
+      _other -> false
+    end
+  end
+
   # The unnamed statement needs no close: the next parse on the connection replaces it.
   @doc false
   @spec prepare(String.t(), keyword) :: {:ok, Postgrex.Query.t()} | {:error, Exception.t()}

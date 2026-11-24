@@ -406,6 +406,9 @@ defmodule Hologram.DB do
   string, `boolean`, `date` as a Date, `time` as a Time, `timestamptz` as a DateTime, an enum as
   its label string and `jsonb` as a map.
 
+  `server_created_seq` and `server_updated_seq` come back as stored, and a stored number may not be
+  final yet, so take a cursor or a read marker from a query, which hides a number until it is.
+
   Inside an enclosing transaction the statement runs on the transaction's connection and sees its
   uncommitted rows, and the transaction stays writable afterwards.
 

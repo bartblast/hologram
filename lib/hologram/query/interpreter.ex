@@ -54,10 +54,25 @@ defmodule Hologram.Query.Interpreter do
   position among the declared ones. An included derived field holds its value, or its rows - a
   list, or one row or nil - each row embedding what its definition and the include ask for.
 
+  An optional `:final_seq` is the limit the database executor reads `server_created_seq` and
+  `server_updated_seq` against: every number above it reads as nil, in what is filtered, ordered,
+  computed and returned. Without one every number reads as stored.
+
   Raises Hologram.MisuseError when the term holds a placeholder, as the database executor does
   (see `Hologram.Query.Stage.assert_no_placeholders!/1`).
   """
   @spec run(Query.t(), %{atom => any}) :: list(struct) | struct | integer | nil
+  def run(term, %{final_seq: limit} = database) do
+    rows =
+      Map.new(database.rows, fn {entity_type, table} ->
+        {entity_type, Map.new(table, fn {id, row} -> {id, masked(row, limit)} end)}
+      end)
+
+    unlimited = Map.delete(database, :final_seq)
+
+    run(term, %{unlimited | rows: rows})
+  end
+
   def run(term, database) do
     Stage.assert_no_placeholders!(term)
 
@@ -533,6 +548,15 @@ defmodule Hologram.Query.Interpreter do
           paired_rows(row, name, Entity.related_type(entity_type, name), scope.database)
       end
     end
+  end
+
+  defp masked(row, limit) do
+    Enum.reduce([:server_created_seq, :server_updated_seq], row, fn field, acc ->
+      case acc do
+        %{^field => seq} when is_integer(seq) and seq > limit -> %{acc | field => nil}
+        _final -> acc
+      end
+    end)
   end
 
   # The reference field's atom is one the entity's own struct defines, so it is always there to

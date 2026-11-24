@@ -10,6 +10,7 @@ defmodule Hologram.Job.RunnerTest do
   alias Hologram.Entity
   alias Hologram.Job
   alias Hologram.Job.RunLock
+  alias Hologram.Sync.FinalSeq
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Job.Module1
@@ -74,6 +75,30 @@ defmodule Hologram.Job.RunnerTest do
       assert claimed_job.id == job.id
       assert claimed_job.status == :running
       assert EntityOperations.get(Module1, job.id).status == :running
+    end
+
+    # The claim's update is not committed while the job runs, so its number is not final, and the
+    # job holds it the way a query of the row would.
+    test "hands over the job with the claim's updated number nil", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+      stored = EntityOperations.get(Module1, job.id)
+
+      assert {:claimed, claimed_job} = claim(Module1, job.id, run_lock)
+
+      assert claimed_job.server_created_seq == stored.server_created_seq
+      assert claimed_job.server_updated_seq == nil
+    end
+
+    test "hands over the job with a created number above the limit nil", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+      stored = EntityOperations.get(Module1, job.id)
+
+      assert {:claimed, claimed_job} =
+               FinalSeq.with_pinned(stored.server_created_seq - 1, fn ->
+                 claim(Module1, job.id, run_lock)
+               end)
+
+      assert claimed_job.server_created_seq == nil
     end
 
     test "skips a job another worker has claimed", %{run_lock: run_lock} do

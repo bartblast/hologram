@@ -3627,6 +3627,271 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
   end
 
+  describe "compile/2 - sequence numbers" do
+    setup do
+      [mapping: Mapper.derive!([Module2], [])]
+    end
+
+    # Sorted by id last, so that the statement has an ORDER BY to read.
+    defp sequence_term(filter, sort \\ []) do
+      %{Stage.normalize(Module2) | filter: filter, sort: Enum.concat(sort, id: :asc)}
+    end
+
+    defp masked(column), do: ~s|CASE WHEN "#{column}" <= $1 THEN "#{column}" END|
+
+    test "compiles equality to a number on the raw column, bounded by the limit", %{
+      mapping: mapping
+    } do
+      term = sequence_term([{:server_updated_seq, :==, 5}])
+
+      assert %{params: [:final_seq, {:value, 5}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("server_updated_seq" = $2 AND "server_updated_seq" <= $1) ORDER BY|
+             )
+    end
+
+    test "compiles a range to a number on the raw column, bounded by the limit", %{
+      mapping: mapping
+    } do
+      term = sequence_term([{:server_created_seq, :>, 5}])
+
+      assert %{params: [:final_seq, {:value, 5}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("server_created_seq" > $2 AND "server_created_seq" <= $1) ORDER BY|
+             )
+    end
+
+    test "compiles inequality to a number to also hold the numbers above the limit", %{
+      mapping: mapping
+    } do
+      term = sequence_term([{:server_updated_seq, :!=, 5}])
+
+      assert %{params: [:final_seq, {:value, 5}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("server_updated_seq" != $2 OR "server_updated_seq" > $1) ORDER BY|
+             )
+    end
+
+    test "compiles equality to nil to the numbers above the limit", %{mapping: mapping} do
+      term = sequence_term([{:server_updated_seq, :==, nil}])
+
+      assert %{params: [:final_seq], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s| WHERE "server_updated_seq" > $1 ORDER BY|)
+    end
+
+    test "compiles inequality to nil to the numbers at or below the limit", %{mapping: mapping} do
+      term = sequence_term([{:server_updated_seq, :!=, nil}])
+
+      assert %{params: [:final_seq], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s| WHERE "server_updated_seq" <= $1 ORDER BY|)
+    end
+
+    test "compiles nil-holding membership to also hold the numbers above the limit", %{
+      mapping: mapping
+    } do
+      term = sequence_term([{:server_updated_seq, :in, [1, nil]}])
+
+      assert %{params: [:final_seq, {:value, [1]}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("server_updated_seq" = ANY($2) OR "server_updated_seq" > $1) ORDER BY|
+             )
+    end
+
+    test "compiles membership without nil to the numbers at or below the limit", %{
+      mapping: mapping
+    } do
+      term = sequence_term([{:server_updated_seq, :in, [1, 2]}])
+
+      assert %{params: [:final_seq, {:value, [1, 2]}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("server_updated_seq" = ANY($2) AND "server_updated_seq" <= $1) ORDER BY|
+             )
+    end
+
+    test "compiles nil-only membership to the numbers above the limit", %{mapping: mapping} do
+      term = sequence_term([{:server_updated_seq, :in, [nil]}])
+
+      assert %{params: [:final_seq], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s| WHERE "server_updated_seq" > $1 ORDER BY|)
+    end
+
+    test "compiles negated membership without nil to also hold the numbers above the limit", %{
+      mapping: mapping
+    } do
+      term = sequence_term([{:server_updated_seq, :not_in, [1]}])
+
+      assert %{params: [:final_seq, {:value, [1]}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("server_updated_seq" != ALL($2) OR "server_updated_seq" > $1) ORDER BY|
+             )
+    end
+
+    test "compiles nil-holding negated membership to the numbers at or below the limit", %{
+      mapping: mapping
+    } do
+      term = sequence_term([{:server_updated_seq, :not_in, [1, nil]}])
+
+      assert %{params: [:final_seq, {:value, [1]}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("server_updated_seq" != ALL($2) AND "server_updated_seq" <= $1) ORDER BY|
+             )
+    end
+
+    test "compiles a range against another value on the raw column, the other value masked", %{
+      mapping: mapping
+    } do
+      term = sequence_term([{:server_updated_seq, :>, {:attribute, :server_created_seq}}])
+
+      assert %{params: [:final_seq], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("server_updated_seq" > #{masked("server_created_seq")} | <>
+                 ~s|AND "server_updated_seq" <= $1) ORDER BY|
+             )
+    end
+
+    test "compiles equality against another value on the masked values", %{mapping: mapping} do
+      term = sequence_term([{:server_updated_seq, :==, {:attribute, :server_created_seq}}])
+
+      assert %{params: [:final_seq], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE #{masked("server_updated_seq")} | <>
+                 ~s|IS NOT DISTINCT FROM #{masked("server_created_seq")} ORDER BY|
+             )
+    end
+
+    test "binds one limit slot for every number of the statement", %{mapping: mapping} do
+      term =
+        sequence_term(
+          [{:server_created_seq, :>, 1}, {:b, :==, 2}, {:server_updated_seq, :<, 3}],
+          server_updated_seq: :asc
+        )
+
+      assert %{params: [:final_seq, {:value, 1}, {:value, 2}, {:value, 3}], sql: sql} =
+               compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("server_created_seq" > $2 AND "server_created_seq" <= $1) AND "b" = $3 | <>
+                 ~s|AND ("server_updated_seq" < $4 AND "server_updated_seq" <= $1) | <>
+                 ~s|ORDER BY "server_updated_seq" ASC|
+             )
+    end
+
+    test "masks a number a path reaches", %{mapping: _mapping} do
+      mapping = path_mapping([Module1, Module2, Module3])
+      term = path_term(Module3, [{[:c, :server_updated_seq], 5}])
+
+      assert %{params: params, sql: sql} = compile(term, mapping)
+      assert :final_seq in params
+
+      assert sql =~
+               ~r/CASE WHEN "\$p1"\."server_updated_seq" <= \$\d+ THEN "\$p1"\."server_updated_seq" END/
+    end
+
+    test "compiles the number of a quantifier's row against a literal on its raw column" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      term = path_term(Module26, any: {[:messages], [server_updated_seq: 5]})
+
+      assert %{params: [:final_seq, {:value, 5}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|AND ("server_updated_seq" = $2 AND "server_updated_seq" <= $1))|
+             )
+    end
+
+    test "orders by the masked number when the filter lets nil through", %{mapping: mapping} do
+      term = sequence_term([{:server_updated_seq, :!=, 5}], server_updated_seq: :desc)
+
+      assert %{sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s| ORDER BY #{masked("server_updated_seq")} DESC, "id" ASC|)
+    end
+
+    test "orders by the masked number without a filter on it", %{mapping: mapping} do
+      term = sequence_term([], server_updated_seq: :desc)
+
+      assert %{params: [:final_seq], sql: sql} = compile(term, mapping)
+      assert String.ends_with?(sql, ~s| ORDER BY #{masked("server_updated_seq")} DESC, "id" ASC|)
+    end
+
+    test "orders by the raw number when the filter holds only final ones", %{mapping: mapping} do
+      term = sequence_term([{:server_updated_seq, :!=, nil}], server_updated_seq: :desc)
+
+      assert %{params: [:final_seq], sql: sql} = compile(term, mapping)
+
+      assert String.ends_with?(
+               sql,
+               ~s| WHERE "server_updated_seq" <= $1 ORDER BY "server_updated_seq" DESC, "id" ASC|
+             )
+    end
+  end
+
+  describe "final_by_filter?/2" do
+    test "holds for a condition nil fails" do
+      assert final_by_filter?([{:server_updated_seq, :!=, nil}], :server_updated_seq)
+      assert final_by_filter?([{:server_updated_seq, :==, 3}], :server_updated_seq)
+      assert final_by_filter?([{:server_updated_seq, :in, [3]}], :server_updated_seq)
+      assert final_by_filter?([{:server_updated_seq, :not_in, [nil]}], :server_updated_seq)
+      assert final_by_filter?([{:server_updated_seq, :>=, 3}], :server_updated_seq)
+
+      assert final_by_filter?(
+               [{:server_updated_seq, :<, {:attribute, :server_created_seq}}],
+               :server_updated_seq
+             )
+    end
+
+    test "fails for a condition nil passes, or one on another field" do
+      refute final_by_filter?([], :server_updated_seq)
+      refute final_by_filter?([{:server_updated_seq, :==, nil}], :server_updated_seq)
+      refute final_by_filter?([{:server_updated_seq, :!=, 3}], :server_updated_seq)
+      refute final_by_filter?([{:server_updated_seq, :in, [3, nil]}], :server_updated_seq)
+      refute final_by_filter?([{:server_updated_seq, :not_in, [3]}], :server_updated_seq)
+      refute final_by_filter?([{:server_created_seq, :!=, nil}], :server_updated_seq)
+
+      refute final_by_filter?(
+               [{:server_updated_seq, :==, {:attribute, :server_created_seq}}],
+               :server_updated_seq
+             )
+
+      refute final_by_filter?([{:or, [[server_updated_seq: 3], [b: 1]]}], :server_updated_seq)
+    end
+  end
+
+  describe "nil_matches?/1" do
+    test "holds where nil passes the comparison" do
+      assert nil_matches?({:b, :==, nil})
+      assert nil_matches?({:b, :!=, 1})
+      assert nil_matches?({:b, :in, [1, nil]})
+      assert nil_matches?({:b, :not_in, [1]})
+    end
+
+    test "fails where nil fails the comparison" do
+      refute nil_matches?({:b, :==, 1})
+      refute nil_matches?({:b, :!=, nil})
+      refute nil_matches?({:b, :in, [1]})
+      refute nil_matches?({:b, :not_in, [1, nil]})
+      refute nil_matches?({:b, :<, 1})
+    end
+  end
+
   describe "compile/2 - searches" do
     test "compiles a loose search to a LIKE over the search key, or the sort key without one" do
       mapping = Mapper.derive!([Module2], [])

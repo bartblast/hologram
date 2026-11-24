@@ -91,6 +91,12 @@ defmodule Hologram.Sync.Dispatcher do
   at the edge as it stands would skip the effects the last one was reading. It is optional: without
   one the edge lives in this process alone, and dies with it.
 
+  `:publish` is called with the seq every number at or below which is final, each time the place
+  moves, so that queries can tell a final number from one a running save may yet be ordered below
+  (see `Hologram.Sync.FinalSeq`). It is called with 0 when the dispatcher starts with nowhere to
+  resume from and once a loss is found. It is optional, and does nothing unless given: only the
+  node's own dispatcher publishes.
+
   `:recheck_interval_ms` is how soon a round waiting for a save looks again, 10 ms unless the
   option says otherwise.
   """
@@ -122,6 +128,7 @@ defmodule Hologram.Sync.Dispatcher do
       on_loss: Keyword.get(opts, :on_loss, fn -> :ok end),
       poll_interval_ms: Keyword.get(opts, :poll_interval_ms, @default_poll_interval_ms),
       prepared_since: nil,
+      publish: Keyword.get(opts, :publish, fn _seq -> :ok end),
       # The id of the log the place is in, taken from the first round's run when the place isn't
       # resumed (see `Hologram.DB.Oplog.log_id/0`).
       log_id: nil,
@@ -152,6 +159,10 @@ defmodule Hologram.Sync.Dispatcher do
     # message, including the poll just scheduled - so the round run here notes where the log stood
     # at the start, and no append can slip in below it in the meantime.
     {cursor, log_id} = if state.cursor, do: {state.cursor, nil}, else: remembered(state.read_edge)
+
+    # A place resumed was final when it was put, and stays final unless a loss is found, which
+    # publishes 0. Nothing to resume from leaves no number final until the first round's limit.
+    publish_place(state, cursor)
 
     {:noreply, dispatch(%{state | cursor: cursor, log_id: log_id})}
   end
@@ -311,6 +322,8 @@ defmodule Hologram.Sync.Dispatcher do
   defp move_to(state, place) do
     if state.read_edge, do: ReadEdge.put(state.read_edge, {place, state.log_id})
 
+    publish_place(state, place)
+
     %{state | cursor: place}
   end
 
@@ -388,8 +401,17 @@ defmodule Hologram.Sync.Dispatcher do
   defp recover_from_loss(state, rotated_log_id) do
     if state.read_edge, do: ReadEdge.put(state.read_edge, nil)
 
+    # Whatever was read may be lost, so no number reads as final until a new limit is worked out.
+    publish_place(state, nil)
+
     finish_recovery(%{state | pending_rotation: rotated_log_id})
   end
+
+  # The place's seq is final: the place is the limit, or a cursor above it every save at or below
+  # which was read.
+  defp publish_place(state, nil), do: state.publish.(0)
+
+  defp publish_place(state, {seq, _tx, _at}), do: state.publish.(seq)
 
   defp remembered(nil), do: {nil, nil}
 

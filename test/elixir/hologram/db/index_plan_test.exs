@@ -599,6 +599,99 @@ defmodule Hologram.DB.IndexPlanTest do
     end
   end
 
+  describe "needs/2 for sequence numbers" do
+    test "needs the column an equality to a number fixes" do
+      assert term_needs(filter(Module2, server_updated_seq == 5)) == [
+               need(@module2, ["server_updated_seq"])
+             ]
+    end
+
+    test "needs the column a membership without nil narrows" do
+      assert term_needs(filter(Module2, server_updated_seq in [5, 6])) == [
+               need(@module2, ["server_updated_seq"])
+             ]
+
+      assert filter_needs(Module2, [{:server_updated_seq, :in, {:placeholder, :seqs}}]) == [
+               need(@module2, ["server_updated_seq"])
+             ]
+    end
+
+    test "needs a range for nil, which is a number above the limit" do
+      range = [need(@module2, [], "server_updated_seq")]
+
+      assert term_needs(filter(Module2, server_updated_seq == nil)) == range
+      assert term_needs(filter(Module2, server_updated_seq != nil)) == range
+      assert term_needs(filter(Module2, server_updated_seq in [nil])) == range
+      assert term_needs(filter(Module2, server_updated_seq not in [5, nil])) == range
+    end
+
+    test "needs a membership holding nil as the membership and the range beside it" do
+      needs = term_needs(filter(Module2, server_updated_seq in [5, nil]))
+
+      assert Enum.sort(needs) ==
+               Enum.sort([
+                 need(@module2, ["server_updated_seq"]),
+                 need(@module2, [], "server_updated_seq")
+               ])
+    end
+
+    test "needs a range for a range, against a number or another value" do
+      range = [need(@module2, [], "server_updated_seq")]
+
+      assert term_needs(filter(Module2, server_updated_seq > 5)) == range
+      assert term_needs(filter(Module2, server_updated_seq > server_created_seq)) == range
+    end
+
+    test "needs nothing where nil passes beside a number, or for equality to another value" do
+      assert term_needs(filter(Module2, server_updated_seq != 5)) == []
+      assert term_needs(filter(Module2, server_updated_seq not in [5])) == []
+      assert filter_needs(Module2, [{:server_updated_seq, :not_in, {:placeholder, :seqs}}]) == []
+      assert term_needs(filter(Module2, server_updated_seq == server_created_seq)) == []
+    end
+
+    test "orders by a number when the filter leaves no nil to order" do
+      query =
+        Module2
+        |> filter(a == true and server_updated_seq != nil)
+        |> sort(server_updated_seq: :desc, b: :desc)
+        |> take(1)
+
+      assert term_needs(query) == [need(@module2, ["a"], "server_updated_seq", ["b"])]
+    end
+
+    test "orders by a number a membership in a placeholder list holds to final ones" do
+      query =
+        Module2
+        |> sort(server_updated_seq: :desc, b: :desc)
+        |> take(1)
+        |> Stage.normalize()
+        |> Map.put(:filter, [{:server_updated_seq, :in, {:placeholder, :seqs}}])
+
+      assert needs(query, @mapping) == [need(@module2, ["server_updated_seq"])]
+    end
+
+    test "orders nothing by a number beside a placeholder list it is not in" do
+      query =
+        Module2
+        |> sort(server_updated_seq: :desc)
+        |> take(1)
+        |> Stage.normalize()
+        |> Map.put(:filter, [{:server_updated_seq, :not_in, {:placeholder, :seqs}}])
+
+      assert needs(query, @mapping) == []
+    end
+
+    test "orders nothing by a number the filter leaves nil" do
+      query =
+        Module2
+        |> filter(a == true)
+        |> sort([server_updated_seq, b])
+        |> take(1)
+
+      assert term_needs(query) == [need(@module2, ["a"])]
+    end
+  end
+
   describe "needs/2 for the levels below the queried row" do
     setup do
       put_derived_definitions([Module32, Module33, Module37, Module38, Module55])

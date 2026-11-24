@@ -170,6 +170,13 @@ defmodule Hologram.DB.IndexPlan do
   inequality, a search, a comparison between two attributes, a derived value, a path or a
   quantifier - is not served, and adds nothing.
 
+  `server_created_seq` and `server_updated_seq` read nil above the limit, which the compiler checks
+  as a range on the column: `== nil`, `!= nil`, a `not in` holding nil and a range against another
+  attribute are a range on it, and a membership holding nil is the OR of the membership and that
+  range. Equality against another attribute compares masked values, and is not served. A sort on
+  one keeps its column only when the level's filter leaves no nil to sort - a condition on the
+  number nil fails - since it otherwise sorts by the masked value, which no index holds.
+
   The served conditions ANDed in the filter give one need. Each OR in it adds a need per arm, the
   arm's served conditions with the ones beside the OR, and an arm holding an OR of its own adds a
   need per arm of that one as well. An OR with an arm no index serves can't be answered from
@@ -351,7 +358,7 @@ defmodule Hologram.DB.IndexPlan do
 
     plain_order =
       if or_paths == [] and bounded?(term) do
-        order_columns(term.sort, fixed_columns(plain), scope)
+        order_columns(term, fixed_columns(plain), scope)
       else
         []
       end
@@ -940,7 +947,8 @@ defmodule Hologram.DB.IndexPlan do
   # A membership holding nil on an optional column compiles to an OR of the membership and an
   # IS NULL (see the query compiler's null_inclusive/3), so it is that OR here too - an OR beside it
   # is never crossed with it. On a required column the nil is dropped, and one holding nothing but
-  # nil is the IS NULL alone.
+  # nil is the IS NULL alone. A sequence number's nil is a range above the limit, which the compiler
+  # ORs with the membership the same way.
   defp spell_out_membership({name, :in, values} = clause, scope)
        when is_atom(name) and is_list(values) do
     column = QueryCompiler.name_column(scope.entity_mapping, name)
@@ -949,7 +957,7 @@ defmodule Hologram.DB.IndexPlan do
       case Enum.reject(values, &is_nil/1) do
         [] -> {name, :==, nil}
         given when column.null -> {:or, [[{name, :in, given}], [{name, :==, nil}]]}
-        _given -> clause
+        given -> sequence_membership(clause, column, given)
       end
     else
       clause
@@ -957,6 +965,12 @@ defmodule Hologram.DB.IndexPlan do
   end
 
   defp spell_out_membership(clause, _scope), do: clause
+
+  defp sequence_membership({name, :in, _values} = clause, column, given) do
+    if Mapper.sequence?(column),
+      do: {:or, [[{name, :in, given}], [{name, :==, nil}]]},
+      else: clause
+  end
 
   defp path_need(path, order, scope) do
     # A membership or an IS NULL returns the rows of each value apart, so nothing after it is in
@@ -1037,11 +1051,41 @@ defmodule Hologram.DB.IndexPlan do
   defp conjunct({name, operator, operand}, scope) when is_atom(name) do
     case QueryCompiler.name_column(scope.entity_mapping, name) do
       nil -> nil
-      column -> column_conjunct(column, operator, operand, scope)
+      column -> if_sequence_conjunct(column, operator, operand, scope)
     end
   end
 
   defp conjunct(_clause, _scope), do: nil
+
+  defp if_sequence_conjunct(column, operator, operand, scope) do
+    if Mapper.sequence?(column),
+      do: sequence_conjunct(column, operator, operand),
+      else: column_conjunct(column, operator, operand, scope)
+  end
+
+  # A sequence number compiles on its raw column with the limit bounding it (see the query
+  # compiler's sequence_condition/5): a range on the column wherever the limit is ANDed, or ORed
+  # alone for nil, and nothing where the limit is ORed beside another condition, which no index
+  # serves alone. Equality against another value compares masked values, which no index holds.
+  defp sequence_conjunct(column, operator, {:attribute, _other}) do
+    if operator in @range_operators, do: {:range, column.name}
+  end
+
+  defp sequence_conjunct(column, operator, nil) when operator in [:==, :!=],
+    do: {:range, column.name}
+
+  defp sequence_conjunct(column, :==, _operand), do: {:eq, column.name}
+
+  defp sequence_conjunct(column, :in, _operand), do: {:set, column.name}
+
+  defp sequence_conjunct(column, :not_in, operand) when is_list(operand) do
+    if nil in operand, do: {:range, column.name}
+  end
+
+  defp sequence_conjunct(column, operator, _operand) when operator in @range_operators,
+    do: {:range, column.name}
+
+  defp sequence_conjunct(_column, _operator, _operand), do: nil
 
   # A range against a column of the row above is an index condition each probe of the subquery
   # binds, the way a value is - equality against one compiles to IS NOT DISTINCT FROM, which no
@@ -1095,8 +1139,16 @@ defmodule Hologram.DB.IndexPlan do
 
   defp ordering_column(column, _entity_mapping), do: column.name
 
-  defp order_columns(sort, fixed, scope) do
+  # A sequence number orders by its masked value unless the level's filter holds it to final ones
+  # (see the query compiler's order_clause/3), and no index holds the masked value.
+  defp order_columns(%{sort: sort, filter: filter}, fixed, scope) do
     sort
+    |> Enum.take_while(fn {name, _direction} ->
+      column = order_column(name, scope)
+
+      column == nil or not Mapper.sequence?(column) or
+        QueryCompiler.final_by_filter?(filter, name)
+    end)
     |> Enum.reduce_while({[], nil}, &order_step(&1, &2, fixed, scope))
     |> elem(0)
     |> Enum.reverse()

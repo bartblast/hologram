@@ -21,6 +21,7 @@ defmodule Hologram.Sync.Supervisor do
 
   alias Hologram.DB.Listener
   alias Hologram.Sync.Dispatcher
+  alias Hologram.Sync.FinalSeq
   alias Hologram.Sync.Gate
   alias Hologram.Sync.Live
   alias Hologram.Sync.Pool
@@ -101,6 +102,7 @@ defmodule Hologram.Sync.Supervisor do
      handler: &Live.route/4,
      notifications: @notifications,
      on_loss: &cut_sessions_on_loss/0,
+     publish: &FinalSeq.publish/1,
      read_edge: ReadEdge}
   end
 end

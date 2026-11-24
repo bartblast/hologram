@@ -303,6 +303,67 @@ defmodule Hologram.Sync.DispatcherTest do
     end
   end
 
+  describe ":publish" do
+    defp publishing do
+      test_pid = self()
+
+      fn seq -> send(test_pid, {:published, seq}) end
+    end
+
+    test "publishes nothing final at start with nowhere to resume from, then the first limit" do
+      {seq, _tx, _at} = seed(200, @entity_id)
+
+      dispatcher = start_dispatcher!(publish: publishing())
+
+      assert_receive {:published, 0}
+      assert_receive {:published, ^seq}
+
+      settle(dispatcher)
+    end
+
+    test "publishes the place it resumed from at start" do
+      {seq, _tx, _at} = first = seed(200, @entity_id)
+
+      dispatcher =
+        start_dispatcher!(
+          advance: sandbox_advance(running: ["a"]),
+          publish: publishing(),
+          read_edge: start_read_edge!({first, Oplog.log_id()})
+        )
+
+      assert_receive {:published, ^seq}
+      refute_received {:published, 0}
+
+      settle(dispatcher)
+    end
+
+    test "publishes the place each round moves to" do
+      place = seed(200, @entity_id)
+
+      dispatcher = start_dispatcher!(cursor: place, publish: publishing())
+      :sys.get_state(dispatcher)
+
+      {seq, _tx, _at} = seed(201, @entity_id)
+      wake(dispatcher)
+
+      assert_receive {:published, ^seq}
+
+      settle(dispatcher)
+    end
+
+    test "publishes nothing final once a loss is found" do
+      {seq, tx, inserted_at} = seed(200, @entity_id)
+
+      dispatcher =
+        start_dispatcher!(cursor: {seq + 5, tx, inserted_at}, publish: publishing())
+
+      assert_receive :lost
+      assert_received {:published, 0}
+
+      settle(dispatcher)
+    end
+  end
+
   describe "handle :wake" do
     # The place is what a frame built from this batch may claim a client has reached: replaying
     # from it re-reads the whole batch, and never less.
