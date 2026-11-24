@@ -202,6 +202,13 @@ export default class DataLayer {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Auth",
+      "can?/4",
+      "public",
+      ManuallyPortedElixirHologramAuth["can?/4"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
       "grant_role/2",
       "public",
       ManuallyPortedElixirHologramAuth["grant_role/2"],
@@ -854,6 +861,19 @@ export default class DataLayer {
   // no answer is still pending, and this is what wakes the queue that stopped behind it.
   static streamOpened() {
     Batches.flush();
+  }
+
+  // A batch whose tab closed before saying it filed one has nothing to wake the sender, so with
+  // nobody acting it would sit in the store unsent. The stream's heartbeat is a clock this tab
+  // already has, and it stops while offline, where there is nothing to send to anyway.
+  //
+  // Only with an empty queue, so a beat can never send a batch a second time. A queue holding one
+  // may be sending it, waiting out a retry's backoff, holding it for a stopped tab, or stopped by
+  // a send that raised.
+  static streamBeat() {
+    if (Batches.pendingCount() === 0) {
+      Batches.flush();
+    }
   }
 
   // Takes up the identity a stream handshake brought, if this tab asked for one, and wakes the

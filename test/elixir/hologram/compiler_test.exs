@@ -111,7 +111,12 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module44, as: CratePolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module45, as: ParcelPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module5, as: DelegationPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module58, as: ChangedProject
+  alias Hologram.Test.Fixtures.Policy.Module59, as: ChangedTask
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module61, as: ExactOnlyTask
+  alias Hologram.Test.Fixtures.Policy.Module62, as: ExactOnlyProject
+  alias Hologram.Test.Fixtures.Policy.Module63, as: ExactOnlyMember
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module8, as: TwoHopDelegationPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersTeam
@@ -3007,6 +3012,10 @@ defmodule Hologram.CompilerTest do
       ~s/{"reads":[#{reads_js}],"verdict":"#{key}"}/
     end
 
+    defp sync_constants_js_for(entity_type) do
+      build_sync_constants_js(%{@empty_sync_constants | entity_types: MapSet.new([entity_type])})
+    end
+
     defmodule BakedBoard do
       use Hologram.Entity
 
@@ -3239,6 +3248,59 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/"policy":{"archive":[{"predicates":[["owner_id","==",{"actor":true}]]/
              )
+    end
+
+    test "bakes a rule reading the row after the change with its clauses as written" do
+      js = sync_constants_js_for(ChangedTask)
+
+      assert String.contains?(
+               js,
+               ~s/{"new":{"predicates":[["status","==","pending"],/ <>
+                 ~s/[{"name":"status","outer":1},"==","approved"]]},/ <>
+                 ~s/"predicates":[["status","==","pending"]],"to":/
+             )
+    end
+
+    test "bakes a role asked of the row after the change" do
+      js = sync_constants_js_for(ChangedTask)
+
+      assert String.contains?(
+               js,
+               ~s/{"new":{"predicates":[{"hasRole":[["project"],/ <>
+                 ~s/"#{inspect(ChangedProject)}",["member"]]}]},"predicates":[]/
+             )
+    end
+
+    test "bakes both parents' role checks under a move's name" do
+      js = sync_constants_js_for(ChangedTask)
+      role = ~s/["project"],"#{inspect(ChangedProject)}",["member"]/
+
+      assert String.contains?(
+               js,
+               ~s/"move":[{"new":{"predicates":[{"hasRole":[#{role}]}]},"predicates":[],/ <>
+                 ~s/"to":[["rel",#{role}]],"via":null}]/
+             )
+    end
+
+    test "bakes an operation asked of the row the row after the change leads to" do
+      js = sync_constants_js_for(ChangedTask)
+
+      assert String.contains?(
+               js,
+               ~s/{"new":{"predicates":[{"can":["read",["project"]]}]},"predicates":[]/
+             )
+    end
+
+    test "bakes the names update lines carry" do
+      js = sync_constants_js_for(ChangedTask)
+
+      assert String.contains?(js, ~s/"updateNames":["approve","move"]/)
+    end
+
+    test "bakes no update names for a type with none" do
+      js = sync_constants_js_for(ChangedProject)
+
+      refute String.contains?(js, ~s/"updateNames"/)
     end
 
     # A field key is spelled the way a per-role key is, so the client asks a field the way it asks a
@@ -3720,6 +3782,7 @@ defmodule Hologram.CompilerTest do
 
     # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an
     # any over one leaves its operation to the verdict, which reads the rows the set is taken from.
+    # What its condition compares stays off the bundle, since no client reads it.
     test "bakes the verdict key and the types read of an operation with an any over a derived set" do
       put_derived_definitions([BakedBoard])
 
@@ -3732,7 +3795,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"filter":[["rank","==",1]],"quantifier":"any","source":["top_cards"]}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[{"server":true}],"to":null,"via":null}]/
              )
 
       read_js = verdict_entry_js(BakedBoard, :read, [BakedBoard, BakedCard])
@@ -10183,6 +10246,15 @@ defmodule Hologram.CompilerTest do
 
       assert without_terms(decoded_rules([Entity42])[label]) ==
                without_terms(baked_model([Entity42])[label])
+    end
+
+    # The browser walks a set's chain through these types' entries to judge one change, though
+    # neither declares a rule or a role and the rule's planned form reads neither.
+    test "includes the types only a condition on the row after a change reads" do
+      rules = decoded_rules([ExactOnlyTask, ExactOnlyProject, ExactOnlyMember])
+
+      assert Map.has_key?(rules, inspect(ExactOnlyProject))
+      assert Map.has_key?(rules, inspect(ExactOnlyMember))
     end
 
     # The runtime script spells them as JavaScript, and a sync frame carries JSON.

@@ -270,9 +270,8 @@ defmodule Hologram.Mutation do
   defp apply_write(%Write{op: :update} = write, followers, index, _created_rows) do
     row = lock_row(write, index)
     edges = edge_ops(followers)
-    edge_fields = Enum.map(followers, & &1.relationship)
 
-    Writer.check_update!(row, Map.keys(write.data) ++ Map.keys(write.deltas) ++ edge_fields)
+    unjudged = Writer.check_update!(row, write.data, write.deltas, edges, write.stamp)
     check_values(write, index)
 
     {changes, lost} =
@@ -280,7 +279,9 @@ defmodule Hologram.Mutation do
 
     apply_changes(write, changes, edges, index)
 
-    {lost_values(write, lost), kept_values(row, lost)}
+    # A column whose stated value no rule could judge doesn't come back: what stands in it was
+    # never shown to be this user's to read.
+    {lost_values(write, lost), kept_values(row, lost -- unjudged)}
   end
 
   # A revocation is judged against the grant as the store holds it, locked for the batch: the
