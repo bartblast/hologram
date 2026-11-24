@@ -272,7 +272,7 @@ defmodule Hologram.Query.Stage do
   # Returns whether the given filter clauses name the acting user anywhere - inside a disjunction's
   # alternatives and a quantifier's condition included.
   @doc false
-  @spec names_actor?(list(Query.clause())) :: boolean
+  @spec names_actor?(list(Query.policy_clause())) :: boolean
   def names_actor?(clauses) do
     Enum.any?(clauses, fn
       {:or, alternatives} -> Enum.any?(alternatives, &names_actor?/1)
