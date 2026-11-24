@@ -364,7 +364,8 @@ defmodule Hologram.Policy.Expression do
   end
 
   # A reference listed next to others is one of the roles any of which grants, so its condition
-  # goes on a line of its own: one in the when: of the same line would have to hold as well.
+  # goes on a copy of the line, which keeps its fields and conditions: one in the when: of the same
+  # line would have to hold as well.
   defp refuse_new_reference!({role, scope} = ast, alone?, operation, env) do
     if QueryExpression.new_path?(scope) and atom_or_pin?(role) do
       role = hinted_name(role, ":role", env)
@@ -391,7 +392,8 @@ defmodule Hologram.Policy.Expression do
     own_line =
       if alone?,
         do: "",
-        else: " on an allow line of its own, since to: holds on any one of its roles"
+        else:
+          " on a copy of this line with the role taken out of to:, since to: holds on any one of its roles"
 
     QueryExpression.compile_error!(
       "to reads the stored row, got: #{Macro.to_string(ast)} - a role on the row a change leads to goes in when: has_role(#{role}, #{Macro.to_string(target)})#{own_line}",
