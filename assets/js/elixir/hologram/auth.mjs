@@ -1853,7 +1853,9 @@ function hasOtherCalendar(value, type) {
 // Whether a date's year is past what a number holds exactly, so the browser's validator can refuse
 // a date the server accepts.
 function hasInexactYear(value, type) {
-  if ((type !== "date" && type !== "datetime") || !Type.isMap(value)) {
+  const struct = {date: "Date", datetime: "DateTime"}[type];
+
+  if (struct === undefined || !Type.isStruct(value, struct)) {
     return false;
   }
 

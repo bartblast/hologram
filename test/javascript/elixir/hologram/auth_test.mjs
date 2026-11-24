@@ -3932,6 +3932,19 @@ describe("Elixir_Hologram_Auth", () => {
         );
       });
 
+      it("reads a plain map with a far year on a date field as the stored value", () => {
+        defineUpdate("update:due_on", newIs("due_on", "==", null));
+
+        const plainMap = Type.map([
+          [Type.atom("year"), Type.integer(10n ** 16n)],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {due_on: plainMap}),
+          Type.boolean(true),
+        );
+      });
+
       it("doesn't read a date with a year past what a number holds as the stored value", () => {
         defineUpdate("update:due_on", newIs("due_on", "==", null));
 
