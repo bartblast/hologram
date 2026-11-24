@@ -530,6 +530,44 @@ defmodule Hologram.MigrationTest do
                module.__hologram_migration__().ops
     end
 
+    test "keeps a field access a quote holds as data in an op" do
+      module =
+        compile_migration("20260813091522", """
+        change_entity MyApp.Task do
+          add_attribute :first, :string, default: Macro.to_string(quote(do: x.y))
+          add_attribute :second, :string, default: Macro.to_string([do: x.y] |> quote())
+          add_attribute :third, :string, default: Macro.to_string(quote(do: unquote(%{y: "z"}.y)))
+        end
+        """)
+
+      assert [
+               %{opts: [default: "x.y"]},
+               %{opts: [default: "x.y"]},
+               %{opts: [default: ~s("z")]}
+             ] = module.__hologram_migration__().ops
+    end
+
+    test "refuses a field access in an unquote of a quote whose options only the compiler can read" do
+      body = """
+      @opts []
+
+      change_entity MyApp.Task do
+        add_attribute :first, :string,
+          default: Macro.to_string(quote(@opts, do: unquote(%{y: "z"}.y)))
+      end
+      """
+
+      error =
+        assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+      assert error.message ==
+               "a migration can't read a field in an unquote of a quote whose options only the " <>
+                 "compiler can read, like an attribute - write the options out, or read the field " <>
+                 "with Map.fetch!/2"
+
+      assert error.line == 8
+    end
+
     # Collected from this compile alone, since stderr takes other tests' output too.
     test "raises no unused alias warning for an alias used only in ops" do
       {_module, diagnostics} =

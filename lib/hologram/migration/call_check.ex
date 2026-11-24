@@ -781,8 +781,8 @@ defmodule Hologram.Migration.CallCheck do
 
   defp collect_references(definitions, migration) do
     definitions
-    |> Enum.reduce([], fn {_name_arity, _kind, line, [args, guards, body]}, acc ->
-      walk([args, body], line, guard_references(guards, line) ++ acc)
+    |> Enum.reduce([], fn {_name_arity, kind, line, [args, guards, body]}, acc ->
+      walk([args, macro_code(kind, body)], line, guard_references(guards, line) ++ acc)
     end)
     |> walk_struct_fields(migration)
   end
@@ -967,6 +967,20 @@ defmodule Hologram.Migration.CallCheck do
   defp location(file, nil), do: file
 
   defp location(file, line), do: "#{file}:#{line}"
+
+  # A migration's macro returns its code rewritten where it expands (see
+  # Hologram.Migration.FieldAccess.define/4), which computes on that code alone. The
+  # rewrite is allowed only there, around the whole body, where it gets the env the macro
+  # expands in - __CALLER__ can't be bound to anything else.
+  defp macro_code(
+         kind,
+         {{:., _dot_meta, [Definitions, :__code__]}, _meta,
+          [code, {:__CALLER__, _caller_meta, context}]}
+       )
+       when kind in [:defmacro, :defmacrop] and is_atom(context),
+       do: code
+
+  defp macro_code(_kind, body), do: body
 
   # Each refused module is judged once - :environment for a standard module the module body
   # used that reads the environment (one only required, as Elixir requires Application in

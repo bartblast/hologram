@@ -1463,12 +1463,19 @@ defmodule Hologram.Migration.Value do
     end
   end
 
-  defp unpiped_call({:|>, _meta, [_left, _right]} = pipe, env) do
-    if Macro.Env.lookup_import(env, {:|>, 2}) == [macro: Kernel] do
-      expanded_pipe(pipe, env)
-    else
-      pipe
-    end
+  # A quote's call names the import it was written with, which Elixir takes over the env it
+  # expands in.
+  defp unpiped_call({:|>, meta, [_left, _right]} = pipe, env) do
+    quoted_import =
+      if Keyword.has_key?(meta, :context), do: List.keyfind(meta[:imports] || [], 2, 0)
+
+    kernel? =
+      case quoted_import do
+        {2, module} -> module == Kernel
+        nil -> Macro.Env.lookup_import(env, {:|>, 2}) == [macro: Kernel]
+      end
+
+    if kernel?, do: expanded_pipe(pipe, env), else: pipe
   end
 
   defp unpiped_call(node, _env), do: node

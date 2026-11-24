@@ -303,7 +303,7 @@ defmodule Hologram.Migration do
       |> Enum.reverse()
       |> settle_fn_backfills(env)
 
-    ops = FieldAccess.rewrite(settled_ops)
+    ops = FieldAccess.rewrite(settled_ops, env)
 
     version = Path.basename(env.file, ".ex")
     path = Path.relative_to_cwd(env.file)
@@ -624,7 +624,7 @@ defmodule Hologram.Migration do
         line: reading.env.line
     end
 
-    definition = FieldAccess.define(:def, {name, [], reading.arg_asts}, do: body)
+    definition = FieldAccess.define(:def, env, {name, [], reading.arg_asts}, do: body)
 
     function =
       quote do

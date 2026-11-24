@@ -817,6 +817,46 @@ defmodule Hologram.Migration.CallCheckTest do
       defmacro name_of(value), do: quote(do: unquote(value).name)
 
       def via_macro(row), do: name_of(row)
+
+      defp name_code(value), do: quote(do: unquote(value).name)
+
+      defmacrop name_through(value), do: name_code(value)
+
+      def via_helper(row), do: name_through(row)
+
+      defmacrop name_or_nil(value) do
+        quote(do: unquote(value).name)
+      rescue
+        _error -> nil
+      end
+
+      def via_rescue(row), do: name_or_nil(row)
+
+      defmacrop as_text, do: Macro.to_string(quote(do: x.y))
+
+      def quoted_text, do: as_text()
+      def quoted_code(row), do: Macro.to_string(quote(do: unquote(row.name)))
+
+      defmacrop stringify(code), do: Macro.to_string(code)
+
+      def stringified, do: stringify(x.y)
+      def piped_stringified, do: x.y |> stringify()
+      def bare_piped_stringified, do: x.y |> stringify
+      def kernel_piped_stringified, do: Kernel.|>(x.y, stringify())
+
+      def guarded(row) when stringify(row.y) == "row.y" and is_map(row), do: :ok
+      def guarded(_row), do: :no
+
+      def defaulted(text \\ stringify(x.y)), do: text
+
+      defguardp stringified_guard(value) when stringify(value.y) == "value.y" and is_map(value)
+
+      def via_guard(row) when stringified_guard(row), do: :ok
+      def via_guard(_row), do: :no
+
+      defmacrop twice(value), do: quote(do: unquote(value) <> unquote(value))
+
+      def via_arg(row), do: twice(row.name)
       """
 
       module = compile_migration("20260813091522", body)
@@ -838,6 +878,18 @@ defmodule Hologram.Migration.CallCheckTest do
       assert module.title(%{title: "a"}) == "a"
       assert module.pi() == :math.pi()
       assert module.via_macro(%{name: "b"}) == "b"
+      assert module.via_helper(%{name: "c"}) == "c"
+      assert module.via_rescue(%{name: "d"}) == "d"
+      assert module.quoted_text() == "x.y"
+      assert module.quoted_code(%{name: "e"}) == ~s("e")
+      assert module.stringified() == "x.y"
+      assert module.piped_stringified() == "x.y"
+      assert module.bare_piped_stringified() == "x.y"
+      assert module.kernel_piped_stringified() == "x.y"
+      assert module.guarded(%{}) == :ok
+      assert module.defaulted() == "x.y"
+      assert module.via_guard(%{}) == :ok
+      assert module.via_arg(%{name: "f"}) == "ff"
 
       assert_raise BadMapError, fn -> module.data(Hologram.Test.Fixtures.Migration.Module1) end
 
@@ -849,7 +901,87 @@ defmodule Hologram.Migration.CallCheckTest do
         module.via_macro(Hologram.Test.Fixtures.Migration.Module1)
       end
 
+      assert_raise BadMapError, fn ->
+        module.via_helper(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
+      assert_raise BadMapError, fn ->
+        module.via_rescue(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
+      assert_raise BadMapError, fn ->
+        module.quoted_code(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
+      assert_raise BadMapError, fn ->
+        module.via_arg(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
       assert_raise BadMapError, fn -> module.title(Hologram.Test.Fixtures.Migration.Module1) end
+    end
+
+    test "reads a pipe in a macro's code by the import it was written with" do
+      body = ~S"""
+      defmacrop piped_text, do: quote(do: Macro.to_string([do: x.y] |> quote()))
+
+      import Kernel,
+        except: [
+          def: 1,
+          def: 2,
+          defguard: 1,
+          defguardp: 1,
+          defmacro: 1,
+          defmacro: 2,
+          defmacrop: 1,
+          defmacrop: 2,
+          defp: 1,
+          defp: 2,
+          |>: 2
+        ]
+
+      def left |> right, do: {left, right}
+
+      def quoted_text, do: piped_text()
+      """
+
+      assert compile_migration("20260813091522", body).quoted_text() == "x.y"
+    end
+
+    test "passes a pipe to the migration's own pipe macro as written" do
+      body = ~S"""
+      import Kernel, only: []
+
+      defmacrop left |> _right, do: Macro.to_string(left)
+
+      def piped_text, do: [do: x.y] |> quote()
+      """
+
+      assert compile_migration("20260813091522", body).piped_text() == "[do: x.y]"
+    end
+
+    test "refuses the field access rewrite anywhere but around the code a macro returns" do
+      body = """
+      alias Hologram.Migration.FieldAccess.Definitions
+
+      def rewritten(code, env), do: Definitions.__code__(code, env)
+
+      defmacrop rewritten_text(code), do: Macro.to_string(Definitions.__code__(code, __CALLER__))
+
+      defmacrop rewritten_in(code, env), do: Definitions.__code__(code, env)
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex:6 - calls " <>
+          "Hologram.Migration.FieldAccess.Definitions.__code__/2\n" <>
+          "  app/migrations/20260813091522.ex:8 - calls " <>
+          "Hologram.Migration.FieldAccess.Definitions.__code__/2\n" <>
+          "  app/migrations/20260813091522.ex:10 - calls " <>
+          "Hologram.Migration.FieldAccess.Definitions.__code__/2"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
     end
 
     test "takes a path apart in an op, Kernel-qualified or piped" do

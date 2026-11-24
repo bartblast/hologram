@@ -1589,6 +1589,12 @@ defmodule Hologram.Migration.ValueTest do
       assert_raise BadMapError, fn -> module.__backfill_0__(String) end
     end
 
+    test "keeps a field access a quote holds as data" do
+      {module, _value} = elixir_op("fn title -> Macro.to_string(quote(do: x.y)) <> title end")
+
+      assert module.__backfill_0__("!") == "x.y!"
+    end
+
     test "refuses an alias, import or require inside the body" do
       for {kind, line} <- [
             alias: "alias String, as: S",
