@@ -5021,17 +5021,25 @@ describe("Hologram", () => {
       });
 
       it("shows the page the server answers with for the identity that lasts", async () => {
+        seedCurrentPage();
+
         await Hologram.loadNewPage("/target", staleTo(payloadFor("stale-2")));
 
         const onSuccess = fetchPageStub.firstCall.args[1];
 
         await onSuccess({
-          ...payloadFor("fresh-2"),
+          ...payloadFor("fresh-2", "fresh content"),
           identityPeriod: IdentityTracker.period,
         });
 
-        assert.equal(frames.length, 1);
-        assert.deepStrictEqual(assignedUrls, []);
+        try {
+          frames.splice(0).forEach((frame) => frame());
+
+          assert.include(document.body.textContent, "fresh content");
+          assert.deepStrictEqual(assignedUrls, []);
+        } finally {
+          Hologram.virtualDocument = null;
+        }
       });
 
       it("is asked for again for the entry the browser went to", async () => {
