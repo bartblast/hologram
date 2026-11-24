@@ -80,7 +80,7 @@ defmodule Hologram.Migration do
 
     * `a <> b` joins strings, giving nil when any of them is nil. In a `fn`, a body whose
       outermost part is `<>` is Elixir, which raises on nil, so write it as `query(a <> b)`
-    * `split(text, separator)` splits as `String.split/2`, with a separator that isn't empty,
+    * `split(text, separator)` splits as `String.split/2`, with a non-empty string separator,
       giving nil for nil, and is read through `at`, since a list can't be stored
     * `at(split(...), n)` picks a part, with `n` from 0 up to 1_000_000, giving nil past the end
     * `coalesce(a, b, ...)` gives the first value that isn't nil
