@@ -8,12 +8,12 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
-  alias Hologram.DB.Oplog
   alias Hologram.Realtime
   alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
+  alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Bench
@@ -386,24 +386,25 @@ defmodule HologramFeatureTests.Helpers do
   Blocks until this browser's local database holds a whole fill, then returns the `session`.
 
   The place the client greets a stream with is held once a fill has declared the local database
-  complete, so polling for it is how a test waits for a whole fill to have landed. Raising rather
-  than returning: an action it gates would otherwise read only the rows the render carried.
+  complete, so polling for it is how a test waits for a whole fill to have landed. Raises if no
+  place is held after `@max_wait_time` rather than returning: an action it gates would otherwise
+  read only the rows the render carried.
   """
-  @spec await_local_fill(Wallaby.Session.t(), non_neg_integer) :: Wallaby.Session.t()
-  def await_local_fill(session, attempts_left \\ 100)
+  @spec await_local_fill(Wallaby.Session.t(), integer | nil) :: Wallaby.Session.t()
+  def await_local_fill(session, start_time \\ nil) do
+    start_time = start_time || current_time()
 
-  def await_local_fill(session, 0) do
-    raise Wallaby.ExpectationNotMetError,
-          "Timed out waiting for the local database to fill, the client holds place " <>
-            inspect(script_result(session, @place_script))
-  end
+    cond do
+      script_result(session, @place_script) ->
+        session
 
-  def await_local_fill(session, attempts_left) do
-    if script_result(session, @place_script) do
-      session
-    else
-      Process.sleep(50)
-      await_local_fill(session, attempts_left - 1)
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for the local database to fill, the client holds no place"
+
+      true ->
+        :timer.sleep(50)
+        await_local_fill(session, start_time)
     end
   end
 
@@ -438,24 +439,29 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Blocks until no transaction older than the operations log's newest change is still running on
-  the database server.
+  Blocks until the server has read the operations log past its newest change, which it can only
+  once no transaction older than that change is still running on the database server.
 
-  For a test whose browser or client comes back with the place it was given: called after the
-  test's writes and before the first visit or connect, it makes that place one past everything the
-  test wrote.
+  For a test that leans on what the server tells a browser or a client about the rows the test
+  wrote before it connected: called after those writes and before the first visit or connect.
 
-  A session's first place is the oldest transaction still running when it starts, and PostgreSQL
-  counts transactions per server, so one open anywhere on it holds the place back - in another
-  database, like another test run's, as much as in this one. A place below the test's changes
-  breaks such a test two ways. Below the log's oldest change it reads as one from before the log,
-  and the client is sent everything again instead of being caught up (#1763). And the changes
-  after it are replayed from the rows as they stand, so a row the test took away since is told as
-  gone.
+  The server reads the log only up to the oldest transaction still running, and PostgreSQL counts
+  transactions per server, so one open anywhere on it holds the reading back - in another
+  database, like another test run's, as much as in this one. Such a test then fails in one of two
+  ways.
+
+  The place a session starts from is the oldest transaction still running when it starts, so it
+  can be below the test's changes. Below the log's oldest change it reads as one from before the
+  log, and a returning client is sent everything again instead of being caught up (#1763). Above
+  it, the changes after the place are replayed from the rows as they stand, so a row the test took
+  away since is told as gone.
+
+  A change the server hasn't read yet goes out live with whatever the test writes next: a row's
+  create read together with its update is sent as the whole row, not as a patch.
 
   Raises `ArgumentError` on an empty log, where every returning client is sent everything again
-  whatever its place. Raises `Wallaby.ExpectationNotMetError` if such a transaction is still
-  running after `@max_wait_time`.
+  whatever its place. Raises `Wallaby.ExpectationNotMetError` if the log isn't read that far after
+  `@max_wait_time`.
   """
   @spec await_log_settled() :: :ok
   def await_log_settled do
@@ -1742,16 +1748,19 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   # The newest change is read once, by the caller: read again on every round, the wait would chase
-  # whatever is written meanwhile.
+  # whatever is written meanwhile. The edge is nil until the server's first read.
   defp do_await_log_settled(newest_tx, start_time) do
+    read_edge = ReadEdge.get(ReadEdge)
+
     cond do
-      Oplog.current_xmin() > newest_tx ->
+      is_integer(read_edge) and read_edge > newest_tx ->
         :ok
 
       timed_out?(start_time) ->
         raise Wallaby.ExpectationNotMetError,
-              "Timed out waiting for the transactions older than the operations log's newest " <>
-                "change, one is still running on the database server"
+              "Timed out waiting for the server to read the operations log past transaction " <>
+                "#{newest_tx}, it has read up to #{inspect(read_edge)} - an older transaction " <>
+                "is still running on the database server, or the server's reads are failing"
 
       true ->
         :timer.sleep(50)
