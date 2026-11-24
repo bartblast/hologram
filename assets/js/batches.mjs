@@ -487,12 +487,14 @@ export default class Batches {
         // come back days later as a write the user watched fail, and a device whose clock is
         // permanently wrong would resend it on every page load with nothing in v1 able to discard
         // it.
-        Durability.forgetBatch(batch.seq);
-
+        //
         // Every tab of the group holds this batch and every one of them has to let it go - the
         // answer reaches them as it arrived, undecoded, because a client term is not something a
-        // browser can carry from one tab to another.
+        // browser can carry from one tab to another. Told first: a delete that fails on the spot
+        // ends the group, and a tab that never heard would send the batch again.
         Tabs.post({answer, kind: "answered", seq: batch.seq});
+
+        Durability.forgetBatch(batch.seq);
 
         Batches.settle(batch.seq, answer);
       }

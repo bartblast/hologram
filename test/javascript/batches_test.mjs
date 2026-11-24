@@ -1187,6 +1187,22 @@ describe("Batches", () => {
       assert.isTrue(forgetting.calledOnceWithExactly(1));
     });
 
+    // A delete that fails on the spot ends the group, and a tab that never heard would resend it.
+    it("tells the group about the answer before forgetting the batch", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+      const posting = sinon.stub(Tabs, "post");
+
+      sealed(creating("t1", "first"));
+      sendStub.resolves(confirmed());
+
+      await Batches.flush();
+
+      sinon.assert.callOrder(
+        posting.withArgs(sinon.match({kind: "answered", seq: 1})),
+        forgetting,
+      );
+    });
+
     it("forgets nothing about a batch nobody answered", async () => {
       const forgetting = sinon.stub(Durability, "forgetBatch");
 

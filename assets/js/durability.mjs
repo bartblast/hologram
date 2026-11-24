@@ -323,25 +323,36 @@ export default class Durability {
   // nothing is waiting on it any more, and a later page load has no reason to take it up.
   //
   // Fire and forget, unlike the write that put it there. What a crash between the verdict and this
-  // delete costs is one batch sent a second time on the next load - and a second arrival of the
-  // same replica and number is answered from the server's record of the first rather than applied
-  // again, so the cost is a round trip rather than a duplicate write.
-  static forgetBatch(seq) {
-    if (Durability.mode === "memory") {
-      return Durability.hadStore && Durability.holdsIdentity()
-        ? Durability.#forgetWithoutStore(seq)
-        : Promise.resolve();
+  // delete costs is one batch sent a second time on the next load. A verdict on the server's record
+  // is answered from it, so that costs a round trip. One that isn't is judged afresh (see
+  // #forgetWithoutStore).
+  //
+  // Whose batch it is gets read here, before the wait: an answer to the next batch can move this
+  // tab to another identity while the delete is running.
+  static async forgetBatch(seq) {
+    const replicaId = Replica.id;
+    const holdsIdentity = Durability.hadStore && Durability.holdsIdentity();
+
+    if (Durability.mode !== "memory") {
+      const deleted = await Durability.#write([QUEUE], (transaction) =>
+        transaction.objectStore(QUEUE).delete(seq),
+      );
+
+      if (deleted) {
+        return;
+      }
     }
 
-    return Durability.#write([QUEUE], (transaction) =>
-      transaction.objectStore(QUEUE).delete(seq),
-    );
+    if (holdsIdentity) {
+      await Durability.#forgetWithoutStore(seq, replicaId);
+    }
   }
 
-  // The same, for a tab that has let go of the store and is still sending the batches it holds. Not
-  // every verdict is on the server's record: a refusal of a signed-out visitor's batch isn't, and
-  // neither is a `:clock` refusal. A batch left in the queue would go out again on the next load
-  // and be judged afresh, so a write the person watched fail could apply.
+  // The same, for a tab that has let go of the store, or just did because this delete failed, and
+  // is still sending the batches it holds. Not every verdict is on the server's record: a refusal
+  // of a signed-out visitor's batch isn't, and neither is a `:clock` refusal. A batch left in the
+  // queue would go out again on the next load and be judged afresh, so a write the person watched
+  // fail could apply.
   //
   // Over a connection of its own, for this one delete, which usually works on a full disk too. If
   // it doesn't, the next load sends the batch again and that risk stands.
@@ -349,9 +360,7 @@ export default class Durability {
   // Only while the store still names this identity. Under another one, the same number can be a
   // different batch. And a database deleted meanwhile stays deleted: opening it would otherwise
   // bring it back with no stores in it, and every later load would fall to memory mode.
-  static async #forgetWithoutStore(seq) {
-    const replicaId = Replica.id;
-
+  static async #forgetWithoutStore(seq, replicaId) {
     let db = null;
 
     try {
@@ -939,9 +948,9 @@ export default class Durability {
   //
   // That includes the identity and its counter, which stay true: nothing spends a number under the
   // stored identity without the store (see Batches.#numbered). And the stored queue needs them. A
-  // batch answered after this point can't be taken out of the queue, so the next load sends it
-  // again, and only under the same identity and number does the server answer it from its record
-  // rather than apply it twice.
+  // batch answered after this point may stay in the queue if its delete fails too (see
+  // forgetBatch). The next load then sends it again, and only under the same identity and number
+  // does the server answer it from its record rather than apply it twice.
   //
   // The wipe deliberately does NOT go through the ordinary write path. A failure here must not
   // come back round to this function, and it cannot: nothing in this block reports one. That is

@@ -734,6 +734,77 @@ describe("Durability", () => {
       assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
     });
 
+    describe("when the delete itself fails", () => {
+      const failingDelete = async () => {
+        sinon.stub(Tabs, "storeLost");
+
+        await seedPreviousLoad();
+        await writeBatches([batchRecord(7), batchRecord(8)]);
+        await Durability.open();
+        await Durability.load();
+
+        Durability.restore(true);
+
+        raw.forEach((connection) => connection.close());
+        raw = [];
+
+        const start = FDBDatabase.prototype.transaction;
+        let failed = false;
+
+        sinon.stub(FDBDatabase.prototype, "transaction").callsFake(function (
+          names,
+          ...rest
+        ) {
+          if (!failed && names.length === 1 && names[0] === "queue") {
+            failed = true;
+
+            throw new Error("disk full");
+          }
+
+          return start.call(this, names, ...rest);
+        });
+      };
+
+      const queued = async () =>
+        (await readAll("queue")).map((record) => record.seq);
+
+      // Not every verdict is on the server's record, so one left here could apply on the next load.
+      it("takes the answered batch out over a connection of its own", async () => {
+        await failingDelete();
+
+        await Durability.forgetBatch(7);
+
+        assert.equal(Durability.mode, "memory");
+        assert.deepStrictEqual(await queued(), [8]);
+      });
+
+      // An answer to the next batch can move the tab to another identity during the delete.
+      it("goes by the identity the tab held when the batch was answered", async () => {
+        sinon.stub(Tabs, "storeLost");
+
+        await seedPreviousLoad();
+        await writeBatches([batchRecord(7), batchRecord(8)]);
+        await Durability.open();
+        await Durability.load();
+
+        Durability.restore(true);
+
+        raw.forEach((connection) => connection.close());
+        raw = [];
+
+        const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+        const forgetting = Durability.forgetBatch(7);
+        const deleting = starting.lastCall.returnValue;
+
+        Replica.adopt({id: "r-next", token: "statement-next"});
+        deleting.abort();
+
+        await forgetting;
+
+        assert.deepStrictEqual(await queued(), [8]);
+      });
+    });
+
     describe("in a tab that has let go of the store", () => {
       const letGo = async () => {
         await seedPreviousLoad();
