@@ -1570,7 +1570,16 @@ defmodule Hologram.PolicyTest do
     end
 
     test "returns no names for a type whose update lines carry none" do
-      assert update_names(Hologram.Test.Fixtures.Policy.Module58) == []
+      defmodule UnnamedUpdateFixture do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        allow :read
+        allow :update
+      end
+
+      assert update_names(UnnamedUpdateFixture) == []
     end
 
     test "leaves out a name carried by a line of another operation" do
