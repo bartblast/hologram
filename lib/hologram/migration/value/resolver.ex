@@ -387,7 +387,7 @@ defmodule Hologram.Migration.Value.Resolver do
 
   @spec refuse_value!(any, type, %{atom => any}) :: no_return
   defp refuse_value!(value, type, context) do
-    refuse!(context, "holds #{inspect(value)}, which isn't #{spell_type(type)}")
+    refuse!(context, "holds #{Check.printed(value)}, which isn't #{spell_type(type)}")
   end
 
   defp relationship(entry, name), do: List.keyfind(entry.relationships, name, 0)
@@ -409,7 +409,7 @@ defmodule Hologram.Migration.Value.Resolver do
     else
       refuse!(
         context,
-        "reads position #{inspect(n)} - at takes an integer from 0 to #{max_position}"
+        "reads position #{Check.printed(n)} - at takes an integer from 0 to #{max_position}"
       )
     end
   end
@@ -418,7 +418,7 @@ defmodule Hologram.Migration.Value.Resolver do
     if is_binary(separator) and separator != "" do
       fit_value!(separator, :string, context)
     else
-      refuse!(context, "splits by #{inspect(separator)} - split takes a non-empty string")
+      refuse!(context, "splits by #{Check.printed(separator)} - split takes a non-empty string")
     end
   end
 

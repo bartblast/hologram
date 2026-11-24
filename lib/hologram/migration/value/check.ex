@@ -17,6 +17,12 @@ defmodule Hologram.Migration.Value.Check do
 
   @length_rules [:length, :max_length, :min_length]
 
+  @iso_values %{
+    Date => ~D[2000-01-01],
+    DateTime => ~U[2000-01-01 00:00:00Z],
+    Time => ~T[00:00:00]
+  }
+
   @doc """
   Validates the backfills of the given ops, one file's, against the model before them.
 
@@ -92,8 +98,9 @@ defmodule Hologram.Migration.Value.Check do
   end
 
   @doc """
-  Returns the given value as a column stores it: a datetime in a calendar that compares with ISO
-  becomes the same moment in UTC ISO, and anything else stays as it is.
+  Returns the given value as a column stores it: a datetime in another calendar that compares with
+  ISO becomes the same moment in UTC ISO, and anything else, including an ISO datetime at an
+  offset, stays as it is.
   """
   @spec stored_form(any) :: any
   def stored_form(%DateTime{calendar: calendar} = value) when calendar != Calendar.ISO do
@@ -110,6 +117,30 @@ defmodule Hologram.Migration.Value.Check do
   end
 
   def stored_form(value), do: value
+
+  @doc """
+  Returns the given value printed for a refusal.
+  """
+  @spec printed(any) :: String.t()
+  def printed(value) do
+    inspect(value, safe: false)
+  catch
+    # A value can name any module as its calendar, and one that fails while printing the value
+    # mustn't hide the refusal, or bury it in the error's text, so the struct is printed as a plain
+    # map.
+    _kind, _reason -> inspect(value, structs: false)
+  end
+
+  @doc """
+  Returns what the given violation reason requires of a value, as
+  Validator.requirement_description/1 says it, with a bound printed for a refusal.
+  """
+  @spec requirement_description({atom, any}) :: String.t()
+  def requirement_description({:max, max}), do: "must be at most #{printed(max)}"
+
+  def requirement_description({:min, min}), do: "must be at least #{printed(min)}"
+
+  def requirement_description(reason), do: Validator.requirement_description(reason)
 
   defp bound_ops([], _model, _final_model), do: []
 
@@ -141,8 +172,14 @@ defmodule Hologram.Migration.Value.Check do
   # the comparison can run on: a real one, with the day starting when ISO's does.
   defp comparable_bound?(%{__struct__: struct, calendar: calendar} = bound, type)
        when struct in [Date, DateTime, Time] do
+    # The rules compare the value with the bound, which runs calendar functions the checks before
+    # don't, and one value in ISO makes the comparison convert the bound.
     usable_calendar?(calendar) and integer_offsets?(bound) and
-      Validator.attribute_value_valid?(bound, type)
+      Validator.attribute_value_valid?(bound, type) and
+      struct.compare(bound, Map.fetch!(@iso_values, struct)) in [:eq, :gt, :lt]
+  catch
+    # A declared bound can name any module as its calendar, so one that fails can't be compared.
+    _kind, _reason -> false
   end
 
   defp comparable_bound?(%{__struct__: struct}, _type) when struct in [Date, DateTime, Time] do
@@ -225,11 +262,11 @@ defmodule Hologram.Migration.Value.Check do
   end
 
   defp describe_refusal(_value, _type, {:type, _type_name} = reason) do
-    Validator.requirement_description(reason)
+    requirement_description(reason)
   end
 
   defp describe_refusal(_value, type, reason) do
-    "as a #{inspect(type)} #{Validator.requirement_description(reason)}"
+    "as a #{inspect(type)} #{requirement_description(reason)}"
   end
 
   defp fill_word(%{fill_source: :backfill}), do: "backfill"
@@ -333,7 +370,7 @@ defmodule Hologram.Migration.Value.Check do
   defp refuse_unfit_rule!(op, {key, rule_value}, type) do
     refuse!(
       op,
-      "fills an attribute declaring #{key}: #{inspect(rule_value)}, which a " <>
+      "fills an attribute declaring #{key}: #{printed(rule_value)}, which a " <>
         "#{inspect(type)} attribute can't take"
     )
   end
@@ -368,7 +405,7 @@ defmodule Hologram.Migration.Value.Check do
     if MapSet.member?(added, {op.after.type, value}) do
       raise Hologram.CompileError,
         message:
-          ~s(the #{fill_word(op)} #{inspect(value)} of column "#{op.column}" on table ) <>
+          ~s(the #{fill_word(op)} #{printed(value)} of column "#{op.column}" on table ) <>
             ~s("#{op.table}" is ) <>
             "an enum value this file adds to its type - PostgreSQL can't use a value in the " <>
             "transaction adding it (#1687), so move the change making the column required to " <>
@@ -468,7 +505,7 @@ defmodule Hologram.Migration.Value.Check do
         raise Hologram.CompileError,
           message:
             "the default of #{inspect(op.name)} on #{inspect(op.entity)}#{line(op)} holds " <>
-              "#{inspect(default)}, which #{describe_refusal(default, type, reason)} - state a " <>
+              "#{printed(default)}, which #{describe_refusal(default, type, reason)} - state a " <>
               "default: that fits in this op, or default: nil"
       end
     end
@@ -545,7 +582,7 @@ defmodule Hologram.Migration.Value.Check do
     normalized = Value.normalize_constant(value, :uuid)
 
     if not Validator.attribute_value_valid?(normalized, :uuid) do
-      refuse!(op, "holds #{inspect(value)}, which isn't the id of a #{inspect(target)}")
+      refuse!(op, "holds #{printed(value)}, which isn't the id of a #{inspect(target)}")
     end
 
     :ok
@@ -562,7 +599,7 @@ defmodule Hologram.Migration.Value.Check do
         refuse_unfit_rule!(op, rule, type)
 
       reason ->
-        refuse!(op, "holds #{inspect(value)}, which #{describe_refusal(value, type, reason)}")
+        refuse!(op, "holds #{printed(value)}, which #{describe_refusal(value, type, reason)}")
     end
   end
 

@@ -10,6 +10,7 @@ defmodule Hologram.Migration.Value.RowFill do
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Validator
   alias Hologram.Migration.Value
+  alias Hologram.Migration.Value.Check
   alias Hologram.Migration.Value.FillCheck
   alias Hologram.Migration.Value.Resolver
 
@@ -54,16 +55,21 @@ defmodule Hologram.Migration.Value.RowFill do
       "change the fn or add that row"
   end
 
+  # What a fn raises or throws can name any module as its calendar, as a value it returns can, so
+  # a calendar that fails while it's printed mustn't hide the refusal.
+  defp banner(kind, reason, stacktrace) do
+    Exception.format_banner(kind, reason, stacktrace)
+  catch
+    _kind, _reason -> "** (#{kind}) #{Check.printed(reason)}"
+  end
+
   defp call!(op, id, args) do
     {module, function} = op.function
 
     apply(module, function, args)
   catch
     kind, reason ->
-      refuse!(
-        op,
-        "raised on row #{id}: #{Exception.format_banner(kind, reason, __STACKTRACE__)}"
-      )
+      refuse!(op, "raised on row #{id}: #{banner(kind, reason, __STACKTRACE__)}")
   end
 
   defp check_bytes!(value, %{max_bytes: max_bytes, type: :string} = op, id)
@@ -81,7 +87,7 @@ defmodule Hologram.Migration.Value.RowFill do
     if not fits?(value, op) do
       refuse!(
         op,
-        "returned #{inspect(value)} for row #{id}, which isn't #{spell_type(op)} - change the fn"
+        "returned #{Check.printed(value)} for row #{id}, which isn't #{spell_type(op)} - change the fn"
       )
     end
   end

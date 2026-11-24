@@ -17,6 +17,7 @@ defmodule Hologram.Migration.Value.ResolverTest do
   import Hologram.Migration.Value.Resolver
 
   alias Hologram.Migration.Value
+  alias Hologram.Test.Fixtures.Migration.Module2
 
   @uuid "018f0000-0000-7000-8000-000000000000"
 
@@ -464,6 +465,25 @@ defmodule Hologram.Migration.Value.ResolverTest do
       assert stored == Value.normalize_constant(iso, :datetime)
     end
 
+    test "refuses a datetime whose calendar throws while printing it" do
+      value = %{
+        ~U[2026-01-01 00:00:00Z]
+        | year: 10_000,
+          calendar: Module2
+      }
+
+      term = {:coalesce, [{:name, [:due]}, {:value, value}]}
+      model = put_in(@model.entities[MyApp.Trip].attributes, [{:due, :datetime, []}])
+
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          resolve!(%Value{term: term}, model, MyApp.Trip, attribute_target(:datetime))
+        end
+
+      assert error.message =~ "holds %{"
+      assert error.message =~ "which isn't a value of type :datetime"
+    end
+
     test "refuses a date before PostgreSQL's earliest" do
       term = {:coalesce, [{:name, [:created_on]}, {:value, ~D[-4713-11-23]}]}
       model = put_in(@model.entities[MyApp.Trip].attributes, [{:created_on, :date, []}])
@@ -644,6 +664,16 @@ defmodule Hologram.Migration.Value.ResolverTest do
     test "refuses a pinned position past the largest" do
       assert refusal(at({:name, [:destination]}, ",", 1_000_001), attribute_target(:string)) =~
                "reads position 1000001"
+    end
+
+    test "refuses a pinned separator and position whose calendar throws while printing them" do
+      value = %{~U[2026-01-01 00:00:00Z] | calendar: Module2}
+
+      assert refusal(at({:name, [:destination]}, value, 0), attribute_target(:string)) =~
+               "splits by %{"
+
+      assert refusal(at({:name, [:destination]}, ",", value), attribute_target(:string)) =~
+               "reads position %{"
     end
 
     test "refuses a pinned position that is no integer" do

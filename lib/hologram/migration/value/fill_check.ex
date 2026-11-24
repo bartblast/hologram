@@ -182,7 +182,7 @@ defmodule Hologram.Migration.Value.FillCheck do
     rules =
       broken
       |> Enum.map(fn {reason, count} ->
-        "#{Validator.requirement_description(reason)} (#{pluralize_rows(count)})"
+        "#{Check.requirement_description(reason)} (#{pluralize_rows(count)})"
       end)
       |> Enum.sort()
       |> Enum.join(", ")

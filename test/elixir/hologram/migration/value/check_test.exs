@@ -1,7 +1,8 @@
 defmodule Hologram.Migration.Value.CheckTest.OtherCalendar do
   @moduledoc false
 
-  # Calendar.ISO under another name: a bound in a calendar that isn't ISO but compares with it.
+  # Calendar.ISO under another name: a bound in a calendar that isn't ISO but compares dates and
+  # datetimes with it. It has no time_to_day_fraction/4, so it can't compare times.
   defdelegate day_rollover_relative_to_midnight_utc, to: Calendar.ISO
 
   defdelegate naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond),
@@ -41,12 +42,61 @@ defmodule Hologram.Migration.Value.CheckTest.ThrowingCalendar do
   defdelegate valid_time?(hour, minute, second, microsecond), to: Calendar.ISO
 end
 
+defmodule Hologram.Migration.Value.CheckTest.IsoDaysRaisingCalendar do
+  @moduledoc false
+
+  # A calendar a bound can name whose naive_datetime_to_iso_days/7, which a comparison runs, raises.
+  defdelegate day_rollover_relative_to_midnight_utc, to: Calendar.ISO
+
+  @spec naive_datetime_to_iso_days(integer, integer, integer, integer, integer, integer, tuple) ::
+          no_return
+  def naive_datetime_to_iso_days(_year, _month, _day, _hour, _minute, _second, _microsecond),
+    do: raise("calendar blew up")
+
+  defdelegate valid_date?(year, month, day), to: Calendar.ISO
+  defdelegate valid_time?(hour, minute, second, microsecond), to: Calendar.ISO
+end
+
+defmodule Hologram.Migration.Value.CheckTest.IsoDaysThrowingCalendar do
+  @moduledoc false
+
+  # A calendar a bound can name whose naive_datetime_to_iso_days/7, which a comparison runs, throws.
+  defdelegate day_rollover_relative_to_midnight_utc, to: Calendar.ISO
+
+  @spec naive_datetime_to_iso_days(integer, integer, integer, integer, integer, integer, tuple) ::
+          no_return
+  def naive_datetime_to_iso_days(_year, _month, _day, _hour, _minute, _second, _microsecond),
+    do: throw(:calendar_threw)
+
+  defdelegate valid_date?(year, month, day), to: Calendar.ISO
+  defdelegate valid_time?(hour, minute, second, microsecond), to: Calendar.ISO
+end
+
+defmodule Hologram.Migration.Value.CheckTest.UnprintableThrowingCalendar do
+  @moduledoc false
+
+  # A calendar a bound can name whose valid_date?/3 throws, and which throws while its date is printed.
+  @spec date_to_string(integer, integer, integer) :: no_return
+  def date_to_string(_year, _month, _day), do: throw(:calendar_threw)
+
+  defdelegate day_rollover_relative_to_midnight_utc, to: Calendar.ISO
+
+  defdelegate naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond),
+    to: Calendar.ISO
+
+  @spec valid_date?(integer, integer, integer) :: no_return
+  def valid_date?(_year, _month, _day), do: throw(:calendar_threw)
+
+  defdelegate valid_time?(hour, minute, second, microsecond), to: Calendar.ISO
+end
+
 defmodule Hologram.Migration.Value.CheckTest do
   use Hologram.Test.BasicCase, async: true
 
   import Hologram.Migration.Value.Check
 
   alias Hologram.Migration.Value
+  alias Hologram.Test.Fixtures.Migration.Module2
 
   @uuid "018f0000-0000-7000-8000-000000000000"
 
@@ -146,6 +196,13 @@ defmodule Hologram.Migration.Value.CheckTest do
       op = add_attribute(:string, default: 1, optional: true)
 
       assert refusal(op) =~ "the default of :value on MyApp.Task (line 7) holds 1"
+    end
+
+    test "refuses a default whose calendar throws while printing it" do
+      value = %{~U[2026-01-01 00:00:00Z] | year: 10_000, calendar: Module2}
+
+      assert refusal(add_attribute(:datetime, default: value, optional: true)) =~
+               "the default of :value on MyApp.Task (line 7) holds %{"
     end
 
     test "refuses an enum default that no op of the file adds" do
@@ -497,7 +554,35 @@ defmodule Hologram.Migration.Value.CheckTest do
           {"a range with a zero step", :integer,
            [in: %{__struct__: Range, first: 1, last: 5, step: 0}], 1},
           {"a date bound in a calendar that doesn't exist", :date,
-           [min: %{~D[2020-01-01] | calendar: Nope}], ~D[2026-01-01]}
+           [min: %{~D[2020-01-01] | calendar: Nope}], ~D[2026-01-01]},
+          {"a date bound in a calendar that raises", :date,
+           [
+             min: %{~D[2020-01-01] | calendar: Hologram.Migration.Value.CheckTest.RaisingCalendar}
+           ], ~D[2026-01-01]},
+          {"a date bound in a calendar that throws", :date,
+           [
+             min: %{
+               ~D[2020-01-01]
+               | calendar: Hologram.Migration.Value.CheckTest.ThrowingCalendar
+             }
+           ], ~D[2026-01-01]},
+          {"a date bound in a calendar that raises while it's compared", :date,
+           [
+             min: %{
+               ~D[2020-01-01]
+               | calendar: Hologram.Migration.Value.CheckTest.IsoDaysRaisingCalendar
+             }
+           ], ~D[2026-01-01]},
+          {"a datetime bound in a calendar that throws while it's compared", :datetime,
+           [
+             min: %{
+               ~U[2020-01-01 00:00:00Z]
+               | calendar: Hologram.Migration.Value.CheckTest.IsoDaysThrowingCalendar
+             }
+           ], ~U[2026-01-01 00:00:00Z]},
+          {"a time bound in a calendar that can't compare times", :time,
+           [max: %{~T[10:00:00] | calendar: Hologram.Migration.Value.CheckTest.OtherCalendar}],
+           ~T[09:00:00]}
         ] do
       test "refuses #{label} instead of crashing" do
         op =
@@ -653,6 +738,59 @@ defmodule Hologram.Migration.Value.CheckTest do
       bound = %{~D[2020-01-01] | calendar: Hologram.Migration.Value.CheckTest.OtherCalendar}
 
       assert check(add_attribute(:date, min: bound, backfill: ~D[2026-01-01])) == :ok
+    end
+
+    test "takes a default beside a bound whose calendar fails, leaving the bound to the declaration" do
+      for {type, bound, default} <- [
+            {:date, %{~D[2020-01-01] | calendar: Value.CheckTest.RaisingCalendar},
+             ~D[2026-01-01]},
+            {:date, %{~D[2020-01-01] | calendar: Value.CheckTest.ThrowingCalendar},
+             ~D[2026-01-01]},
+            {:date, %{~D[2020-01-01] | calendar: Value.CheckTest.IsoDaysRaisingCalendar},
+             ~D[2026-01-01]},
+            {:datetime,
+             %{~U[2020-01-01 00:00:00Z] | calendar: Value.CheckTest.IsoDaysThrowingCalendar},
+             ~U[2026-01-01 00:00:00Z]},
+            {:time, %{~T[10:00:00] | calendar: Value.CheckTest.OtherCalendar}, ~T[09:00:00]}
+          ] do
+        assert check(add_attribute(type, max: bound, default: default)) == :ok
+      end
+    end
+
+    test "refuses a bound whose calendar throws both while checking and printing it" do
+      bound = %{~D[2020-01-01] | calendar: Value.CheckTest.UnprintableThrowingCalendar}
+
+      assert refusal(add_attribute(:date, min: bound, backfill: ~D[2026-01-01])) =~
+               "fills an attribute declaring min: %{"
+    end
+
+    test "refuses a datetime whose calendar throws while printing it, naming the op" do
+      value = %{
+        ~U[2026-01-01 00:00:00Z]
+        | year: 10_000,
+          calendar: Module2
+      }
+
+      assert refusal(add_attribute(:datetime, backfill: value)) =~
+               "the backfill of :value on MyApp.Task (line 7) holds %{"
+    end
+
+    test "refuses a value breaking a bound whose calendar throws while printing it" do
+      bound = %{~U[2020-01-01 00:00:00Z] | calendar: Module2}
+
+      for {key, opts} <- [backfill: [], default: [optional: true]] do
+        op = add_attribute(:datetime, [{:min, bound}, {key, ~U[2000-01-01 00:00:00Z]} | opts])
+
+        assert refusal(op) =~ ":datetime must be at least %{"
+      end
+    end
+
+    test "refuses a datetime whose calendar raises while printing it, printing it plainly" do
+      value = %{~U[2026-01-01 00:00:00Z] | calendar: Value.CheckTest.IsoDaysRaisingCalendar}
+      message = refusal(add_attribute(:datetime, backfill: value))
+
+      assert message =~ "the backfill of :value on MyApp.Task (line 7) holds %{"
+      refute message =~ "Inspect.Error"
     end
 
     test "takes a date bound PostgreSQL can't store, as a declaration may" do

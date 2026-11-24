@@ -2144,6 +2144,39 @@ defmodule Hologram.Migration.BackfillTest do
       )
     end
 
+    test "names the row when the fn throws a value whose calendar throws while printing it",
+         context do
+      value =
+        elixir_fn("""
+        fn title ->
+          throw(%{
+            __struct__: DateTime,
+            calendar: Hologram.Test.Fixtures.Migration.Module2,
+            year: String.length(title),
+            month: 1,
+            day: 1,
+            hour: 0,
+            minute: 0,
+            second: 0,
+            microsecond: {0, 0},
+            time_zone: "Etc/UTC",
+            zone_abbr: "UTC",
+            utc_offset: 0,
+            std_offset: 0
+          })
+        end
+        """)
+
+      rows = fn -> insert_row("my_app_task", code: "a", title: "abc") end
+
+      assert_row_fill_refused(
+        context,
+        rows,
+        [add_filled(:copy, :string, value, optional: true)],
+        ~r/raised on row [0-9a-f-]{36}: \*\* \(throw\) %\{.*year: 3/s
+      )
+    end
+
     test "refuses a result of the wrong type, naming the row", context do
       value = elixir_fn("fn title -> String.length(title) end")
       rows = fn -> insert_row("my_app_task", code: "a", title: "abc") end
@@ -2153,6 +2186,38 @@ defmodule Hologram.Migration.BackfillTest do
         rows,
         [add_filled(:copy, :string, value, optional: true)],
         ~r/returned 3 for row [0-9a-f-]{36}, which isn't a value of type :string/
+      )
+    end
+
+    test "refuses a result whose calendar throws while printing it, naming the row", context do
+      value =
+        elixir_fn("""
+        fn title ->
+          %{
+            __struct__: DateTime,
+            calendar: Hologram.Test.Fixtures.Migration.Module2,
+            year: 9_997 + String.length(title),
+            month: 1,
+            day: 1,
+            hour: 0,
+            minute: 0,
+            second: 0,
+            microsecond: {0, 0},
+            time_zone: "Etc/UTC",
+            zone_abbr: "UTC",
+            utc_offset: 0,
+            std_offset: 0
+          }
+        end
+        """)
+
+      rows = fn -> insert_row("my_app_task", code: "a", title: "abc") end
+
+      assert_row_fill_refused(
+        context,
+        rows,
+        [add_filled(:due, :datetime, value, optional: true)],
+        ~r/returned %\{.*\} for row [0-9a-f-]{36}, which isn't a value of type :datetime/s
       )
     end
 
@@ -2440,6 +2505,22 @@ defmodule Hologram.Migration.BackfillTest do
       op = computed_add(:copy, :integer, {:name, [:priority]}, optional: true, in: 1..3)
 
       assert_fill_refused(context, ["one"], [add_priority, op], ~r/must be in 1\.\.3 \(1 row\)/)
+    end
+
+    test "refuses a value under a bound whose calendar throws while printing it", context do
+      add_due = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :due,
+        type: :datetime,
+        opts: [optional: true, backfill: ~U[2000-01-01 00:00:00Z]],
+        line: 2
+      }
+
+      bound = %{~U[2020-01-01 00:00:00Z] | calendar: Hologram.Test.Fixtures.Migration.Module2}
+      op = computed_add(:copy, :datetime, {:name, [:due]}, optional: true, min: bound)
+
+      assert_fill_refused(context, ["one"], [add_due, op], ~r/must be at least %\{.*\(1 row\)/s)
     end
 
     test "refuses a value over a unique index's byte bound", context do
