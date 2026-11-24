@@ -331,6 +331,110 @@ describe("Client", () => {
     });
   });
 
+  describe("settleIdentity()", () => {
+    let asking, delays;
+
+    beforeEach(() => {
+      delays = Client.IDENTITY_ASK_DELAYS_MS;
+      Client.IDENTITY_ASK_DELAYS_MS = [0, 1, 1];
+      IdentityTracker.init("5.tag");
+      asking = sinon.stub(Client, "fetchIdentityTag");
+    });
+
+    afterEach(() => {
+      Client.IDENTITY_ASK_DELAYS_MS = delays;
+      asking.restore();
+    });
+
+    it("takes in a newer answer at once", async () => {
+      asking.resolves("6.other");
+
+      await Client.settleIdentity();
+
+      sinon.assert.calledOnce(asking);
+      assert.equal(IdentityTracker.tag, "6.other");
+    });
+
+    it("keeps the identity an equal answer confirms", async () => {
+      const period = IdentityTracker.period;
+
+      asking.resolves("5.tag");
+
+      await Client.settleIdentity();
+
+      sinon.assert.calledOnce(asking);
+      assert.equal(IdentityTracker.period, period);
+    });
+
+    // Two changes made at one moment: the cookie this browser holds decides.
+    it("takes in a tied answer at once", async () => {
+      asking.resolves("5.other");
+
+      await Client.settleIdentity();
+
+      sinon.assert.calledOnce(asking);
+      assert.equal(IdentityTracker.tag, "5.other");
+    });
+
+    it("takes in the answer for a session that was cleared at once", async () => {
+      asking.resolves("none.other");
+
+      await Client.settleIdentity();
+
+      sinon.assert.calledOnce(asking);
+      assert.equal(IdentityTracker.tag, "none.other");
+    });
+
+    // The cookie of a login whose response is still on its way.
+    it("asks again while the answer is older", async () => {
+      asking.onFirstCall().resolves("4.other");
+      asking.onSecondCall().resolves("5.tag");
+
+      await Client.settleIdentity();
+
+      sinon.assert.calledTwice(asking);
+      assert.equal(IdentityTracker.tag, "5.tag");
+    });
+
+    // A login whose response never arrived left the browser with the older cookie.
+    it("believes an older answer that doesn't change", async () => {
+      asking.resolves("4.other");
+
+      await Client.settleIdentity();
+
+      sinon.assert.calledThrice(asking);
+      assert.equal(IdentityTracker.tag, "4.other");
+    });
+
+    it("leaves the identity alone when no answer comes", async () => {
+      const period = IdentityTracker.period;
+
+      asking.resolves(null);
+
+      await Client.settleIdentity();
+
+      assert.equal(IdentityTracker.tag, "5.tag");
+      assert.equal(IdentityTracker.period, period);
+    });
+
+    it("asks once for callers that overlap", async () => {
+      asking.resolves("6.other");
+
+      await Promise.all([Client.settleIdentity(), Client.settleIdentity()]);
+
+      sinon.assert.calledOnce(asking);
+    });
+
+    it("asks anew once the last round is over", async () => {
+      asking.resolves("6.other");
+
+      await Client.settleIdentity();
+      await Client.settleIdentity();
+
+      sinon.assert.calledTwice(asking);
+    });
+  });
+
   describe("fetchIdentityTag()", () => {
     afterEach(() => sinon.restore());
 
@@ -349,10 +453,10 @@ describe("Client", () => {
 
     it("answers the tag the response carries", async () => {
       sinon.stub(globalThis, "fetch").resolves({
-        headers: new Headers({"hologram-identity-tag": "tag-2"}),
+        headers: new Headers({"hologram-identity-tag": "2.tag-2"}),
       });
 
-      assert.equal(await Client.fetchIdentityTag(), "tag-2");
+      assert.equal(await Client.fetchIdentityTag(), "2.tag-2");
     });
 
     // Offline, say. No answer says nothing about the identity.
@@ -383,7 +487,7 @@ describe("Client", () => {
       originalInstanceId = App.instanceId;
       App.instanceId = "test-instance-id";
 
-      IdentityTracker.init("tag-1");
+      IdentityTracker.init("1.tag-1");
     });
 
     afterEach(() => {
@@ -474,14 +578,14 @@ describe("Client", () => {
       sinon.stub(globalThis, "fetch").resolves({
         ...pageDataResponse({type: "page"}),
         headers: new Headers({
-          "hologram-identity-tag": "tag-2",
+          "hologram-identity-tag": "2.tag-2",
           "hologram-page-data": "true",
         }),
       });
 
       await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
 
-      assert.equal(IdentityTracker.tag, "tag-2");
+      assert.equal(IdentityTracker.tag, "2.tag-2");
     });
 
     // The period starts with the response's own tag, not the one the client knew before it.
@@ -491,7 +595,7 @@ describe("Client", () => {
       sinon.stub(globalThis, "fetch").resolves({
         ...pageDataResponse({type: "page"}),
         headers: new Headers({
-          "hologram-identity-tag": "tag-2",
+          "hologram-identity-tag": "2.tag-2",
           "hologram-page-data": "true",
         }),
       });
@@ -504,17 +608,67 @@ describe("Client", () => {
       assert.notEqual(payload.identityPeriod, periodBefore);
     });
 
+    // Its tag is older than the change the stream reported while it was on its way.
+    describe("for a response no newer than what the client knows", () => {
+      let settling;
+
+      beforeEach(() => {
+        IdentityTracker.observe("2.tag-2");
+
+        settling = sinon.stub(Client, "settleIdentity").resolves();
+
+        sinon.stub(globalThis, "fetch").resolves({
+          ...pageDataResponse({type: "page"}),
+          headers: new Headers({
+            "hologram-identity-tag": "1.tag-1",
+            "hologram-page-data": "true",
+          }),
+        });
+      });
+
+      it("marks the page as not of the current identity", async () => {
+        await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
+
+        assert.equal(
+          onSuccessStub.firstCall.args[0].identityPeriod,
+          IdentityTracker.SUPERSEDED,
+        );
+
+        assert.equal(IdentityTracker.tag, "2.tag-2");
+      });
+
+      it("asks the server who is signed in", async () => {
+        await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
+
+        sinon.assert.calledOnce(settling);
+      });
+    });
+
+    // A redirect names where it leads and not what it answered, and a stale one is asked for again.
+    it("records on the payload which page was asked for", async () => {
+      sinon
+        .stub(globalThis, "fetch")
+        .resolves(pageDataResponse({type: "redirect"}));
+
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
+
+      assert.strictEqual(
+        onSuccessStub.firstCall.args[0].requestedPage,
+        pageModule,
+      );
+    });
+
     // Middleware can log the user in or out and answer with something other than a page.
     it("takes in the identity tag of a response that is not a page", async () => {
       sinon.stub(globalThis, "fetch").resolves({
-        headers: new Headers({"hologram-identity-tag": "tag-2"}),
+        headers: new Headers({"hologram-identity-tag": "2.tag-2"}),
         ok: false,
         status: 403,
       });
 
       await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
 
-      assert.equal(IdentityTracker.tag, "tag-2");
+      assert.equal(IdentityTracker.tag, "2.tag-2");
       sinon.assert.calledOnce(onNotPageStub);
     });
 
@@ -610,7 +764,7 @@ describe("Client", () => {
       originalRegistryEpoch = Hologram.registryEpoch;
       Hologram.registryEpoch = 3;
 
-      IdentityTracker.init("tag-1");
+      IdentityTracker.init("1.tag-1");
     });
 
     afterEach(() => {
@@ -788,7 +942,7 @@ describe("Client", () => {
 
     it("takes in the identity tag the reply carries", async () => {
       sinon.stub(globalThis, "fetch").resolves({
-        headers: new Headers({"hologram-identity-tag": "tag-2"}),
+        headers: new Headers({"hologram-identity-tag": "2.tag-2"}),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(Type.nil()),
@@ -801,13 +955,36 @@ describe("Client", () => {
 
       await Client.sendCommand(command);
 
-      assert.equal(IdentityTracker.tag, "tag-2");
+      assert.equal(IdentityTracker.tag, "2.tag-2");
+    });
+
+    it("leaves the identity alone for a reply no newer than what the client knows, and asks the server", async () => {
+      IdentityTracker.observe("2.tag-2");
+
+      const settling = sinon.stub(Client, "settleIdentity").resolves();
+
+      fetchStub = sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers({"hologram-identity-tag": "1.tag-1"}),
+        ok: true,
+        json: sinon.stub().resolves({
+          action: serialized(Type.nil()),
+          selfEchoes: serialized(Type.list()),
+          status: 1,
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
+        }),
+      });
+
+      await Client.sendCommand(command);
+
+      assert.equal(IdentityTracker.tag, "2.tag-2");
+      sinon.assert.calledOnce(settling);
     });
 
     // A command turned away can still be where the client learns the identity changed.
     it("takes in the identity tag of a reply that failed", async () => {
       sinon.stub(globalThis, "fetch").resolves({
-        headers: new Headers({"hologram-identity-tag": "tag-2"}),
+        headers: new Headers({"hologram-identity-tag": "2.tag-2"}),
         ok: false,
         status: 403,
       });
@@ -821,7 +998,7 @@ describe("Client", () => {
       }
 
       assert.instanceOf(thrownError, HologramRuntimeError);
-      assert.equal(IdentityTracker.tag, "tag-2");
+      assert.equal(IdentityTracker.tag, "2.tag-2");
     });
 
     it("command fails due to result status code", async () => {

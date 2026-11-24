@@ -4,6 +4,7 @@ import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
 import Batch from "../../assets/js/batch.mjs";
 import Batches from "../../assets/js/batches.mjs";
+import Client from "../../assets/js/client.mjs";
 import DataLayer from "../../assets/js/data_layer.mjs";
 import Deltas from "../../assets/js/deltas.mjs";
 import Durability from "../../assets/js/durability.mjs";
@@ -20,6 +21,7 @@ import QueryCheck from "../../assets/js/query_check.mjs";
 import QuerySpelling from "../../assets/js/query_spelling.mjs";
 import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
+import Sse from "../../assets/js/sse.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -1095,6 +1097,469 @@ describe("DataLayer", () => {
       assert.isNull(LocalDatabase.actorEntityId);
       assert.deepStrictEqual(LocalDatabase.syncCounts, {
         "MyApp.Held/count/": 9,
+      });
+    });
+  });
+
+  describe("holdsOtherUser()", () => {
+    afterEach(() => {
+      DataLayer.isStoreRestored = false;
+      LocalDatabase.actorUserId = null;
+    });
+
+    it("is true for another user once the store is read", () => {
+      DataLayer.isStoreRestored = true;
+      LocalDatabase.actorUserId = "u1";
+
+      assert.isTrue(DataLayer.holdsOtherUser("u2"));
+    });
+
+    it("is false for the user it holds", () => {
+      DataLayer.isStoreRestored = true;
+      LocalDatabase.actorUserId = "u1";
+
+      assert.isFalse(DataLayer.holdsOtherUser("u1"));
+    });
+
+    it("takes undefined and null as the same visitor", () => {
+      DataLayer.isStoreRestored = true;
+      LocalDatabase.actorUserId = undefined;
+
+      assert.isFalse(DataLayer.holdsOtherUser(null));
+    });
+
+    // The document's first mount is what says who it is for.
+    it("is false before the store is read", () => {
+      LocalDatabase.actorUserId = "u1";
+
+      assert.isFalse(DataLayer.holdsOtherUser("u2"));
+    });
+  });
+
+  describe("followIdentity()", () => {
+    const TASK = "MyApp.Task";
+
+    const pair = {id: "replica-2", token: "token-2"};
+
+    const sealed = (id) => {
+      Batches.open("tasks");
+      Batches.current().append({id, op: "delete", stamp: 1, type: TASK});
+
+      return Batches.close();
+    };
+
+    let originalTracker, persisting, rendering;
+
+    beforeEach(() => {
+      originalTracker = {
+        documentPeriod: IdentityTracker.documentPeriod,
+        period: IdentityTracker.period,
+        periods: IdentityTracker.periods,
+        tag: IdentityTracker.tag,
+      };
+
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {id: "uuid", title: "string"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+      Batches.reset();
+      Replica.reset();
+      LocalDatabase.reset();
+      IdentityTracker.init("1.tag-1");
+
+      LocalDatabase.identityEndedPeriod = null;
+      LocalDatabase.actorUserId = "u1";
+      LocalDatabase.actorEntityId = "entity-1";
+      LocalDatabase.putRow(TASK, {id: "t1", title: "the first user's"});
+
+      SyncStream.followedTag = null;
+      SyncStream.rowsChangedSinceRender = false;
+      SyncStream.syncCursor = "place-1";
+
+      Replica.adopt({id: "replica-1", token: "token-1"});
+
+      persisting = sinon.stub(Durability, "persistReplica");
+      rendering = sinon.stub(SyncStream, "scheduleRender");
+    });
+
+    afterEach(() => {
+      Object.assign(IdentityTracker, originalTracker);
+
+      Batches.reset();
+      Replica.reset();
+      LocalDatabase.reset();
+
+      LocalDatabase.identityEndedPeriod = null;
+      LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
+
+      SyncStream.awaitingIdentity = false;
+      SyncStream.awaitingPair = false;
+      SyncStream.followedTag = null;
+      SyncStream.rowsChangedSinceRender = false;
+      SyncStream.syncCursor = null;
+
+      Tabs.leader = true;
+
+      delete globalThis.Hologram.sync;
+    });
+
+    const followToSecondUser = (fields = {}) =>
+      DataLayer.followIdentity({
+        actorEntityId: "entity-2",
+        actorUserId: "u2",
+        identityTag: "2.tag-2",
+        replica: pair,
+        ...fields,
+      });
+
+    describe("to another user", () => {
+      it("drops the previous user's rows", () => {
+        followToSecondUser();
+
+        assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+      });
+
+      it("answers for the new user", () => {
+        followToSecondUser();
+
+        assert.equal(LocalDatabase.actorUserId, "u2");
+        assert.equal(LocalDatabase.actorEntityId, "entity-2");
+      });
+
+      it("takes a sign-out as nobody", () => {
+        followToSecondUser({actorEntityId: undefined, actorUserId: null});
+
+        assert.isNull(LocalDatabase.actorUserId);
+        assert.isNull(LocalDatabase.actorEntityId);
+      });
+
+      it("gives up the place, which dated the previous user's rows", () => {
+        followToSecondUser();
+
+        assert.isNull(SyncStream.syncCursor);
+      });
+
+      it("has the next action compute its fields again and asks for a render", () => {
+        followToSecondUser();
+
+        assert.isTrue(SyncStream.rowsChangedSinceRender);
+        sinon.assert.calledOnce(rendering);
+      });
+
+      it("takes in the new user's own row", () => {
+        const applying = sinon.stub(Deltas, "apply");
+        const userRow = {put_entity: {"MyApp.User": [{id: "entity-2"}]}};
+
+        followToSecondUser({userRow});
+
+        sinon.assert.calledOnceWithExactly(applying, userRow, {
+          insertOnly: true,
+        });
+      });
+
+      it("lets the previous user's batches go", () => {
+        sealed("t2");
+
+        followToSecondUser();
+
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isFalse(Overlay.names(TASK, "t2"));
+      });
+
+      it("takes the pair the server minted", () => {
+        followToSecondUser();
+
+        assert.deepStrictEqual(Replica.current(), pair);
+        assert.deepStrictEqual(Replica.fresh, pair);
+      });
+
+      it("ends a wait for a pair", () => {
+        SyncStream.awaitingPair = true;
+
+        followToSecondUser();
+
+        assert.isFalse(SyncStream.awaitingPair);
+      });
+
+      it("goes on waiting when the event brings no pair", () => {
+        SyncStream.awaitingPair = true;
+
+        followToSecondUser({replica: undefined});
+
+        assert.isTrue(SyncStream.awaitingPair);
+      });
+
+      it("moves to the new identity's period", () => {
+        const period = IdentityTracker.period;
+
+        followToSecondUser();
+
+        assert.equal(IdentityTracker.tag, "2.tag-2");
+        assert.notEqual(IdentityTracker.period, period);
+      });
+
+      // Counts are filed under the period, and the new user's has only just begun.
+      it("doesn't count the new user's period as ended", () => {
+        followToSecondUser();
+
+        assert.isNull(LocalDatabase.identityEndedPeriod);
+      });
+
+      // A login command's reply can have moved the period before the stream said so.
+      it("doesn't end a period a response already moved to", () => {
+        IdentityTracker.observe("2.tag-2");
+
+        followToSecondUser();
+
+        assert.isNull(LocalDatabase.identityEndedPeriod);
+      });
+
+      // With no tag the period can't move, and it held the previous user's numbers.
+      it("counts the period as ended when the server tags nothing", () => {
+        followToSecondUser({identityTag: undefined});
+
+        assert.equal(LocalDatabase.identityEndedPeriod, IdentityTracker.period);
+      });
+
+      describe("named by an event no newer than what the tab knows", () => {
+        let reconnecting, settling;
+
+        beforeEach(() => {
+          IdentityTracker.init("5.tag");
+          LocalDatabase.actorUserId = "u1";
+          settling = sinon.stub(Client, "settleIdentity").resolves();
+          reconnecting = sinon.stub(Sse, "reconnect");
+        });
+
+        afterEach(() => {
+          settling.restore();
+          reconnecting.restore();
+          SyncStream.awaitingIdentity = false;
+        });
+
+        const followBehind = () =>
+          DataLayer.followIdentity({
+            actorEntityId: "entity-2",
+            actorUserId: "u2",
+            identityTag: "4.other",
+          });
+
+        it("stays with the user it holds", () => {
+          followBehind();
+
+          assert.equal(LocalDatabase.actorUserId, "u1");
+          assert.equal(IdentityTracker.tag, "5.tag");
+        });
+
+        // The stream's server side has moved to that identity all the same.
+        it("takes nothing more from this stream", () => {
+          followBehind();
+
+          assert.isTrue(SyncStream.awaitingIdentity);
+        });
+
+        it("opens a new stream once the server has said who is signed in", async () => {
+          followBehind();
+
+          sinon.assert.calledOnce(settling);
+          sinon.assert.notCalled(reconnecting);
+
+          await settling.firstCall.returnValue;
+          await Promise.resolve();
+
+          sinon.assert.calledOnce(reconnecting);
+        });
+      });
+
+      it("remembers the tag it followed", () => {
+        followToSecondUser();
+
+        assert.equal(SyncStream.followedTag, "2.tag-2");
+      });
+
+      it("treats a visitor named undefined as a visitor", () => {
+        LocalDatabase.actorUserId = undefined;
+
+        DataLayer.followIdentity({actorUserId: null, identityTag: "2.tag-2"});
+
+        assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+      });
+    });
+
+    describe("to the same user", () => {
+      const followToSameUser = (fields = {}) =>
+        DataLayer.followIdentity({
+          actorEntityId: "entity-1",
+          actorUserId: "u1",
+          identityTag: "1.tag-1",
+          ...fields,
+        });
+
+      it("keeps the rows and the place", () => {
+        followToSameUser();
+
+        assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+        assert.equal(SyncStream.syncCursor, "place-1");
+        sinon.assert.notCalled(rendering);
+      });
+
+      it("keeps the pair when the event brings none", () => {
+        followToSameUser();
+
+        assert.equal(Replica.id, "replica-1");
+        sinon.assert.notCalled(persisting);
+      });
+
+      // A visitor's pair is bound to the session id, which is what changed.
+      it("takes a pair the event brings, and the leader stores it", () => {
+        Replica.owner = "u1";
+
+        followToSameUser({replica: pair});
+
+        assert.deepStrictEqual(Replica.current(), pair);
+        sinon.assert.calledOnceWithExactly(persisting, pair);
+      });
+
+      // A follow a mount started leaves the store the previous user's until the tab has moved.
+      it("doesn't store the pair in another user's slot", () => {
+        Replica.owner = "u0";
+
+        followToSameUser({replica: pair});
+
+        assert.deepStrictEqual(Replica.current(), pair);
+        sinon.assert.notCalled(persisting);
+      });
+
+      it("leaves storing the pair to the leader", () => {
+        Replica.owner = "u1";
+        Tabs.leader = false;
+
+        followToSameUser({replica: pair});
+
+        assert.deepStrictEqual(Replica.current(), pair);
+        sinon.assert.notCalled(persisting);
+      });
+    });
+
+    describe("from a page's mount data", () => {
+      let reconnecting;
+
+      const mount = (actorUserId) =>
+        DataLayer.ingestMountData({
+          actorEntityId: "entity-2",
+          actorUserId,
+          identityPeriod: IdentityTracker.period,
+          syncRows: {},
+        });
+
+      beforeEach(() => {
+        DataLayer.isStoreRestored = true;
+        Sse.isStarted = true;
+        reconnecting = sinon.stub(Sse, "reconnect");
+      });
+
+      afterEach(() => {
+        // Run while the stub is in place, so a test that mounted leaves no stream to replace.
+        DataLayer.reconnectIfFollowed();
+
+        DataLayer.isStoreRestored = false;
+        Sse.isStarted = false;
+      });
+
+      it("follows a user the page was rendered for", () => {
+        mount("u2");
+
+        assert.equal(LocalDatabase.actorUserId, "u2");
+        assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+      });
+
+      it("drops the frames of the stream it had", () => {
+        mount("u2");
+
+        assert.isTrue(SyncStream.awaitingIdentity);
+      });
+
+      // Its response carries no pair.
+      it("holds writes until it has a pair", () => {
+        mount("u2");
+
+        assert.isTrue(SyncStream.holdsWrites());
+      });
+
+      // The handshake presents the page's receipts, which the mount has yet to take in.
+      it("opens a new stream only once the mount is done", () => {
+        mount("u2");
+
+        sinon.assert.notCalled(reconnecting);
+
+        DataLayer.restore();
+
+        sinon.assert.calledOnce(reconnecting);
+      });
+
+      it("opens one new stream per follow", () => {
+        mount("u2");
+
+        DataLayer.restore();
+        DataLayer.restore();
+
+        sinon.assert.calledOnce(reconnecting);
+      });
+
+      it("opens none before the stream has started", () => {
+        Sse.isStarted = false;
+
+        mount("u2");
+        DataLayer.restore();
+
+        sinon.assert.notCalled(reconnecting);
+      });
+
+      // A mount that raises doesn't reach the store's restore.
+      it("replaces the stream when asked after a mount that raised", () => {
+        mount("u2");
+
+        DataLayer.reconnectIfFollowed();
+
+        sinon.assert.calledOnce(reconnecting);
+      });
+
+      // The response's tag was observed already, and the new user's period has only just begun.
+      it("doesn't count the new user's period as ended", () => {
+        IdentityTracker.observe("2.tag-2");
+
+        mount("u2");
+
+        assert.isNull(LocalDatabase.identityEndedPeriod);
+      });
+
+      it("does nothing for the user it already holds", () => {
+        mount("u1");
+        DataLayer.restore();
+
+        assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+        assert.isFalse(SyncStream.awaitingIdentity);
+        sinon.assert.notCalled(reconnecting);
+      });
+
+      // Every signed-in page load starts with no actor, and following that would drop what the
+      // page carried.
+      it("only sets the ids on the document's first mount", () => {
+        DataLayer.isStoreRestored = false;
+
+        mount("u2");
+
+        assert.equal(LocalDatabase.actorUserId, "u2");
+        assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+        assert.isFalse(SyncStream.awaitingIdentity);
       });
     });
   });

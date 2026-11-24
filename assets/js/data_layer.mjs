@@ -1,6 +1,7 @@
 "use strict";
 
 import Batches from "./batches.mjs";
+import Client from "./client.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
 import IdentityTracker from "./identity_tracker.mjs";
@@ -17,6 +18,7 @@ import QueryKernel from "./query_kernel.mjs";
 import QuerySpelling from "./query_spelling.mjs";
 import ReloadNotice from "./reload_notice.mjs";
 import Replica from "./replica.mjs";
+import Sse from "./sse.mjs";
 import SyncStream from "./sync_stream.mjs";
 import Tabs from "./tabs.mjs";
 import Type from "./type.mjs";
@@ -58,6 +60,10 @@ export default class DataLayer {
   //
   // Whether this document has taken up what the store holds, so whether it holds a place is known.
   static isStoreRestored = false;
+
+  // Whether the mount under way moved this tab to another user, so the stream has to be replaced
+  // once the mount is done (see #followMountedIdentity).
+  static #reconnectsAfterMount = false;
 
   // Based on run_query!/4
   //
@@ -573,14 +579,17 @@ export default class DataLayer {
     $.#unfiledCounts = [];
 
     if (mountData.syncRows) {
+      // The period the page was rendered in rather than the one lasting now: the identity can
+      // change between a page arriving and its mount.
+      const period = mountData.identityPeriod ?? IdentityTracker.period;
+
+      if ($.holdsOtherUser(mountData.actorUserId)) {
+        $.#followMountedIdentity(mountData);
+      }
+
       // A number counted for one identity must never answer for another. The period tells apart
       // what the ids can't, like one user signing out and back in. The ids cover a server that
       // tags no responses, where the period never moves.
-      //
-      // The period the page was rendered in rather than the one lasting now: the identity can
-      // change between a page arriving and its mount, and its numbers are still the old identity's.
-      const period = mountData.identityPeriod ?? IdentityTracker.period;
-
       if (
         period !== LocalDatabase.syncCountsPeriod ||
         (mountData.actorUserId ?? null) !== (LocalDatabase.actorUserId ?? null)
@@ -601,6 +610,100 @@ export default class DataLayer {
         mountData.syncCountTypes ?? {},
       );
     }
+  }
+
+  // Whether a page for the given user is for somebody else than this tab holds. Only once this
+  // document has read its store: its first mount is what says who it is for, and the store it read
+  // is held to that (see Durability.restore).
+  static holdsOtherUser(actorUserId) {
+    return (
+      $.isStoreRestored &&
+      (actorUserId ?? null) !== (LocalDatabase.actorUserId ?? null)
+    );
+  }
+
+  // Takes this tab to the user the server says is signed in now, in one turn, so that nothing reads
+  // the previous user's rows under the new user's name. The rows, the place and the counts go, and
+  // the previous user's batches leave the queue and the screen and wait in the store for them.
+  //
+  // The period moves first: what is filed for the new user from here on belongs to it. A server
+  // that tags no responses has no new period to move to, so the one lasting now counts as ended
+  // (see LocalDatabase.reset).
+  //
+  // The same user keeps everything, and only takes the pair the event may bring: a visitor whose
+  // session id changed needs one that the new session verifies.
+  static followIdentity({
+    actorEntityId,
+    actorUserId,
+    identityTag,
+    replica,
+    userRow,
+  }) {
+    // This stream's server side has moved to an identity this tab can't take for the latest, so
+    // what it sends from here on may not be for the user the tab holds. A new stream is opened
+    // under the session as it stands, once the server has said who that is.
+    if (IdentityTracker.isBehind(identityTag)) {
+      SyncStream.awaitingIdentity = true;
+      Client.settleIdentity().then(() => Sse.reconnect());
+
+      return;
+    }
+
+    const owner = actorUserId ?? null;
+    const isSameUser = owner === (LocalDatabase.actorUserId ?? null);
+
+    IdentityTracker.observe(identityTag);
+    SyncStream.followedTag = identityTag ?? null;
+
+    if (!isSameUser) {
+      LocalDatabase.reset();
+
+      if (identityTag !== null && identityTag !== undefined) {
+        LocalDatabase.identityEndedPeriod = null;
+      }
+
+      LocalDatabase.actorUserId = owner;
+      LocalDatabase.actorEntityId = actorEntityId ?? null;
+
+      if (userRow) {
+        Deltas.apply(userRow, {insertOnly: true});
+      }
+
+      SyncStream.syncCursor = null;
+      SyncStream.rowsChangedSinceRender = true;
+
+      Batches.releaseForeign(owner);
+      SyncStream.scheduleRender();
+    }
+
+    if (replica) {
+      Replica.adopt(replica);
+      Replica.fresh = {id: replica.id, token: replica.token};
+      SyncStream.awaitingPair = false;
+
+      // Only into this user's own slot. After a follow a mount started, the store is still the
+      // previous user's until the tab has moved.
+      if (isSameUser && Tabs.leader && Replica.owner === owner) {
+        Durability.persistReplica(Replica.current());
+      }
+    }
+  }
+
+  // A page arrived for another user than this tab holds. The stream in front of it can still be
+  // serving the previous user, so its frames wait for a new one, opened once the mount is done:
+  // its handshake presents the receipts of the page now mounted, and a login made outside Hologram
+  // announces nothing. The page's response carries no replica pair, so writes wait for one.
+  static #followMountedIdentity(mountData) {
+    $.followIdentity({
+      actorEntityId: mountData.actorEntityId,
+      actorUserId: mountData.actorUserId,
+      identityTag: IdentityTracker.tag,
+    });
+
+    SyncStream.awaitingIdentity = true;
+    SyncStream.awaitingPair = true;
+
+    $.#reconnectsAfterMount = Sse.isStarted;
   }
 
   // The four sync kinds the stream delivers (see SyncStream.listen).
@@ -700,6 +803,17 @@ export default class DataLayer {
     ReloadNotice.update(SyncStream.stopReason !== null);
   }
 
+  // Replaces the stream when the mount that just ended moved this tab to another user (see
+  // #followMountedIdentity). Called for a mount that raised too, which would otherwise leave the
+  // tab on a stream whose frames it drops.
+  static reconnectIfFollowed() {
+    if ($.#reconnectsAfterMount) {
+      $.#reconnectsAfterMount = false;
+
+      Sse.reconnect();
+    }
+  }
+
   // Takes up what a previous page load left - the place to resume the stream from, the number to
   // count batches on from, and the batches it never managed to send - and answers nothing on every
   // visit after the first, since the runtime's page-script listener fires again on each
@@ -719,6 +833,8 @@ export default class DataLayer {
       $.#fileCounts($.#unfiledCounts);
       $.#unfiledCounts = [];
     }
+
+    $.reconnectIfFollowed();
 
     if (resumed === null) {
       return;

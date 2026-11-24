@@ -424,9 +424,9 @@ defmodule Hologram.Controller do
       # Middleware produced a terminal response - skip the command and send it,
       # still applying the decorations accumulated by the steps that ran.
       ensure_valid_user_id!(middleware_server_struct)
-      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
 
       conn
+      |> announce_identity_change(server_struct, middleware_server_struct)
       |> decorate_conn(server_struct, middleware_server_struct)
       |> send_response(middleware_server_struct)
       |> Plug.Conn.halt()
@@ -452,7 +452,7 @@ defmodule Hologram.Controller do
       # side effects land.
       {sub_receipt_adds, sub_receipt_drops} = apply_subscription_deltas(processed_server_struct)
 
-      Realtime.maybe_announce_identity_change(server_struct, processed_server_struct)
+      announced_conn = announce_identity_change(conn, server_struct, processed_server_struct)
 
       # Snapshot self-echoes before flush_broadcasts/1 clears the queue. Self-echoes
       # reach every component on the originating instance subscribed to the
@@ -474,7 +474,7 @@ defmodule Hologram.Controller do
           {:error, message} -> {message, 0}
         end
 
-      conn
+      announced_conn
       |> decorate_conn(server_struct, flushed_server_struct)
       |> send_json(%{
         action: action,
@@ -1015,6 +1015,19 @@ defmodule Hologram.Controller do
     end
   end
 
+  # Stamped ahead of the announcement, so that the streams hearing of a change and the response
+  # making it name the same tag.
+  defp announce_identity_change(conn, pre_server, post_server) do
+    Realtime.maybe_announce_identity_change(pre_server, post_server)
+
+    if {pre_server.session_id, pre_server.user_id} ==
+         {post_server.session_id, post_server.user_id} do
+      conn
+    else
+      Session.stamp_identity(conn)
+    end
+  end
+
   # Persists a handler-driven `server.user_id` change into the Phoenix session
   # (the opaque `:hologram_user_id` key) so later requests resolve the new
   # identity. No-op when unchanged, leaving the session - and any Set-Cookie -
@@ -1147,9 +1160,10 @@ defmodule Hologram.Controller do
       # Middleware answered before anything was rendered - skip the render, still applying the
       # decorations accumulated by the steps that ran.
       ensure_valid_user_id!(middleware_server_struct)
-      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
 
-      {:terminal, decorate_conn(conn, server_struct, middleware_server_struct),
+      announced_conn = announce_identity_change(conn, server_struct, middleware_server_struct)
+
+      {:terminal, decorate_conn(announced_conn, server_struct, middleware_server_struct),
        middleware_server_struct}
     else
       %{
@@ -1176,7 +1190,7 @@ defmodule Hologram.Controller do
       {sub_receipt_adds, sub_receipt_drops} =
         transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
 
-      Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
+      announced_conn = announce_identity_change(conn, server_struct, rendered_server_struct)
 
       # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The renderer stays out of
       # them on purpose, so this Realtime-domain computation lives in the controller, which is also
@@ -1196,7 +1210,7 @@ defmodule Hologram.Controller do
         tree: rendered_tree
       }
 
-      {:rendered, decorate_conn(conn, server_struct, flushed_server_struct), result}
+      {:rendered, decorate_conn(announced_conn, server_struct, flushed_server_struct), result}
     end
   end
 

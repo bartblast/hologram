@@ -210,6 +210,19 @@ defmodule Hologram.ControllerTest do
     |> Session.identity_tag()
   end
 
+  # The tag of the identity a response left, the stamp its session holds included.
+  defp identity_tag_left_by(conn, session \\ %{}) do
+    identity_tag_of(
+      Map.merge(
+        %{
+          hologram_identity_stamp: Plug.Conn.get_session(conn, :hologram_identity_stamp),
+          hologram_session_id: Session.get_session_id(conn)
+        },
+        session
+      )
+    )
+  end
+
   defp page_request_body(instance_id \\ "test-instance-id", client_claimed_sub_keys \\ []) do
     serialized_keys =
       Enum.map(client_claimed_sub_keys, fn {channel, cid} ->
@@ -2273,10 +2286,58 @@ defmodule Hologram.ControllerTest do
         |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
-      expected_tag =
-        identity_tag_of(%{hologram_session_id: @hologram_session_id, hologram_user_id: 7})
+      expected_tag = identity_tag_left_by(conn, %{hologram_user_id: 7})
 
       assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
+    end
+
+    # The stream hears of the change first, so it has to be stamped by then.
+    test "stamps the identity a command changed" do
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_changing_user_id,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert is_integer(Plug.Conn.get_session(conn, :hologram_identity_stamp))
+    end
+
+    test "leaves the stamp alone when the command leaves the identity alone" do
+      conn = execute_successful_command_request()
+
+      assert Plug.Conn.get_session(conn, :hologram_identity_stamp) == nil
+    end
+
+    test "stamps the identity that middleware answering a command changed" do
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module27,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert is_integer(Plug.Conn.get_session(conn, :hologram_identity_stamp))
     end
 
     test "tells the browser to store nothing of the response of a command that logs the user in" do
@@ -2326,8 +2387,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
-      expected_tag =
-        identity_tag_of(%{hologram_session_id: @hologram_session_id, hologram_user_id: 7})
+      expected_tag = identity_tag_left_by(conn, %{hologram_user_id: 7})
 
       assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
     end
@@ -2452,7 +2512,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
-      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+      expected_tag = identity_tag_left_by(conn)
 
       assert conn.status == 403
       assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
@@ -3098,7 +3158,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module5)
 
-      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+      expected_tag = identity_tag_left_by(conn)
 
       assert boot_data(conn.resp_body)["identityTag"] == expected_tag
     end
@@ -4234,7 +4294,7 @@ defmodule Hologram.ControllerTest do
         |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module4)
 
-      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+      expected_tag = identity_tag_left_by(conn)
 
       assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
     end
@@ -4247,7 +4307,7 @@ defmodule Hologram.ControllerTest do
         |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module29)
 
-      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+      expected_tag = identity_tag_left_by(conn)
 
       assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
     end

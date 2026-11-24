@@ -303,6 +303,10 @@ export default class Tabs {
       // a marker is passed over, since it would call rows whole that this tab never got. The
       // leader's messages arrive in order, so the state that settles it includes the marker.
       case "frame":
+        if (SyncStream.isFollowedStartOver(message.event, message.frame)) {
+          return;
+        }
+
         if (message.event === "sync_resync") {
           Tabs.#readForeign = false;
         } else if (message.event === "synced" && Tabs.#readForeign) {

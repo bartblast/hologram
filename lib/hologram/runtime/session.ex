@@ -11,6 +11,7 @@ defmodule Hologram.Runtime.Session do
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Server
 
+  @identity_stamp_key :hologram_identity_stamp
   @session_id_key :hologram_session_id
   @user_id_key :hologram_user_id
 
@@ -21,12 +22,17 @@ defmodule Hologram.Runtime.Session do
   # value written past Hologram would skip the checks it makes.
   @spec reserved_keys() :: list(String.t())
   def reserved_keys do
-    [CSRFProtection.session_key(), Atom.to_string(@session_id_key), Atom.to_string(@user_id_key)]
+    [
+      CSRFProtection.session_key(),
+      Atom.to_string(@identity_stamp_key),
+      Atom.to_string(@session_id_key),
+      Atom.to_string(@user_id_key)
+    ]
   end
 
   @doc """
   Returns the application-level entries from the Phoenix session, with
-  Hologram-managed keys (CSRF token, session_id, user_id) excluded.
+  Hologram-managed keys (CSRF token, identity stamp, session_id, user_id) excluded.
   """
   @spec get_session(Plug.Conn.t()) :: map
   def get_session(conn) do
@@ -67,16 +73,26 @@ defmodule Hologram.Runtime.Session do
   (a new session) and with the user ID (a login or a logout), and with nothing else the session
   holds.
 
-  The tag is a digest only for its form, a fixed 43 characters that fit in a response header
-  whatever the user ID is. It hides nothing, and the server never trusts it.
+  It starts with the session's identity stamp, then a dot, so that a client hearing about the
+  identity from several responses and streams, in any order, can tell which is newer. A request
+  with no session has no stamp, and starts with `none`: its cookie was cleared, which no later
+  response is going to contradict. The digest is there only for its form, a fixed 43 characters
+  that fit in a response header whatever the user ID is. It hides nothing, and the server never
+  trusts it.
   """
   @spec identity_tag(Plug.Conn.t()) :: String.t()
   def identity_tag(conn) do
-    data = :erlang.term_to_binary({get_session_id(conn), get_user_id(conn)}, [:deterministic])
+    session_id = get_session_id(conn)
+    data = :erlang.term_to_binary({session_id, get_user_id(conn)}, [:deterministic])
 
-    :sha256
-    |> :crypto.hash(data)
-    |> Base.url_encode64(padding: false)
+    digest =
+      :sha256
+      |> :crypto.hash(data)
+      |> Base.url_encode64(padding: false)
+
+    stamp = if session_id, do: identity_stamp(conn), else: "none"
+
+    "#{stamp}.#{digest}"
   end
 
   @doc """
@@ -88,8 +104,13 @@ defmodule Hologram.Runtime.Session do
   @spec init(Plug.Conn.t()) :: Plug.Conn.t()
   def init(conn) do
     case Plug.Conn.get_session(conn, @session_id_key) do
-      nil -> Plug.Conn.put_session(conn, @session_id_key, UUID.uuid4())
-      _session_id -> conn
+      nil ->
+        conn
+        |> Plug.Conn.put_session(@session_id_key, UUID.uuid4())
+        |> stamp_identity()
+
+      _session_id ->
+        conn
     end
   end
 
@@ -108,5 +129,23 @@ defmodule Hologram.Runtime.Session do
 
   def put_user_id(conn, user_id) do
     Plug.Conn.put_session(conn, @user_id_key, Server.validate_user_id!(user_id))
+  end
+
+  @doc """
+  Records that the identity the session holds changed just now.
+
+  The stamp is the current time, moved past the one it replaces, so that it goes up with every
+  change made on this session whatever the clocks of the servers making them say. A session with
+  no stamp holds the identity it held before stamps existed, which reads as the oldest.
+  """
+  @spec stamp_identity(Plug.Conn.t()) :: Plug.Conn.t()
+  def stamp_identity(conn) do
+    stamp = max(System.system_time(:millisecond), identity_stamp(conn) + 1)
+
+    Plug.Conn.put_session(conn, @identity_stamp_key, stamp)
+  end
+
+  defp identity_stamp(conn) do
+    Plug.Conn.get_session(conn, @identity_stamp_key) || 0
   end
 end

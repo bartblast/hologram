@@ -15,6 +15,7 @@ import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Deserializer from "../../assets/js/deserializer.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import IdentityTracker from "../../assets/js/identity_tracker.mjs";
 import LiveReload from "../../assets/js/live_reload.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
@@ -258,6 +259,52 @@ describe("Sse", () => {
 
       assert.isTrue(mockEventSource.close.calledOnce);
       assert.equal(globalThis.EventSource.callCount, 2);
+    });
+
+    // Made under the session as it was, and answering last it would put its stream in place of
+    // this one.
+    it("calls off a handshake still on its way", async () => {
+      sinon.stub(Logger, "debug");
+
+      let answerFirst;
+
+      fetchStub.onFirstCall().returns(
+        new Promise((resolve) => {
+          answerFirst = resolve;
+        }),
+      );
+
+      fetchStub.onSecondCall().resolves({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          handshakeId: "second",
+          heartbeatIntervalMs: 15_000,
+          refreshedReceipts: serializedValue(Type.list()),
+        }),
+      });
+
+      const first = Sse.connect();
+
+      await Sse.reconnect();
+
+      answerFirst({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          handshakeId: "first",
+          heartbeatIntervalMs: 15_000,
+          refreshedReceipts: serializedValue(Type.list()),
+        }),
+      });
+
+      await first;
+
+      assert.equal(globalThis.EventSource.callCount, 1);
+      assert.include(
+        globalThis.EventSource.firstCall.args[0],
+        "handshake_id=second",
+      );
     });
 
     // A left page has no stream to replace, and one opened here would outlive the document.
@@ -641,6 +688,86 @@ describe("Sse", () => {
 
       sinon.assert.calledOnce(globalThis.window.location.reload);
       sinon.assert.notCalled(globalThis.EventSource);
+    });
+
+    // The subscriptions it held were authorized for an identity it has left.
+    describe("after the identity moved", () => {
+      const refusedKey = Type.encodeMapKey(
+        Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
+      );
+
+      const keptKey = Type.encodeMapKey(
+        Type.tuple([Type.atom("room_b"), Type.bitstring("page")]),
+      );
+
+      const refused = receipt(Type.atom("room_a"), "page", "refused-token");
+      const kept = receipt(Type.atom("room_b"), "page", "kept-token");
+
+      beforeEach(() => {
+        IdentityTracker.init("1.tag-1");
+        Sse.handshakePeriod = IdentityTracker.period;
+        IdentityTracker.observe("2.tag-2");
+
+        SubscriptionReceiptRegistry.entries.set(refusedKey, refused);
+      });
+
+      afterEach(() => {
+        Sse.handshakePeriod = null;
+        IdentityTracker.init(null);
+        IdentityTracker.period = null;
+        IdentityTracker.documentPeriod = null;
+      });
+
+      it("drops the refused receipts instead of reloading", async () => {
+        stubHandshakeResponse({refreshedReceipts: Type.list()});
+
+        await Sse.connect();
+
+        sinon.assert.notCalled(globalThis.window.location.reload);
+        assert.equal(SubscriptionReceiptRegistry.entries.size, 0);
+        sinon.assert.calledOnce(globalThis.EventSource);
+      });
+
+      // Refused by one handshake or the next, a receipt mustn't be left to look like a reason to
+      // reload once the others are gone.
+      it("drops a refused receipt when another one is honored", async () => {
+        SubscriptionReceiptRegistry.entries.set(keptKey, kept);
+
+        stubHandshakeResponse({refreshedReceipts: Type.list([kept])});
+
+        await Sse.connect();
+
+        assert.isFalse(SubscriptionReceiptRegistry.entries.has(refusedKey));
+        assert.isTrue(SubscriptionReceiptRegistry.entries.has(keptKey));
+      });
+
+      it("keeps a receipt added while the handshake was under way", async () => {
+        fetchStub.callsFake(async () => {
+          SubscriptionReceiptRegistry.entries.set(keptKey, kept);
+
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              handshakeId: "handshake",
+              heartbeatIntervalMs: 15_000,
+              refreshedReceipts: serializedValue(Type.list()),
+            }),
+          };
+        });
+
+        await Sse.connect();
+
+        assert.isTrue(SubscriptionReceiptRegistry.entries.has(keptKey));
+      });
+
+      it("expects its receipts to be honored from then on", async () => {
+        stubHandshakeResponse({refreshedReceipts: Type.list()});
+
+        await Sse.connect();
+
+        assert.equal(Sse.handshakePeriod, IdentityTracker.period);
+      });
     });
 
     it("does not reload on the initial fresh load with no stored receipts", async () => {

@@ -15,6 +15,12 @@ import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 
 export default class Client {
+  // How long to wait before each question in settleIdentity. They add up to about four seconds,
+  // which a login's response can take to arrive after the stream has announced it.
+  static IDENTITY_ASK_DELAYS_MS = [0, 100, 250, 500, 1000, 2000];
+
+  static #identitySettling = null;
+
   // Deps: [:maps.get/2]
   static buildCommandPayload(command) {
     const target = Erlang_Maps["get/2"](Type.atom("target"), command);
@@ -119,6 +125,20 @@ export default class Client {
     }
   }
 
+  // Finds out who is signed in, after hearing about an identity that can't be told to be the latest.
+  //
+  // This asks the identity route rather than repeating the request, which could run app code
+  // twice. An answer older than what the client knows can be a cookie that hasn't caught up with a
+  // login yet, so it's asked again after a while. Once the delays run out the answer is believed:
+  // the cookie this browser holds is what the next request will be served under.
+  static settleIdentity() {
+    $.#identitySettling ??= $.#askForIdentity().finally(() => {
+      $.#identitySettling = null;
+    });
+
+    return $.#identitySettling;
+  }
+
   // Asks the server to describe a page rather than render it, for a client that renders it itself.
   //
   // The answer is a page only when it says so: a page's middleware can answer the request instead,
@@ -150,7 +170,7 @@ export default class Client {
 
       // Read whatever the answer is: a page's middleware can log the user in or out and answer
       // with something other than a page.
-      const identityPeriod = IdentityTracker.observeResponse(response);
+      const identityPeriod = $.#observeIdentity(response);
 
       // Awaited so that whatever the callback goes on to do is part of this promise. A redirect
       // answers by fetching the next page, and without the await a failure there - the hop limit
@@ -162,6 +182,9 @@ export default class Client {
         // prefetched page can wait a while before it is shown, and the identity can change
         // meanwhile.
         payload.identityPeriod = identityPeriod;
+
+        // A redirect doesn't name the page it answers for, and a stale one is asked for again.
+        payload.requestedPage = toParam;
 
         await onSuccess(payload);
       } else {
@@ -214,7 +237,7 @@ export default class Client {
 
       // Read before the status: a command turned away can still have come with another identity
       // than the one the client knew, and this reply is where the client learns of it.
-      IdentityTracker.observeResponse(response);
+      $.#observeIdentity(response);
 
       if (!response.ok) {
         $.#failCommand(response.status);
@@ -273,12 +296,44 @@ export default class Client {
     }
   }
 
+  static async #askForIdentity() {
+    let answer = null;
+
+    for (const delayMs of $.IDENTITY_ASK_DELAYS_MS) {
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
+      answer = await $.fetchIdentityTag();
+
+      if (answer !== null && !IdentityTracker.isOlder(answer)) {
+        break;
+      }
+    }
+
+    if (answer !== null) {
+      IdentityTracker.observe(answer);
+    }
+  }
+
   static #failCommand(message) {
     throw new HologramRuntimeError(`command failed: ${message}`);
   }
 
   static #handleFetchPageError(message) {
     throw new HologramRuntimeError(`page fetch failed: ${message}`);
+  }
+
+  // Takes in the identity a response names, and asks the server when that can't be told to be the
+  // latest word on it.
+  static #observeIdentity(response) {
+    const period = IdentityTracker.observeResponse(response);
+
+    if (period === IdentityTracker.SUPERSEDED) {
+      $.settleIdentity();
+    }
+
+    return period;
   }
 }
 

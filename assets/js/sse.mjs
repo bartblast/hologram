@@ -5,6 +5,7 @@ import ComponentRegistry from "./component_registry.mjs";
 import Deserializer from "./deserializer.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
+import IdentityTracker from "./identity_tracker.mjs";
 import LiveReload from "./live_reload.mjs";
 import Logger from "./logger.mjs";
 import Serializer from "./serializer.mjs";
@@ -50,6 +51,10 @@ export default class Sse {
   // Whether the page has been left: from pagehide until the browser brings the page back
   // from its back/forward cache, if it ever does.
   static isSuspended = false;
+
+  // The identity period of the last handshake. Once it has ended, the subscriptions this tab holds
+  // were authorized for an identity it has left, and the server is right to refuse them.
+  static handshakePeriod = null;
 
   static reconnectAttempts = 0;
 
@@ -120,8 +125,9 @@ export default class Sse {
     const isStale = () => runId !== $.runId;
 
     try {
-      const preHandshakeReceiptCount =
-        App.subscriptionReceiptRegistry.entries.size;
+      const presentedKeys = Array.from(
+        App.subscriptionReceiptRegistry.entries.keys(),
+      );
 
       const response = await fetch($.HANDSHAKE_PATH, {
         method: "POST",
@@ -147,10 +153,14 @@ export default class Sse {
 
       const refreshed = Deserializer.deserialize(serializedRefreshed);
 
-      if (preHandshakeReceiptCount > 0 && refreshed.data.length === 0) {
+      if ($.#hasIdentityMoved()) {
+        $.#dropRefusedReceipts(presentedKeys, refreshed);
+      } else if (presentedKeys.length > 0 && refreshed.data.length === 0) {
         window.location.reload();
         return;
       }
+
+      $.handshakePeriod = IdentityTracker.period;
 
       App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
       $.heartbeatIntervalMs = heartbeatIntervalMs;
@@ -315,6 +325,10 @@ export default class Sse {
     clearTimeout($.reconnectTimer);
     $.reconnectTimer = null;
 
+    // So is a handshake still on its way: it was made with the session as it was, and answering
+    // last it would replace this stream with its own.
+    $.runId++;
+
     $.closeStream();
     $.eventSource = null;
 
@@ -374,6 +388,28 @@ export default class Sse {
     $.reconnectAttempts = 0;
 
     $.closeStream();
+  }
+
+  // Leaves any receipt added while the handshake was under way, which it didn't present.
+  static #dropRefusedReceipts(presentedKeys, refreshed) {
+    const refreshedKeys = new Set(
+      refreshed.data.map((triple) =>
+        Type.encodeMapKey(Type.tuple(triple.data.slice(0, 2))),
+      ),
+    );
+
+    for (const key of presentedKeys) {
+      if (!refreshedKeys.has(key)) {
+        App.subscriptionReceiptRegistry.entries.delete(key);
+      }
+    }
+  }
+
+  static #hasIdentityMoved() {
+    return (
+      IdentityTracker.period !==
+      ($.handshakePeriod ?? IdentityTracker.documentPeriod)
+    );
   }
 }
 

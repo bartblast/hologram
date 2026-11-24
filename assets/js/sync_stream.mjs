@@ -21,6 +21,18 @@ export default class SyncStream {
   // same model.
   static MAX_SYNCED_TYPES_LENGTH = 4000;
 
+  // Whether a page moved this tab to another user and no stream has served it since. The frames of
+  // the stream it had are the previous user's.
+  static awaitingIdentity = false;
+
+  // Whether a page moved this tab to another user and it holds no replica pair for them yet, which
+  // is what a write goes out under.
+  static awaitingPair = false;
+
+  // The identity tag this tab last followed, so the start-over the server sends for the same change
+  // isn't taken as another one.
+  static followedTag = null;
+
   static renderScheduled = false;
 
   // The last rules a server handed this client in place of its bundle's, as the frame carried
@@ -162,8 +174,32 @@ export default class SyncStream {
   // Each of the five hands its MEMORY work to receiveFrame and does its own STORING here,
   // which is what separates what a frame means from who received it.
   static listen(eventSource) {
+    // A new stream was opened under the session as it stands now.
+    $.awaitingIdentity = false;
+
+    // Sent to every stream of a session, so each tab hears it from its own, whichever tab leads.
+    eventSource.addEventListener("sync_identity", (event) => {
+      const frame = JSON.parse(event.data);
+
+      $.awaitingIdentity = false;
+
+      Hologram.dataLayer?.followIdentity({
+        actorEntityId: frame.actor_entity_id,
+        actorUserId: frame.actor_user_id,
+        identityTag: frame.identity_tag,
+        replica: frame.replica,
+        userRow: frame.user_row,
+      });
+
+      Batches.flush();
+    });
+
     eventSource.addEventListener("sync_deltas", (event) => {
       const frame = JSON.parse(event.data);
+
+      if ($.dropsFrame("sync_deltas", frame)) {
+        return;
+      }
 
       $.markServedBy(frame.model_hash);
       const written = $.receiveFrame("sync_deltas", frame);
@@ -193,6 +229,10 @@ export default class SyncStream {
 
     eventSource.addEventListener("sync_resync", (event) => {
       const frame = JSON.parse(event.data);
+
+      if ($.dropsFrame("sync_resync", frame)) {
+        return;
+      }
 
       $.markServed();
 
@@ -224,6 +264,10 @@ export default class SyncStream {
     eventSource.addEventListener("synced", (event) => {
       const frame = JSON.parse(event.data);
 
+      if ($.dropsFrame("synced", frame)) {
+        return;
+      }
+
       $.markServedBy(frame.model_hash);
 
       const written = $.receiveFrame("synced", frame);
@@ -242,6 +286,39 @@ export default class SyncStream {
 
       $.tell("synced", frame, stored);
     });
+  }
+
+  // Whether a frame belongs to a change this tab has already made, or to the user it just left. A
+  // start-over naming the tag this tab followed has nothing left to do. One naming no tag comes from
+  // a server that sends no word of whom it serves, so it's the last word this tab will get.
+  static dropsFrame(event, frame) {
+    if (
+      event === "sync_resync" &&
+      frame.reason === "identity" &&
+      (frame.identity_tag === null || frame.identity_tag === undefined)
+    ) {
+      $.awaitingIdentity = false;
+      $.awaitingPair = false;
+
+      return false;
+    }
+
+    if ($.isFollowedStartOver(event, frame)) {
+      return true;
+    }
+
+    return $.awaitingIdentity;
+  }
+
+  // Whether a frame is the server's start-over for the change this tab has already followed.
+  static isFollowedStartOver(event, frame) {
+    return (
+      event === "sync_resync" &&
+      frame.reason === "identity" &&
+      frame.identity_tag !== null &&
+      frame.identity_tag !== undefined &&
+      frame.identity_tag === $.followedTag
+    );
   }
 
   // Records that this tab's stream has served it, and the first time, tells the group again what
@@ -533,9 +610,9 @@ export default class SyncStream {
 
   // Whether this tab has to hold its writes: the server would refuse them. That is a stop over the
   // model rather than the protocol, because the write endpoint compares only the model - under a
-  // protocol stop, writes still land.
+  // protocol stop, writes still land. Or the tab moved to another user and has no pair for them yet.
   static holdsWrites() {
-    return $.stopReason === "model_hash";
+    return $.stopReason === "model_hash" || $.awaitingPair;
   }
 }
 
