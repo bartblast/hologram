@@ -355,10 +355,10 @@ defmodule HologramFeatureTests.SyncTest do
   # handed over then is a claim it could not honour. Hence the write before it leaves: it is there
   # to produce a frame after the store is complete, which is the first frame carrying a place.
   #
-  # The log is settled before the client connects, here and in the three features below this one:
-  # that frame's place is no higher than the oldest transaction still running when it was read, so
-  # without the wait it can be below the row the client was filled with (see
-  # `await_log_settled/0`).
+  # The log is settled before the client connects, here and in the three features below this one.
+  # A place is taken from the oldest transaction still running, when the session starts and again
+  # when a batch is read, so without the wait the place this client leaves with can be below the
+  # row it was filled with (see `await_log_settled/0`).
   feature "tells a returning client only what moved while it was away", %{session: _session} do
     %{public: true, title: "held_across_the_gap"}
     |> Document.new()
