@@ -3829,7 +3829,11 @@ describe("Elixir_Hologram_Auth", () => {
         );
 
         assert.deepStrictEqual(
-          asks(update, {held_at: datetimeInYear(300000)}),
+          asks(
+            update,
+            {held_at: datetimeInYear(300000)},
+            document({held_at: "2025-06-01T00:00:00.000000Z"}),
+          ),
           Type.boolean(false),
         );
       });
