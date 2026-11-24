@@ -5282,11 +5282,15 @@ describe("Hologram", () => {
             IdentityTracker.observe("2.tag-2");
             bundleArrives("restored-3");
 
+            const freshRows = {
+              put_entity: {"App.Task": [{id: "t2", title: "Bob's task"}]},
+            };
+
             await fetchPageStub.firstCall.args[1]({
               ...payloadFor("restored-answer"),
               actorUserId: "u2",
               identityPeriod: IdentityTracker.period,
-              syncRows: {},
+              syncRows: freshRows,
             });
 
             frames.splice(0).forEach((frame) => frame());
@@ -5308,6 +5312,7 @@ describe("Hologram", () => {
             sinon.assert.calledOnceWithMatch(dataLayer.ingestMountData, {
               actorUserId: "u2",
               pageDigest: "restored-answer",
+              syncRows: freshRows,
             });
           });
         });
