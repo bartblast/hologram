@@ -5367,6 +5367,75 @@ describe("Elixir_Hologram_Auth", () => {
         assert.deepStrictEqual(verdictReads(true), Type.boolean(true));
         assert.deepStrictEqual(verdictReads(false), Type.boolean(false));
       });
+
+      // The shape the build sends: what the condition compares stays off the bundle, and each held
+      // row reads the marker as unknown.
+      describe("as the build's marker", () => {
+        const anyMarker = (filter) => ({
+          filter,
+          quantifier: "any",
+          source: ["documents"],
+        });
+
+        it("answers from the verdict", () => {
+          const verdictReads = (verdicts) => {
+            putDocument();
+
+            return folderReads([anyMarker([serverOnlyMarker])], verdicts);
+          };
+
+          assert.deepStrictEqual(
+            verdictReads({$verdicts: {[KEY]: true}}),
+            Type.boolean(true),
+          );
+
+          assert.deepStrictEqual(
+            verdictReads({$verdicts: {[KEY]: false}}),
+            Type.boolean(false),
+          );
+
+          assert.deepStrictEqual(verdictReads(), Type.boolean(false));
+        });
+
+        it("answers from the verdict in a nested quantifier's condition", () => {
+          const predicates = [
+            {
+              filter: [
+                {
+                  filter: [serverOnlyMarker],
+                  quantifier: "any",
+                  source: {name: ["documents"], outer: 1},
+                },
+              ],
+              quantifier: "any",
+              source: ["documents"],
+            },
+          ];
+
+          putDocument();
+
+          assert.deepStrictEqual(
+            folderReads(predicates, {$verdicts: {[KEY]: true}}),
+            Type.boolean(true),
+          );
+
+          assert.deepStrictEqual(folderReads(predicates), Type.boolean(false));
+        });
+
+        it("grants on a held row through an alternative reading no server-only attribute", () => {
+          const predicates = [
+            anyMarker([{or: [[["title", "==", "Plans"]], [serverOnlyMarker]]}]),
+          ];
+
+          putDocument({title: "Notes"});
+
+          assert.deepStrictEqual(folderReads(predicates), Type.boolean(false));
+
+          putDocument({title: "Plans"});
+
+          assert.deepStrictEqual(folderReads(predicates), Type.boolean(true));
+        });
+      });
     });
 
     describe("in a predicate the build sends as a marker", () => {

@@ -5857,10 +5857,9 @@ defmodule Hologram.Compiler do
     verdict_context = {entity_type, operation}
 
     render_json_object(
-      render_policy_exact(entity_type, rule, verdict_context) ++
+      render_policy_exact(entity_type, rule) ++
         [
-          {"predicates",
-           render_policy_predicates([entity_type], rule.predicates, verdict_context)},
+          {"predicates", render_policy_predicates([entity_type], rule.predicates)},
           {"to", render_policy_references(entity_type, rule.to, verdict_context)},
           {"via", render_policy_delegation(rule.via, verdict_context)}
         ]
@@ -5869,31 +5868,29 @@ defmodule Hologram.Compiler do
 
   # The clauses a rule reading the row after the change holds as written, which only a check of one
   # specific change reads. They're read with that row one level above the rule's own.
-  defp render_policy_exact(entity_type, %{exact: %{predicates: predicates}}, verdict_context) do
-    predicates_js =
-      render_policy_predicates([entity_type, entity_type], predicates, verdict_context)
+  defp render_policy_exact(entity_type, %{exact: %{predicates: predicates}}) do
+    predicates_js = render_policy_predicates([entity_type, entity_type], predicates)
 
     [{"new", render_json_object([{"predicates", predicates_js}])}]
   end
 
-  defp render_policy_exact(_entity_type, _rule, _verdict_context), do: []
+  defp render_policy_exact(_entity_type, _rule), do: []
 
   # Triples, the same shape the client's query filters take - name, operator, value - so one
   # reader spells both. The types are those of the rows the clauses are read on, nearest first: the
-  # rule's own row alone outside any quantifier. The verdict context is the rule's type and
-  # operation for the clauses standing in its predicates, and nil inside a quantifier.
-  defp render_policy_predicates(types, predicates, verdict_context \\ nil) do
+  # rule's own row alone outside any quantifier.
+  defp render_policy_predicates(types, predicates) do
     predicates
-    |> Enum.map_join(",", &render_policy_clause(types, &1, verdict_context))
+    |> Enum.map_join(",", &render_policy_clause(types, &1))
     |> then(&"[#{&1}]")
   end
 
   # A disjunction is an object beside the triple arrays, holding its alternatives - the shape the
   # query kernel's filters take, so one reader tells the two apart by whether a clause is an array.
-  defp render_policy_clause(types, {:or, alternatives}, verdict_context) do
+  defp render_policy_clause(types, {:or, alternatives}) do
     alternatives_js =
       alternatives
-      |> Enum.map_join(",", &render_policy_predicates(types, &1, verdict_context))
+      |> Enum.map_join(",", &render_policy_predicates(types, &1))
       |> then(&"[#{&1}]")
 
     render_json_object([{"or", alternatives_js}])
@@ -5901,11 +5898,12 @@ defmodule Hologram.Compiler do
 
   # A quantifier is an object too, in the shape the kernel's filters take it: the set its source
   # leads to, read on the row it is about or on one above it, and the condition each of the set's
-  # rows is matched with, read on that row with the rows above it. A deciding one renders the same:
-  # the rows the client holds of its set decide what one row can and leave the rest unknown, and
-  # over a derived set they decide nothing, so one is the marker a client answers as unknown: what
-  # its condition compares, a server-only attribute's value among it, stays off the bundle.
-  defp render_policy_clause(types, {quantifier, {source, clauses}}, _verdict_context)
+  # rows is matched with, read on that row with the rows above it. A deciding one renders the same,
+  # its predicates reading a server-only attribute each the marker (see the triple head): the rows
+  # the client holds of its set decide what one row can and leave the rest unknown. Over a derived
+  # set they decide nothing, so the whole quantifier is the marker a client answers as unknown, and
+  # what its condition compares stays off the bundle.
+  defp render_policy_clause(types, {quantifier, {source, clauses}})
        when quantifier in [:all, :any, :none] do
     if quantified_through_derived_set?(source, types) do
       render_json_object([{"server", "true"}])
@@ -5929,11 +5927,7 @@ defmodule Hologram.Compiler do
 
   # A role asked of the row after the change: the chain to the row it's held on, that row's type and
   # the roles that count, spelled as a role reference through a chain is.
-  defp render_policy_clause(
-         [entity_type | _types_above],
-         {:has_role, {role_names, chain}},
-         _verdict_context
-       ) do
+  defp render_policy_clause([entity_type | _types_above], {:has_role, {role_names, chain}}) do
     members = [
       render_policy_name(chain),
       render_entity_type_label(Entity.path_target(entity_type, chain)),
@@ -5944,7 +5938,7 @@ defmodule Hologram.Compiler do
   end
 
   # An operation asked of the row the row after the change leads to, spelled as a delegation is.
-  defp render_policy_clause(_types, {:can, {operation, chain}}, _verdict_context) do
+  defp render_policy_clause(_types, {:can, {operation, chain}}) do
     operation_js =
       operation
       |> Policy.operation_key()
@@ -5953,25 +5947,17 @@ defmodule Hologram.Compiler do
     render_json_object([{"can", "[#{operation_js},#{render_policy_name(chain)}]"}])
   end
 
-  # A predicate standing in a rule's predicates that reads a server-only attribute, whose value no
-  # client holds, is a marker the client answers as unknown - its compared value stays off the
-  # bundle. Every other predicate is its triple: one reading a row of a type no client holds reads
-  # it as unknown unless an empty reference on its path reads no row.
-  #
-  # A clause reading a server-only attribute is deciding for that alone, so only whether it stands
-  # in a rule's predicates is left to ask - inside a quantifier, with no context, it stays a triple.
-  defp render_policy_clause(types, {_name, _operator, _value} = clause, {entity_type, _operation}) do
-    [stored_clause] = Policy.stored_spelling([clause])
-
-    if Policy.reads_server_only?(entity_type, stored_clause) do
+  # A predicate reading a server-only attribute, whose value no client holds, is a marker the client
+  # answers as unknown - its compared value stays off the bundle - wherever it stands: in a rule's
+  # predicates, in a quantifier's condition or in a nested one. Every other predicate is its triple:
+  # one reading a row of a type no client holds reads it as unknown unless an empty reference on its
+  # path reads no row.
+  defp render_policy_clause(types, {_name, _operator, _value} = clause) do
+    if reads_server_only?(types, clause) do
       render_json_object([{"server", "true"}])
     else
       render_policy_triple(types, clause)
     end
-  end
-
-  defp render_policy_clause(types, {_name, _operator, _value} = clause, nil) do
-    render_policy_triple(types, clause)
   end
 
   defp render_policy_triple(types, {name, operator, value}) do
@@ -6279,6 +6265,29 @@ defmodule Hologram.Compiler do
       {_name, type, _opts} when is_atom(type) -> type
       _other -> :uuid
     end
+  end
+
+  # Whether the given predicate, read on the rows of the given types nearest first, reads a
+  # server-only attribute - of the row it is read on, of one a path leads to, or of a row above
+  # inside a quantifier - by its name or by an attribute operand.
+  defp reads_server_only?(types, {name, _operator, {:attribute, other}}) do
+    server_only_name?(name, types) or server_only_name?(other, types)
+  end
+
+  defp reads_server_only?(types, {name, _operator, _value}), do: server_only_name?(name, types)
+
+  defp server_only_name?({:outer, levels, name}, types) do
+    server_only_name?(name, [Enum.at(types, levels)])
+  end
+
+  defp server_only_name?(path, [entity_type | _types_above]) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    server_only_name?(name, [Entity.path_target(entity_type, relationship_names)])
+  end
+
+  defp server_only_name?(name, [entity_type | _types_above]) do
+    name in Entity.server_only_attribute_names(entity_type)
   end
 
   # The components among the given modules, as the module info PLT records them: a module it does

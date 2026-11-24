@@ -3140,17 +3140,37 @@ defmodule Hologram.CompilerTest do
     defmodule BakedSecretBoard do
       use Hologram.Entity
 
+      attribute :code, :string, server_only: true
+
       relationship :notes, [Hologram.CompilerTest.BakedSecretNote], inverse: board
 
-      allow :read, when: any(note <- notes, note.secret == "x")
+      allow :read, when: any(note <- notes, note.secret == "secret-x")
+      allow :read, when: any(note <- notes, any(tag <- note.tags, tag.label == "secret-y"))
+      allow :read, when: any(note <- notes, code == "secret-w")
+      allow :read, when: any(note <- notes, note.title == "t" or note.secret == "secret-z")
+      allow :read, when: all(note <- notes, note.board.code != "secret-v")
+      allow :read, when: any(note <- notes, any(tag <- note.tags, tag.name == code))
     end
 
     defmodule BakedSecretNote do
       use Hologram.Entity
 
       attribute :secret, :string, server_only: true
+      attribute :title, :string
 
       relationship :board, BakedSecretBoard, optional: true
+      relationship :tags, [Hologram.CompilerTest.BakedSecretTag], inverse: note
+
+      allow :read, when: any(tag <- tags, tag.label == "secret-u")
+    end
+
+    defmodule BakedSecretTag do
+      use Hologram.Entity
+
+      attribute :label, :string, server_only: true
+      attribute :name, :string
+
+      relationship :note, BakedSecretNote, optional: true
 
       allow :read
     end
@@ -3836,20 +3856,57 @@ defmodule Hologram.CompilerTest do
              )
     end
 
-    # A quantifier's condition is read on the rows of its set, so one reading a server-only value
-    # stays a triple, which the client answers as unknown on each row.
-    test "bakes a quantifier's condition on a server-only attribute as its triple" do
+    # A quantifier's condition is read on the rows of its set, so a predicate in it reading a
+    # server-only attribute - of the set's row, of a row a nested quantifier reads, of the row above
+    # or of a row a path leads to - is the marker too, which the client answers as unknown on each
+    # row, its compared value left off the bundle. So is one comparing a stored attribute with a
+    # server-only one, from rows above. A stored attribute beside it in an alternative stays a
+    # triple, which decides on a held row.
+    test "bakes a quantifier's condition on a server-only attribute as a marker" do
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: MapSet.new([BakedSecretBoard, BakedSecretNote, RoleGrant])
+        | entity_types: MapSet.new([BakedSecretBoard, BakedSecretNote, BakedSecretTag, RoleGrant])
       }
 
       js = build_sync_constants_js(sync_constants)
 
-      assert String.contains?(
-               js,
-               ~s/"read":[{"predicates":[{"filter":[["secret","==","x"]],"quantifier":"any","source":["notes"]}],"to":null,"via":null}]/
-             )
+      any_notes_js = fn filter_js ->
+        ~s/{"predicates":[{"filter":[#{filter_js}],"quantifier":"any","source":["notes"]}],"to":null,"via":null}/
+      end
+
+      marker_js = ~s/{"server":true}/
+
+      rules_js =
+        Enum.join(
+          [
+            any_notes_js.(marker_js),
+            any_notes_js.(~s/{"filter":[#{marker_js}],"quantifier":"any","source":["tags"]}/),
+            any_notes_js.(marker_js),
+            any_notes_js.(~s/{"or":[[["title","==","t"]],[#{marker_js}]]}/),
+            ~s/{"predicates":[{"filter":[#{marker_js}],"quantifier":"all","source":["notes"]}],"to":null,"via":null}/,
+            any_notes_js.(~s/{"filter":[#{marker_js}],"quantifier":"any","source":["tags"]}/)
+          ],
+          ","
+        )
+
+      assert String.contains?(js, ~s/"policy":{"read":[#{rules_js}]}/)
+
+      read_js =
+        verdict_entry_js(BakedSecretBoard, :read, [
+          BakedSecretBoard,
+          BakedSecretNote,
+          BakedSecretTag
+        ])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
+
+      # An any over a stored set decides nothing by itself, so the note's read verdict stands only
+      # because its condition reads a server-only attribute.
+      note_read_js = verdict_entry_js(BakedSecretNote, :read, [BakedSecretNote, BakedSecretTag])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{note_read_js}}/)
+
+      refute String.contains?(js, "secret-")
     end
 
     # No client holds a row of a type nobody may read, so a read rule's predicate reading one is its
@@ -10237,6 +10294,20 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "render_rules/1" do
+    # A server sends these to a client built with other rules, so they keep the values a rule
+    # compares a server-only attribute with off the wire as the bundle does.
+    test "leaves off the values a rule compares a server-only attribute with" do
+      rules_json =
+        render_rules([
+          Hologram.CompilerTest.BakedSecretBoard,
+          Hologram.CompilerTest.BakedSecretNote,
+          Hologram.CompilerTest.BakedSecretTag
+        ])
+
+      assert String.contains?(rules_json, ~s/{"server":true}/)
+      refute String.contains?(rules_json, "secret-")
+    end
+
     # A client swaps these in for the rules its bundle was built with, so an entry reads the way the
     # bundle spells it.
     test "renders the entry of a type declaring rules the way a build bakes it" do

@@ -774,20 +774,6 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns whether the given clause of a rule of the given entity type reads a server-only
-  attribute - of the row, of one a path or a set leads to, or of one above inside a quantifier. A
-  derived field never reads one, which the build refuses, so the names the clause writes are all
-  there is. No client ever holds such a value, so it answers the clause as unknown, and the
-  server's verdict on the operation answers the rule.
-  """
-  @spec reads_server_only?(module, tuple) :: boolean
-  def reads_server_only?(entity_type, clause) do
-    entity_type
-    |> server_only_references(clause)
-    |> Enum.any?(fn {_relationship_names, server_only?} -> server_only? end)
-  end
-
-  @doc """
   Returns the chains of relationship names whose rows the given entity type's rules read, across
   every operation, sorted: every row along a path in a condition, every set a quantifier reads and
   the rows along its source - a to-many or an inverse holding them all - the rows before the last
@@ -2115,6 +2101,17 @@ defmodule Hologram.Policy do
       rules: rules,
       update_names: update_names(entity_type)
     }
+  end
+
+  # Whether the given clause of a rule of the given entity type reads a server-only attribute - of
+  # the row, of one a path or a set leads to, or of one above inside a quantifier. A derived field
+  # never reads one, which the build refuses, so the names the clause writes are all there is. No
+  # client ever holds such a value, so it answers the clause as unknown, and the server's verdict on
+  # the operation answers the rule.
+  defp reads_server_only?(entity_type, clause) do
+    entity_type
+    |> server_only_references(clause)
+    |> Enum.any?(fn {_relationship_names, server_only?} -> server_only? end)
   end
 
   # Every name the clause reads, as its relationships from the row and whether it is server-only -
