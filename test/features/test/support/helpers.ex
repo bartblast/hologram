@@ -30,8 +30,10 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.GuestEntry
   alias HologramFeatureTests.Entities.Inspection
   alias HologramFeatureTests.Entities.Item
+  alias HologramFeatureTests.Entities.Jar
   alias HologramFeatureTests.Entities.Label
   alias HologramFeatureTests.Entities.Leg
+  alias HologramFeatureTests.Entities.Lid
   alias HologramFeatureTests.Entities.Locker
   alias HologramFeatureTests.Entities.Membership
   alias HologramFeatureTests.Entities.Memo
@@ -39,6 +41,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Milestone
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Notice
+  alias HologramFeatureTests.Entities.Pantry
   alias HologramFeatureTests.Entities.Parcel
   alias HologramFeatureTests.Entities.Permit
   alias HologramFeatureTests.Entities.Post
@@ -1298,9 +1301,11 @@ defmodule HologramFeatureTests.Helpers do
         HoldRun,
         Inspection,
         Item,
+        Jar,
         KillRun,
         Label,
         Leg,
+        Lid,
         Locker,
         Membership,
         Memo,
@@ -1308,6 +1313,7 @@ defmodule HologramFeatureTests.Helpers do
         Milestone,
         Note,
         Notice,
+        Pantry,
         Parcel,
         Permit,
         Post,
