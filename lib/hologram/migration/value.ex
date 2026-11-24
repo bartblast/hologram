@@ -11,6 +11,7 @@ defmodule Hologram.Migration.Value do
 
   alias Hologram.DB.Codec
   alias Hologram.Entity.Model
+  alias Hologram.Migration.Value.Check
   alias Hologram.Migration.Value.Resolver
   alias Hologram.Query.Expression
 
@@ -147,8 +148,10 @@ defmodule Hologram.Migration.Value do
   def normalize_constant(value, :uuid) when is_binary(value), do: String.downcase(value)
 
   def normalize_constant(value, type) when type in [:datetime, :time] do
-    if Resolver.storable?(value) and Resolver.fits_type?(value, type) do
-      Codec.encode(value, type)
+    stored = Check.stored_form(value)
+
+    if Resolver.storable?(stored) and Resolver.fits_type?(stored, type) do
+      Codec.encode(stored, type)
     else
       value
     end

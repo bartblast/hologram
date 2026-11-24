@@ -10,6 +10,7 @@ defmodule Hologram.Migration.Value.Resolver do
   alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Migration.Value
+  alias Hologram.Migration.Value.Check
 
   @type type ::
           :boolean
@@ -209,8 +210,10 @@ defmodule Hologram.Migration.Value.Resolver do
   defp fit_value!(value, :uuid, context), do: fit_uuid!(value, :uuid, context)
 
   defp fit_value!(value, type, context) do
-    if storable?(value) and Validator.attribute_value_valid?(value, type) do
-      stored_form(value, type)
+    stored = Check.stored_form(value)
+
+    if storable?(stored) and Validator.attribute_value_valid?(stored, type) do
+      stored_form(stored, type)
     else
       refuse_value!(value, type, context)
     end

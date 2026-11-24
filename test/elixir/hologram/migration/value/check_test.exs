@@ -11,6 +11,36 @@ defmodule Hologram.Migration.Value.CheckTest.OtherCalendar do
   defdelegate valid_time?(hour, minute, second, microsecond), to: Calendar.ISO
 end
 
+defmodule Hologram.Migration.Value.CheckTest.RaisingCalendar do
+  @moduledoc false
+
+  # A calendar a pinned value can name whose valid_date?/3 raises.
+  defdelegate day_rollover_relative_to_midnight_utc, to: Calendar.ISO
+
+  defdelegate naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond),
+    to: Calendar.ISO
+
+  @spec valid_date?(integer, integer, integer) :: no_return
+  def valid_date?(_year, _month, _day), do: raise("calendar blew up")
+
+  defdelegate valid_time?(hour, minute, second, microsecond), to: Calendar.ISO
+end
+
+defmodule Hologram.Migration.Value.CheckTest.ThrowingCalendar do
+  @moduledoc false
+
+  # A calendar a pinned value can name whose valid_date?/3 throws.
+  defdelegate day_rollover_relative_to_midnight_utc, to: Calendar.ISO
+
+  defdelegate naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond),
+    to: Calendar.ISO
+
+  @spec valid_date?(integer, integer, integer) :: no_return
+  def valid_date?(_year, _month, _day), do: throw(:calendar_threw)
+
+  defdelegate valid_time?(hour, minute, second, microsecond), to: Calendar.ISO
+end
+
 defmodule Hologram.Migration.Value.CheckTest do
   use Hologram.Test.BasicCase, async: true
 
@@ -160,6 +190,33 @@ defmodule Hologram.Migration.Value.CheckTest do
       op = change(:change_attribute, :at, default: default)
 
       assert validate_ops!([op], with_attribute(attribute)) == :ok
+    end
+
+    test "passes a constant datetime backfill in another calendar, stored as UTC ISO" do
+      attribute = {:at, :datetime, [optional: true]}
+      value = %{~U[2026-01-01 00:00:00Z] | calendar: Value.CheckTest.OtherCalendar}
+      op = change(:change_attribute, :at, optional: false, backfill: value)
+
+      assert validate_ops!([op], with_attribute(attribute)) == :ok
+
+      assert Value.normalize_constant(value, :datetime) ==
+               Value.normalize_constant(~U[2026-01-01 00:00:00Z], :datetime)
+    end
+
+    test "refuses a constant datetime backfill whose calendar fails, naming the op" do
+      attribute = {:at, :datetime, [optional: true]}
+
+      for calendar <- [Value.CheckTest.RaisingCalendar, Value.CheckTest.ThrowingCalendar] do
+        value = %{~U[2026-01-01 00:00:00Z] | calendar: calendar}
+        op = change(:change_attribute, :at, optional: false, backfill: value)
+
+        error =
+          assert_raise Hologram.CompileError, fn ->
+            validate_ops!([op], with_attribute(attribute))
+          end
+
+        assert error.message =~ "the backfill of :at on MyApp.Task (line 7)"
+      end
     end
 
     test "passes a type change restating the default" do

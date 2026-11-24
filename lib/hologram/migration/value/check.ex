@@ -91,6 +91,26 @@ defmodule Hologram.Migration.Value.Check do
     end
   end
 
+  @doc """
+  Returns the given value as a column stores it: a datetime in a calendar that compares with ISO
+  becomes the same moment in UTC ISO, and anything else stays as it is.
+  """
+  @spec stored_form(any) :: any
+  def stored_form(%DateTime{calendar: calendar} = value) when calendar != Calendar.ISO do
+    with true <- comparable_bound?(value, :datetime),
+         unix = DateTime.to_unix(value, :microsecond),
+         {:ok, iso} <- DateTime.from_unix(unix, :microsecond) do
+      iso
+    else
+      _unusable -> value
+    end
+  catch
+    # A pinned value can name any module as its calendar, so one that fails is just unusable.
+    _kind, _reason -> value
+  end
+
+  def stored_form(value), do: value
+
   defp bound_ops([], _model, _final_model), do: []
 
   defp bound_ops([op | later_ops], model, final_model) do
@@ -339,19 +359,6 @@ defmodule Hologram.Migration.Value.Check do
   end
 
   defp rule_fits?(_rule, _type), do: true
-
-  # A datetime in another calendar is stored as UTC ISO, so that's the value to ask about.
-  defp stored_form(%DateTime{calendar: calendar} = value) when calendar != Calendar.ISO do
-    with true <- comparable_bound?(value, :datetime),
-         unix = DateTime.to_unix(value, :microsecond),
-         {:ok, iso} <- DateTime.from_unix(unix, :microsecond) do
-      iso
-    else
-      _unusable -> value
-    end
-  end
-
-  defp stored_form(value), do: value
 
   defp track_enum_values(%{op: :add_enum_value} = op, added) do
     MapSet.put(added, {op.enum_type, op.value})

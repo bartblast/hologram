@@ -1,3 +1,16 @@
+defmodule Hologram.Migration.Value.ResolverTest.OtherCalendar do
+  @moduledoc false
+
+  # Calendar.ISO under another name: a value in a calendar that isn't ISO but compares with it.
+  defdelegate day_rollover_relative_to_midnight_utc, to: Calendar.ISO
+
+  defdelegate naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond),
+    to: Calendar.ISO
+
+  defdelegate valid_date?(year, month, day), to: Calendar.ISO
+  defdelegate valid_time?(hour, minute, second, microsecond), to: Calendar.ISO
+end
+
 defmodule Hologram.Migration.Value.ResolverTest do
   use Hologram.Test.BasicCase, async: true
 
@@ -437,6 +450,18 @@ defmodule Hologram.Migration.Value.ResolverTest do
 
       assert %{type: :date} =
                resolve!(%Value{term: term}, model, MyApp.Trip, attribute_target(:date))
+    end
+
+    test "stores a pinned datetime in another calendar as UTC ISO" do
+      iso = ~U[2026-01-01 03:06:07Z]
+      value = %{iso | calendar: Value.ResolverTest.OtherCalendar}
+      term = {:coalesce, [{:name, [:due]}, {:value, value}]}
+      model = put_in(@model.entities[MyApp.Trip].attributes, [{:due, :datetime, []}])
+
+      assert %{term: {:coalesce, [_due, {:value, stored, :datetime}]}} =
+               resolve!(%Value{term: term}, model, MyApp.Trip, attribute_target(:datetime))
+
+      assert stored == Value.normalize_constant(iso, :datetime)
     end
 
     test "refuses a date before PostgreSQL's earliest" do
