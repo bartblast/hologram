@@ -11,6 +11,8 @@ defmodule HologramFeatureTests.CatchupTest do
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.SyncPage
 
+  @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
+
   # The browser end of a returning client's catch-up, which `sync_test.exs` checks on the wire.
   #
   # The lever is a stream killed while its next attach is held back by a cookie: the change written
@@ -67,7 +69,8 @@ defmodule HologramFeatureTests.CatchupTest do
   #
   # After the reload the stream is held back for longer than the test reads, so what the page
   # reads - its place, the folder that stays readable, and no document - can only have come out
-  # of the browser's own store.
+  # of the browser's own store. The hold outlasts the fill wait too: a browser that lost its place
+  # would otherwise have it handed back by a fill from the server just before the wait gives up.
   feature "drops a row its folder going private hid while away, for good", %{session: session} do
     folder =
       %{name: "shut_folder", public: true}
@@ -92,7 +95,7 @@ defmodule HologramFeatureTests.CatchupTest do
     |> await_local_read("Read the document's folder locally", "local_document_folder", "missing")
     |> assert_caught_up()
     |> await_durable_writes()
-    |> hold_attach(30_000)
+    |> hold_attach(2 * @max_wait_time)
     |> mark_document()
     |> reload()
     |> wait_for_unmarked_document()
