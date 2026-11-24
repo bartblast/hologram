@@ -33,6 +33,10 @@ export default class SyncStream {
   // isn't taken as another one.
   static followedTag = null;
 
+  // Whether this tab's last greeting asked for sync, so the server may still be serving it a sync
+  // session - which a tab that stops leading has to close (see DataLayer.followIdentity).
+  static heldSync = false;
+
   static renderScheduled = false;
 
   // The last rules a server handed this client in place of its bundle's, as the frame carried
@@ -90,8 +94,12 @@ export default class SyncStream {
     // served now would be written over a store and rows that may not stand at the place it
     // names, or are about to be cleared. It is greeted again once that is settled.
     if (pageModule === null || !Tabs.leader || Tabs.takingLead) {
+      $.heldSync = false;
+
       return {};
     }
+
+    $.heldSync = true;
 
     const pageModuleName = Interpreter.moduleExName(pageModule);
 
@@ -291,14 +299,23 @@ export default class SyncStream {
   // Whether a frame belongs to a change this tab has already made, or to the user it just left. A
   // start-over naming the tag this tab followed has nothing left to do. One naming no tag comes from
   // a server that sends no word of whom it serves, so it's the last word this tab will get.
+  //
+  // And whether a tab that isn't leading its group, or is still settling where a lead starts from,
+  // heard a sync frame on its own stream: one that moved to another user's group can still be
+  // served the session its last greeting asked for, until its next one closes it (see
+  // DataLayer.followIdentity). What that session sends is the leader's to store and pass on.
   static dropsFrame(event, frame) {
+    if (!Tabs.leader || Tabs.takingLead) {
+      return true;
+    }
+
     if (
       event === "sync_resync" &&
       frame.reason === "identity" &&
       (frame.identity_tag === null || frame.identity_tag === undefined)
     ) {
+      // A tab still waiting for a pair goes on waiting: with none, a send could only be refused.
       $.awaitingIdentity = false;
-      $.awaitingPair = false;
 
       return false;
     }
@@ -611,8 +628,13 @@ export default class SyncStream {
   // Whether this tab has to hold its writes: the server would refuse them. That is a stop over the
   // model rather than the protocol, because the write endpoint compares only the model - under a
   // protocol stop, writes still land. Or the tab moved to another user and has no pair for them yet.
+  // Any pair it holds after the move ends the wait: the event's, the one the store keeps for the
+  // new user, or the one the new user's group hands it. All three are the new user's, since the
+  // move dropped the previous user's.
   static holdsWrites() {
-    return $.stopReason === "model_hash" || $.awaitingPair;
+    return (
+      $.stopReason === "model_hash" || ($.awaitingPair && Replica.id === null)
+    );
   }
 }
 

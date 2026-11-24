@@ -386,6 +386,35 @@ describe("Batches", () => {
         assert.isTrue(forgetting.calledOnceWithExactly(batch.seq));
         assert.isNull(LocalDatabase.getRow(TODO, "t1"));
       });
+
+      // The tab moved to the new user's group as a follower while the send was out: the tab that
+      // leads there sends the new user's queue, under its own pair.
+      it("sends nothing more once the tab stopped sending while one was out", async () => {
+        written();
+
+        let answer;
+
+        sendStub.returns(new Promise((resolve) => (answer = resolve)));
+
+        sealed(creating("t1", "first"));
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        assert.isTrue(sendStub.calledOnce);
+
+        LocalDatabase.actorUserId = "u2";
+        Batches.releaseForeign("u2");
+        const second = sealed(creating("t2", "second"));
+        Tabs.leader = false;
+
+        answer(confirmed());
+        await flushing;
+
+        assert.isTrue(sendStub.calledOnce);
+        assert.deepStrictEqual(Batches.pending, [second]);
+        assert.equal(second.state, "pending");
+      });
     });
 
     // The server would refuse them over a mismatch the person did not cause, and roll back what
@@ -2026,6 +2055,36 @@ describe("Batches", () => {
       assert.strictEqual(batch.recorded, recording);
     });
 
+    describe("whether the store holds it", () => {
+      const closedFiled = async (stored) => {
+        Durability.mode = "indexeddb";
+        sinon.stub(Durability, "fileBatch").resolves(stored);
+
+        Batches.open("todos");
+        wrote("t1");
+
+        const batch = Batches.close();
+        await batch.recorded;
+
+        return batch;
+      };
+
+      it("is so once the store filed it", async () => {
+        assert.isFalse((await closedFiled(true)).unstored);
+      });
+
+      it("is not when the store failed to file it", async () => {
+        assert.isTrue((await closedFiled(false)).unstored);
+      });
+
+      it("is not with nowhere to file it", () => {
+        Batches.open("todos");
+        wrote("t1");
+
+        assert.isTrue(Batches.close().unstored);
+      });
+    });
+
     // The page that eventually sends this batch may belong to somebody else, and only a page
     // mounted under this user takes it up again.
     it("seals the batch under the page's user", () => {
@@ -2157,20 +2216,54 @@ describe("Batches", () => {
     // the batch up compares with ===, and undefined would match nothing a page ever mounts under.
     // What puts a write made in one tab on the screen of the next before the server has heard of
     // it - and what lets the tab that sends send it without reading the store again.
-    it("tells the group about a batch it has filed", () => {
-      const posting = sinon.stub(Tabs, "post");
+    describe("telling the group", () => {
+      const closedFiled = async (stored) => {
+        Durability.mode = "indexeddb";
+        sinon.stub(Durability, "fileBatch").callsFake(async (batch) => {
+          batch.seal(7);
 
-      Batches.open("todos");
-      wrote("t1");
+          return stored;
+        });
 
-      const batch = Batches.close();
+        Batches.open("todos");
+        wrote("t1");
 
-      assert.isTrue(
-        posting.calledOnceWithExactly({
-          kind: "sealed",
-          record: batch.record(),
-        }),
-      );
+        const batch = Batches.close();
+        await batch.recorded;
+
+        return batch;
+      };
+
+      it("tells it about a batch it has filed", async () => {
+        const posting = sinon.stub(Tabs, "post");
+        const batch = await closedFiled(true);
+
+        assert.isTrue(
+          posting.calledOnceWithExactly({
+            kind: "sealed",
+            record: batch.record(),
+          }),
+        );
+      });
+
+      // Its number was never written down, so the store can give it to another batch.
+      it("says nothing of one the store failed to file", async () => {
+        const posting = sinon.stub(Tabs, "post");
+
+        await closedFiled(false);
+
+        sinon.assert.notCalled(posting);
+      });
+
+      it("says nothing of one with nowhere to file it", () => {
+        const posting = sinon.stub(Tabs, "post");
+
+        Batches.open("todos");
+        wrote("t1");
+        Batches.close();
+
+        sinon.assert.notCalled(posting);
+      });
     });
 
     it("takes the number the store gives it", () => {
@@ -2643,6 +2736,69 @@ describe("Batches", () => {
     });
   });
 
+  describe("disownStored()", () => {
+    const STAMP = 1_798_246_400_125_952;
+
+    let unstored;
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {model: TODO_MODEL};
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      sinon.stub(SyncStream, "scheduleRender");
+
+      Batches.adopt([
+        {
+          actorUserId: null,
+          landed: [],
+          seq: 3,
+          writes: [
+            {
+              data: {done: false, title: "stored"},
+              id: "t1",
+              op: "create",
+              stamp: STAMP,
+              type: TODO,
+            },
+          ],
+        },
+      ]);
+
+      Batches.open("todos");
+
+      Batches.current().append({
+        data: {done: false, title: "never stored"},
+        id: "t2",
+        op: "create",
+        stamp: STAMP + 1,
+        type: TODO,
+      });
+
+      unstored = Batches.close();
+
+      Batches.disownStored();
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+    });
+
+    it("lets a batch the store holds go, and takes its rows with it", () => {
+      assert.notInclude(
+        Batches.pending.map((batch) => batch.seq),
+        3,
+      );
+      assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+    });
+
+    it("keeps a batch the store never got, and its rows", () => {
+      assert.deepStrictEqual(Batches.pending, [unstored]);
+      assert.equal(LocalDatabase.getRow(TODO, "t2").title, "never stored");
+    });
+  });
+
   describe("discard()", () => {
     it("takes the batch's writes out of the overlay", () => {
       Batches.open("todos");
@@ -2877,6 +3033,24 @@ describe("Batches", () => {
 
       assert.isTrue(rendering.calledOnce);
     });
+
+    // A batch taken up seals before the open action does, so the server applies it first - and
+    // the action reads its own write on top of it.
+    it("folds a batch it takes under an action still open", () => {
+      Batches.open("todos");
+
+      Batches.current().append({
+        data: {title: "open"},
+        id: "t1",
+        op: "update",
+        stamp: STAMP + 1,
+        type: TODO,
+      });
+
+      Batches.adopt([stored(3, "t1")]);
+
+      assert.equal(LocalDatabase.getRow(TODO, "t1").title, "open");
+    });
   });
 
   describe("resumeFrom()", () => {
@@ -2887,6 +3061,18 @@ describe("Batches", () => {
       wrote("t1");
 
       assert.equal(Batches.close().seq, 42);
+    });
+
+    // A tab that moves to another group resumes from that group's store, whose count can be
+    // behind a number this tab has already spent.
+    it("never numbers below a batch it already numbered", () => {
+      Batches.resumeFrom(50);
+      Batches.resumeFrom(41);
+
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.equal(Batches.close().seq, 51);
     });
   });
 });

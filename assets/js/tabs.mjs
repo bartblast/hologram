@@ -150,6 +150,16 @@ export default class Tabs {
     if (followed) {
       Batches.disown();
       Replica.refresh();
+
+      // A tab that followed a page to another user was given no pair of its own (see
+      // DataLayer.followIdentity), so what it holds is the group's, which the group's leader goes
+      // on counting under. Two senders under one pair is the thing leaving has to end, so it holds
+      // none, and its writes wait for one.
+      if (Replica.fresh === null) {
+        Replica.id = null;
+        Replica.token = null;
+        SyncStream.awaitingPair = true;
+      }
     }
 
     if ((followed || untaken) && Sse.isStarted) {
@@ -278,6 +288,39 @@ export default class Tabs {
     Tabs.takingLead = false;
 
     return released ?? Promise.resolve();
+  }
+
+  // Leaves this tab's group for the given one, keeping the handlers, for a tab that followed the
+  // session to another user (see DataLayer.followIdentity). Answers the visit to the new group, or
+  // nothing when a newer move or the group ending took the tab elsewhere while it joined. A tab in
+  // no group stays in none.
+  //
+  // The tab is starting up again in the new group: what the group says is held until it has read
+  // the store again (see ready()), and its stream is served no sync until then, the same as while a
+  // lead is being settled (see takingLead). A frame stored in that window would land under a claim
+  // this tab hasn't judged, and give the stream a place to greet from that the tab never filled.
+  static async move(name) {
+    if (Tabs.name === null) {
+      return null;
+    }
+
+    const handlers = {onLead: Tabs.#onLead, onMessage: Tabs.#onMessage};
+
+    Tabs.leave();
+
+    const joining = Tabs.join(name, handlers);
+    const visit = Tabs.#token;
+
+    Tabs.takingLead = true;
+
+    await joining;
+
+    return Tabs.isVisit(visit) ? visit : null;
+  }
+
+  // Whether the given visit to a group is the one this tab is on (see move).
+  static isVisit(visit) {
+    return visit !== null && Tabs.#token === visit;
   }
 
   // What the group's messages mean, and the whole of what one tab does on hearing another.
@@ -532,8 +575,10 @@ export default class Tabs {
       }
     }
 
+    // A tab that moved to another group held its stream back from sync until now (see move).
+    Tabs.takingLead = false;
+
     if (lead) {
-      Tabs.takingLead = false;
       Tabs.#onLead();
     } else if (Tabs.leader) {
       Tabs.postState();
@@ -742,7 +787,13 @@ export default class Tabs {
       // awaits it: nothing is sent under an identity that is not recorded, or a reload after a lost
       // answer would send the stored batch again under a new pair, and the server would apply it
       // twice.
-      await (recorded ?? Durability.persistReplica(Replica.current()));
+      //
+      // Not for a visit that has ended: a tab that moved to another user's group since holds that
+      // user's pair, or none, and the slot this would write is the group's.
+      await (recorded ??
+        (Tabs.#token === token
+          ? Durability.persistReplica(Replica.current())
+          : null));
 
       // A lead of a visit that has ended leaves the next one's to settle.
       if (Tabs.#token === token) {

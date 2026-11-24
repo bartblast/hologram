@@ -54,6 +54,11 @@ export default class Batch {
   // dropped, so nothing is left to hold a state.
   state = "open";
 
+  // Whether this tab numbered it with nowhere to file it - its store stopped before the batch was
+  // written down. No other tab and no later page load can send it, so this tab is the only one
+  // that can (see Batches.disownStored).
+  unstored = false;
+
   // The cid of the component whose action opened it, so what the server says about these writes
   // can be delivered where they were made.
   target = null;

@@ -218,6 +218,28 @@ describe("Tabs", () => {
       assert.isTrue(disowning.calledOnce);
     });
 
+    // A tab that followed its page to another user holds that user's group's pair, which the
+    // group's leader goes on sending under.
+    it("holds no identity in a tab that was following with no fresh one to take", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      Replica.fresh = null;
+      Replica.adopt({id: "r-group", token: "statement-group"});
+
+      try {
+        Tabs.dissolve();
+
+        assert.isNull(Replica.id);
+        assert.isNull(Replica.token);
+        assert.isTrue(SyncStream.awaitingPair);
+      } finally {
+        SyncStream.awaitingPair = false;
+      }
+    });
+
     // The frames it was being handed stop here, so it needs a stream the server serves sync on.
     it("opens a stream of its own in a tab that was following", async () => {
       const group = nextGroup();
@@ -640,6 +662,36 @@ describe("Tabs", () => {
       assert.isTrue(led.calledOnce);
     });
 
+    // A tab that followed the session to another user reads that user's store again, and the lead
+    // of their group can come to it meanwhile.
+    it("waits until it is ready to take the lead it was handed while moving", async () => {
+      const led = sinon.spy();
+      const to = nextGroup();
+
+      await Tabs.join(nextGroup(), {onLead: led, onMessage: () => {}});
+      Tabs.ready();
+      led.resetHistory();
+
+      const release = await holdLeaderLock(to);
+      const visit = await Tabs.move(to);
+
+      assert.isFalse(Tabs.leader);
+
+      release();
+      await waitForEventLoop();
+
+      assert.isTrue(Tabs.isVisit(visit));
+      assert.isTrue(Tabs.leader);
+      assert.isTrue(Tabs.takingLead);
+      assert.isFalse(Tabs.sends());
+      assert.isFalse(led.called);
+
+      Tabs.ready();
+
+      assert.isTrue(led.calledOnce);
+      assert.isFalse(Tabs.takingLead);
+    });
+
     it("takes the lead from the place its restore handed it", async () => {
       await handOverWhileStarting(nextGroup());
 
@@ -750,6 +802,25 @@ describe("Tabs", () => {
       assert.isFalse(reconnecting.called);
       assert.isFalse(Tabs.postState.called);
       assert.isFalse(posting.called);
+    });
+
+    // The tab holds the next group's pair, or none, and the slot it would write is this group's.
+    it("writes no identity down for a group it left while the store answered", async () => {
+      const persisting = sinon.stub(Durability, "persistReplica").resolves();
+
+      let repaired;
+
+      repairing.returns(new Promise((resolve) => (repaired = resolve)));
+      SyncStream.syncCursor = "place-1";
+
+      await succeed(nextGroup());
+
+      Tabs.leave();
+
+      repaired(false);
+      await waitForEventLoop();
+
+      assert.isFalse(persisting.called);
     });
 
     // The lead that would have replaced its follower's stream stops when it finds the group gone.
@@ -3019,6 +3090,102 @@ describe("Tabs", () => {
       sibling(group).postMessage({kind: "barrier"});
 
       assert.deepStrictEqual(await hasReceived, {kind: "barrier"});
+    });
+  });
+
+  // What a tab does when its page follows the session to another user (see
+  // DataLayer.followIdentity).
+  describe("move()", () => {
+    it("stays in no group when the tab is in none", async () => {
+      assert.isNull(await Tabs.move(nextGroup()));
+      assert.isNull(Tabs.name);
+    });
+
+    it("leaves the group it was in for the one it is given", async () => {
+      const from = nextGroup();
+      const to = nextGroup();
+
+      await Tabs.join(from, stubs());
+
+      await Tabs.move(to);
+
+      assert.equal(Tabs.name, to);
+      assert.isTrue(await isLockFree(from));
+      assert.isFalse(await isLockFree(to));
+      assert.isTrue(Tabs.leader);
+    });
+
+    it("answers the visit to the new group", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      const visit = await Tabs.move(nextGroup());
+
+      assert.isTrue(Tabs.isVisit(visit));
+
+      Tabs.leave();
+
+      assert.isFalse(Tabs.isVisit(visit));
+    });
+
+    it("answers nothing when a newer move took the tab elsewhere while it joined", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      const first = Tabs.move(nextGroup());
+      const second = Tabs.move(nextGroup());
+
+      assert.isNull(await first);
+      assert.isTrue(Tabs.isVisit(await second));
+    });
+
+    // The handlers are the page's, and there is no page to name them again.
+    it("keeps what the tab does with the group's messages", async () => {
+      const to = nextGroup();
+      const received = [];
+
+      await Tabs.join(nextGroup(), {
+        onLead: () => {},
+        onMessage: (message) => received.push(message),
+      });
+
+      await holdLeaderLock(to);
+      await Tabs.move(to);
+
+      Tabs.ready();
+
+      sibling(to).postMessage({kind: "joined"});
+      await waitForEventLoop();
+
+      assert.deepStrictEqual(received, [{kind: "joined"}]);
+    });
+
+    // Until the tab has read the new group's store, a frame its stream stored would land under a
+    // claim it hasn't judged.
+    it("settles where the tab starts from before its stream is served sync", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      await Tabs.move(nextGroup());
+
+      assert.isTrue(Tabs.takingLead);
+
+      Tabs.ready();
+
+      assert.isFalse(Tabs.takingLead);
+    });
+
+    it("settles a follower's start the same way", async () => {
+      const to = nextGroup();
+
+      await Tabs.join(nextGroup(), stubs());
+
+      await holdLeaderLock(to);
+      await Tabs.move(to);
+
+      assert.isFalse(Tabs.leader);
+      assert.isTrue(Tabs.takingLead);
+
+      Tabs.ready();
+
+      assert.isFalse(Tabs.takingLead);
     });
   });
 

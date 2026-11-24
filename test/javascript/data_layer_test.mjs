@@ -1297,6 +1297,364 @@ describe("DataLayer", () => {
         assert.isTrue(SyncStream.awaitingPair);
       });
 
+      // The previous user's pair would be sent under the new user's session, or written into
+      // their slot, and the page offered it for the previous user too.
+      it("holds no pair when the event brings none", () => {
+        Replica.fresh = {id: "replica-1", token: "token-1"};
+
+        followToSecondUser({replica: undefined});
+
+        assert.isNull(Replica.id);
+        assert.isNull(Replica.token);
+        assert.isNull(Replica.fresh);
+      });
+
+      it("holds the pair it has for the new user", () => {
+        Replica.owner = "u1";
+
+        followToSecondUser();
+
+        assert.equal(Replica.owner, "u2");
+        assert.deepStrictEqual(Replica.current(), pair);
+      });
+
+      // With no pair a send could only be refused.
+      it("waits for a pair when the event brings none", () => {
+        followToSecondUser({replica: undefined});
+
+        assert.isTrue(SyncStream.holdsWrites());
+      });
+
+      it("holds no pair for the new user when the event brings none", () => {
+        Replica.owner = "u1";
+
+        followToSecondUser({replica: undefined});
+
+        assert.equal(Replica.owner, "u2");
+      });
+
+      it("stays in no group when the tab is in none", () => {
+        const moving = sinon.stub(Tabs, "move").resolves(null);
+
+        followToSecondUser();
+
+        sinon.assert.notCalled(moving);
+      });
+
+      // What the previous user's group shares is theirs: their store's claim, their pair, their
+      // queue.
+      describe("in a group", () => {
+        const resumed = {
+          batches: [{seq: 4, writes: []}],
+          cursor: "place-2",
+          readForeign: true,
+          seq: 5,
+        };
+
+        const visit = {};
+
+        let adopting,
+          dissolving,
+          flushing,
+          loading,
+          moving,
+          posting,
+          readying,
+          reconnecting,
+          restoring,
+          resumingFrom,
+          wasMode,
+          wasStarted;
+
+        beforeEach(() => {
+          wasMode = Durability.mode;
+          wasStarted = Sse.isStarted;
+
+          Durability.mode = "indexeddb";
+          Sse.isStarted = true;
+          Tabs.name = "hologram.1.model.u1";
+
+          adopting = sinon.stub(Batches, "adopt");
+          dissolving = sinon.stub(Tabs, "dissolve");
+          flushing = sinon.stub(Batches, "flush");
+          loading = sinon.stub(Durability, "load").resolves();
+          moving = sinon.stub(Tabs, "move").resolves(visit);
+          posting = sinon.stub(Tabs, "post");
+          readying = sinon.stub(Tabs, "ready");
+          reconnecting = sinon.stub(Sse, "reconnect");
+          restoring = sinon.stub(Durability, "restore").returns(resumed);
+          resumingFrom = sinon.stub(Batches, "resumeFrom");
+
+          sinon.stub(Tabs, "isVisit").callsFake((given) => given === visit);
+        });
+
+        afterEach(() => {
+          Durability.mode = wasMode;
+          Sse.isStarted = wasStarted;
+          Tabs.name = null;
+          SyncStream.heldSync = false;
+        });
+
+        const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+        it("moves the tab to the new user's group", async () => {
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.calledOnceWithExactly(
+            moving,
+            Durability.groupName("u2"),
+          );
+        });
+
+        // Joined first, read after, as a page load does.
+        it("takes up what the store holds for the new user", async () => {
+          Tabs.leader = false;
+
+          followToSecondUser();
+          await settle();
+
+          assert.isTrue(moving.calledBefore(loading));
+          sinon.assert.calledOnceWithExactly(restoring, false);
+          sinon.assert.calledOnceWithExactly(resumingFrom, 5);
+          sinon.assert.calledOnceWithExactly(adopting, resumed.batches);
+          sinon.assert.calledOnceWithExactly(readying, true);
+          sinon.assert.calledOnceWithExactly(posting, {kind: "joined"});
+          sinon.assert.calledOnce(flushing);
+
+          assert.equal(SyncStream.syncCursor, "place-2");
+        });
+
+        // Only the current visit's read counts: a newer move loads again.
+        it("reads the store for the visit it moved to", async () => {
+          followToSecondUser();
+          await settle();
+
+          const isCurrent = loading.firstCall.args[0];
+
+          assert.isTrue(isCurrent());
+
+          Tabs.isVisit.callsFake(() => false);
+
+          assert.isFalse(isCurrent());
+        });
+
+        it("asks for sync again when it leads the new group", async () => {
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.calledOnce(reconnecting);
+        });
+
+        it("closes the sync session its stream held when it follows", async () => {
+          SyncStream.heldSync = true;
+          Tabs.leader = false;
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.calledOnce(reconnecting);
+        });
+
+        // The lock came to it while it read, so it judges the store as the tab that leads, and the
+        // lead it takes at ready() opens its own stream.
+        it("takes up the store as the leader when handed the lead while it read", async () => {
+          Tabs.leader = false;
+
+          loading.callsFake(async () => {
+            Tabs.leader = true;
+          });
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.calledOnceWithExactly(restoring, true);
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        it("leaves the stream to a lead handed over while it read, though it held sync", async () => {
+          Tabs.leader = false;
+          SyncStream.heldSync = true;
+
+          loading.callsFake(async () => {
+            Tabs.leader = true;
+          });
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        it("keeps a stream that held no sync when it follows", async () => {
+          Tabs.leader = false;
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        // The page opens one after the mount, which greets as the tab now stands.
+        it("opens no stream before the page has", async () => {
+          Sse.isStarted = false;
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        it("stops when a newer move took the tab elsewhere while it joined", async () => {
+          moving.resolves(null);
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.notCalled(loading);
+          sinon.assert.notCalled(restoring);
+        });
+
+        it("takes up nothing when a newer move took the tab elsewhere while it read", async () => {
+          loading.callsFake(async () => {
+            Tabs.isVisit.callsFake(() => false);
+          });
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.notCalled(restoring);
+          sinon.assert.notCalled(readying);
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        describe("when the store already stopped", () => {
+          let disowning, leaving;
+
+          beforeEach(() => {
+            disowning = sinon.stub(Batches, "disown");
+            leaving = sinon.stub(Tabs, "leave");
+
+            Durability.mode = "memory";
+          });
+
+          // Joined, it could lead the new user's tabs from memory.
+          it("leaves its group and joins no other", async () => {
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.calledOnce(leaving);
+            sinon.assert.notCalled(moving);
+            sinon.assert.notCalled(loading);
+          });
+
+          // The ones it made since the store stopped were never stored.
+          it("keeps the batches it holds", async () => {
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.notCalled(disowning);
+          });
+
+          it("asks for sync as a replica of its own", async () => {
+            Tabs.leader = false;
+
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.calledOnce(reconnecting);
+          });
+        });
+
+        describe("when the store can't be read", () => {
+          let disowning, leaving;
+
+          beforeEach(() => {
+            disowning = sinon.stub(Batches, "disownStored");
+            leaving = sinon.stub(Tabs, "leave");
+
+            loading.callsFake(async () => {
+              Durability.mode = "memory";
+            });
+          });
+
+          // As at boot: with nothing stored, there is nothing to share.
+          it("leaves the group", async () => {
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.calledOnce(leaving);
+            sinon.assert.notCalled(restoring);
+          });
+
+          // They're in the store, where another tab sends them under its own pair.
+          it("lets go of the batches the store holds, though it leads", async () => {
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.calledOnce(disowning);
+            sinon.assert.notCalled(dissolving);
+          });
+
+          // A filing still out decides whether its batch is one the store holds.
+          it("lets go of them once its filings settle", async () => {
+            let filed;
+
+            sinon
+              .stub(Batches, "recorded")
+              .returns(new Promise((resolve) => (filed = resolve)));
+
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.notCalled(disowning);
+
+            filed();
+            await settle();
+
+            sinon.assert.calledOnce(disowning);
+          });
+
+          it("leaves them to a newer follow made while its filings settle", async () => {
+            let filed;
+
+            sinon
+              .stub(Batches, "recorded")
+              .returns(new Promise((resolve) => (filed = resolve)));
+
+            followToSecondUser();
+            await settle();
+
+            Tabs.isVisit.callsFake(() => false);
+            filed();
+            await settle();
+
+            sinon.assert.notCalled(disowning);
+          });
+
+          it("asks for sync as a replica of its own", async () => {
+            Tabs.leader = false;
+
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.calledOnce(reconnecting);
+          });
+        });
+
+        it("stays in its group for the same user", async () => {
+          DataLayer.followIdentity({
+            actorEntityId: "entity-1",
+            actorUserId: "u1",
+            identityTag: "1.tag-1",
+          });
+
+          await settle();
+
+          sinon.assert.notCalled(moving);
+        });
+      });
+
       it("moves to the new identity's period", () => {
         const period = IdentityTracker.period;
 
@@ -1443,6 +1801,23 @@ describe("DataLayer", () => {
         Tabs.leader = false;
 
         followToSameUser({replica: pair});
+
+        assert.deepStrictEqual(Replica.current(), pair);
+        sinon.assert.notCalled(persisting);
+      });
+
+      // The tab moved to this user's group and is still reading the store, whose pair wins over
+      // the event's: written now, the slot would hold another pair than the one the tab sends
+      // under. The lead writes the pair it holds once it settles.
+      it("leaves storing the pair to a lead still being settled", () => {
+        Replica.owner = "u1";
+        Tabs.takingLead = true;
+
+        try {
+          followToSameUser({replica: pair});
+        } finally {
+          Tabs.takingLead = false;
+        }
 
         assert.deepStrictEqual(Replica.current(), pair);
         sinon.assert.notCalled(persisting);
@@ -2125,6 +2500,8 @@ describe("DataLayer", () => {
     let adopting, flushing, posting, readying, resuming;
 
     beforeEach(() => {
+      DataLayer.isStoreRestored = false;
+
       adopting = sinon.stub(Batches, "adopt");
       flushing = sinon.stub(Batches, "flush");
       resuming = sinon.stub(Batches, "resumeFrom");
@@ -2133,6 +2510,7 @@ describe("DataLayer", () => {
     });
 
     afterEach(() => {
+      DataLayer.isStoreRestored = false;
       SyncStream.syncCursor = null;
       Tabs.leader = true;
     });
@@ -2181,6 +2559,18 @@ describe("DataLayer", () => {
       sinon.assert.notCalled(flushing);
 
       assert.isNull(SyncStream.syncCursor);
+    });
+
+    // A tab that moved to another user's group takes up what it read for that group itself.
+    it("reads no store on a visit after the first", () => {
+      const restoring = sinon
+        .stub(Durability, "restore")
+        .returns({batches: [], cursor: null, seq: 0});
+
+      DataLayer.restore();
+      DataLayer.restore();
+
+      sinon.assert.calledOnce(restoring);
     });
   });
 

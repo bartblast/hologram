@@ -550,6 +550,33 @@ describe("Durability", () => {
       assert.equal((await readPair("u2")).id, "r-u2");
     });
 
+    // The tab followed the session to u2 while u1's write was out, and u2's pair is what u2's
+    // group goes on sending under.
+    it("drops the pair of the user whose write failed, not the one the tab moved to", async () => {
+      await seedPreviousLoad();
+      await writeMeta({"replica:u2": {id: "r-u2", token: "statement-u2"}});
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+      await Durability.replicaWritten();
+
+      const opening = sinon.spy(FDBDatabase.prototype, "transaction");
+
+      Durability.persistReplica({id: "r-u1-next", token: "statement-u1"});
+
+      const transaction = opening.lastCall.returnValue;
+
+      Replica.owner = "u2";
+      transaction.abort();
+
+      await Durability.replicaWritten();
+
+      assert.equal(Durability.mode, "memory");
+      assert.isUndefined(await readPair("u1"));
+      assert.equal((await readPair("u2")).id, "r-u2");
+    });
+
     it("keeps the counter", async () => {
       await Durability.open();
       await Durability.load();
@@ -935,6 +962,24 @@ describe("Durability", () => {
 
       assert.isNull(Durability.restore(true));
     });
+
+    // A tab that moved to another group while this read ran loads again for that group, and what
+    // this read found would be taken up as that group's.
+    it("keeps nothing it read once the read stopped being current", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+
+      let current = true;
+
+      const loading = Durability.load(() => current);
+
+      current = false;
+
+      await loading;
+
+      assert.equal(Durability.mode, "indexeddb");
+      assert.isNull(Durability.restore(true));
+    });
   });
 
   describe("asking the browser to keep the data", () => {
@@ -1077,6 +1122,33 @@ describe("Durability", () => {
 
       assert.equal(Durability.inFlight, 0);
       assert.deepStrictEqual(await readAll("queue"), [batch.record()]);
+    });
+
+    // What tells a batch the store holds from one that exists only in its tab.
+    describe("whether it was stored", () => {
+      it("answers so once the batch is down", async () => {
+        await Durability.open();
+        await Durability.load();
+
+        assert.isTrue(await Durability.fileBatch(unfiledBatch()));
+      });
+
+      it("answers not when the write failed", async () => {
+        await Durability.open();
+        await Durability.load();
+
+        const opening = sinon.spy(FDBDatabase.prototype, "transaction");
+        const filing = Durability.fileBatch(unfiledBatch());
+
+        opening.lastCall.returnValue.abort();
+
+        assert.isFalse(await filing);
+        assert.deepStrictEqual(await readAll("queue"), []);
+      });
+
+      it("answers not with nowhere to file it", async () => {
+        assert.isFalse(await Durability.fileBatch(unfiledBatch()));
+      });
     });
 
     it("numbers the batch above the stored counter", async () => {
@@ -1523,6 +1595,20 @@ describe("Durability", () => {
       await writing;
 
       assert.isTrue(await isSettled(Durability.replicaWritten()));
+    });
+
+    // A tab that follows another user before that user's stream handed it a pair holds none, and
+    // a pair of nulls stored would be taken up as the pair a later page load presents.
+    it("leaves a stored pair when the tab holds none", async () => {
+      const pair = {id: "r1", token: "statement"};
+
+      await Durability.open();
+      await Durability.load();
+      await writeMeta({"replica:anonymous": pair});
+
+      await Durability.persistReplica({id: null, token: null});
+
+      assert.deepStrictEqual(await readPair(), pair);
     });
 
     it("leaves nothing for replicaWritten() to wait on in memory mode", async () => {

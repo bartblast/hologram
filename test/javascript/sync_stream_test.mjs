@@ -81,6 +81,7 @@ describe("SyncStream", () => {
     SyncStream.awaitingIdentity = false;
     SyncStream.awaitingPair = false;
     SyncStream.followedTag = null;
+    SyncStream.heldSync = false;
     SyncStream.renderScheduled = false;
     SyncStream.rowsChangedSinceRender = false;
     SyncStream.rules = null;
@@ -408,6 +409,31 @@ describe("SyncStream", () => {
       } finally {
         Tabs.leader = true;
       }
+    });
+
+    // What a tab that stops leading has to close (see DataLayer.followIdentity).
+    it("remembers whether it asked for sync", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      SyncStream.syncCursor = "place-1";
+
+      SyncStream.buildGreeting(pageModule);
+
+      assert.isTrue(SyncStream.heldSync);
+
+      Tabs.leader = false;
+
+      try {
+        SyncStream.buildGreeting(pageModule);
+      } finally {
+        Tabs.leader = true;
+      }
+
+      assert.isFalse(SyncStream.heldSync);
     });
 
     // A first visit greets with no place right after the page filed the counts it was rendered
@@ -1528,7 +1554,6 @@ describe("SyncStream", () => {
 
     // A server that doesn't name the identity it serves says nothing more than this.
     it("ends the wait on an identity start-over naming no tag", () => {
-      SyncStream.awaitingPair = true;
       sinon.stub(Durability, "clear");
 
       eventSource.listeners.sync_resync({
@@ -1536,8 +1561,19 @@ describe("SyncStream", () => {
       });
 
       assert.isFalse(SyncStream.awaitingIdentity);
-      assert.isFalse(SyncStream.awaitingPair);
       sinon.assert.calledOnce(telling);
+    });
+
+    // It names no pair, and with none a send could only be refused.
+    it("goes on holding writes after an identity start-over naming no tag", () => {
+      SyncStream.awaitingPair = true;
+      sinon.stub(Durability, "clear");
+
+      eventSource.listeners.sync_resync({
+        data: JSON.stringify({reason: "identity"}),
+      });
+
+      assert.isTrue(SyncStream.holdsWrites());
     });
 
     it("takes frames again when a new stream opens", () => {
@@ -1561,6 +1597,79 @@ describe("SyncStream", () => {
       eventSource.listeners.sync_deltas({data: deltas});
 
       assert.equal(SyncStream.syncCursor, "place-old");
+    });
+  });
+
+  // A tab that moved to another user's group can still be served the session its last greeting
+  // asked for, until its next one closes it. What that session sends is the leader's to store.
+  describe("sync frames a tab that doesn't lead hears on its own stream", () => {
+    const deltas = JSON.stringify({
+      applied_seq: null,
+      cursor: "place-old",
+      deltas: {},
+      model_hash: "a3f9c2",
+    });
+
+    const synced = JSON.stringify({
+      applied_seq: null,
+      cursor: "place-old",
+      model_hash: "a3f9c2",
+      scope: "all",
+    });
+
+    let clearing, persisting, telling;
+
+    beforeEach(() => {
+      clearing = sinon.stub(Durability, "clear");
+      persisting = sinon.stub(Durability, "persistFrame");
+      telling = sinon.stub(SyncStream, "tell");
+    });
+
+    afterEach(() => {
+      Tabs.leader = true;
+      Tabs.takingLead = false;
+    });
+
+    const deliverAll = () => {
+      eventSource.listeners.sync_deltas({data: deltas});
+      eventSource.listeners.synced({data: synced});
+
+      eventSource.listeners.sync_resync({
+        data: JSON.stringify({reason: "retention"}),
+      });
+    };
+
+    it("are dropped while the tab follows", () => {
+      Tabs.leader = false;
+
+      deliverAll();
+
+      assert.isNull(SyncStream.syncCursor);
+      assert.isFalse(LocalDatabase.isAllSynced());
+      sinon.assert.notCalled(clearing);
+      sinon.assert.notCalled(persisting);
+      sinon.assert.notCalled(telling);
+    });
+
+    it("are dropped while the tab settles where its lead starts from", () => {
+      Tabs.takingLead = true;
+
+      deliverAll();
+
+      assert.isNull(SyncStream.syncCursor);
+      sinon.assert.notCalled(clearing);
+      sinon.assert.notCalled(persisting);
+      sinon.assert.notCalled(telling);
+    });
+
+    it("still let a stop through", () => {
+      Tabs.leader = false;
+
+      eventSource.listeners.sync_reload({
+        data: JSON.stringify({reason: "protocol_version"}),
+      });
+
+      assert.equal(SyncStream.stopReason, "protocol_version");
     });
   });
 
@@ -1621,6 +1730,18 @@ describe("SyncStream", () => {
       SyncStream.awaitingPair = true;
 
       assert.isTrue(SyncStream.holdsWrites());
+    });
+
+    // The store or the new user's group gave it one.
+    it("is false once the tab holds a pair again", () => {
+      SyncStream.awaitingPair = true;
+      Replica.adopt({id: "r-stored", token: "statement-stored"});
+
+      try {
+        assert.isFalse(SyncStream.holdsWrites());
+      } finally {
+        Replica.reset();
+      }
     });
 
     // The write endpoint refuses a batch built against another model.

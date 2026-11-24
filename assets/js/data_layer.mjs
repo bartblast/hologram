@@ -674,6 +674,19 @@ export default class DataLayer {
 
       Batches.releaseForeign(owner);
       SyncStream.scheduleRender();
+
+      // The pair goes with the user. One a mount moved the tab with brings none, and the previous
+      // user's would be written into the new user's slot, or sent under the new user's session:
+      // the tab holds none until the store or the server gives it the new user's (see
+      // SyncStream.awaitingPair). The page's offer was minted for the previous user too.
+      Replica.owner = owner;
+
+      if (!replica) {
+        Replica.id = null;
+        Replica.token = null;
+        Replica.fresh = null;
+        SyncStream.awaitingPair = true;
+      }
     }
 
     if (replica) {
@@ -681,18 +694,119 @@ export default class DataLayer {
       Replica.fresh = {id: replica.id, token: replica.token};
       SyncStream.awaitingPair = false;
 
-      // Only into this user's own slot. After a follow a mount started, the store is still the
-      // previous user's until the tab has moved.
-      if (isSameUser && Tabs.leader && Replica.owner === owner) {
+      // Only into this user's own slot. Another user's is written by the move below, once the tab
+      // leads that user's group.
+      //
+      // And not while a lead is being settled, which is also the whole of a move: a tab reading
+      // the store again takes the pair it finds there over this one, and a write landing after that
+      // read would leave the slot holding another pair than the one the tab sends under. The lead
+      // writes the pair it holds once it settles (see Tabs.ready and Tabs.#lead).
+      if (
+        isSameUser &&
+        Tabs.leader &&
+        !Tabs.takingLead &&
+        Replica.owner === owner
+      ) {
         Durability.persistReplica(Replica.current());
       }
+    }
+
+    if (!isSameUser && Tabs.name !== null) {
+      $.#moveGroup(owner, SyncStream.heldSync);
+    }
+  }
+
+  // Takes a tab that followed the session to another user out of the previous user's group and
+  // into the new one's, and takes up what the store holds for the new user, as a page load would:
+  // joined first, read after (see boot). The store is judged by the tab that leads the new group,
+  // and claimed by it when another user's: only the holder of a user's lock claims for that user,
+  // so a tab leading that user's group never finds its claim out of date. One that follows reads
+  // only whose the store is (see Durability.restore).
+  //
+  // What the tab held of its own is kept: the rows its page carried, and the batches of the new
+  // user it still holds. The store adds the rest of that user's queue - a tab back with a user it
+  // left takes up everything they left, the batches it released itself included, since its
+  // counter has moved past them.
+  //
+  // Then a stream the server serves as the tab now stands. One that leads asks for sync from the
+  // place the store gave it, or from nowhere: the stream it had may be serving the new user
+  // already, but frames it sent while the tab joined were passed over (see
+  // SyncStream.dropsFrame). One that follows closes the sync session its stream held, if it did.
+  //
+  // A newer follow, or the group ending, takes over from any point here.
+  static async #moveGroup(owner, heldSync) {
+    // A tab whose store already stopped has nothing to share with the new user's tabs, and joined,
+    // it could lead them from memory. So it leaves the group it was in and goes on as a replica of
+    // its own. It keeps its batches, as a tab that leads does when its store stops: the ones it
+    // made since were never stored, and it is the only tab that can send them.
+    if (Durability.mode !== "indexeddb") {
+      Tabs.leave();
+
+      if (Sse.isStarted) {
+        Sse.reconnect();
+      }
+
+      return;
+    }
+
+    const visit = await Tabs.move(Durability.groupName(owner));
+
+    if (visit === null) {
+      return;
+    }
+
+    // A lead handed over from here on is taken at ready(), which opens its own stream (see
+    // Tabs.#lead).
+    const ledOnJoin = Tabs.leader;
+
+    await Durability.load(() => Tabs.isVisit(visit));
+
+    if (!Tabs.isVisit(visit)) {
+      return;
+    }
+
+    // The store couldn't be read, or stopped while the tab moved: nothing left to share, so the tab
+    // leads itself and lets go of the batches the store holds, as at boot. The tab leading the new
+    // user's group sends those, or the next page load does. Kept, each would be sent twice: by this
+    // tab, and from the store under another pair. The ones its actions sealed after the store
+    // stopped are kept: nothing else holds them. Its filings settle first, since that is what tells
+    // the two apart. The other tabs are told nothing, since the store failed only for this one.
+    //
+    // Its stream is a replica's of its own from here, served sync from no place.
+    if (Durability.mode !== "indexeddb") {
+      await Batches.recorded();
+
+      if (!Tabs.isVisit(visit)) {
+        return;
+      }
+
+      Tabs.leave();
+      Batches.disownStored();
+
+      if (Sse.isStarted) {
+        Sse.reconnect();
+      }
+
+      return;
+    }
+
+    const resumed = Durability.restore(Tabs.leader);
+
+    SyncStream.syncCursor = resumed.cursor;
+    SyncStream.scheduleRender();
+
+    $.#resume(resumed);
+
+    if (Sse.isStarted && (ledOnJoin || (!Tabs.leader && heldSync))) {
+      Sse.reconnect();
     }
   }
 
   // A page arrived for another user than this tab holds. The stream in front of it can still be
   // serving the previous user, so its frames wait for a new one, opened once the mount is done:
   // its handshake presents the receipts of the page now mounted, and a login made outside Hologram
-  // announces nothing. The page's response carries no replica pair, so writes wait for one.
+  // announces nothing. The page's response carries no replica pair, so writes wait for one (see
+  // followIdentity).
   static #followMountedIdentity(mountData) {
     $.followIdentity({
       actorEntityId: mountData.actorEntityId,
@@ -701,7 +815,6 @@ export default class DataLayer {
     });
 
     SyncStream.awaitingIdentity = true;
-    SyncStream.awaitingPair = true;
 
     $.#reconnectsAfterMount = Sse.isStarted;
   }
@@ -818,8 +931,12 @@ export default class DataLayer {
   // count batches on from, and the batches it never managed to send - and answers nothing on every
   // visit after the first, since the runtime's page-script listener fires again on each
   // client-side navigation and this runs once per page visit.
+  //
+  // Only the first visit reads the store: a tab moving to another user's group takes up what it
+  // reads itself (see #moveGroup), which a later visit landing between that read and its use
+  // must not take instead.
   static restore() {
-    const resumed = Durability.restore(Tabs.leader);
+    const resumed = $.isStoreRestored ? null : Durability.restore(Tabs.leader);
 
     $.isStoreRestored = true;
 
@@ -836,10 +953,14 @@ export default class DataLayer {
 
     $.reconnectIfFollowed();
 
-    if (resumed === null) {
-      return;
+    if (resumed !== null) {
+      $.#resume(resumed);
     }
+  }
 
+  // What a tab does with what its restore took up, at its first visit and after moving to another
+  // user's group (see #moveGroup).
+  static #resume(resumed) {
     Batches.resumeFrom(resumed.seq);
     Batches.adopt(resumed.batches);
 

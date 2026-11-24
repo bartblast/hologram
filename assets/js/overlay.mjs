@@ -186,6 +186,22 @@ export default class Overlay {
     Overlay.#batches.push(batch);
   }
 
+  // A sealed batch this tab took up rather than made, put where its number goes: ahead of every
+  // batch with a higher one, and of every batch with none yet - an action still open, or one of
+  // this tab's own waiting for its number. Both of those seal later, so the server applies this one
+  // first, and folded after them it would hide an open action's own write from it.
+  static pushSealed(batch) {
+    const index = Overlay.#batches.findIndex(
+      (held) => held.seq === null || held.seq > batch.seq,
+    );
+
+    if (index === -1) {
+      Overlay.#batches.push(batch);
+    } else {
+      Overlay.#batches.splice(index, 0, batch);
+    }
+  }
+
   static remove(batch) {
     Overlay.#batches = Overlay.#batches.filter((held) => held !== batch);
   }

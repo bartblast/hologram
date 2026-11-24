@@ -290,7 +290,7 @@ export default class Durability {
   // and no transaction to order it against.
   static fileBatch(batch) {
     if (Durability.mode === "memory") {
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
 
     // The first batch stored is the first moment this browser holds something that exists nowhere
@@ -344,7 +344,11 @@ export default class Durability {
   //
   // Answers nothing, and never throws, the same as open(): a store that cannot be read is a page
   // that carries on from memory.
-  static async load() {
+  //
+  // Read again by a tab moving to another user's group, which can move on again while this reads
+  // (see DataLayer.followIdentity). `isCurrent` says whether the move that asked still stands, and
+  // a read it no longer wants is dropped, so the next restore can't take it up.
+  static async load(isCurrent = () => true) {
     if (Durability.mode === "memory") {
       return;
     }
@@ -361,7 +365,7 @@ export default class Durability {
     // Closing a database lets a transaction already running finish, so the read still answers,
     // and taking up what it found would hand this tab, which now leads itself, the identity and the
     // queue the group's leader is still sending: two senders under one replica.
-    if (Durability.mode !== "indexeddb") {
+    if (Durability.mode !== "indexeddb" || !isCurrent()) {
       return;
     }
 
@@ -744,7 +748,9 @@ export default class Durability {
   // Answers NOTHING when there is nothing to take up - a browser with no durable storage, and
   // every call after the first. The second matters: the runtime's page-script listener runs again
   // on each client-side navigation, so this is reached once per page visit, and a later call that
-  // answered a place of null would take away the one the stream had been keeping all along.
+  // answered a place of null would take away the one the stream had been keeping all along. A tab
+  // moving to another user's group loads again and takes that up the same way, as the user it now
+  // holds (see DataLayer.followIdentity).
   //
   // The rows are dropped rather than used in two cases, and each is a case where showing them
   // would be showing something untrue. (A model change is not among them any more: a bundle on
@@ -914,7 +920,7 @@ export default class Durability {
   // log can fill and that survives reloads. A throw here would leave the store open and unwiped,
   // tell no other tab, and reject the write being failed - which a send waits on when it is the
   // identity's or the batch's own (see replicaWritten).
-  static #fail(reason) {
+  static #fail(reason, owner) {
     try {
       Logger.debug(
         `Hologram: durable storage stopped (${reason}), the database lives in memory for this page`,
@@ -930,9 +936,7 @@ export default class Durability {
 
       Durability.#whileOwned(transaction, () => Durability.#wipe(transaction));
 
-      transaction
-        .objectStore(META)
-        .delete(Durability.#pairKey(Durability.#pairOwner()));
+      transaction.objectStore(META).delete(Durability.#pairKey(owner));
     } catch {
       // There is nothing further to try - this page stops storing either way.
     }
@@ -1101,7 +1105,13 @@ export default class Durability {
       : Replica.owner;
   }
 
+  // Nothing for a tab holding no pair: one that followed a page to another user is given none (see
+  // DataLayer.followIdentity), and the slot it would write over is that user's own.
   static #writePair(transaction, owner, replica) {
+    if (!replica?.id) {
+      return;
+    }
+
     transaction.objectStore(META).put(replica, Durability.#pairKey(owner));
   }
 
@@ -1194,12 +1204,20 @@ export default class Durability {
   //
   // In memory mode this answers an already-settled promise, so a caller that awaits one - the
   // batch counter does - waits for nothing rather than branching.
+  //
+  // Answers whether the write was committed, which is what tells a batch that was filed from one
+  // that exists only in its tab's memory.
   static async #write(storeNames, fn) {
     if (Durability.mode === "memory") {
-      return;
+      return false;
     }
 
     Durability.inFlight += 1;
+
+    // Whose pair a failure takes out, read as the write starts: a tab that follows the session to
+    // another user moves its pair's owner at once, and a write it started before then is the
+    // previous user's.
+    const owner = Durability.#pairOwner();
 
     try {
       const transaction = Durability.#db.transaction(storeNames, "readwrite", {
@@ -1209,8 +1227,12 @@ export default class Durability {
       fn(transaction);
 
       await Durability.#complete(transaction);
+
+      return true;
     } catch (error) {
-      Durability.#fail(`write failed (${error})`);
+      Durability.#fail(`write failed (${error})`, owner);
+
+      return false;
     } finally {
       Durability.inFlight -= 1;
     }

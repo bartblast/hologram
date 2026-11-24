@@ -121,7 +121,7 @@ export default class Batches {
       }
 
       Batches.pending.push(batch);
-      Overlay.push(batch);
+      Overlay.pushSealed(batch);
 
       taken = true;
     }
@@ -244,6 +244,23 @@ export default class Batches {
     Batches.pending = [];
   }
 
+  // Lets go of the batches the store holds, and keeps the ones it was never given: for a tab whose
+  // store stopped while it moved to another user's group (see DataLayer). What the store holds is
+  // sent from there, by the tab leading that user's group or the next page load; kept, this tab
+  // would send it too, under another pair. What the store never got exists only here.
+  //
+  // Asked once every filing has settled (see recorded), since a batch's filing is what tells which
+  // of the two it is.
+  static disownStored() {
+    for (const batch of Batches.pending) {
+      if (!batch.unstored) {
+        Overlay.remove(batch);
+      }
+    }
+
+    Batches.pending = Batches.pending.filter((batch) => batch.unstored);
+  }
+
   // Lets go of every batch of a user other than the given one: out of the queue, so this tab does
   // not send it under the new user's session, and out of the overlay, so the new user doesn't see
   // it. An action still open counts, since its batch is in the overlay from the moment it opens.
@@ -354,6 +371,13 @@ export default class Batches {
         // the way in: the queue is still taken up, so a batch another tab filed is on this tab's
         // screen too, and a stop that arrives while a send is out stops the drain behind it.
         if (SyncStream.holdsWrites()) {
+          return;
+        }
+
+        // Asked again here for the same reason: a tab that follows a change of user moves to the
+        // new user's group, where it may not be the one that sends. Its send already out finishes,
+        // and the queue behind it goes to whichever tab leads there, under that tab's identity.
+        if (!Tabs.sends()) {
           return;
         }
 
@@ -665,7 +689,8 @@ export default class Batches {
     SyncStream.scheduleRender();
   }
 
-  // Where the previous page load's numbering got to, so this one counts on from there. Never
+  // Where the previous page load's numbering got to, so this one counts on from there - or where the
+  // store's got to, for a tab moving to another user's group (see DataLayer.followIdentity). Never
   // backwards: a number is identified with its replica, and the server answers a repeat from its
   // record of the first batch to carry it.
   //
@@ -676,7 +701,7 @@ export default class Batches {
   // work takes the number inside the same lock that puts the batch in the shared queue, which
   // removes the case rather than detecting it.
   static resumeFrom(seq) {
-    Batches.#seq = seq;
+    Batches.#seq = Math.max(Batches.#seq, seq);
   }
 
   // The number a batch ships under, and its place in the queue once it has one.
@@ -696,12 +721,16 @@ export default class Batches {
     // stored has its number the moment the action ends, exactly as it did before there was
     // anywhere to file one.
     if (Durability.mode === "memory") {
+      batch.unstored = true;
       Batches.#numbered(batch);
 
       return filed;
     }
 
-    return filed.then(() => Batches.#numbered(batch));
+    return filed.then((stored) => {
+      batch.unstored = stored === false;
+      Batches.#numbered(batch);
+    });
   }
 
   // A batch whose number is settled: taken from this tab's own count if the store gave none, and
@@ -724,7 +753,15 @@ export default class Batches {
     //
     // Not one of a user this tab no longer serves: a tab that hasn't heard of the change yet would
     // take it up and send it under the new session.
-    if (batch.actorUserId === (LocalDatabase.actorUserId ?? null)) {
+    //
+    // Nor one the store never got: its number was never written down, so the store can hand it
+    // to another batch, and a tab sending it under the group's pair would have the server answer
+    // that batch from this one's record. And this tab keeps it to send under its own pair (see
+    // disownStored), so the server would apply it twice.
+    if (
+      !batch.unstored &&
+      batch.actorUserId === (LocalDatabase.actorUserId ?? null)
+    ) {
       Tabs.post({kind: "sealed", record: batch.record()});
     }
   }
