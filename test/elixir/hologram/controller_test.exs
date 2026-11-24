@@ -75,6 +75,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module54
   alias Hologram.Test.Fixtures.Controller.Module55
   alias Hologram.Test.Fixtures.Controller.Module56
+  alias Hologram.Test.Fixtures.Controller.Module57
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
   alias Hologram.Test.Fixtures.Controller.Module9
@@ -89,7 +90,6 @@ defmodule Hologram.ControllerTest do
   @csrf_token_session_key CSRFProtection.session_key()
   @hologram_session_id "test-session-id"
   @replica_id "test-replica-id"
-  @replica_token "test-replica-token"
 
   @session %{
     @csrf_token_session_key => @unmasked_csrf_token,
@@ -275,8 +275,7 @@ defmodule Hologram.ControllerTest do
       initial_page?: true,
       instance_id: instance_id,
       csrf_token: @masked_csrf_token,
-      replica_id: @replica_id,
-      replica_token: @replica_token
+      replica_id: @replica_id
     )
   end
 
@@ -3140,6 +3139,33 @@ defmodule Hologram.ControllerTest do
                :ok
     end
 
+    # A token for the identity before the init would be refused for good once it changed.
+    test "mints a replica identity bound to the user an init/3 signed in" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module57, :dummy_module_57_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module57")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module57)
+
+      {replica_id, replica_token} = extract_replica_identity(conn.resp_body)
+
+      assert ReplicaIdentity.verify(replica_token, replica_id, "another-session", 7) == :ok
+    end
+
+    test "names the user an init/3 signed in as the page's owner" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module57, :dummy_module_57_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module57")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module57)
+
+      assert boot_data(conn.resp_body)["actorUserId"] == "i7"
+    end
+
     test "mints a fresh replica id on each initial page request" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
 
@@ -3491,8 +3517,7 @@ defmodule Hologram.ControllerTest do
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token,
-          replica_id: @replica_id,
-          replica_token: @replica_token
+          replica_id: @replica_id
         )
 
       assert String.contains?(conn.resp_body, "actor=019ff5c2-0000-7000-8000-000000000002")
@@ -3637,8 +3662,7 @@ defmodule Hologram.ControllerTest do
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token,
-        replica_id: @replica_id,
-        replica_token: @replica_token
+        replica_id: @replica_id
       )
 
       assert_receive {:identity_changed, ^session_id, 7}
@@ -3661,8 +3685,7 @@ defmodule Hologram.ControllerTest do
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token,
-        replica_id: @replica_id,
-        replica_token: @replica_token
+        replica_id: @replica_id
       )
 
       refute_receive {:identity_changed, _session_id, _user_id}
@@ -3686,8 +3709,7 @@ defmodule Hologram.ControllerTest do
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token,
-          replica_id: @replica_id,
-          replica_token: @replica_token
+          replica_id: @replica_id
         )
       end
 
@@ -3714,8 +3736,7 @@ defmodule Hologram.ControllerTest do
                        initial_page?: true,
                        instance_id: "test-instance-id",
                        csrf_token: @masked_csrf_token,
-                       replica_id: @replica_id,
-                       replica_token: @replica_token
+                       replica_id: @replica_id
                      )
                    end
 
@@ -3740,8 +3761,7 @@ defmodule Hologram.ControllerTest do
                        initial_page?: true,
                        instance_id: "test-instance-id",
                        csrf_token: @masked_csrf_token,
-                       replica_id: @replica_id,
-                       replica_token: @replica_token
+                       replica_id: @replica_id
                      )
                    end
 
@@ -3763,8 +3783,7 @@ defmodule Hologram.ControllerTest do
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token,
-        replica_id: @replica_id,
-        replica_token: @replica_token
+        replica_id: @replica_id
       )
 
       assert_receive {:identity_changed, ^session_id, 7}
@@ -3785,8 +3804,7 @@ defmodule Hologram.ControllerTest do
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token,
-        replica_id: @replica_id,
-        replica_token: @replica_token
+        replica_id: @replica_id
       )
 
       refute_receive {:identity_changed, _session_id, _user_id}
@@ -3806,8 +3824,7 @@ defmodule Hologram.ControllerTest do
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token,
-          replica_id: @replica_id,
-          replica_token: @replica_token
+          replica_id: @replica_id
         )
 
       assert Plug.Conn.get_session(conn, :hologram_user_id) == 7
@@ -3830,8 +3847,7 @@ defmodule Hologram.ControllerTest do
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token,
-          replica_id: @replica_id,
-          replica_token: @replica_token
+          replica_id: @replica_id
         )
 
       assert Plug.Conn.get_session(conn, :hologram_user_id) == 7

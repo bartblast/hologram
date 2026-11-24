@@ -19,6 +19,7 @@ export default class Mutations {
   // numbers.
   static buildPayload(batch) {
     return {
+      actor_user_id: batch.actorUserId,
       instance_id: App.instanceId,
       model_hash: globalThis.Hologram.sync.modelHash,
       replica_id: Replica.id,

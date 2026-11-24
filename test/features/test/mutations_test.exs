@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.MutationsTest do
   # async: false - each test truncates the shared tables.
   use HologramFeatureTests.TestCase, async: false
 
+  alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
@@ -171,6 +172,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
     script = """
     const payload = {
+      actor_user_id: #{Jason.encode!(session_owner())},
       instance_id: globalThis.Hologram.instanceId,
       replica_id: #{replica_id_js},
       replica_token: #{replica_token_js},
@@ -207,6 +209,15 @@ defmodule HologramFeatureTests.MutationsTest do
     Enum.map(rows, fn [actor_id, result, envelope] ->
       %{actor_id: Codec.decode(actor_id, :uuid), envelope: envelope, result: result}
     end)
+  end
+
+  # Whose batch this is, as the page of the session's user names it. A hand-built batch has to say
+  # so too, since the server refuses one made for anyone else.
+  defp session_owner do
+    case session_user() do
+      nil -> nil
+      user -> Auth.owner_key(user.id)
+    end
   end
 
   defp session_user do

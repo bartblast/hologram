@@ -68,6 +68,7 @@ defmodule Hologram.Template.Renderer do
   # Where the refs of the render in progress are kept, each with the module whose template wrote its
   # element, so that a second element under one of them is caught wherever in the page it renders.
   @rendered_refs_key {__MODULE__, :rendered_refs}
+  @restart_render {__MODULE__, :restart_render}
 
   # The characters a value cannot carry into a script element as the text of a JavaScript string
   # literal, each with the escape sequence it is written as instead. Every sequence is valid
@@ -445,9 +446,30 @@ defmodule Hologram.Template.Renderer do
           tree: tree
         }
   def render_page(page_module, params, server_struct, opts) do
+    render_page_once(page_module, params, server_struct, opts)
+  catch
+    :throw, {@restart_render, user_id} ->
+      rerender_page_as(page_module, params, %{server_struct | user_id: user_id}, opts)
+  end
+
+  defp render_page_once(page_module, params, server_struct, opts) do
     Context.with_actor(server_struct.user_id, fn ->
       render_page_as_actor(page_module, params, server_struct, opts)
     end)
+  end
+
+  # A layout's or child's init/3 changed who is signed in after the render had read data as the
+  # previous user. Rendering again is the one way for the whole page to be the new user's. Started
+  # from the struct the render began with, so what the first run queued isn't done twice.
+  defp rerender_page_as(page_module, params, server_struct, opts) do
+    render_page_once(page_module, params, server_struct, opts)
+  catch
+    :throw, {@restart_render, _user_id} ->
+      raise Hologram.MisuseError,
+        message:
+          "#{inspect(page_module)} changed the signed-in user in a layout's or component's " <>
+            "init/3 again when it was rendered for the new user - change it in the page's " <>
+            "init/3, middleware or a command"
   end
 
   # Queries evaluated during the render are filtered by the session user's policies, and the
@@ -459,7 +481,7 @@ defmodule Hologram.Template.Renderer do
     Carry.start()
 
     {page_component_struct, page_server_struct} =
-      init_component(page_module, params, server_struct)
+      init_component(page_module, params, server_struct, true)
 
     page_digest = PageDigestRegistry.lookup(page_module)
 
@@ -513,15 +535,16 @@ defmodule Hologram.Template.Renderer do
     # controller to serialize: into the first page's boot data block, or into a navigation's
     # payload. The values that depend on the render's Realtime state, the self-echoes and the
     # receipts, join them there, which keeps the renderer Realtime-agnostic. The acting user and the
-    # rows travel as plain JSON, since the data layer reads them as JSON.
+    # rows travel as plain JSON, since the data layer reads them as JSON. The acting user is the one
+    # the render leaves signed in, since that's whose session the page's writes go out under.
     mount_data = %{
-      actor_user_id: server_struct.user_id,
+      actor_user_id: final_server_struct.user_id,
       component_registry: component_registry_for_client,
       page_module: page_module,
       page_params: params,
       sync_count_types: Carry.take_count_types(),
       sync_counts: Carry.take_counts(),
-      sync_rows: Carry.take(server_struct.user_id)
+      sync_rows: Carry.take(final_server_struct.user_id)
     }
 
     %{
@@ -1359,7 +1382,7 @@ defmodule Hologram.Template.Renderer do
   # the state it returned - so the template renders once, with what init set.
   #
   # WARNING: the struct it starts from must match the client renderer's #maybeInitComponent.
-  defp init_component(module, props, server_struct) do
+  defp init_component(module, props, server_struct, page? \\ false) do
     {before_init, after_init} = ComponentDerived.split_by_init(module.__derived__())
     state_defaults = state_defaults(module)
     compute_opts = derived_compute_opts(module)
@@ -1394,6 +1417,22 @@ defmodule Hologram.Template.Renderer do
 
     validate_declared_state(component_struct.state, module, "init/3")
 
+    derived_before_init =
+      cond do
+        returned_server_struct.user_id == server_struct.user_id ->
+          computed_before_init
+
+        page? ->
+          render_as_user(returned_server_struct.user_id)
+
+          ComponentDerived.compute(before_init, module, props, state_defaults, %{}, compute_opts)
+
+        true ->
+          follow_user_change(returned_server_struct.user_id)
+
+          computed_before_init
+      end
+
     # Only a field reading state is a placeholder while init runs, so a component declaring none
     # has nothing to look for - and its state, which can hold every row it loaded, isn't walked.
     if after_init != [] do
@@ -1406,11 +1445,29 @@ defmodule Hologram.Template.Renderer do
         module,
         props,
         component_struct.state,
-        computed_before_init,
+        derived_before_init,
         compute_opts
       )
 
     {%{component_struct | derived: derived, props: props}, %{returned_server_struct | cid: nil}}
+  end
+
+  # What follows a page's init/3 that changed who is signed in renders for the user it left signed
+  # in. What the render gathered before it belongs to the previous user, so it stays behind.
+  defp render_as_user(user_id) do
+    Context.put_actor(user_id)
+    Carry.start()
+  end
+
+  # A layout's or child's init/3 changed who is signed in. With nothing read yet the render just
+  # goes on as the new user. Otherwise part of the page is the previous user's, so it starts over
+  # (see render_page/4). Outside a page render there's no actor to move.
+  defp follow_user_change(user_id) do
+    cond do
+      not Carry.active?() -> :ok
+      Carry.gathered?() -> throw({@restart_render, user_id})
+      true -> Context.put_actor(user_id)
+    end
   end
 
   defp inject_default_prop_values(props, module) do

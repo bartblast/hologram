@@ -161,6 +161,22 @@ defmodule Hologram.Sync.Carry do
   end
 
   @doc """
+  Returns whether a render is gathering what the client takes in, which only `start/0` turns on.
+  """
+  @spec active?() :: boolean
+  def active?, do: Process.get(@grant_scopes_key) != nil
+
+  @doc """
+  Returns whether the render has gathered anything so far: a row, a count or a permission check.
+  """
+  @spec gathered?() :: boolean
+  def gathered? do
+    grant_scopes = Process.get(@grant_scopes_key, MapSet.new())
+
+    gathered() != %{} or gathered_counts() != %{} or MapSet.size(grant_scopes) > 0
+  end
+
+  @doc """
   Returns the entity types each count gathered so far reads, keyed as the counts are (see
   `collect_count/4`), and clears what was gathered.
   """

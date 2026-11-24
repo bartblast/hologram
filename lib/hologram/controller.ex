@@ -340,12 +340,41 @@ defmodule Hologram.Controller do
   # doesn't match - the caller is using an `instance_id` they didn't
   # establish (forgery, or post-logout stale state).
   defp caller_owns_instance_id?(conn, instance_id) do
-    case SubscriptionRegistry.identity_of(instance_id) do
-      nil ->
-        true
+    instance_ownership(conn, instance_id) == :owned
+  end
 
-      registry_identity ->
-        registry_identity == {Session.get_session_id(conn), Session.get_user_id(conn)}
+  # The same session under another user is a login or logout the stream hasn't recorded yet, rather
+  # than a caller claiming somebody else's tab.
+  defp instance_ownership(conn, instance_id) do
+    session_id = Session.get_session_id(conn)
+    user_id = Session.get_user_id(conn)
+
+    case SubscriptionRegistry.identity_of(instance_id) do
+      nil -> :owned
+      {^session_id, ^user_id} -> :owned
+      {^session_id, _other_user_id} -> :user_changed
+      _other_identity -> :foreign
+    end
+  end
+
+  defp handle_validated_mutation_request(conn) do
+    ownership = instance_ownership(conn, conn.body_params["instance_id"])
+
+    cond do
+      ownership == :foreign ->
+        forbid(conn, "instance_id cross-check failed")
+
+      ownership == :user_changed or not batch_of_session_user?(conn) ->
+        conn
+        |> Plug.Conn.put_status(409)
+        |> Controller.text("Conflict")
+        |> Plug.Conn.halt()
+
+      not replica_identity_verified?(conn) ->
+        forbid(conn, "replica identity check failed")
+
+      true ->
+        send_mutation_response(conn)
     end
   end
 
@@ -511,16 +540,6 @@ defmodule Hologram.Controller do
     instance_id = UUID.uuid4()
     replica_id = UUID.uuid4()
 
-    # Minted before the lifecycle, from the session as it stands: a page whose middleware signs
-    # the visitor in gets a session-bound identity that keeps working in that session, and the
-    # next page load mints a user-bound one.
-    replica_token =
-      ReplicaIdentity.issue(
-        replica_id,
-        Session.get_session_id(conn_with_session),
-        Session.get_user_id(conn_with_session)
-      )
-
     # Read once, so the nonce and the elements it is stamped on follow the same policy. A page sent
     # without a policy carries no nonce at all, since nothing would read it.
     csp_directives = ContentSecurityPolicy.directives()
@@ -533,8 +552,7 @@ defmodule Hologram.Controller do
       csrf_token: masked_csrf_token,
       initial_page?: true,
       instance_id: instance_id,
-      replica_id: replica_id,
-      replica_token: replica_token
+      replica_id: replica_id
     ]
 
     handle_page_request(conn_with_session, page_module, params, [], renderer_opts)
@@ -544,8 +562,9 @@ defmodule Hologram.Controller do
   Handles an HTTP POST carrying a batch of client writes.
 
   Checks the CSRF token and the instance cross-check exactly as a command request does, checks that
-  the batch's replica id is one the session presenting it was given, applies the batch on behalf of
-  the session, and answers with what became of it as JSON.
+  the batch was made for the session's user and that its replica id is one the session presenting
+  it was given, applies the batch on behalf of the session, and answers with what became of it as
+  JSON.
 
   ## Parameters
 
@@ -562,18 +581,10 @@ defmodule Hologram.Controller do
       |> PlugConnUtils.init_conn()
       |> Session.init()
 
-    cond do
-      not validate_csrf_token(conn) ->
-        forbid(conn, "CSRF token validation failed")
-
-      not caller_owns_instance_id?(conn, conn.body_params["instance_id"]) ->
-        forbid(conn, "instance_id cross-check failed")
-
-      not replica_identity_verified?(conn) ->
-        forbid(conn, "replica identity check failed")
-
-      true ->
-        send_mutation_response(conn)
+    if validate_csrf_token(conn) do
+      handle_validated_mutation_request(conn)
+    else
+      forbid(conn, "CSRF token validation failed")
     end
   end
 
@@ -603,6 +614,17 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, conn, result} ->
+        replica_id = renderer_opts[:replica_id]
+
+        # Minted from the session the lifecycle leaves behind: middleware or an init/3 can have
+        # changed who is signed in, and a token for the previous user would be refused for good.
+        replica_token =
+          ReplicaIdentity.issue(
+            replica_id,
+            Session.get_session_id(conn),
+            Session.get_user_id(conn)
+          )
+
         boot_data =
           build_boot_data(%{
             chunk_digests: result.chunk_digests,
@@ -611,8 +633,8 @@ defmodule Hologram.Controller do
             instance_id: renderer_opts[:instance_id],
             mount_data: result.mount_data,
             page_digest: PageDigestRegistry.lookup(page_module),
-            replica_id: renderer_opts[:replica_id],
-            replica_token: renderer_opts[:replica_token],
+            replica_id: replica_id,
+            replica_token: replica_token,
             self_echoes: result.self_echoes,
             sub_receipt_adds: result.sub_receipt_adds,
             sub_receipt_drops: result.sub_receipt_drops
@@ -786,6 +808,20 @@ defmodule Hologram.Controller do
       end
     end)
     |> Enum.unzip()
+  end
+
+  # A batch applies as the session's user, and a tab that hasn't heard of a login yet can still send
+  # what the previous user wrote. A visitor's replica token keeps verifying after they sign in, so
+  # the token can't catch this. This and a stream that hasn't recorded the login answer 409 rather
+  # than 403, since a 403 makes the client replace its pair, and a batch resent under a new pair
+  # has no record on the server to be answered from.
+  defp batch_of_session_user?(conn) do
+    session_owner =
+      conn
+      |> Session.get_user_id()
+      |> Auth.owner_key()
+
+    conn.body_params["actor_user_id"] == session_owner
   end
 
   # The statement proves that the session presenting this replica id is the one it was minted for -

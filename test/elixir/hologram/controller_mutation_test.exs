@@ -5,6 +5,7 @@ defmodule Hologram.ControllerMutationTest do
 
   import Hologram.Controller
 
+  alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -103,7 +104,10 @@ defmodule Hologram.ControllerMutationTest do
     Enum.map(rows, fn [actor_id] -> Codec.decode(actor_id, :uuid) end)
   end
 
+  # Names the session's user unless the batch says otherwise, as a tab serving that user does.
   defp post_batch(raw, session \\ @anonymous_session, opts \\ []) do
+    raw = Map.put_new(raw, "actor_user_id", Auth.owner_key(session[:hologram_user_id]))
+
     :post
     |> Plug.Test.conn("/hologram/mutation", "")
     |> Plug.Test.init_test_session(session)
@@ -160,7 +164,7 @@ defmodule Hologram.ControllerMutationTest do
       assert oplog_actor_ids(replica_id) == [user.id]
     end
 
-    test "applies a batch under an identity minted before the session signed in" do
+    test "applies a signed-in user's batch under an identity minted before they signed in" do
       user = create_user("signed-in-later@example.com")
       id = Entity.generate_id()
       replica_id = Entity.generate_id()
@@ -184,6 +188,62 @@ defmodule Hologram.ControllerMutationTest do
              }
 
       assert EntityOperations.get(MutationModule2, id) != nil
+    end
+
+    # A visitor's token keeps verifying after they sign in, so a tab that hasn't heard of the login
+    # could otherwise get the visitor's write saved as the user's.
+    test "leaves a visitor's batch unapplied once the session has signed in" do
+      user = create_user("signed-in-meanwhile@example.com")
+      id = Entity.generate_id()
+
+      raw =
+        [public_write(id)]
+        |> envelope()
+        |> Map.put("actor_user_id", nil)
+
+      conn = post_batch(raw, session_of(user.id))
+
+      assert conn.halted == true
+      assert conn.status == 409
+      assert conn.resp_body == "Conflict"
+
+      assert EntityOperations.get(MutationModule2, id) == nil
+    end
+
+    test "leaves a user's batch unapplied once the session has signed out" do
+      id = Entity.generate_id()
+
+      raw =
+        [public_write(id)]
+        |> envelope()
+        |> Map.put("actor_user_id", Auth.owner_key(7))
+
+      conn = post_batch(raw)
+
+      assert conn.status == 409
+
+      assert EntityOperations.get(MutationModule2, id) == nil
+    end
+
+    # Before the token: a refused token makes the client replace a pair that's fine.
+    test "answers a batch of another user with a conflict even when its token is theirs" do
+      user = create_user("next-user@example.com")
+      id = Entity.generate_id()
+      replica_id = Entity.generate_id()
+
+      raw =
+        [public_write(id)]
+        |> envelope(
+          replica_id: replica_id,
+          replica_token: ReplicaIdentity.issue(replica_id, @hologram_session_id, "previous-user")
+        )
+        |> Map.put("actor_user_id", Auth.owner_key("previous-user"))
+
+      conn = post_batch(raw, session_of(user.id))
+
+      assert conn.status == 409
+
+      assert EntityOperations.get(MutationModule2, id) == nil
     end
 
     test "answers a refused batch with the write and the reason" do
@@ -296,6 +356,34 @@ defmodule Hologram.ControllerMutationTest do
       assert conn.halted == true
       assert conn.status == 403
       assert conn.resp_body == "Forbidden"
+    end
+
+    # The stream records a login when it handles the announcement. A 403 here would make the client
+    # replace its pair, and a batch resent under a new pair has no record to be answered from.
+    test "answers a conflict while the stream hasn't recorded a login" do
+      user = create_user("login-not-recorded@example.com")
+      id = Entity.generate_id()
+
+      :ok = SubscriptionRegistry.register_connection(@instance_id, self())
+      :ok = SubscriptionRegistry.update_identity(@instance_id, @hologram_session_id, nil)
+
+      conn = post_batch(envelope([public_write(id)]), session_of(user.id))
+
+      assert conn.halted == true
+      assert conn.status == 409
+      assert EntityOperations.get(MutationModule2, id) == nil
+    end
+
+    test "answers a conflict while the stream hasn't recorded a logout" do
+      id = Entity.generate_id()
+
+      :ok = SubscriptionRegistry.register_connection(@instance_id, self())
+      :ok = SubscriptionRegistry.update_identity(@instance_id, @hologram_session_id, 7)
+
+      conn = post_batch(envelope([public_write(id)]))
+
+      assert conn.status == 409
+      assert EntityOperations.get(MutationModule2, id) == nil
     end
 
     test "refuses a batch carrying no replica token" do

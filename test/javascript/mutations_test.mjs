@@ -13,6 +13,7 @@ describe("Mutations", () => {
     let fetchStub, originalHologram, originalInstanceId;
 
     const batch = {
+      actorUserId: "i42",
       seq: 7,
       writes: [
         {
@@ -76,6 +77,7 @@ describe("Mutations", () => {
       await Mutations.send(batch);
 
       assert.deepStrictEqual(JSON.parse(fetchStub.firstCall.args[1].body), {
+        actor_user_id: "i42",
         instance_id: "test-instance-id",
         model_hash: "test-model-hash",
         replica_id: "test-replica-id",
@@ -83,6 +85,18 @@ describe("Mutations", () => {
         seq: 7,
         writes: batch.writes,
       });
+    });
+
+    // The server applies a batch as the session's user, so it has to know whose this one is.
+    it("names a visitor's batch as nobody's", async () => {
+      responding({dropped: {}, status: "confirmed"});
+
+      await Mutations.send({...batch, actorUserId: null});
+
+      const body = JSON.parse(fetchStub.firstCall.args[1].body);
+
+      assert.property(body, "actor_user_id");
+      assert.isNull(body.actor_user_id);
     });
 
     it("sends a big integer as its digits", async () => {
