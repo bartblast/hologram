@@ -179,6 +179,7 @@ export default class SyncStream {
         LocalDatabase.records(written),
         frame.cursor,
         LocalDatabase.takeStoredFactRemovals(),
+        LocalDatabase.finalSeq(),
       );
 
       $.tell("sync_deltas", frame, stored);
@@ -238,6 +239,8 @@ export default class SyncStream {
           ? Durability.persistFrame(
               LocalDatabase.records(written ?? []),
               frame.cursor || null,
+              [],
+              LocalDatabase.finalSeq(),
             )
           : null;
 
@@ -275,6 +278,11 @@ export default class SyncStream {
         $.noteServedModel(frame.model_hash);
 
         const written = Deltas.apply(frame.deltas);
+
+        // How far the numbers are final once this frame's rows are in, which only its batch's last
+        // frame says: its numbers are split against the point the frames before it reached, so a
+        // number the frame itself makes final waits for it here, a moment.
+        LocalDatabase.raiseFinal(frame.final_seq);
 
         // What this client's own pending writes are worth against what just arrived: every batch
         // up to the number the frame names has been applied, so its writes on these rows are in
@@ -347,6 +355,13 @@ export default class SyncStream {
           $.rowsChangedSinceRender = true;
         } else {
           LocalDatabase.beginRefill({hadPlace: $.syncCursor !== null});
+
+          // A refill keeps how far the numbers are final, since the rows below the point stay held
+          // until its markers say which go - unless the log they came from is gone, or the place
+          // naming it can't be read: a log claimed again numbers its saves from the start.
+          if (frame.reason === "retention" || frame.reason === "cursor") {
+            LocalDatabase.forgetFinal();
+          }
         }
 
         $.syncCursor = null;
@@ -379,6 +394,11 @@ export default class SyncStream {
       // front of an old node.
       case "synced": {
         $.noteServedModel(frame.model_hash);
+
+        // Ahead of the sweep, which goes by the rows rather than their numbers. A fill's marker
+        // carries its edge, which a type's rows reach once its marker arrives: the rows of a type
+        // still to come are a part of the truth anyway, until their own marker.
+        LocalDatabase.raiseFinal(frame.final_seq);
 
         if (frame.cursor) {
           $.syncCursor = frame.cursor;

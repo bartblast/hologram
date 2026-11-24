@@ -244,6 +244,8 @@ export default class Deltas {
   // it has already been told to let go of - a resync between the two is enough for that to
   // happen. Filing the changes alone would leave a row with holes where its other attributes
   // should be, and nothing would ever fill them.
+  //
+  // An updated number above the final point waits beside the row, which keeps the one it held.
   static #patchRow(type, changes) {
     Deltas.#observeRevisions(changes);
 
@@ -253,7 +255,11 @@ export default class Deltas {
       return null;
     }
 
-    const merged = Object.assign({}, held, changes);
+    const merged = Object.assign(
+      {},
+      held,
+      LocalDatabase.holdNumbers(type, changes),
+    );
 
     // A patch carries the revisions of the columns it names and nothing else, so the row's map is
     // the held one with those written over it - the assign above would otherwise have replaced the
@@ -269,6 +275,9 @@ export default class Deltas {
     return changes.id;
   }
 
+  // A row from the stream holds only the numbers that are final, the rest waiting beside it (see
+  // LocalDatabase.holdNumbers), while one a page carried is filed as it came: the render already
+  // left out every number it could not call final, and the first render here has to match it.
   static #putRow(type, row, opts) {
     Deltas.#observeRevisions(row);
 
@@ -283,7 +292,7 @@ export default class Deltas {
       return row.id;
     }
 
-    Deltas.#fileRow(type, row);
+    Deltas.#fileRow(type, LocalDatabase.holdNumbers(type, row));
 
     // The stream has delivered it, so it is no longer a row the client only has because a page
     // carried it - and no longer one the completeness marker should take away.

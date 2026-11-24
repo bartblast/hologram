@@ -621,6 +621,7 @@ export default class Tabs {
       {
         completeness,
         cursor: SyncStream.syncCursor,
+        finalSeq: LocalDatabase.finalSeq(),
         kind: "state",
         replica: Replica.current(),
         rules: SyncStream.rulesForGroup(),
@@ -668,6 +669,7 @@ export default class Tabs {
           placeless = await Durability.repair(
             LocalDatabase.records(LocalDatabase.vouchedRowKeys()),
             SyncStream.syncCursor,
+            LocalDatabase.finalSeq(),
           );
         } finally {
           Tabs.takingLead = false;
@@ -776,8 +778,10 @@ export default class Tabs {
       return;
     }
 
+    // How far the numbers are final comes with the place, since it is a claim about the same rows.
     if (SyncStream.syncCursor === null && message.cursor !== null) {
       SyncStream.syncCursor = message.cursor;
+      LocalDatabase.raiseFinal(message.finalSeq);
     }
 
     Tabs.#takeRules(message);
@@ -932,7 +936,10 @@ export default class Tabs {
           // server sends again only what changed after it, and an older value the page rendered
           // would stay for good. The sets a record names are the store's too; a set it says
           // nothing about is left as the page filed it, which is what a restore does.
-          for (const {facts, id, row, type} of base.records) {
+          // How far their numbers are final is the store's too, written down with them.
+          LocalDatabase.takeStoredFinal(base.finalSeq);
+
+          for (const {facts, id, row, type, waiting} of base.records) {
             if (row === null) {
               continue;
             }
@@ -944,7 +951,7 @@ export default class Tabs {
               Clock.observe(revision);
             }
 
-            LocalDatabase.putRow(type, row);
+            LocalDatabase.putStored(type, row, waiting);
             LocalDatabase.unmarkCarried(type, id);
 
             for (const [relationship, targetIds] of Object.entries(facts)) {
