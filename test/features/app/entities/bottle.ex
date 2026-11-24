@@ -11,3 +11,9 @@ defmodule HologramFeatureTests.Entities.Bottle do
   # it includes and reads, so that name is what makes them sync at all.
   allow :read
 end
+
+# What the entity impls page prints. An implementation doesn't name the type it's written for, so
+# Bottle stays a type browser code reaches only by a relationship name.
+defimpl String.Chars, for: HologramFeatureTests.Entities.Bottle do
+  def to_string(bottle), do: bottle.label
+end

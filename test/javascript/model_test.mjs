@@ -1913,6 +1913,68 @@ describe("Model", () => {
       Model.reset();
     });
 
+    it("remembers the update names the new rules no longer carry", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["approve", "archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: ["approve"],
+          policy: {},
+          updateNames: ["approve"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("remembers the update names of a held type the entries leave out", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("keeps a removed update name across a later refresh", () => {
+      globalThis.Hologram.sync.model[DOC].formerUpdateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("forgets a removed update name the new rules bring back", () => {
+      globalThis.Hologram.sync.model[DOC].formerUpdateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: ["archive"],
+          policy: {},
+          updateNames: ["archive"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        [],
+      );
+    });
+
     it("takes a held type's rules from its entry", () => {
       const policy = {
         read: [
@@ -1957,6 +2019,49 @@ describe("Model", () => {
         globalThis.Hologram.sync.model[DOC].verdicts,
         verdicts,
       );
+    });
+
+    it("takes the update names of a held type's entry", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: [],
+          policy: {},
+          updateNames: ["approve"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(globalThis.Hologram.sync.model[DOC].updateNames, [
+        "approve",
+      ]);
+    });
+
+    it("drops the update names of a held type its entry carries none for", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: [],
+          policy: {},
+          verdicts: {},
+        },
+      });
+
+      assert.equal(globalThis.Hologram.sync.model[DOC].updateNames, undefined);
+    });
+
+    it("drops the update names of a held type the entries leave out", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.equal(globalThis.Hologram.sync.model[DOC].updateNames, undefined);
     });
 
     // The bundle's own code can still ask about an operation the new build dropped, and is denied

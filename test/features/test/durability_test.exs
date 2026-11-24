@@ -3,17 +3,25 @@ defmodule HologramFeatureTests.DurabilityTest do
   use HologramFeatureTests.TestCase, async: false
 
   alias Hologram.DB
+  alias HologramFeatureTests.ActionWritesPage
   alias HologramFeatureTests.DurabilityPage
   alias HologramFeatureTests.Entities.Product
+  alias HologramFeatureTests.Entities.Todo
 
   # What the client held in memory until now it keeps between page loads, so these read the SECOND
   # visit rather than the first.
   #
   # The lever is emptying the SERVER between the two: a TRUNCATE writes nothing to the operations
   # log, so a returning client is never told the rows are gone and the stream has nothing to send
-  # it. Anything on screen after that came out of the browser's own store, and there is no timing
-  # to get right. (Holding the stream open instead does not work: `visit/3` blocks until the client
-  # reports a connection, so a page whose stream never attaches never finishes visiting.)
+  # it. Anything on screen after that came out of the browser's own store. (Holding the stream open
+  # instead does not work: `visit/3` blocks until the client reports a connection, so a page whose
+  # stream never attaches never finishes visiting.)
+  #
+  # The lever holds only for a browser that left with a place, and one past the rows' own changes
+  # in the log, so the first visit waits for both. The place comes with the marker ending the fill,
+  # after the rows are on screen, and rows stored with no place are dropped by the next page load.
+  # And a place below the rows' changes has them replayed from the emptied tables, or reads as one
+  # from before the log (see `await_log_settled/0`).
   #
   # Every one of these leans on a Wallaby session being a fresh Chrome profile, and so an empty
   # store to begin with - nothing truncates a browser's database.
@@ -35,10 +43,13 @@ defmodule HologramFeatureTests.DurabilityTest do
     |> Product.new()
     |> DB.create!()
 
+    await_log_settled()
+
     session
     |> visit(DurabilityPage)
     |> click(button("Show products"))
     |> assert_text(css("#live_products"), ~r/^abacus,armchair$/)
+    |> await_local_fill()
     |> await_durable_writes()
 
     truncate_every_entity_table()
@@ -81,6 +92,53 @@ defmodule HologramFeatureTests.DurabilityTest do
 
     # The page did mint a fresh one, and the client is not presenting it.
     refute minted == held
+  end
+
+  # The first vote is in the store and on its way when the second one's filing fails, and the store
+  # refuses to let go of it once it's answered. So the next load sends it again, and only under the
+  # identity it was first sent with does the server answer it from its record instead of counting
+  # it a second time.
+  feature "applies a write once when its answer arrives after the store failed", %{
+    session: session
+  } do
+    visited =
+      session
+      |> visit(ActionWritesPage)
+      |> click(button("Add one todo"))
+      |> assert_text(css("#todos"), "alpha 0")
+
+    assert [%Todo{votes: 0}] = await_server_todos(1)
+
+    failed =
+      visited
+      |> await_pending_writes(0)
+      |> hold_mutation_requests()
+      |> click(button("Vote"))
+      |> assert_text(css("#todos"), "alpha 1")
+      |> await_durable_writes()
+      |> fail_store_writes()
+      |> click(button("Vote"))
+      |> assert_text(css("#todos"), "alpha 2")
+      |> await_memory_mode()
+      |> release_mutations()
+
+    assert %Todo{votes: 2} = await_server_votes(2)
+
+    reloaded =
+      failed
+      |> await_pending_writes(0)
+      |> mark_document()
+      |> reload()
+      |> wait_for_unmarked_document()
+      |> assert_page(ActionWritesPage)
+
+    assert script_result(reloaded, "return globalThis.Hologram.durability.storedBatches();") == 1
+
+    reloaded
+    |> await_pending_writes(0)
+    |> assert_text(css("#todos"), "alpha 2")
+
+    assert [%Todo{votes: 2}] = DB.read(Todo)
   end
 
   # There is deliberately no feature here for the place a returning client resumes from, and the

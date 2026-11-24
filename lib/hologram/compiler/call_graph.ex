@@ -401,6 +401,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Exception, :format_stacktrace, 1},
     {FunctionClauseError, :message, 1},
     {Hologram.Auth, :can?, 3},
+    {Hologram.Auth, :can?, 4},
     # The grant verbs and the role checks, hand-written for the client the way the data verbs below
     # are: one spelling on both tiers. A role check asks the grant store on the server and the grant
     # rows it holds in the browser. A grant verb differs at the end - the server writes the store,
@@ -1319,8 +1320,9 @@ defmodule Hologram.Compiler.CallGraph do
   implementations for the built-in types with what those call.
 
   A type the page reaches only through a relationship or derived field name is not one it can hold
-  here: its rows sync, but its implementations are not listed and the page doesn't preload them. The
-  browser gets them when the server sends it a struct or the module of that type.
+  here, unless it's among the seeds' types, which is how `Hologram.Compiler.fold_held_impls/5` walks
+  a page again with the types it holds through rows. Every page preloads the implementations of
+  those types, in one chunk (see `Hologram.Compiler.merge_held_chunks/2`).
 
   Give it the graph without the manually ported functions, as `list_client_protocols/4` asks, or the
   walk follows their Elixir bodies, which don't run on the client. `analyses` is taken as
