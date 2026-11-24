@@ -240,6 +240,179 @@ defmodule Hologram.AuthTest do
     end
   end
 
+  # The gates are spread over the read path, the writer and the role verbs, so each is pinned.
+  describe "work a session moved to another process" do
+    # Runs the function in a Task the session started, answering :refused for the refusal.
+    defp in_session_task(user_id, fun) do
+      Context.with_actor(user_id, fn ->
+        in_sandboxed_task(fn ->
+          try do
+            {:ran, fun.()}
+          rescue
+            error in MisuseError ->
+              assert error.message =~ "started for a request's work"
+
+              :refused
+          end
+        end)
+      end)
+    end
+
+    defp create_private_row do
+      %{priority: 5, public: false}
+      |> Module1.new()
+      |> DB.create!()
+    end
+
+    test "is refused a read by id" do
+      user = create_user("user_moved_1@example.com")
+      row = create_private_row()
+
+      assert in_session_task(user.id, fn -> DB.read(Module1, row.id) end) == :refused
+    end
+
+    test "is refused a read by query" do
+      user = create_user("user_moved_2@example.com")
+
+      assert in_session_task(user.id, fn -> DB.read(Module1) end) == :refused
+    end
+
+    test "is refused in a signed-out visitor's session" do
+      row = create_private_row()
+
+      assert in_session_task(nil, fn -> DB.read(Module1, row.id) end) == :refused
+    end
+
+    test "is refused a create" do
+      user = create_user("user_moved_3@example.com")
+
+      entity = Module1.new()
+
+      assert in_session_task(user.id, fn -> DB.create(entity) end) == :refused
+    end
+
+    test "is refused an update of a struct" do
+      user = create_user("user_moved_4@example.com")
+      row = create_private_row()
+      changed = Hologram.Query.put_attribute(row, :priority, 7)
+
+      assert in_session_task(user.id, fn -> DB.update(changed) end) == :refused
+      assert DB.read(Module1, row.id).priority == 5
+    end
+
+    test "is refused an update by type and id" do
+      user = create_user("user_moved_5@example.com")
+      row = create_private_row()
+
+      assert in_session_task(user.id, fn -> DB.update(Module1, row.id, priority: 7) end) ==
+               :refused
+
+      assert DB.read(Module1, row.id).priority == 5
+    end
+
+    test "is refused a delete of a struct" do
+      user = create_user("user_moved_6@example.com")
+      row = create_private_row()
+
+      assert in_session_task(user.id, fn -> DB.delete(row) end) == :refused
+      assert DB.read(Module1, row.id)
+    end
+
+    test "is refused a delete by type and id" do
+      user = create_user("user_moved_7@example.com")
+      row = create_private_row()
+
+      assert in_session_task(user.id, fn -> DB.delete(Module1, row.id) end) == :refused
+      assert DB.read(Module1, row.id)
+    end
+
+    test "is refused a role grant" do
+      user = create_user("user_moved_8@example.com")
+      row = create_private_row()
+
+      assert in_session_task(user.id, fn -> grant_role(user, :viewer, row) end) == :refused
+      refute has_role?(user, :viewer, row)
+    end
+
+    test "is refused a role revocation" do
+      user = create_user("user_moved_9@example.com")
+      row = create_private_row()
+      grant_role(user, :viewer, row)
+
+      assert in_session_task(user.id, fn -> revoke_role(user, :viewer, row) end) == :refused
+      assert has_role?(user, :viewer, row)
+    end
+
+    test "is refused a job" do
+      user = create_user("user_moved_10@example.com")
+
+      assert in_session_task(user.id, fn ->
+               Hologram.Job.create(Hologram.Test.Fixtures.Job.Module1)
+             end) == :refused
+    end
+
+    test "is refused the user's id, which would read as a signed-out visitor" do
+      user = create_user("user_moved_11@example.com")
+
+      assert in_session_task(user.id, fn -> user_id() end) == :refused
+    end
+
+    test "reads past the rules with a trust claim" do
+      user = create_user("user_moved_12@example.com")
+      row = create_private_row()
+
+      {:ran, rows} =
+        in_session_task(user.id, fn ->
+          Module1
+          |> Hologram.Query.trust()
+          |> DB.read()
+        end)
+
+      assert Enum.map(rows, & &1.id) == [row.id]
+    end
+
+    test "writes past the rules with a trust claim" do
+      user = create_user("user_moved_13@example.com")
+      row = create_private_row()
+
+      changed =
+        row
+        |> Hologram.Query.put_attribute(:priority, 7)
+        |> Hologram.Query.trust()
+
+      assert {:ran, :ok} = in_session_task(user.id, fn -> DB.update(changed) end)
+      assert DB.read(Module1, row.id).priority == 7
+    end
+
+    test "grants a role with a trust claim" do
+      user = create_user("user_moved_14@example.com")
+      row = create_private_row()
+
+      assert {:ran, _grant} =
+               in_session_task(user.id, fn -> grant_role(user, :viewer, row, trust: true) end)
+
+      assert has_role?(user, :viewer, row)
+    end
+
+    # The trust claim is the server's authority: the job doesn't run as the session's user.
+    test "creates a job that runs as the server with a trust claim" do
+      user = create_user("user_moved_15@example.com")
+
+      assert {:ran, {:ok, job}} =
+               in_session_task(user.id, fn ->
+                 Hologram.Job.create(Hologram.Test.Fixtures.Job.Module1, %{}, trust: true)
+               end)
+
+      assert %{actor_id: nil, run_as_server: true} = job
+    end
+
+    test "keeps the server's authority in a process no session started" do
+      row = create_private_row()
+
+      assert in_sandboxed_task(fn -> DB.read(Module1, row.id).id end) == row.id
+    end
+  end
+
   # What a check asks is whether a grant EXISTS, so nothing it reads can be gathered - the
   # questions are gathered and answered here, as the session user, so the client's first render
   # can evaluate the same checks against rows rather than waiting for the fill.

@@ -17,10 +17,13 @@ defmodule Hologram.Auth.Context do
   # neither setter is a boundary against it. Shipping no act-as-user API keeps impersonation
   # off the app-facing surface, which is a surface decision, not an enforced one.
   #
-  # The session is process-local and is not inherited. Work moved off the request process - a task,
-  # a spawned process, a call into a GenServer - starts with no session, which IS the trusted tier,
-  # so a gate that denies in the request process permits there instead (#1848). Framework code
-  # continuing a session's work in another process re-establishes identity with with_actor/2.
+  # The session is process-local and is not inherited, since a child can't tell which of the users
+  # its starter serves in turn it was started for. So a process started for a session's work is
+  # neither that user nor the trusted tier: session?/0 refuses it, until it carries the session
+  # with capture/1 or its call claims trust. started_by_request?/0 says what can be told and what
+  # can't: work handed to a process that was already running, like a call into a GenServer, still
+  # has the server's authority. Framework code continuing a session's work in another process
+  # re-establishes identity with with_actor/2.
 
   alias Hologram.Auth
   alias Hologram.Auth.SpawnMark
@@ -73,17 +76,41 @@ defmodule Hologram.Auth.Context do
 
   @doc """
   Returns true when the calling process is working for a session, signed in or not, or false when
-  it is server code outside Hologram's request handling.
+  it is server code outside Hologram's request handling. Raises Hologram.MisuseError in a process
+  started for a session's work that carries no session, which is neither (see
+  started_by_request?/0).
   """
   @spec session?() :: boolean
   def session? do
-    match?({:session, _user_id}, Process.get(@actor_key))
+    case Process.get(@actor_key) do
+      {:session, _user_id} ->
+        true
+
+      :server ->
+        false
+
+      nil ->
+        refuse_request_work!()
+        false
+    end
+  end
+
+  @doc """
+  Returns the id of the user the calling process is working for, like actor_user_id/0, but raises
+  Hologram.MisuseError in a process started for a session's work that carries no session, where
+  nil would read as a signed-out visitor.
+  """
+  @spec user_id() :: Server.identity_id() | nil
+  def user_id do
+    session?()
+
+    actor_user_id()
   end
 
   @doc """
   Returns true when the calling process, outside any session or without_session/1 of its own, was
   started for a session's work: by a process working for a session, or by a supervisor on behalf of
-  a process that has served one or has ended.
+  a process that has served one, was itself started for one or has ended.
 
   A task a supervisor started carries only its caller's pid, and the caller may have moved on to
   other work, so a caller that has served a session counts even if it wasn't serving one then. An
@@ -163,10 +190,18 @@ defmodule Hologram.Auth.Context do
     run_in_state(:server, fun)
   end
 
+  # Work with no session to carry isn't handed the server's authority by wrapping it.
   defp captured_state do
     case Process.get(@actor_key) do
-      {:session, _user_id} = session -> session
-      _no_session -> :server
+      {:session, _user_id} = session ->
+        session
+
+      :server ->
+        :server
+
+      nil ->
+        refuse_request_work!()
+        :server
     end
   end
 
@@ -177,7 +212,11 @@ defmodule Hologram.Auth.Context do
     Process.put(@actor_key, session)
   end
 
+  # A marked process keeps a record of it, since a task it handed to a supervisor is judged by what
+  # can be read about it, and the mark is out of sight for as long as this lasts.
   defp enter_state(:server) do
+    if SpawnMark.marked?(), do: Process.put(@served_key, true)
+
     SpawnMark.put(false)
     Process.put(@actor_key, :server)
   end
@@ -185,18 +224,19 @@ defmodule Hologram.Auth.Context do
   # A caller that spawned this process itself, directly or through plain spawns like the monitor
   # of Task.async_stream/3, passed on its mark at the spawn, and the walk goes on to its own
   # callers. So a plain Task from a process no request started isn't refused for having outlived
-  # it. Only a real hand-off, through a process started with proc_lib like a supervisor, is judged
-  # by what the caller has served.
-  defp handed_over_by_request?([caller | _callers] = callers, parent) do
-    not spawned_by?(parent, caller, []) and Enum.any?(callers, &served_or_ended?/1)
+  # it. Only a real hand-off, through a process started with proc_lib like a supervisor, is judged,
+  # and by the direct caller alone: one further up says nothing about a live caller that was
+  # started by a process that has since ended.
+  defp handed_over_by([caller | _callers], parent) do
+    if not spawned_by?(parent, caller, []), do: caller
   end
 
-  defp handed_over_by_request?(_no_callers, _parent), do: false
+  defp handed_over_by(_no_callers, _parent), do: nil
 
   defp kept_search_answer do
     case Process.get(@started_by_request_key) do
       nil ->
-        answer = supervised_for_request?(self(), [])
+        answer = supervised_for_request?([self()], [])
         Process.put(@started_by_request_key, answer)
 
         answer
@@ -225,7 +265,15 @@ defmodule Hologram.Auth.Context do
     end
   end
 
-  defp served_or_ended?(pid) when node(pid) != node(), do: false
+  defp refuse_request_work! do
+    if started_by_request?() do
+      raise Hologram.MisuseError,
+        message:
+          "this process was started for a request's work, so it has no user and isn't trusted server code. To run as the request's user, wrap the function it runs in Hologram.Auth.as_current_user/1, called in the request's process. To run as the server, with no user, claim trust, like query |> trust() |> DB.read(). A task from a Task.Supervisor also lands here when its caller has served a request, has run a wrapped function or has ended."
+    end
+
+    :ok
+  end
 
   defp served_or_ended?(pid) do
     case Process.info(pid, {:dictionary, @served_key}) do
@@ -253,17 +301,37 @@ defmodule Hologram.Auth.Context do
   # without_session/1: that says what the ancestor is doing now rather than when it started this
   # process, and the answer is kept, so a moment inside without_session/1 could clear request work
   # for good.
-  defp supervised_for_request?(pid, _seen) when node(pid) != node(), do: false
+  #
+  # One list of visited processes serves the whole search, since a process can be reached both as a
+  # caller and as a parent, and walking it once per path takes exponential time on nested
+  # supervisors. A caller is judged before that check, since being reached as a parent says nothing
+  # about what it was doing as a caller.
+  defp supervised_for_request?([], _seen), do: false
 
-  defp supervised_for_request?(pid, seen) do
-    case Process.info(pid, [:parent, {:dictionary, :"$callers"}]) do
-      nil ->
-        false
+  defp supervised_for_request?([pid | pids], seen) do
+    if node(pid) != node() or pid in seen do
+      supervised_for_request?(pids, seen)
+    else
+      case Process.info(pid, [:parent, {:dictionary, :"$callers"}]) do
+        nil ->
+          supervised_for_request?(pids, [pid | seen])
 
-      [{:parent, parent}, {_callers_item, callers}] ->
-        handed_over_by_request?(callers, parent) or
-          (is_pid(parent) and parent not in seen and
-             supervised_for_request?(parent, [pid | seen]))
+        [{:parent, parent}, {_callers_item, callers}] ->
+          caller = handed_over_by(callers, parent)
+
+          (caller != nil and request_work?(caller)) or
+            supervised_for_request?(Enum.filter([caller, parent], &is_pid/1) ++ pids, [pid | seen])
+      end
     end
+  end
+
+  defp request_work?(pid) when node(pid) != node(), do: false
+
+  # The mark is read first. Entering without_session/1 records the process as served and then
+  # clears the mark, and an ending process loses both, so a mark found missing here means the record
+  # or the end is already there to read. In the other order, a read landing between the two steps
+  # would find neither, and the answer is kept.
+  defp request_work?(pid) do
+    SpawnMark.held_by?(pid) or served_or_ended?(pid)
   end
 end

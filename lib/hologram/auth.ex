@@ -502,7 +502,7 @@ defmodule Hologram.Auth do
   its writes are judged by them rather than trusted.
   """
   @spec user_id() :: Server.identity_id() | nil
-  defdelegate user_id, to: Context, as: :actor_user_id
+  defdelegate user_id, to: Context
 
   @doc """
   Wraps the given function so that it runs as the current user wherever it's called, for moving a

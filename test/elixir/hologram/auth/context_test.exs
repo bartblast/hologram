@@ -3,13 +3,16 @@ defmodule Hologram.Auth.ContextTest do
 
   import Hologram.Auth.Context
 
+  # Long enough for a loaded CI runner: a passing test never waits it out.
+  @receive_timeout 5_000
+
   # Runs the function in a spawned process and returns its result.
   defp in_spawned(fun) do
     caller = self()
     ref = make_ref()
     spawn(fn -> send(caller, {ref, fun.()}) end)
 
-    assert_receive {^ref, result}
+    assert_receive {^ref, result}, @receive_timeout
 
     result
   end
@@ -17,7 +20,18 @@ defmodule Hologram.Auth.ContextTest do
   defp await_down(pid) do
     monitor = Process.monitor(pid)
 
-    assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
+    assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}, @receive_timeout
+  end
+
+  defp refused?(fun) do
+    fun.()
+
+    false
+  rescue
+    error in Hologram.MisuseError ->
+      assert error.message =~ "started for a request's work"
+
+      true
   end
 
   # Starts a process that waits for :go, then sends the function's result to report_to.
@@ -122,6 +136,73 @@ defmodule Hologram.Auth.ContextTest do
         assert actor_user_id() == nil
       end)
     end
+
+    test "raises Hologram.MisuseError in a process a user's session started" do
+      assert with_actor("user_id_54", fn -> in_spawned(fn -> refused?(&session?/0) end) end)
+    end
+
+    test "raises Hologram.MisuseError in a process a signed-out visitor's session started" do
+      assert with_actor(nil, fn -> in_spawned(fn -> refused?(&session?/0) end) end)
+    end
+
+    test "raises Hologram.MisuseError after the starter's session ended on the same process" do
+      {pid, ref} =
+        with_actor("user_id_55", fn -> spawn_waiting(fn -> refused?(&session?/0) end, self()) end)
+
+      send(pid, :go)
+
+      assert_receive {^ref, true}, @receive_timeout
+    end
+
+    test "raises Hologram.MisuseError in a task a supervisor started for a session" do
+      supervisor = start_supervised!(Task.Supervisor)
+
+      assert with_actor("user_id_56", fn ->
+               supervisor
+               |> Task.Supervisor.async(fn -> refused?(&session?/0) end)
+               |> Task.await()
+             end)
+    end
+
+    test "is false in a process no session started" do
+      refute in_spawned(&session?/0)
+    end
+
+    test "is false in the session's own process between sessions" do
+      with_actor("user_id_57", fn -> :ok end)
+
+      refute session?()
+    end
+
+    test "is false inside without_session/1 in a process a session started" do
+      refute with_actor("user_id_58", fn ->
+               in_spawned(fn -> without_session(&session?/0) end)
+             end)
+    end
+
+    test "is true for a process a session started that carries the session" do
+      fun = with_actor("user_id_59", fn -> capture(&session?/0) end)
+
+      assert with_actor("user_id_60", fn -> in_spawned(fun) end)
+    end
+  end
+
+  describe "user_id/0" do
+    test "returns the session's user id" do
+      assert with_actor("user_id_61", fn -> user_id() end) == "user_id_61"
+    end
+
+    test "returns nil for a signed-out visitor's session" do
+      assert with_actor(nil, fn -> user_id() end) == nil
+    end
+
+    test "returns nil with no session" do
+      assert user_id() == nil
+    end
+
+    test "raises Hologram.MisuseError in a process a session started" do
+      assert with_actor("user_id_62", fn -> in_spawned(fn -> refused?(&user_id/0) end) end)
+    end
   end
 
   describe "capture/1" do
@@ -188,7 +269,7 @@ defmodule Hologram.Auth.ContextTest do
           send(test_pid, {:fun, with_actor("user_id_45", fn -> capture(&actor_user_id/0) end)})
         end)
 
-      assert_receive {:fun, fun}
+      assert_receive {:fun, fun}, @receive_timeout
       await_down(starter)
 
       assert in_spawned(fun) == "user_id_45"
@@ -225,6 +306,12 @@ defmodule Hologram.Auth.ContextTest do
         assert fun.() == "user_id_49"
         assert actor_user_id() == "user_id_50"
       end)
+    end
+
+    test "raises Hologram.MisuseError in a process a session started with no session to carry" do
+      assert with_actor("user_id_63", fn ->
+               in_spawned(fn -> refused?(fn -> capture(fn -> :ok end) end) end)
+             end)
     end
 
     test "raises Hologram.MisuseError for a function of two arguments" do
@@ -294,12 +381,12 @@ defmodule Hologram.Auth.ContextTest do
           end)
         end)
 
-      assert_receive {:started, {pid, ref}}
+      assert_receive {:started, {pid, ref}}, @receive_timeout
       await_down(starter)
 
       send(pid, :go)
 
-      assert_receive {^ref, true}
+      assert_receive {^ref, true}, @receive_timeout
     end
 
     test "stays true after the starter's session has ended on the same process" do
@@ -308,7 +395,7 @@ defmodule Hologram.Auth.ContextTest do
 
       send(pid, :go)
 
-      assert_receive {^ref, true}
+      assert_receive {^ref, true}, @receive_timeout
     end
 
     test "is false for a process spawned after the session ended on the same process" do
@@ -376,11 +463,11 @@ defmodule Hologram.Auth.ContextTest do
           send(test_pid, {:task, task})
         end)
 
-      assert_receive {:task, task}
+      assert_receive {:task, task}, @receive_timeout
       await_down(caller)
       send(task, :go)
 
-      assert_receive {^ref, true}
+      assert_receive {^ref, true}, @receive_timeout
     end
 
     test "is false for a task a supervisor started for a process with no session" do
@@ -417,11 +504,11 @@ defmodule Hologram.Auth.ContextTest do
           send(test_pid, {:task, task})
         end)
 
-      assert_receive {:task, task}
+      assert_receive {:task, task}, @receive_timeout
       await_down(starter)
       send(task, :go)
 
-      assert_receive {^ref, false}
+      assert_receive {^ref, false}, @receive_timeout
     end
 
     test "is true for a Task.start in a session" do
@@ -432,7 +519,7 @@ defmodule Hologram.Auth.ContextTest do
         Task.start(fn -> send(test_pid, {ref, started_by_request?()}) end)
       end)
 
-      assert_receive {^ref, true}
+      assert_receive {^ref, true}, @receive_timeout
     end
 
     test "is false for a nested Task whose first starter, with no session, has ended" do
@@ -454,11 +541,134 @@ defmodule Hologram.Auth.ContextTest do
           end)
         end)
 
-      assert_receive {:inner, inner}
+      assert_receive {:inner, inner}, @receive_timeout
       await_down(starter)
       send(inner, :go)
 
-      assert_receive {^ref, false}
+      assert_receive {^ref, false}, @receive_timeout
+    end
+
+    test "is true for a supervised task of a process a session spawned" do
+      supervisor = start_supervised!(Task.Supervisor)
+
+      assert with_actor("user_id_64", fn ->
+               in_spawned(fn ->
+                 supervisor
+                 |> Task.Supervisor.async(&started_by_request?/0)
+                 |> Task.await()
+               end)
+             end)
+    end
+
+    test "is true for a supervised task of a supervised task of a session" do
+      supervisor = start_supervised!(Task.Supervisor)
+
+      assert with_actor("user_id_65", fn ->
+               supervisor
+               |> Task.Supervisor.async(fn ->
+                 supervisor
+                 |> Task.Supervisor.async(&started_by_request?/0)
+                 |> Task.await()
+               end)
+               |> Task.await()
+             end)
+    end
+
+    test "is true for a supervised task a marked process starts inside without_session/1" do
+      supervisor = start_supervised!(Task.Supervisor)
+
+      assert with_actor("user_id_66", fn ->
+               in_spawned(fn ->
+                 without_session(fn ->
+                   supervisor
+                   |> Task.Supervisor.async(&started_by_request?/0)
+                   |> Task.await()
+                 end)
+               end)
+             end)
+    end
+
+    test "is true for a marked process' supervised task that first looks during without_session/1" do
+      supervisor = start_supervised!(Task.Supervisor)
+
+      assert with_actor("user_id_67", fn ->
+               in_spawned(fn ->
+                 task =
+                   Task.Supervisor.async(supervisor, fn ->
+                     receive do
+                       :look -> started_by_request?()
+                     end
+                   end)
+
+                 without_session(fn ->
+                   send(task.pid, :look)
+                   Task.await(task)
+                 end)
+               end)
+             end)
+    end
+
+    test "is false for a supervised task of a live caller whose own starter has ended" do
+      supervisor = start_supervised!(Task.Supervisor)
+      test_pid = self()
+      ref = make_ref()
+
+      starter =
+        spawn(fn ->
+          {:ok, poller} =
+            Task.start(fn ->
+              receive do
+                :go ->
+                  answer =
+                    supervisor
+                    |> Task.Supervisor.async(&started_by_request?/0)
+                    |> Task.await()
+
+                  send(test_pid, {ref, answer})
+              end
+            end)
+
+          send(test_pid, {:poller, poller})
+        end)
+
+      assert_receive {:poller, poller}, @receive_timeout
+      await_down(starter)
+      send(poller, :go)
+
+      assert_receive {^ref, false}, @receive_timeout
+    end
+
+    test "is false for a supervised task of a live caller whose starter served a session earlier" do
+      supervisor = start_supervised!(Task.Supervisor)
+      with_actor("user_id_68", fn -> :ok end)
+
+      answer =
+        fn ->
+          supervisor
+          |> Task.Supervisor.async(&started_by_request?/0)
+          |> Task.await()
+        end
+        |> Task.async()
+        |> Task.await()
+
+      refute answer
+    end
+
+    # Walking a process once per path took minutes at this depth.
+    test "answers quickly under deeply nested supervisors" do
+      nest = fn nest, depth ->
+        if depth == 0 do
+          started_by_request?()
+        else
+          {:ok, supervisor} = Task.Supervisor.start_link()
+
+          supervisor
+          |> Task.Supervisor.async(fn -> nest.(nest, depth - 1) end)
+          |> Task.await()
+        end
+      end
+
+      refute nest.(nest, 26)
     end
 
     test "is true for a process a session's supervised task started inside without_session/1" do
@@ -492,11 +702,11 @@ defmodule Hologram.Auth.ContextTest do
           send(test_pid, {:task, task})
         end)
 
-      assert_receive {:task, task}
+      assert_receive {:task, task}, @receive_timeout
       await_down(caller)
       send(task, :go)
 
-      assert_receive {^ref, true}
+      assert_receive {^ref, true}, @receive_timeout
     end
 
     # Reading the task's state at the check would answer false here, and keep it.
@@ -535,13 +745,13 @@ defmodule Hologram.Auth.ContextTest do
           end)
         end)
 
-      assert_receive {:first, true}
+      assert_receive {:first, true}, @receive_timeout
 
       send(task, :leave)
-      assert_receive {:left, child}
+      assert_receive {:left, child}, @receive_timeout
 
       send(child, :look_again)
-      assert_receive {^ref, true}
+      assert_receive {^ref, true}, @receive_timeout
 
       send(task, :end)
     end
@@ -595,11 +805,11 @@ defmodule Hologram.Auth.ContextTest do
           end
         end)
 
-      assert_receive :looked
+      assert_receive :looked, @receive_timeout
       with_actor("user_id_32", fn -> :ok end)
       send(task, :go)
 
-      assert_receive {^ref, {false, false}}
+      assert_receive {^ref, {false, false}}, @receive_timeout
     end
 
     test "keeps an answer of true after the supervised task that started the process ends" do
@@ -627,14 +837,14 @@ defmodule Hologram.Auth.ContextTest do
         end)
       end)
 
-      assert_receive {:task, task, child}
-      assert_receive {:looked, ^child}
+      assert_receive {:task, task, child}, @receive_timeout
+      assert_receive {:looked, ^child}, @receive_timeout
 
       send(task, :end)
       await_down(task)
       send(child, :go)
 
-      assert_receive {^ref, {true, true}}
+      assert_receive {^ref, {true, true}}, @receive_timeout
     end
   end
 
@@ -679,17 +889,16 @@ defmodule Hologram.Auth.ContextTest do
     end
 
     # The session lives in the process dictionary, so work moved off the request process starts
-    # with none - which is the trusted tier, not an anonymous session. Pinned here because the
-    # boundary decides which tier spawned work runs in.
-    test "leaves a spawned process without a session" do
+    # with none - and that must not read as the trusted tier.
+    test "leaves a spawned process without a session, which session?/0 refuses" do
       spawned_state =
         with_actor("user_id_8", fn ->
-          fn -> {actor_user_id(), session?()} end
+          fn -> {actor_user_id(), refused?(&session?/0)} end
           |> Task.async()
           |> Task.await()
         end)
 
-      assert spawned_state == {nil, false}
+      assert spawned_state == {nil, true}
     end
 
     test "restores the enclosing actor when the function raises" do

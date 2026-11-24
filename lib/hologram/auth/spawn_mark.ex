@@ -37,12 +37,21 @@ defmodule Hologram.Auth.SpawnMark do
   @spec marked?(:trace.session() | nil) :: boolean
   def marked?(session \\ trace_session())
 
-  def marked?(nil), do: false
+  def marked?(session), do: held_by?(self(), session)
 
-  def marked?(session) do
-    {:flags, flags} = :trace.info(session, self(), :flags)
+  @doc """
+  Returns true when the given local process holds the mark, and false when it doesn't or has ended.
+  """
+  @spec held_by?(pid, :trace.session() | nil) :: boolean
+  def held_by?(pid, session \\ trace_session())
 
-    :set_on_spawn in flags
+  def held_by?(_pid, nil), do: false
+
+  def held_by?(pid, session) do
+    case :trace.info(session, pid, :flags) do
+      {:flags, flags} -> :set_on_spawn in flags
+      :undefined -> false
+    end
   end
 
   @doc """

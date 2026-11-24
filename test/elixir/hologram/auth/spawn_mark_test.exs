@@ -3,6 +3,9 @@ defmodule Hologram.Auth.SpawnMarkTest do
 
   import Hologram.Auth.SpawnMark
 
+  # Long enough for a loaded CI runner: a passing test never waits it out.
+  @receive_timeout 5_000
+
   # A trace session of the test's own, so nothing here touches the one the app runs on.
   defp start_session do
     tracer = spawn(fn -> Process.sleep(:infinity) end)
@@ -14,7 +17,7 @@ defmodule Hologram.Auth.SpawnMarkTest do
     test_pid = self()
     spawn(fn -> send(test_pid, {:marked, marked?(session)}) end)
 
-    assert_receive {:marked, marked?}
+    assert_receive {:marked, marked?}, @receive_timeout
 
     marked?
   end
@@ -28,6 +31,42 @@ defmodule Hologram.Auth.SpawnMarkTest do
 
     test "is false with no trace session" do
       refute marked?(nil)
+    end
+  end
+
+  describe "held_by?/2" do
+    test "is true for another process holding the mark" do
+      {session, _tracer} = start_session()
+      test_pid = self()
+      put(true, session)
+
+      pid =
+        spawn(fn ->
+          send(test_pid, :started)
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive :started, @receive_timeout
+      assert held_by?(pid, session)
+    end
+
+    test "is false for a process that doesn't hold it" do
+      {session, tracer} = start_session()
+
+      refute held_by?(tracer, session)
+    end
+
+    test "is false for a process that has ended" do
+      {session, _tracer} = start_session()
+      pid = spawn(fn -> :ok end)
+      monitor = Process.monitor(pid)
+      assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}, @receive_timeout
+
+      refute held_by?(pid, session)
+    end
+
+    test "is false with no trace session" do
+      refute held_by?(self(), nil)
     end
   end
 
@@ -71,7 +110,7 @@ defmodule Hologram.Auth.SpawnMarkTest do
       {session, tracer} = start_session()
       monitor = Process.monitor(tracer)
       Process.exit(tracer, :kill)
-      assert_receive {:DOWN, ^monitor, :process, ^tracer, :killed}
+      assert_receive {:DOWN, ^monitor, :process, ^tracer, :killed}, @receive_timeout
 
       assert_error RuntimeError,
                    "can't mark this process as working for a session: Hologram.Auth.SpawnMark isn't running",
@@ -82,7 +121,7 @@ defmodule Hologram.Auth.SpawnMarkTest do
       {session, tracer} = start_session()
       monitor = Process.monitor(tracer)
       Process.exit(tracer, :kill)
-      assert_receive {:DOWN, ^monitor, :process, ^tracer, :killed}
+      assert_receive {:DOWN, ^monitor, :process, ^tracer, :killed}, @receive_timeout
 
       assert put(false, session) == :ok
     end
@@ -112,7 +151,7 @@ defmodule Hologram.Auth.SpawnMarkTest do
       {session, tracer} = start_session()
       monitor = Process.monitor(tracer)
       Process.exit(tracer, :kill)
-      assert_receive {:DOWN, ^monitor, :process, ^tracer, :killed}
+      assert_receive {:DOWN, ^monitor, :process, ^tracer, :killed}, @receive_timeout
 
       assert restore(true, session) == :ok
     end

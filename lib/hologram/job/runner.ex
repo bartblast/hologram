@@ -10,7 +10,7 @@ defmodule Hologram.Job.Runner do
   # the claim's transaction and given up once the outcome is recorded - so a running row whose lock
   # nobody holds is one whose run was cut short.
 
-  import Hologram.Query, only: [filter: 2, sort: 2, take: 2]
+  import Hologram.Query, only: [filter: 2, sort: 2, take: 2, trust: 1]
 
   alias Hologram.Auth.Context
   alias Hologram.DB
@@ -180,6 +180,7 @@ defmodule Hologram.Job.Runner do
     |> filter(status == :queued and scheduled_at <= ^now)
     |> sort(scheduled_at)
     |> take(^limit)
+    |> trust()
     |> DB.read()
     |> Enum.reject(&MapSet.member?(skip_ids, &1.id))
     |> Enum.take(count)
@@ -213,6 +214,7 @@ defmodule Hologram.Job.Runner do
     Enum.each(job_types, fn job_type ->
       job_type
       |> filter(status == :running)
+      |> trust()
       |> DB.read()
       |> Enum.map(& &1.id)
       |> Enum.reject(&MapSet.member?(skip_ids, &1))
