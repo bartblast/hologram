@@ -1229,6 +1229,14 @@ describe("Elixir_Hologram_DB", () => {
         [Type.atom("zone_abbr"), Type.bitstring("UTC")],
       ]);
 
+    const dateInYear = (year) =>
+      Type.struct("Date", [
+        [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+        [Type.atom("day"), Type.integer(1)],
+        [Type.atom("month"), Type.integer(1)],
+        [Type.atom("year"), Type.integer(year)],
+      ]);
+
     const exact = (predicates, overrides = {}) =>
       rule({new: {predicates}, ...overrides});
 
@@ -1264,6 +1272,7 @@ describe("Elixir_Hologram_DB", () => {
           id: "uuid",
           code: "string",
           held_at: "datetime",
+          held_on: "date",
           note: "string",
           rating: "float",
           status: "enum",
@@ -1275,6 +1284,7 @@ describe("Elixir_Hologram_DB", () => {
             optional: true,
           },
           held_at: {optional: true},
+          held_on: {optional: true},
           note: {optional: true},
           rating: {optional: true},
           title: {optional: true},
@@ -1823,22 +1833,35 @@ describe("Elixir_Hologram_DB", () => {
 
       it("leaves a date past what a JavaScript date holds", () => {
         defineCard({
-          "update:held_at": [
-            exact([[newName("held_at"), "==", "2026-01-01T00:00:00.000000Z"]]),
-          ],
+          "update:held_on": [exact([[newName("held_on"), "==", "2026-01-01"]])],
         });
 
-        assertSent(put({held_at: datetimeInYear(280000)}));
+        assertSent(put({held_on: dateInYear(280000)}));
       });
 
-      it("leaves a datetime whose offset moves it past what a JavaScript date holds", () => {
+      it("refuses a datetime whose offset moves it past what the database holds, as the server does", () => {
         defineCard({
           "update:held_at": [
             exact([[newName("held_at"), ">=", "2026-01-01T00:00:00.000000Z"]]),
           ],
         });
 
-        assertSent(put({held_at: datetimeInYear(2026, -10_000_000_000_000n)}));
+        assert.deepStrictEqual(
+          update(put({held_at: datetimeInYear(2026, -10_000_000_000_000n)})),
+          Type.tuple([
+            Type.atom("error"),
+            Type.map([
+              [
+                Type.atom("held_at"),
+                Type.list([
+                  Type.tuple([Type.atom("type"), Type.atom("datetime")]),
+                ]),
+              ],
+            ]),
+          ]),
+        );
+
+        assert.isUndefined(Batches.current()?.writes[0]);
       });
 
       it("doesn't refuse a field holding a far date, which a bound can't judge", () => {

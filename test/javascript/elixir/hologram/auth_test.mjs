@@ -3823,6 +3823,22 @@ describe("Elixir_Hologram_Auth", () => {
       };
 
       it("doesn't grant on a date past what a JavaScript date holds", () => {
+        defineUpdate("update:due_on", newIs("due_on", "!=", "2026-01-01"));
+
+        const farDate = Type.struct("Date", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("month"), Type.integer(1)],
+          [Type.atom("year"), Type.integer(280000)],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {due_on: farDate}, document({due_on: "2025-06-01"})),
+          Type.boolean(false),
+        );
+      });
+
+      it("reads a datetime past what the database holds as the stored value, as the server does", () => {
         defineUpdate(
           "update:held_at",
           newIs("held_at", "<", "2026-01-01T00:00:00.000000Z"),
@@ -3834,7 +3850,7 @@ describe("Elixir_Hologram_Auth", () => {
             {held_at: datetimeInYear(300000)},
             document({held_at: "2025-06-01T00:00:00.000000Z"}),
           ),
-          Type.boolean(false),
+          Type.boolean(true),
         );
       });
 
