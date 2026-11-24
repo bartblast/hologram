@@ -433,6 +433,29 @@ defmodule Hologram.DBTest do
       end)
     end
 
+    test "names the reset when the database doesn't exist in dev" do
+      System.put_env("HOLOGRAM_ENV", "dev")
+      on_exit(fn -> System.delete_env("HOLOGRAM_ENV") end)
+
+      connection_opts = Config.connection_opts(database: "hologram_no_such_database")
+
+      expected_msg =
+        ~s(database "hologram_no_such_database" does not exist - create it, or run ) <>
+          "mix holo.db.reset to create it with Hologram's tables"
+
+      capture_log(fn ->
+        pool = start_unreachable_pool()
+
+        assert_raise RuntimeError, expected_msg, fn ->
+          Connection.with_connection(pool, fn ->
+            await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+          end)
+        end
+
+        stop_unreachable_pool()
+      end)
+    end
+
     # Waiting is for a database that is away - one that answers with an error would answer the
     # same way on every try.
     test "raises an error other than a connection error" do

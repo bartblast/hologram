@@ -730,8 +730,8 @@ defmodule Hologram.DB do
   which: a server that refuses or cannot be reached - a host name that does not resolve included -
   or one still starting up or shutting down, is waited for. Any other error - a wrong password, a
   database that does not exist, a connection limit - raises, failing the boot as it did before the
-  wait. An error the query itself answers with raises the same way, unless it is one of
-  those.
+  wait. In dev, a database that does not exist raises naming mix holo.db.reset, which creates it.
+  An error the query itself answers with raises the same way, unless it is one of those.
 
   It runs inside the start of the database's supervisor, so a restart of that supervisor while the
   database is away - rare, since the pool waits rather than failing - holds the unit above it, and
@@ -1074,9 +1074,24 @@ defmodule Hologram.DB do
       when code in @unavailable_error_codes ->
         error
 
+      {:error, %Postgrex.Error{postgres: %{code: :invalid_catalog_name}} = error} ->
+        raise_missing_database!(error, connection_opts[:database])
+
       {:error, error} ->
         raise error
     end
+  end
+
+  # In dev the reset creates the database along with Hologram's tables, so the error names it.
+  # A test run makes its own database, and every other env's is the deploy's to create, so the
+  # reset is no way out there.
+  defp raise_missing_database!(error, database) do
+    if Hologram.env() == :dev do
+      raise ~s(database "#{database}" does not exist - create it, or run mix holo.db.reset to ) <>
+              "create it with Hologram's tables"
+    end
+
+    raise error
   end
 
   # A unique field is a declared attribute or the reference field of a unique to-one, and the line
