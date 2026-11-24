@@ -775,6 +775,38 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       end
     end
 
+    test "names the reset in dev for a lone system schema whose marker matches" do
+      drop_hologram_schemas()
+      dev_context = %{@context | env: "dev"}
+      ensure_managed!(dev_context)
+      {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
+
+      assert_error RuntimeError, @not_managed_msg <> @reset_hint, fn ->
+        ensure_managed!(dev_context)
+      end
+    end
+
+    # The reset refuses these databases too, so it's no way out.
+    test "names no reset in dev for a lone system schema whose marker the reset refuses" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+      {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
+
+      assert_raise RuntimeError, ~r/ - point the config at the right database$/, fn ->
+        ensure_managed!(%{@context | otp_app: "other_app", env: "dev"})
+      end
+
+      assert_raise RuntimeError, ~r/ - the config points at another env's database$/, fn ->
+        ensure_managed!(%{@context | env: "dev"})
+      end
+
+      write_marker(%{read_marker() | env: "dev", managed_by: "migrations"})
+
+      assert_raise RuntimeError, ~r/ - schema reconciliation never touches it$/, fn ->
+        ensure_managed!(%{@context | env: "dev"})
+      end
+    end
+
     test "raises when the marker row is missing" do
       drop_hologram_schemas()
       ensure_managed!(@context)

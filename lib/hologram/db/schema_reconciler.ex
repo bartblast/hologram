@@ -86,10 +86,11 @@ defmodule Hologram.DB.SchemaReconciler do
   raises with a specific message: Hologram schemas without a marker, a marker belonging
   to another app or env, a database managed by migrations, or system tables at a newer
   layout than the running one (see system_schema_version/1, which reads the context's
-  optional :system_upgrades). It never upgrades the system tables of a database it finds
-  managed - that is upgrade_system_tables!/1, which reconcile/1 runs next in the same
-  transaction. In the dev env, the messages of the states mix holo.db.reset clears name it:
-  the Hologram schemas without a marker and the newer layout.
+  optional :system_upgrades). A database with only one of the two schemas raises as having no
+  marker once a marker left in it passes the app, env and managed-by checks. It never upgrades
+  the system tables of a database it finds managed - that is upgrade_system_tables!/1, which
+  reconcile/1 runs next in the same transaction. In the dev env, the messages of the states
+  mix holo.db.reset clears name it: the Hologram schemas without a marker and the newer layout.
   """
   @spec ensure_managed!(%{atom => any}) :: :claimed | :managed
   def ensure_managed!(context) do
@@ -99,7 +100,7 @@ defmodule Hologram.DB.SchemaReconciler do
     case hologram_schemas() do
       [] -> claim(context)
       [^data_schema, ^system_schema] -> check_marker!(context)
-      _partial -> raise_not_managed!(context)
+      _partial -> check_partial!(context)
     end
   end
 
@@ -547,17 +548,8 @@ defmodule Hologram.DB.SchemaReconciler do
     Enum.each(ops, &check_alien!(&1, registry))
   end
 
-  defp check_marker!(context) do
-    if not marker_table_exists?() do
-      raise_not_managed!(context)
-    end
-
-    marker = read_marker()
-
+  defp check_guard_facts!(marker, context) do
     cond do
-      marker == nil ->
-        raise_not_managed!(context)
-
       marker.otp_app != context.otp_app ->
         raise "the configured database belongs to app \"#{marker.otp_app}\" - " <>
                 "the current app is \"#{context.otp_app}\" - " <>
@@ -573,9 +565,33 @@ defmodule Hologram.DB.SchemaReconciler do
                 "schema reconciliation never touches it"
 
       true ->
-        with_reset_hint(context, fn -> check_system_schema_version!(marker, context) end)
-        :managed
+        :ok
     end
+  end
+
+  defp check_marker!(context) do
+    marker = existing_marker()
+
+    if marker == nil do
+      raise_not_managed!(context)
+    end
+
+    check_guard_facts!(marker, context)
+    with_reset_hint(context, fn -> check_system_schema_version!(marker, context) end)
+
+    :managed
+  end
+
+  # A marker left beside one Hologram schema still says whose database it is, and the reset
+  # refuses another app's, another env's or the migrator's database, so the refusal that names
+  # the reset waits until the marker's guard facts match.
+  defp check_partial!(context) do
+    case existing_marker() do
+      nil -> :ok
+      marker -> check_guard_facts!(marker, context)
+    end
+
+    raise_not_managed!(context)
   end
 
   defp claim(context) do
@@ -660,6 +676,10 @@ defmodule Hologram.DB.SchemaReconciler do
         raise "upgrading the system tables to layout version #{version} failed - " <>
                 Exception.message(error)
     end
+  end
+
+  defp existing_marker do
+    if marker_table_exists?(), do: read_marker()
   end
 
   defp fill_column(table, column, encoded_value) do
