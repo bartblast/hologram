@@ -622,14 +622,14 @@ defmodule HologramSyncTests.Consistency.Client do
     end
   end
 
-  # The transaction id a cursor names - opaque to a browser, read here because check 2 bounds what a
-  # frame may carry by it, and read the way the server reads one back, so a change to the format
+  # The seq of the place a cursor names - opaque to a browser, read here because check 2 bounds what
+  # a frame may carry by it, and read the way the server reads one back, so a change to the format
   # shows up as a failure where the cursor is kept rather than quietly switching the bound off.
   defp cursor_tx(nil), do: {:ok, nil}
 
   defp cursor_tx(cursor) do
     case Cursor.decode(cursor) do
-      {:ok, tx, _seq, _policy_hash, _types_hash} -> {:ok, tx}
+      {:ok, {seq, _tx, _at}, _log_id, _policy_hash, _types_hash} -> {:ok, seq}
       :error -> :error
     end
   end

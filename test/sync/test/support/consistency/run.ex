@@ -8,10 +8,8 @@ defmodule HologramSyncTests.Consistency.Run do
   # The run traps exits while it goes, so a client, writer or schedule that crashes is a failure in
   # the report, with the seed and the trace, rather than one that takes the test down without them.
 
-  import HologramSyncTests.Helpers, only: [create!: 2, truncate_tables: 0]
+  import HologramSyncTests.Helpers, only: [create!: 2, read_seq: 0, truncate_tables: 0]
 
-  alias Hologram.DB
-  alias Hologram.DB.Connection
   alias Hologram.DB.Oplog
   alias Hologram.Entity.Model, as: EntityModel
   alias Hologram.Sync.Catchup
@@ -357,9 +355,9 @@ defmodule HologramSyncTests.Consistency.Run do
 
   defp gap_too_large?(%{cursor: cursor}) when is_binary(cursor) do
     case Cursor.decode(cursor) do
-      {:ok, tx, seq, _policy_hash, _types_hash} ->
+      {:ok, {seq, _tx, _at}, _log_id, _policy_hash, _types_hash} ->
         limit = Catchup.gap_limit()
-        {count, _other_model?} = Oplog.count_after(tx, seq, limit + 1, EntityModel.hash())
+        {count, _other_model?} = Oplog.count_after(seq, limit + 1, EntityModel.hash())
 
         count > limit
 
@@ -381,24 +379,18 @@ defmodule HologramSyncTests.Consistency.Run do
     |> elem(1)
   end
 
-  # A session's first place is the oldest transaction still running when it starts, which a
-  # transaction anywhere on the database server can hold back. Below the log's oldest change, a
-  # returning client's place reads as one from before the log, and it's sent everything again for
-  # retention - on a fresh log, every client coming back from its first place would be, and no
-  # catch-up would run. So the log gets a change first, and the run starts once nothing older than
-  # it still runs. The row goes with the truncate after; the change stays in the log.
+  # A save left running anywhere on the database server holds the final limit below its serial, and
+  # with it every place a session reaches and every number a client is shown - the run would then
+  # fail on what that save held back rather than on what it checks. So the log gets a change first,
+  # and the run starts once the dispatcher has read past it. The row goes with the truncate after;
+  # the change stays in the log.
   defp warm_up_log do
-    {:ok, xid} =
-      DB.transaction(fn ->
-        create!(Tag, name: "warm-up")
-        {:ok, %{rows: [[xid]]}} = Connection.query("SELECT pg_current_xact_id()::text", [])
+    create!(Tag, name: "warm-up")
+    serial = Oplog.last_serial()
 
-        String.to_integer(xid)
-      end)
-
-    if await(fn -> Oplog.current_xmin() > xid end, @read_ms) == :timeout do
-      raise "a transaction elsewhere on the database server kept running for #{@read_ms} ms, " <>
-              "so a returning client's place would read as one from before the log"
+    if await(fn -> read_seq() >= serial end, @read_ms) == :timeout do
+      raise "a save elsewhere on the database server kept running for #{@read_ms} ms, " <>
+              "so the final limit stayed below the run's first change"
     end
   end
 

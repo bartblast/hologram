@@ -4,7 +4,6 @@ defmodule HologramSyncTests.Consistency.RunTest do
 
   import HologramSyncTests.Helpers
 
-  alias Hologram.DB.Connection
   alias Hologram.DB.Oplog
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
@@ -22,18 +21,11 @@ defmodule HologramSyncTests.Consistency.RunTest do
   # The client came back from far behind, then its stream ended and it reconnected on its own from
   # a fresh place: the return is what it was owed a start over for.
   test "judges a client's return by the first connect after its cut, not a later reconnect" do
-    behind = Cursor.encode(Oplog.current_xmin(), 0, @hash, @hash)
+    behind = last_cursor()
 
     for index <- 0..Catchup.gap_limit(), do: create!(Tag, name: "tag #{index}")
 
-    # Past every tag: a transaction id taken after they committed - the oldest one running can
-    # still sit below them.
-    {:ok, %{rows: [[next_xid]]}} = Connection.query("SELECT pg_current_xact_id()::text", [])
-
-    caught_up =
-      next_xid
-      |> String.to_integer()
-      |> Cursor.encode(0, @hash, @hash)
+    caught_up = last_cursor()
 
     events = [
       %{cursor: nil, kind: :connect},
@@ -53,5 +45,14 @@ defmodule HologramSyncTests.Consistency.RunTest do
     # place than the return's to a client the return had already caught up.
     assert Run.missed_resync?(%{events: [resync | events], schedule: @schedule})
     assert Run.missed_resync?(%{events: List.insert_at(events, -1, resync), schedule: @schedule})
+  end
+
+  # The cursor naming the log's last entry.
+  defp last_cursor do
+    {entry, _run} = Oplog.last_entry_through(Oplog.last_serial())
+
+    entry
+    |> Oplog.place()
+    |> Cursor.encode(Oplog.log_id(), @hash, @hash)
   end
 end

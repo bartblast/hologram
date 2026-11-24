@@ -212,7 +212,7 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     Client.connect(client)
     assert Checks.await_converged(client, member.id, 5_000) == :ok
 
-    {:ok, tx, _seq, _policy_hash, _types_hash} =
+    {:ok, {seq, _tx, _at}, _log_id, _policy_hash, _types_hash} =
       client
       |> Client.cursor()
       |> Cursor.decode()
@@ -230,7 +230,7 @@ defmodule HologramSyncTests.Consistency.ClientTest do
 
     send(client, {:http, {request_id, :stream, chunk}})
 
-    assert %{cursor_tx: ^tx, id: "t"} =
+    assert %{cursor_tx: ^seq, id: "t"} =
              client
              |> Client.records()
              |> List.last()
@@ -480,22 +480,22 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     |> add_relationship(:tags, red.id)
     |> DB.update!()
 
-    # A transaction left open elsewhere would put the client's place below these writes, and the
+    # A save left running elsewhere would hold the client's place below these writes, and the
     # catch-up would then replay them and restate the tag's set.
-    edge = Oplog.current_xmax()
-    assert await(fn -> Oplog.current_xmin() >= edge end)
+    edge = Oplog.last_serial()
+    assert await(fn -> read_seq() >= edge end)
 
     client = start_client(user.id)
 
     Client.connect(client)
     assert Checks.await_converged(client, user.id, 5_000) == :ok
 
-    {:ok, tx, _seq, _policy_hash, _types_hash} =
+    {:ok, {seq, _tx, _at}, _log_id, _policy_hash, _types_hash} =
       client
       |> Client.cursor()
       |> Cursor.decode()
 
-    assert tx >= edge
+    assert seq >= edge
 
     Client.cut(client)
     give_access.(other_board)
