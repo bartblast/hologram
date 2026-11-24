@@ -40,6 +40,7 @@ defmodule Hologram.Sync.Live do
 
   @type part :: %{
           checked: %{module => binary},
+          final_seq: non_neg_integer,
           moved: %{module => binary},
           overtaking_seqs: %{String.t() => non_neg_integer},
           own_puts: %{String.t() => %{module => binary}},
@@ -69,6 +70,10 @@ defmodule Hologram.Sync.Live do
   - `place` - where the batch was read from, which is what a frame built from it may claim a client
     has reached
   - `seq_range` - the lowest and the highest of the batch's seqs
+  - `final_seq` - the seq of the final limit the batch was read under, the given one or else the
+    place's: every effect at or below it is in this batch or went out before it, so a client told
+    the batch holds every row numbered at or below it, and a number above it in the rows may still
+    be passed by a save that hasn't ended (see `Hologram.Sync.Dispatcher`)
   - `checked` - every row the batch may have changed for anyone, per entity type: its own ids, both
     ends of each pair, and the rows the backwards search reaches along the given edges - the read
     rules', and the verdicts' in a build checking permissions on the client - packed (see
@@ -137,19 +142,20 @@ defmodule Hologram.Sync.Live do
           Edges.t(),
           list(module),
           Oplog.place(),
-          sent | nil
+          sent | nil,
+          non_neg_integer | nil
         ) :: %{(String.t() | nil) => part}
-  def parts(effects, sessions, edges, synced_types, place, sent \\ nil) do
+  def parts(effects, sessions, edges, synced_types, place, sent \\ nil, final_seq \\ nil) do
     {:ok, parts} =
       Connection.snapshot(fn ->
-        parts_now(effects, sessions, edges, synced_types, place, sent)
+        parts_now(effects, sessions, edges, synced_types, place, sent, final_seq)
       end)
 
     parts
   end
 
   @doc """
-  Returns the part of the given effects that is the given user's, as `parts/5` works it out for a
+  Returns the part of the given effects that is the given user's, as `parts/7` works it out for a
   session of that user - what a returning client's catch-up decides each chunk of its gap with. The
   user is put into the spelling the node's sessions are listed by (see
   `Hologram.Auth.canonical_id/1`).
@@ -159,6 +165,9 @@ defmodule Hologram.Sync.Live do
   chunk's highest can have been running then, and commit before the chunk's rows are read - and the
   rows hold it. And a chunk can end inside a save, whose batches with effects only in a later chunk
   the rows hold too.
+
+  Its `final_seq` is the place's: a gap's chunks are told in order, and every effect at or below a
+  place at or below the edge the gap was read after had committed when the gap was read.
   """
   @spec part(
           list(map),
@@ -199,8 +208,8 @@ defmodule Hologram.Sync.Live do
   end
 
   @doc """
-  Reads what `parts/5` reads in whatever transaction the caller is in, which agrees with itself only
-  when that transaction reads every statement from one snapshot - what `parts/5` opens. Given what
+  Reads what `parts/7` reads in whatever transaction the caller is in, which agrees with itself only
+  when that transaction reads every statement from one snapshot - what `parts/7` opens. Given what
   was sent, the overtaking batches are the ones with an entry above its seq or in its ranges (see
   `part/6`) rather than above the place.
   """
@@ -210,9 +219,10 @@ defmodule Hologram.Sync.Live do
           %{{module, atom} => list(tuple)},
           list(module),
           Oplog.place(),
-          sent | nil
+          sent | nil,
+          non_neg_integer | nil
         ) :: %{(String.t() | nil) => part}
-  def parts_now(effects, sessions, edges, synced_types, place, sent \\ nil) do
+  def parts_now(effects, sessions, edges, synced_types, place, sent \\ nil, final_seq \\ nil) do
     synced = MapSet.new(synced_types)
     pair_effects = pair_effects(effects, synced)
 
@@ -254,6 +264,7 @@ defmodule Hologram.Sync.Live do
 
     shared = %{
       checked: Map.new(checked, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end),
+      final_seq: final_seq || place_seq,
       moved: Map.new(moved, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end),
       overtaking_seqs: overtaking_seqs,
       own_puts: own_puts(effects, synced),
@@ -330,16 +341,28 @@ defmodule Hologram.Sync.Live do
   end
 
   @doc """
-  Hands the given effects, read from the given place, to every sync session on this node, each
-  sent `{:live, part}` with its user's part of the batch (see `parts/6`). Given what was sent, the
-  overtaking batches are the ones with an entry above its seq or in its ranges rather than above the
-  place.
+  Hands the given effects, read from the given place under the given final limit, to every sync
+  session on this node, each sent `{:live, part}` with its user's part of the batch (see
+  `parts/7`). Given what was sent, the overtaking batches are the ones with an entry above its seq
+  or in its ranges rather than above the place.
+
+  Given no effects, each session is sent `{:final, final_seq}` instead: the limit moved in a round
+  that read nothing, and every row numbered at or below it reached the sessions in batches before,
+  so their clients can be told the numbers up to it are final.
 
   With no session on the node, nothing is read for them. In a build where no client checks
   permissions, the rows carry no verdicts, so the search follows only the read rules' edges.
   """
-  @spec route(list(map), Oplog.place(), sent | nil) :: :ok
-  def route(effects, place, sent \\ nil) do
+  @spec route(list(map), Oplog.place(), sent | nil, non_neg_integer | nil) :: :ok
+  def route(effects, place, sent \\ nil, final_seq \\ nil)
+
+  def route([], {place_seq, _tx, _at}, _sent, final_seq) do
+    Enum.each(Sessions.list(), fn {pid, _user_id} ->
+      send(pid, {:final, final_seq || place_seq})
+    end)
+  end
+
+  def route(effects, place, sent, final_seq) do
     case Sessions.list() do
       [] ->
         :ok
@@ -351,7 +374,7 @@ defmodule Hologram.Sync.Live do
         edges = Edges.index(QueryCache.permission_checking?())
 
         parts =
-          parts(effects, sessions, edges, QueryCache.synced_types(), place, sent)
+          parts(effects, sessions, edges, QueryCache.synced_types(), place, sent, final_seq)
 
         Enum.each(sessions, fn {pid, user_id} ->
           send(pid, {:live, Map.fetch!(parts, user_id)})

@@ -1,5 +1,5 @@
 defmodule Hologram.Sync.LiveTest do
-  # async: false - the tests of route/2 write the query cache's persistent term, shared by the whole
+  # async: false - the tests of route/4 write the query cache's persistent term, shared by the whole
   # node, and start the session registry under its registered name.
   use Hologram.Test.DatabaseCase, async: false
 
@@ -158,7 +158,7 @@ defmodule Hologram.Sync.LiveTest do
       )
   end
 
-  # The query cache route/2 reads: whether a client checks permissions, and the synced types.
+  # The query cache route/4 reads: whether a client checks permissions, and the synced types.
   defp route_query_cache(permission_checking?) do
     %{derived: %{}, permission_checking?: permission_checking?, synced_types: @synced}
   end
@@ -170,7 +170,7 @@ defmodule Hologram.Sync.LiveTest do
     |> MapSet.new()
   end
 
-  describe "parts/5" do
+  describe "parts/7" do
     test "checks the row a patch wrote, and gives it to whoever may read it", context do
       project = create!(PolicyModule17, public: true)
       effects = [effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"})]
@@ -342,6 +342,26 @@ defmodule Hologram.Sync.LiveTest do
       assert unpacked_pairs(part.pair_effects) == %{
                {PolicyModule17, :labels, PolicyModule19} => [{project.id, label.id}]
              }
+    end
+
+    test "dates every part's numbers as final up to the given seq", context do
+      project = create!(PolicyModule17, public: true)
+      effects = [effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"})]
+
+      parts = parts(effects, context.sessions, context.edges, @synced, @place, nil, 250)
+
+      for user_id <- [context.alice, context.bob, nil] do
+        assert Map.fetch!(parts, user_id).final_seq == 250
+      end
+    end
+
+    test "dates every part's numbers as final up to its place given no seq", context do
+      project = create!(PolicyModule17, public: true)
+      effects = [effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"})]
+
+      parts = parts(effects, context.sessions, context.edges, @synced, @place)
+
+      assert Map.fetch!(parts, nil).final_seq == 100
     end
 
     test "leaves out the rows and pairs of a type sync doesn't send", context do
@@ -771,7 +791,7 @@ defmodule Hologram.Sync.LiveTest do
   end
 
   describe "part/6" do
-    test "answers the part of the given user, as parts/5 answers it for a session of theirs",
+    test "answers the part of the given user, as parts/7 answers it for a session of theirs",
          context do
       project = create!(PolicyModule17)
       create!(PolicyModule18, project_id: project.id, user_id: context.alice)
@@ -947,7 +967,7 @@ defmodule Hologram.Sync.LiveTest do
     end
   end
 
-  describe "route/3" do
+  describe "route/4" do
     setup do
       setup_query_cache(QueryCacheStub, false)
 
@@ -987,6 +1007,38 @@ defmodule Hologram.Sync.LiveTest do
       assert bob_part.readable[PolicyModule17] == %{}
 
       refute_received {:live, _part}
+    end
+
+    test "sends each session a part dated by the given final seq", context do
+      project = create!(PolicyModule17, public: true)
+      effect = effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"})
+
+      Sessions.register(context.alice)
+
+      route([effect], @place, nil, 250)
+
+      assert_received {:live, part}
+      assert part.final_seq == 250
+    end
+
+    test "tells every session how far the numbers are final when the round read nothing",
+         context do
+      Sessions.register(context.alice)
+      start_forwarding_session(context.bob)
+
+      assert route([], @place, nil, 250) == :ok
+
+      assert_received {:final, 250}
+      assert_receive {:forwarded, {:final, 250}}
+      refute_received {:live, _part}
+    end
+
+    test "tells how far the numbers are final up to the place given no seq", context do
+      Sessions.register(context.alice)
+
+      route([], @place)
+
+      assert_received {:final, 100}
     end
 
     # Module17's archive rule reads none(label <- labels, label.name == "locked"), which no read

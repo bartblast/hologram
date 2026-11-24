@@ -41,15 +41,19 @@ defmodule Hologram.Sync.Dispatcher do
   @doc """
   Starts the dispatcher.
 
-  `:handler` is called with the effects of each round, in seq order and never none, the place the
-  round read FROM, and what has been sent: the highest seq, and the ranges below it not sent. The
-  place is the final limit before the round (see `Hologram.DB.Oplog.place/1`), which is what a
-  frame built from these effects may claim a client has reached: a client replaying from there gets
-  this whole batch again, and never less, and with it every effect sent above the limit before. An
-  effect above the seq or in a range can have committed after the round read, so rows read for the
-  batch can hold it; every other one at or below the seq has gone out, or never will. The handler
-  is required, since a dispatcher with nowhere to send what it reads would advance its place past
-  effects nobody saw.
+  `:handler` is called with the effects of each round, in seq order, the place the round read FROM,
+  what has been sent - the highest seq, and the ranges below it not sent - and the seq of the final
+  limit the round read under. The place is the final limit before the round (see
+  `Hologram.DB.Oplog.place/1`), which is what a frame built from these effects may claim a client
+  has reached: a client replaying from there gets this whole batch again, and never less, and with
+  it every effect sent above the limit before. An effect above the seq or in a range can have
+  committed after the round read, so rows read for the batch can hold it; every other one at or
+  below the seq has gone out, or never will. Every effect at or below the limit's seq has gone out
+  once the handler has taken the round's, so a client told them holds every row numbered at or
+  below it. A round reading none is handed on only when it moved the limit, with no effects, so a
+  number above the limit before becomes final even when no row follows it. The handler is required,
+  since a dispatcher with nowhere to send what it reads would advance its place past effects nobody
+  saw.
 
   `:cursor` is the place reading starts from, and defaults to the first final limit, worked out in
   a round run as this dispatcher STARTS: a node begins with what happens from then on, because what
@@ -359,6 +363,7 @@ defmodule Hologram.Sync.Dispatcher do
          {limit_seq, _limit_tx, _limit_at} = limit_place
        ) do
     sent_through = max(state.sent_through || cursor_seq, cursor_seq)
+    final_seq = max(limit_seq, cursor_seq)
 
     effects = Oplog.read_unsent(sent_through, state.unsent)
     noted = note_sent(state, Enum.map(effects, & &1.seq), sent_through, limit_seq)
@@ -366,7 +371,9 @@ defmodule Hologram.Sync.Dispatcher do
     # The place moves only once the handler has taken them: a round that crashes halfway, or is
     # skipped while the data model is held, reads the same effects again, which routing must
     # tolerate, rather than passing them silently.
-    if effects != [], do: state.handler.(effects, cursor, {noted.sent_through, noted.unsent})
+    if effects != [] or final_seq > cursor_seq do
+      state.handler.(effects, cursor, {noted.sent_through, noted.unsent}, final_seq)
+    end
 
     move_to(noted, max_place(cursor, limit_place))
   rescue

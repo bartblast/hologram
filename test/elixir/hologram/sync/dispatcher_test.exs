@@ -122,9 +122,15 @@ defmodule Hologram.Sync.DispatcherTest do
   defp start_dispatcher!(opts) do
     test_pid = self()
 
-    handler = fn effects, place, sent ->
-      send(test_pid, {:dispatched, effects, place})
-      send(test_pid, {:sent, sent})
+    # A round reading nothing is handed on only to say the limit moved, which the tests of what a
+    # round reads look past.
+    handler = fn
+      [], _place, _sent, final_seq ->
+        send(test_pid, {:limit_moved, final_seq})
+
+      effects, place, sent, _final_seq ->
+        send(test_pid, {:dispatched, effects, place})
+        send(test_pid, {:sent, sent})
     end
 
     opts =
@@ -502,6 +508,53 @@ defmodule Hologram.Sync.DispatcherTest do
       settle(dispatcher)
     end
 
+    # The numbers the rows carry are final up to the limit: every save at or below it has ended.
+    test "hands over the final limit the round reached" do
+      {first_seq, _tx, _at} = seed(200, @entity_id)
+      seed(201, @entity_id)
+
+      test_pid = self()
+
+      handler = fn effects, _place, _sent, final_seq ->
+        send(test_pid, {:final, effects, final_seq})
+      end
+
+      dispatcher =
+        start_dispatcher!(
+          advance: sandbox_advance(high: first_seq),
+          cursor: {0, 0, 0},
+          handler: handler
+        )
+
+      assert_receive {:final, [%{tx: 200}, %{tx: 201}], ^first_seq}
+
+      settle(dispatcher)
+    end
+
+    # A save still running held the limit back below rows already handed over, and its end moves
+    # the limit past them with nothing new to read - which the clients holding them are told.
+    test "hands over a round that reads nothing when it moves the final limit" do
+      {first_seq, _tx, _at} = seed(200, @entity_id)
+      {last_seq, _tx, _at} = seed(201, @entity_id)
+
+      dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
+
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
+      refute_received {:limit_moved, _final_seq}
+
+      :sys.replace_state(dispatcher, &%{&1 | advance: sandbox_advance(high: last_seq)})
+      wake(dispatcher)
+
+      assert_receive {:limit_moved, ^last_seq}
+      refute_received {:dispatched, _effects, _place}
+
+      wake(dispatcher)
+
+      refute_receive {:limit_moved, _final_seq}, 100
+
+      settle(dispatcher)
+    end
+
     # A limit below the place is a server that lost the commits above it, and the serials above
     # the limit go to other saves, whose effects reading on from the place would pass by.
     test "stops the sessions and begins again at a final limit below its place" do
@@ -766,7 +819,7 @@ defmodule Hologram.Sync.DispatcherTest do
       test_pid = self()
       {:ok, calls} = Agent.start_link(fn -> 0 end)
 
-      handler = fn effects, place, _sent ->
+      handler = fn effects, place, _sent, _final_seq ->
         call = Agent.get_and_update(calls, &{&1 + 1, &1 + 1})
         send(test_pid, {:dispatched, call, effects, place})
 

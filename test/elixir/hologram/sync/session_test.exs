@@ -260,9 +260,9 @@ defmodule Hologram.Sync.SessionTest do
 
   defp await_fill(acc \\ []) do
     receive do
-      {:sync_deltas, _cursor, deltas, _applied_seq} -> await_fill(acc ++ deltas)
-      {:sync_synced, :all, _cursor} -> acc
-      {:sync_synced, {:types, _types, _applied_seq}, _cursor} -> await_fill(acc)
+      {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq} -> await_fill(acc ++ deltas)
+      {:sync_synced, :all, _cursor, _final_seq} -> acc
+      {:sync_synced, {:types, _types, _applied_seq}, _cursor, _final_seq} -> await_fill(acc)
     after
       1_000 -> flunk("the client was never told it holds everything")
     end
@@ -284,8 +284,8 @@ defmodule Hologram.Sync.SessionTest do
   # holds everything.
   defp synced_scopes(acc \\ []) do
     receive do
-      {:sync_synced, :all, _cursor} -> Enum.reverse([:all | acc])
-      {:sync_synced, scope, _cursor} -> synced_scopes([scope | acc])
+      {:sync_synced, :all, _cursor, _final_seq} -> Enum.reverse([:all | acc])
+      {:sync_synced, scope, _cursor, _final_seq} -> synced_scopes([scope | acc])
     after
       1_000 -> flunk("the client was never told it holds everything")
     end
@@ -343,14 +343,16 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(gap: gap)
 
-      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq,
+                      _final_seq}
+
       assert id == renamed.id
       assert data.c == "renamed twice"
       assert cursor == cursor_at(302)
 
-      assert_receive {:sync_synced, :all, all_cursor}
+      assert_receive {:sync_synced, :all, all_cursor, _final_seq}
       assert all_cursor == cursor_at(302)
-      refute_received {:sync_deltas, _cursor, _deltas, _seq}
+      refute_received {:sync_deltas, _cursor, _deltas, _seq, _final_seq}
     end
 
     # The held ids are read after the grant, so the row is among them - and handed over whole all
@@ -372,10 +374,10 @@ defmodule Hologram.Sync.SessionTest do
         gap: [logged(:put_entity, RoleGrant, grant["id"], grant, 301)]
       )
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], _seq}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], _seq, _final_seq}
       assert id == opened.id
 
-      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
     end
 
     test "drops a row it takes the client to hold that the user can no longer read" do
@@ -389,7 +391,7 @@ defmodule Hologram.Sync.SessionTest do
         read_ids: held_ids(%{Module2 => [gone.id]})
       )
 
-      assert_receive {:sync_deltas, _cursor, deltas, _seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _seq, _final_seq}
       assert deltas == [Frame.unsync_entity(gone.id, Module2)]
     end
 
@@ -412,7 +414,7 @@ defmodule Hologram.Sync.SessionTest do
         read_ids: held_ids(%{PolicyModule1 => [hidden.id]})
       )
 
-      assert_receive {:sync_deltas, _cursor, deltas, _seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _seq, _final_seq}
       assert deltas == [Frame.unsync_entity(hidden.id, PolicyModule1)]
     end
 
@@ -421,10 +423,19 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(gap: [])
 
-      assert_receive {:sync_synced, :all, _cursor}
-      refute_received {:sync_deltas, _cursor, _deltas, _seq}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
+      refute_received {:sync_deltas, _cursor, _deltas, _seq, _final_seq}
     end
 
+    # Every save at or below the edge ended before the gap was read, so the numbers up to it are
+    # final once the gap is told, past the last effect it read.
+    test "dates the catch-up's end by the edge" do
+      start_session!(gap: [], edge: 200)
+
+      assert_receive {:sync_synced, :all, _cursor, 200}
+    end
+
+    # Each chunk's numbers are final up to its last effect, and the catch-up's up to the edge.
     test "tells the gap a chunk at a time, each dated by its last effect, a row in two chunks once" do
       put_app_env(:sync, rows_per_frame: 1)
 
@@ -439,17 +450,17 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(gap: gap)
 
-      assert_receive {:sync_deltas, first_cursor, [%{id: first_id}], _seq}
+      assert_receive {:sync_deltas, first_cursor, [%{id: first_id}], _seq, 301}
       assert first_id == first.id
       assert first_cursor == cursor_at(301)
 
-      assert_receive {:sync_deltas, second_cursor, [%{id: second_id}], _seq}
+      assert_receive {:sync_deltas, second_cursor, [%{id: second_id}], _seq, 302}
       assert second_id == second.id
       assert second_cursor == cursor_at(302)
 
-      assert_receive {:sync_synced, :all, all_cursor}
+      assert_receive {:sync_synced, :all, all_cursor, 303}
       assert all_cursor == cursor_at(303)
-      refute_received {:sync_deltas, _cursor, _deltas, _seq}
+      refute_received {:sync_deltas, _cursor, _deltas, _seq, _final_seq}
     end
 
     # A transaction below an effect the gap read returned can still have been open then.
@@ -463,10 +474,10 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(gap: gap, edge: 300)
 
-      assert_receive {:sync_deltas, cursor, [%{id: _id}], _seq}
+      assert_receive {:sync_deltas, cursor, [%{id: _id}], _seq, 300}
       assert cursor == cursor_at(300)
 
-      assert_receive {:sync_synced, :all, all_cursor}
+      assert_receive {:sync_synced, :all, all_cursor, 300}
       assert all_cursor == cursor_at(300)
     end
 
@@ -479,7 +490,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(applied_seq: 3, gap: gap, replica_id: @replica_id)
 
-      assert_receive {:sync_deltas, _cursor, [%{id: _id}], 9}, 1_000
+      assert_receive {:sync_deltas, _cursor, [%{id: _id}], 9, _final_seq}, 1_000
     end
 
     # The batch's transaction was open when the gap was read, below the gap's own, and committed
@@ -492,7 +503,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(applied_seq: 3, edge: 200, gap: gap, replica_id: @replica_id)
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], 7}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], 7, _final_seq}
       assert id == moved.id
     end
 
@@ -511,7 +522,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(applied_seq: 3, gap: gap, replica_id: @replica_id)
 
-      assert_receive {:sync_deltas, _cursor, [%{id: _id, op: :put_entity}], 5}, 1_000
+      assert_receive {:sync_deltas, _cursor, [%{id: _id, op: :put_entity}], 5, _final_seq}, 1_000
     end
 
     # The client went away before the batch's answer, so its create is still pending and it holds no
@@ -533,10 +544,10 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(applied_seq: 3, gap: gap, replica_id: @replica_id)
 
-      assert_receive {:sync_deltas, _cursor, deltas, 9}, 1_000
+      assert_receive {:sync_deltas, _cursor, deltas, 9, _final_seq}, 1_000
       assert deltas == [Frame.unsync_entity(hidden.id, PolicyModule1)]
 
-      refute_receive {:sync_deltas, _cursor, _deltas, nil}, 100
+      refute_receive {:sync_deltas, _cursor, _deltas, nil, _final_seq}, 100
     end
 
     test "joins the node's sessions before it reads what its user may read" do
@@ -552,7 +563,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(gap: [], read_ids: read_ids_joined)
 
       assert_receive {:joined?, true}
-      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
     end
 
     test "cuts the client off when the log says it has to be sent everything again" do
@@ -576,7 +587,7 @@ defmodule Hologram.Sync.SessionTest do
       send(session, :answer_gap)
 
       assert_receive {:DOWN, ^ref, :process, ^session, {:full_resync, :gap_too_large}}
-      refute_received {:sync_synced, :all, _cursor}
+      refute_received {:sync_synced, :all, _cursor, _final_seq}
     end
 
     # The batch reaches the session before the catch-up is over, dated at the gap's edge, so it is
@@ -607,9 +618,10 @@ defmodule Hologram.Sync.SessionTest do
       route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], 1)
       send(session, :routed)
 
-      assert_receive {:sync_synced, :all, _cursor}, 1_000
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}, 1_000
 
-      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq},
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq,
+                      _final_seq},
                      1_000
 
       assert id == task.id
@@ -639,16 +651,18 @@ defmodule Hologram.Sync.SessionTest do
           end
         )
 
-      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq,
+                      _final_seq}
+
       assert id == row.id
       assert data.c == "after"
       assert cursor == cursor_at(151)
 
-      assert_receive {:sync_synced, :all, all_cursor}
+      assert_receive {:sync_synced, :all, all_cursor, _final_seq}
       assert all_cursor == cursor_at(200)
 
       await_live(session)
-      refute_received {:sync_deltas, _cursor, _deltas, _seq}
+      refute_received {:sync_deltas, _cursor, _deltas, _seq, _final_seq}
     end
 
     # Read in a round the dispatcher ended before the session read the edge, so the gap holds every
@@ -680,14 +694,16 @@ defmodule Hologram.Sync.SessionTest do
           end
         )
 
-      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq,
+                      _final_seq}
+
       assert id == row.id
       assert data.c == "after"
 
-      assert_receive {:sync_synced, :all, _all_cursor}
+      assert_receive {:sync_synced, :all, _all_cursor, _final_seq}
 
       await_live(session)
-      refute_received {:sync_deltas, _cursor, _deltas, _seq}
+      refute_received {:sync_deltas, _cursor, _deltas, _seq, _final_seq}
     end
 
     # Read once every save at or below the edge had ended, so its rows are no older than any of
@@ -707,8 +723,11 @@ defmodule Hologram.Sync.SessionTest do
         end
       )
 
-      assert_receive {:sync_synced, :all, _cursor}
-      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
+
+      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq,
+                      _final_seq}
+
       assert id == row.id
       assert data.c == "after"
       assert cursor == cursor_at(200)
@@ -737,7 +756,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(read_fill: read_fill)
 
       assert_receive {:read_on, "hologram_sync"}, 1_000
-      assert_receive {:sync_synced, :all, _cursor}, 1_000
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}, 1_000
     end
 
     # A grant moving a whole type under a connected client is what keeps it current, which a wave
@@ -765,7 +784,7 @@ defmodule Hologram.Sync.SessionTest do
 
       session = start_session!(actor_user_id: user.id, read_fill: read_fill)
 
-      assert_receive {:sync_synced, :all, _cursor}, 1_000
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}, 1_000
       flush_messages()
 
       grant = %{
@@ -807,7 +826,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(gap: [], read_ids: read_ids)
 
       assert_receive {:read_on, "hologram_sync"}, 1_000
-      assert_receive {:sync_synced, :all, _cursor}, 1_000
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}, 1_000
     end
   end
 
@@ -847,12 +866,12 @@ defmodule Hologram.Sync.SessionTest do
       :sys.get_state(session)
 
       refute registered?(session)
-      refute_received {:sync_synced, :all, _cursor}
+      refute_received {:sync_synced, :all, _cursor, _final_seq}
 
       Process.unlink(holder)
       Process.exit(holder, :kill)
 
-      assert_receive {:sync_synced, :all, _cursor}, 1_000
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}, 1_000
       assert registered?(session)
     end
 
@@ -862,7 +881,7 @@ defmodule Hologram.Sync.SessionTest do
       Process.unlink(holder)
       Process.exit(holder, :kill)
 
-      assert_receive {:sync_synced, :all, _cursor}, 1_000
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}, 1_000
 
       wait_until(fn -> :sys.get_state(Gate).holders == %{} end)
     end
@@ -896,10 +915,10 @@ defmodule Hologram.Sync.SessionTest do
     # seq}`.
     defp await_frames(acc \\ []) do
       receive do
-        {:sync_deltas, _cursor, deltas, applied_seq} ->
+        {:sync_deltas, _cursor, deltas, applied_seq, _final_seq} ->
           await_frames([{deltas, applied_seq} | acc])
 
-        {:sync_synced, :all, _cursor} ->
+        {:sync_synced, :all, _cursor, _final_seq} ->
           Enum.reverse(acc)
       after
         1_000 -> flunk("the client was never told it holds everything")
@@ -979,13 +998,13 @@ defmodule Hologram.Sync.SessionTest do
       route([live_effect(:patch_entity, PolicyModule1, parent.id, %{"public" => false})], 1)
       send(session, :routed)
 
-      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
 
       # The held ids of both types are read after the parent went private, so neither row is held,
       # and the batch is below the trust edge: it tells both by hash, each type in a frame of its
       # own.
-      assert_receive {:sync_deltas, _cursor, first, nil}
-      assert_receive {:sync_deltas, _cursor, second, nil}
+      assert_receive {:sync_deltas, _cursor, first, nil, _final_seq}
+      assert_receive {:sync_deltas, _cursor, second, nil, _final_seq}
 
       hashed_rows =
         [{first, nil}, {second, nil}]
@@ -1039,7 +1058,7 @@ defmodule Hologram.Sync.SessionTest do
 
       assert hashed(chunk_frames, [child.id]) == []
 
-      assert_receive {:sync_deltas, _cursor, deltas, nil}
+      assert_receive {:sync_deltas, _cursor, deltas, nil, _final_seq}
 
       assert hashed([{deltas, nil}], [child.id]) == [
                {"Hologram.Test.Fixtures.Policy.Module5", child.id}
@@ -1472,10 +1491,10 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(gap: [pair_effect(:add_relationship, parent, added, 301)])
 
-      assert_receive {:sync_deltas, first_cursor, [_first], _seq}
+      assert_receive {:sync_deltas, first_cursor, [_first], _seq, _final_seq}
       assert first_cursor == nil
 
-      assert_receive {:sync_deltas, last_cursor, [_last], _seq}
+      assert_receive {:sync_deltas, last_cursor, [_last], _seq, _final_seq}
       assert last_cursor == cursor_at(301)
     end
   end
@@ -1516,7 +1535,7 @@ defmodule Hologram.Sync.SessionTest do
 
       session = start_session!(read_edge: read_edge)
 
-      assert_receive {:sync_synced, :all, _cursor}, 1_000
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}, 1_000
       assert Sessions.list() == [{session, nil}]
     end
 
@@ -1528,7 +1547,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(read_edge: fn -> {edge, log_id} end)
 
-      assert_receive {:sync_synced, :all, cursor}, 1_000
+      assert_receive {:sync_synced, :all, cursor, _final_seq}, 1_000
       assert cursor == Cursor.encode(edge, log_id, @policy_hash, @types_hash)
     end
 
@@ -1547,7 +1566,7 @@ defmodule Hologram.Sync.SessionTest do
       {:messages, messages} = Process.info(self(), :messages)
 
       assert Enum.count(messages, &(&1 == :asked)) <= 6
-      refute_received {:sync_synced, _types, _cursor}
+      refute_received {:sync_synced, _types, _cursor, _final_seq}
     end
 
     test "stops a first arrival that finds the edge gone once it has joined" do
@@ -1560,7 +1579,7 @@ defmodule Hologram.Sync.SessionTest do
       send(session, :go)
 
       assert_receive {:DOWN, ^ref, :process, ^session, {:shutdown, :edge_gone}}, 1_000
-      refute_received {:sync_synced, _types, _cursor}
+      refute_received {:sync_synced, _types, _cursor, _final_seq}
     end
 
     test "stops a returning client that finds the edge gone once it has joined" do
@@ -1571,7 +1590,7 @@ defmodule Hologram.Sync.SessionTest do
       send(session, :go)
 
       assert_receive {:DOWN, ^ref, :process, ^session, {:shutdown, :edge_gone}}, 1_000
-      refute_received {:sync_synced, _types, _cursor}
+      refute_received {:sync_synced, _types, _cursor, _final_seq}
     end
   end
 
@@ -1587,13 +1606,13 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_deltas, nil, first, _applied_seq}
+      assert_receive {:sync_deltas, nil, first, _applied_seq, _final_seq}
       assert length(first) == 2
 
-      assert_receive {:sync_deltas, nil, second, _applied_seq}
+      assert_receive {:sync_deltas, nil, second, _applied_seq, _final_seq}
       assert length(second) == 1
 
-      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
     end
   end
 
@@ -1709,7 +1728,7 @@ defmodule Hologram.Sync.SessionTest do
 
     test "stops with nothing to report when the stream asks while it is idle" do
       {session, ref} = start_paced_session!(raw: true)
-      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
 
       send(session, :sync_stop)
 
@@ -1779,10 +1798,10 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, {:types, [Module2], nil}, nil}
-      assert_receive {:sync_synced, {:types, [PolicyModule1], nil}, nil}
-      assert_receive {:sync_synced, {:types, [PolicyModule5], nil}, nil}
-      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_synced, {:types, [Module2], nil}, nil, _final_seq}
+      assert_receive {:sync_synced, {:types, [PolicyModule1], nil}, nil, _final_seq}
+      assert_receive {:sync_synced, {:types, [PolicyModule5], nil}, nil, _final_seq}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
     end
 
     # Each type is read at its own moment, so each marker speaks for its own read. A type with no
@@ -1815,7 +1834,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(applied_seq: 7, read_fill: read_fill, replica_id: @replica_id)
 
-      assert_receive {:sync_synced, {:types, [Module2], 7}, nil}
+      assert_receive {:sync_synced, {:types, [Module2], 7}, nil, _final_seq}
     end
 
     test "names no number on a type's marker for a replica with no confirmed batch" do
@@ -1823,7 +1842,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(replica_id: @replica_id)
 
-      assert_receive {:sync_synced, {:types, [Module2], nil}, nil}
+      assert_receive {:sync_synced, {:types, [Module2], nil}, nil, _final_seq}
     end
 
     # The marker is what a filled client resumes from: a deltas frame carries no place until the
@@ -1834,7 +1853,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(edge: 200)
 
-      assert_receive {:sync_synced, :all, cursor}
+      assert_receive {:sync_synced, :all, cursor, _final_seq}
       assert cursor == cursor_at(200)
     end
 
@@ -1845,7 +1864,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(edge: 200)
 
-      assert_receive {:sync_synced, {:types, [Module2], _applied_seq}, cursor}
+      assert_receive {:sync_synced, {:types, [Module2], _applied_seq}, cursor, _final_seq}
       assert cursor == nil
     end
 
@@ -1856,9 +1875,9 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(edge: 200, gap: [])
 
-      assert_receive {:sync_synced, :all, cursor}
+      assert_receive {:sync_synced, :all, cursor, _final_seq}
       assert cursor == cursor_at(200)
-      refute_received {:sync_synced, {:types, _types, _applied_seq}, _cursor}
+      refute_received {:sync_synced, {:types, _types, _applied_seq}, _cursor, _final_seq}
     end
   end
 
@@ -1869,7 +1888,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
 
       assert deltas == [
                %{
@@ -1889,8 +1908,8 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :all, _cursor}
-      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
     end
 
     test "fills a synced type no page reads" do
@@ -1920,7 +1939,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(applied_seq: 3, replica_id: @replica_id)
 
-      assert_receive {:sync_deltas, nil, _deltas, 5}
+      assert_receive {:sync_deltas, nil, _deltas, 5, _final_seq}
     end
 
     # Every batch the session's own number counts committed before the read, so its writes are in
@@ -1937,7 +1956,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(applied_seq: 7, replica_id: @replica_id)
 
-      assert_receive {:sync_deltas, nil, _deltas, 7}
+      assert_receive {:sync_deltas, nil, _deltas, 7, _final_seq}
     end
 
     test "sends only the rows this client may read" do
@@ -1957,7 +1976,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(actor_user_id: user.id)
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
       assert [%{data: data, op: :put_entity}] = deltas
       assert data.id == readable.id
     end
@@ -1974,7 +1993,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
       assert [%{data: data, op: :put_entity}] = deltas
       assert data.id == readable.id
     end
@@ -2074,7 +2093,9 @@ defmodule Hologram.Sync.SessionTest do
       task = create("created")
       route([live_effect(:put_entity, Module2, task.id, %{"a" => true, "c" => "created"})])
 
-      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], nil}
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], nil,
+                      _final_seq}
+
       assert id == task.id
       assert data.c == "created"
     end
@@ -2090,7 +2111,9 @@ defmodule Hologram.Sync.SessionTest do
       DB.update!(Module2, task.id, c: "after")
       route([live_effect(:patch_entity, Module2, task.id, %{"c" => "whatever the log said"})])
 
-      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :patch_entity}], nil}
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :patch_entity}], nil,
+                      _final_seq}
+
       assert id == task.id
       assert data.c == "after"
     end
@@ -2109,7 +2132,7 @@ defmodule Hologram.Sync.SessionTest do
       DB.update!(PolicyModule1, gated.id, public: false)
       route([live_effect(:patch_entity, PolicyModule1, gated.id, %{"public" => false})])
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], nil}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], nil, _final_seq}
       assert id == gated.id
     end
 
@@ -2126,7 +2149,9 @@ defmodule Hologram.Sync.SessionTest do
 
       route([live_effect(:put_entity, PolicyModule1, hidden.id, %{"public" => false})])
 
-      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      # The frame says only how far the numbers are final.
+      assert_receive {:sync_deltas, _cursor, [], nil, _final_seq}
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
     end
 
     # The client files the row once the batch is confirmed, whatever its session was told.
@@ -2151,7 +2176,7 @@ defmodule Hologram.Sync.SessionTest do
         )
       ])
 
-      assert_receive {:sync_deltas, _cursor, deltas, 4}
+      assert_receive {:sync_deltas, _cursor, deltas, 4, _final_seq}
       assert deltas == [Frame.unsync_entity(hidden.id, PolicyModule1)]
     end
 
@@ -2176,7 +2201,9 @@ defmodule Hologram.Sync.SessionTest do
         )
       ])
 
-      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      # The frame says only how far the numbers are final.
+      assert_receive {:sync_deltas, _cursor, [], nil, _final_seq}
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
     end
 
     test "tells nothing of a row another replica's batch created that its user may not read" do
@@ -2202,7 +2229,9 @@ defmodule Hologram.Sync.SessionTest do
         )
       ])
 
-      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      # The frame says only how far the numbers are final.
+      assert_receive {:sync_deltas, _cursor, [], nil, _final_seq}
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
     end
 
     test "passes over a batch the fill already holds" do
@@ -2216,7 +2245,7 @@ defmodule Hologram.Sync.SessionTest do
       route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], 199)
       await_live(session)
 
-      refute_received {:sync_deltas, _cursor, _deltas, _applied_seq}
+      refute_received {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}
     end
 
     test "names the number of this replica's batches the batch holds" do
@@ -2233,7 +2262,7 @@ defmodule Hologram.Sync.SessionTest do
 
       route([effect])
 
-      assert_receive {:sync_deltas, _cursor, _deltas, 7}
+      assert_receive {:sync_deltas, _cursor, _deltas, 7, _final_seq}
     end
 
     test "claims the place the batch was read from, under the session's rules and types" do
@@ -2241,14 +2270,14 @@ defmodule Hologram.Sync.SessionTest do
       page_types(%{})
 
       start_session!(edge: 200)
-      assert_receive {:sync_synced, :all, fill_cursor}
+      assert_receive {:sync_synced, :all, fill_cursor, _final_seq}
       assert fill_cursor == cursor_at(200)
       flush_messages()
 
       DB.update!(Module2, task.id, c: "after")
       route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], 300)
 
-      assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
+      assert_receive {:sync_deltas, cursor, _deltas, _applied_seq, _final_seq}
       assert cursor == cursor_at(300)
     end
 
@@ -2277,7 +2306,9 @@ defmodule Hologram.Sync.SessionTest do
       |> Enum.map(&Map.put(&1, :mutation_ref, nil))
       |> route()
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], _applied_seq}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], _applied_seq,
+                      _final_seq}
+
       assert id == private.id
 
       granted = Oplog.read_type_after(RoleGrant, 0, %{})
@@ -2289,7 +2320,8 @@ defmodule Hologram.Sync.SessionTest do
       |> Enum.map(&Map.put(&1, :mutation_ref, nil))
       |> route()
 
-      assert_receive {:sync_deltas, _cursor, [%{id: ^id, op: :unsync_entity}], _applied_seq}
+      assert_receive {:sync_deltas, _cursor, [%{id: ^id, op: :unsync_entity}], _applied_seq,
+                      _final_seq}
     end
 
     # The client's batch 8 commits after the batch holding its batch 7 was read, and before the
@@ -2312,7 +2344,9 @@ defmodule Hologram.Sync.SessionTest do
 
       route([effect], batch_seq)
 
-      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], 8}
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], 8,
+                      _final_seq}
+
       assert id == task.id
       assert data.c == "overtaken"
       assert :sys.get_state(session).applied_seq == 7
@@ -2321,7 +2355,7 @@ defmodule Hologram.Sync.SessionTest do
       overtake(task, batch_seq + 2, 8)
       route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], batch_seq + 1)
 
-      assert_receive {:sync_deltas, _cursor, [%{id: ^id, op: :put_entity}], 8}
+      assert_receive {:sync_deltas, _cursor, [%{id: ^id, op: :put_entity}], 8, _final_seq}
     end
 
     test "hands a row over whole under a later batch of this replica's a batch of others' meets" do
@@ -2337,7 +2371,7 @@ defmodule Hologram.Sync.SessionTest do
 
       route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], batch_seq)
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], 8}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], 8, _final_seq}
       assert id == task.id
     end
 
@@ -2355,7 +2389,7 @@ defmodule Hologram.Sync.SessionTest do
 
       route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], batch_seq)
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :patch_entity}], 9}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :patch_entity}], 9, _final_seq}
       assert id == task.id
     end
 
@@ -2372,7 +2406,7 @@ defmodule Hologram.Sync.SessionTest do
         live_effect(:patch_entity, Module2, task.id, %{"c" => "after"}, ref(@other_replica, 9))
       ])
 
-      assert_receive {:sync_deltas, _cursor, _deltas, 5}, 1_000
+      assert_receive {:sync_deltas, _cursor, _deltas, 5, _final_seq}, 1_000
 
       DB.update!(Module2, task.id, c: "again")
 
@@ -2380,7 +2414,7 @@ defmodule Hologram.Sync.SessionTest do
         live_effect(:patch_entity, Module2, task.id, %{"c" => "again"}, ref(@replica_id, 2))
       ])
 
-      assert_receive {:sync_deltas, _cursor, _deltas, 5}, 1_000
+      assert_receive {:sync_deltas, _cursor, _deltas, 5, _final_seq}, 1_000
     end
 
     test "tells a batch with an entry past the fill's edge" do
@@ -2393,7 +2427,7 @@ defmodule Hologram.Sync.SessionTest do
       DB.update!(Module2, task.id, c: "after")
       route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], 201)
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id}], _applied_seq}
+      assert_receive {:sync_deltas, _cursor, [%{id: id}], _applied_seq, _final_seq}
       assert id == task.id
     end
 
@@ -2417,8 +2451,8 @@ defmodule Hologram.Sync.SessionTest do
       |> Enum.concat([live_effect(:patch_entity, PolicyModule1, gated.id, %{"public" => false})])
       |> route()
 
-      assert_receive {:sync_deltas, _cursor, first, _applied_seq}
-      assert_receive {:sync_deltas, _cursor, second, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, first, _applied_seq, _final_seq}
+      assert_receive {:sync_deltas, _cursor, second, _applied_seq, _final_seq}
 
       assert Enum.count(first, &(&1.op == :put_entity)) == 2
       assert Enum.any?(first, &(&1.op == :unsync_entity))
@@ -2439,8 +2473,8 @@ defmodule Hologram.Sync.SessionTest do
       |> Enum.map(&live_effect(:put_entity, Module2, &1.id, %{"a" => true, "c" => &1.c}))
       |> route()
 
-      assert_receive {:sync_deltas, first_cursor, _first, _applied_seq}
-      assert_receive {:sync_deltas, last_cursor, _last, _applied_seq}
+      assert_receive {:sync_deltas, first_cursor, _first, _applied_seq, _final_seq}
+      assert_receive {:sync_deltas, last_cursor, _last, _applied_seq, _final_seq}
 
       assert first_cursor == nil
       assert last_cursor != nil
@@ -2474,7 +2508,7 @@ defmodule Hologram.Sync.SessionTest do
       await_fill()
 
       assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}],
-                      _applied_seq}
+                      _applied_seq, _final_seq}
 
       assert id == task.id
       assert data.c == "during"
@@ -2507,7 +2541,7 @@ defmodule Hologram.Sync.SessionTest do
       |> Enum.map(&Map.merge(&1, %{mutation_ref: nil, seq: 1}))
       |> route(1)
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
       assert Enum.any?(deltas, &(&1.op == :put_entity and &1.id == public.id))
     end
 
@@ -2558,6 +2592,7 @@ defmodule Hologram.Sync.SessionTest do
 
       part = %{
         checked: %{},
+        final_seq: Oplog.last_serial() + 1,
         moved: %{},
         overtaking_seqs: %{},
         own_puts: %{},
@@ -2677,10 +2712,10 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(gap: gap, synced_types: [Module2])
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
       assert [%{id: id, op: :put_entity}] = deltas
       assert id == task.id
-      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
     end
 
     # A grant change can move every row of a type for a user, which the session reads again whole -
@@ -2720,7 +2755,7 @@ defmodule Hologram.Sync.SessionTest do
 
       # Caught up, so the session judges what came before its trust edge without trusting what it
       # holds.
-      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
 
       packed = PackedIds.pack([row.id])
 
@@ -2735,7 +2770,9 @@ defmodule Hologram.Sync.SessionTest do
       send(session, {:live, part})
       await_live(session)
 
-      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      # The frame says only how far the numbers are final.
+      assert_receive {:sync_deltas, _cursor, [], nil, _final_seq}
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
     end
 
     test "tells nothing of a batch's rows of a type it isn't given" do
@@ -2751,12 +2788,14 @@ defmodule Hologram.Sync.SessionTest do
 
       route([live_effect(:put_entity, PolicyModule1, row.id, %{"public" => true})])
 
-      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      # The frame says only how far the numbers are final.
+      assert_receive {:sync_deltas, _cursor, [], nil, _final_seq}
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
 
       task = create("created")
       route([live_effect(:put_entity, Module2, task.id, %{"a" => true, "c" => "created"})])
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], nil}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], nil, _final_seq}
       assert id == task.id
     end
   end
@@ -2818,8 +2857,8 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(lens: lens, synced_types: [Module2])
 
-      assert_receive {:sync_deltas, nil, [%{type: "MyApp.OldTask"}], _applied_seq}
-      assert_receive {:sync_synced, {:types, [MyApp.OldTask], _applied_seq}, nil}
+      assert_receive {:sync_deltas, nil, [%{type: "MyApp.OldTask"}], _applied_seq, _final_seq}
+      assert_receive {:sync_synced, {:types, [MyApp.OldTask], _applied_seq}, nil, _final_seq}
     end
 
     test "patches a row under the tab's names" do
@@ -2831,7 +2870,7 @@ defmodule Hologram.Sync.SessionTest do
       DB.update!(Module2, task.id, c: "after")
       route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})])
 
-      assert_receive {:sync_deltas, _cursor, [%{data: data, op: :patch_entity}], nil}
+      assert_receive {:sync_deltas, _cursor, [%{data: data, op: :patch_entity}], nil, _final_seq}
       assert data.title == "after"
     end
 
@@ -2850,7 +2889,22 @@ defmodule Hologram.Sync.SessionTest do
       route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})])
 
       assert_receive {:DOWN, ^ref, :process, ^session, {:shutdown, :model_held}}, 1_000
-      refute_received {:sync_deltas, _cursor, _deltas, _claim}
+      refute_received {:sync_deltas, _cursor, _deltas, _claim, _final_seq}
+    end
+
+    test "stops rather than tell how far the numbers are final under a data model on hold" do
+      on_exit(&Model.release/0)
+
+      session = start_session!(lens: tab_lens(), synced_types: [Module2])
+      await_fill()
+
+      ref = Process.monitor(session)
+      Model.hold()
+
+      send(session, {:final, Oplog.last_serial() + 1})
+
+      assert_receive {:DOWN, ^ref, :process, ^session, {:shutdown, :model_held}}, 1_000
+      refute_received {:sync_deltas, _cursor, _deltas, _claim, _final_seq}
     end
 
     test "fills no row holding a value the tab's model lacks" do
@@ -2872,13 +2926,15 @@ defmodule Hologram.Sync.SessionTest do
       DB.update!(Module39, member.id, kind: :staff)
       route([live_effect(:patch_entity, Module39, member.id, %{"kind" => "staff"})])
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], nil}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], nil, _final_seq}
       assert id == member.id
 
       DB.update!(Module39, member.id, kind: :guest)
       route([live_effect(:patch_entity, Module39, member.id, %{"kind" => "guest"})])
 
-      assert_receive {:sync_deltas, _cursor, [%{data: data, id: ^id, op: :put_entity}], nil}
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: ^id, op: :put_entity}], nil,
+                      _final_seq}
+
       assert data.kind == "guest"
     end
 
@@ -2888,12 +2944,12 @@ defmodule Hologram.Sync.SessionTest do
       member = create_member(:staff)
 
       start_session!(gap: [], lens: tab_lens(), synced_types: [Module39])
-      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
 
       DB.update!(Module39, member.id, kind: :guest)
       route([live_effect(:patch_entity, Module39, member.id, %{"kind" => "guest"})])
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], nil}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], nil, _final_seq}
       assert id == member.id
     end
 
@@ -2904,7 +2960,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(gap: gap, lens: tab_lens(), synced_types: [Module39])
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
 
       assert [%{id: id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Entity.Module39"}] =
                deltas
@@ -2931,7 +2987,7 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, part})
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], nil}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], nil, _final_seq}
       assert id == member.id
     end
 
@@ -2953,7 +3009,7 @@ defmodule Hologram.Sync.SessionTest do
 
       # Told to drop once, by the first chunk naming it.
       drops =
-        for {:sync_deltas, _cursor, deltas, _applied_seq} <- catch_up_frames(),
+        for {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq} <- catch_up_frames(),
             %{id: id, op: :unsync_entity} <- deltas,
             id == member.id,
             do: id
@@ -2963,7 +3019,7 @@ defmodule Hologram.Sync.SessionTest do
       DB.update!(Module39, member.id, kind: :guest)
       route([live_effect(:patch_entity, Module39, member.id, %{"kind" => "guest"})])
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], nil}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], nil, _final_seq}
       assert id == member.id
     end
 
@@ -2971,7 +3027,7 @@ defmodule Hologram.Sync.SessionTest do
       member = create_member(:staff)
 
       session = start_session!(gap: [], lens: tab_lens(), synced_types: [Module39])
-      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
 
       part =
         hand_built_part(
@@ -2982,7 +3038,9 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, part})
 
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], _applied_seq}
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], _applied_seq,
+                      _final_seq}
+
       assert id == member.id
     end
 
@@ -2996,7 +3054,7 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, hand_built_part(whole_types: [Module39])})
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
       assert Enum.map(deltas, & &1.id) == [guest.id]
     end
 
@@ -3019,7 +3077,7 @@ defmodule Hologram.Sync.SessionTest do
       session =
         start_session!(actor_user_id: user.id, gap: [], lens: lens, synced_types: [RoleGrant])
 
-      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_synced, :all, _cursor, _final_seq}
 
       # A grant the batch may have taken away, judged without trusting what the client holds.
       lost = Entity.generate_id()
@@ -3035,7 +3093,7 @@ defmodule Hologram.Sync.SessionTest do
       send(session, {:live, part})
 
       assert_receive {:sync_deltas, _cursor,
-                      [%{data: %{hashes: hashes, salt: salt}, op: :keep_hashed}], nil}
+                      [%{data: %{hashes: hashes, salt: salt}, op: :keep_hashed}], nil, _final_seq}
 
       assert Frame.drop_hash(salt, viewer) in hashes
       refute Frame.drop_hash(salt, editor) in hashes
@@ -3105,8 +3163,11 @@ defmodule Hologram.Sync.SessionTest do
     # The frames a returning client is sent up to the marker saying it is caught up.
     defp catch_up_frames(acc \\ []) do
       receive do
-        {:sync_synced, :all, _cursor} -> Enum.reverse(acc)
-        {:sync_deltas, _cursor, _deltas, _applied_seq} = frame -> catch_up_frames([frame | acc])
+        {:sync_synced, :all, _cursor, _final_seq} ->
+          Enum.reverse(acc)
+
+        {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq} = frame ->
+          catch_up_frames([frame | acc])
       after
         1_000 -> flunk("the client was never told it is caught up")
       end
@@ -3122,6 +3183,167 @@ defmodule Hologram.Sync.SessionTest do
       after
         1_000 -> flunk("the session never sent a types marker")
       end
+    end
+  end
+
+  describe "how far the numbers are final" do
+    # Mid-type the client holds only part of what a number would vouch for, so the rows say
+    # nothing of it, and each type's marker and the fill's end say the edge.
+    test "dates a fill's markers by the edge and its rows by nothing" do
+      create("filled")
+      page_types(%{@page => [Module2]})
+
+      start_session!(edge: 200)
+
+      assert_receive {:sync_deltas, nil, [%{op: :put_entity} | _rows], _applied_seq, nil}
+      assert_receive {:sync_synced, {:types, [Module2], _applied_seq}, nil, 200}
+      assert_receive {:sync_synced, :all, _cursor, 200}
+    end
+
+    test "tells how far they are on a batch's last frame alone" do
+      page_types(%{})
+
+      start_session!([])
+      await_fill()
+
+      put_app_env(:sync, rows_per_frame: 1)
+      first = create("first")
+      second = create("second")
+      seq = Oplog.last_serial() + 1
+
+      route(
+        [
+          live_effect(:put_entity, Module2, first.id, %{"a" => true, "c" => "first"}),
+          live_effect(:put_entity, Module2, second.id, %{"a" => true, "c" => "second"})
+        ],
+        seq
+      )
+
+      assert_receive {:sync_deltas, nil, [_first], nil, nil}
+      assert_receive {:sync_deltas, cursor, [_second], nil, ^seq}
+      assert cursor == cursor_at(seq)
+    end
+
+    test "tells how far they are in a frame of their own when a batch has nothing for the client" do
+      page_types(%{})
+
+      start_session!([])
+      await_fill()
+
+      hidden =
+        %{public: false}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      seq = Oplog.last_serial() + 1
+
+      route([live_effect(:put_entity, PolicyModule1, hidden.id, %{"public" => false})], seq)
+
+      assert_receive {:sync_deltas, cursor, [], nil, ^seq}
+      assert cursor == cursor_at(seq)
+    end
+
+    test "sends nothing for a batch with nothing for the client when they are final no further" do
+      page_types(%{})
+
+      start_session!([])
+      await_fill()
+
+      hidden =
+        %{public: false}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      seq = Oplog.last_serial() + 1
+      effect = live_effect(:put_entity, PolicyModule1, hidden.id, %{"public" => false})
+
+      route([effect], seq)
+      assert_receive {:sync_deltas, _cursor, [], nil, ^seq}
+
+      route([effect], seq)
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
+    end
+
+    test "tells how far they are when the limit moves with nothing to read" do
+      page_types(%{})
+
+      session = start_session!(edge: 200)
+      assert_receive {:sync_synced, :all, _cursor, 200}
+
+      send(session, {:final, 250})
+
+      assert_receive {:sync_deltas, nil, [], nil, 250}
+    end
+
+    test "tells nothing when the limit moves no further than the client was told" do
+      page_types(%{})
+
+      session = start_session!(edge: 200)
+      assert_receive {:sync_synced, :all, _cursor, 200}
+
+      send(session, {:final, 200})
+      send(session, {:final, 150})
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
+    end
+
+    test "tells nothing once cut" do
+      page_types(%{})
+
+      session = start_session!(edge: 200)
+      assert_receive {:sync_synced, :all, _cursor, 200}
+
+      :sys.replace_state(session, &%{&1 | cut: {:shutdown, :test}})
+      send(session, {:final, 250})
+
+      assert %{final_seq: 200} = :sys.get_state(session)
+    end
+
+    # The client lands its own create once the server's row reaches it, and has to tell it apart
+    # from a row someone else's batch put under the same id.
+    test "marks a row the client's own batch created as its own" do
+      page_types(%{})
+
+      start_session!(replica_id: @replica_id)
+      await_fill()
+
+      task = create("created")
+
+      route([
+        live_effect(
+          :put_entity,
+          Module2,
+          task.id,
+          %{"a" => true, "c" => "created"},
+          ref(@replica_id, 4)
+        )
+      ])
+
+      assert_receive {:sync_deltas, _cursor, [%{data: data, op: :put_entity}], 4, _final_seq}
+      assert data[:"$own"] == true
+    end
+
+    test "marks no row another replica's batch created" do
+      page_types(%{})
+
+      start_session!(replica_id: @replica_id)
+      await_fill()
+
+      task = create("created")
+      another_replica_id = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+
+      route([
+        live_effect(
+          :put_entity,
+          Module2,
+          task.id,
+          %{"a" => true, "c" => "created"},
+          ref(another_replica_id, 4)
+        )
+      ])
+
+      assert_receive {:sync_deltas, _cursor, [%{data: data, op: :put_entity}], nil, _final_seq}
+      refute Map.has_key?(data, :"$own")
     end
   end
 
@@ -3164,7 +3386,7 @@ defmodule Hologram.Sync.SessionTest do
       data = %{"relationship" => "labels", "target_id" => never_sent_id}
       route([live_effect(:del_relationship, PolicyProject, project.id, data)])
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
 
       assert deltas == [
                %{
@@ -3199,7 +3421,7 @@ defmodule Hologram.Sync.SessionTest do
         1
       )
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
 
       told =
         deltas
@@ -3249,10 +3471,14 @@ defmodule Hologram.Sync.SessionTest do
 
       route([effect], batch_seq)
 
-      assert_receive {:sync_deltas, rows_cursor, [%{id: label_id, op: :put_entity}], 8}
+      assert_receive {:sync_deltas, rows_cursor, [%{id: label_id, op: :put_entity}], 8,
+                      _final_seq}
+
       assert label_id == label.id
 
-      assert_receive {:sync_deltas, pairs_cursor, [%{data: data, id: holder_id, op: op}], 7}
+      assert_receive {:sync_deltas, pairs_cursor, [%{data: data, id: holder_id, op: op}], 7,
+                      _final_seq}
+
       assert {op, holder_id, data.target_id} == {:add_relationship, message.id, label.id}
 
       # The pairs frame is the batch's last, so it alone claims the batch's place.
@@ -3298,6 +3524,7 @@ defmodule Hologram.Sync.SessionTest do
 
       part = %{
         checked: %{},
+        final_seq: seq,
         moved: %{},
         overtaking_seqs: %{},
         own_puts: %{},
@@ -3315,10 +3542,12 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, part})
 
-      assert_receive {:sync_deltas, _cursor, [%{id: label_id, op: :put_entity}], 8}
+      assert_receive {:sync_deltas, _cursor, [%{id: label_id, op: :put_entity}], 8, _final_seq}
       assert label_id == label.id
 
-      assert_receive {:sync_deltas, _cursor, [%{id: holder_id, op: :add_relationship}], 7}
+      assert_receive {:sync_deltas, _cursor, [%{id: holder_id, op: :add_relationship}], 7,
+                      _final_seq}
+
       assert holder_id == message.id
       assert :sys.get_state(session).applied_seq == 7
     end
@@ -3342,7 +3571,7 @@ defmodule Hologram.Sync.SessionTest do
       data = %{"relationship" => "labels", "target_id" => locked.id}
       route([live_effect(:add_relationship, PolicyProject, project.id, data)])
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
       assert deltas == [verdicts_patch(project, false)]
     end
 
@@ -3358,7 +3587,9 @@ defmodule Hologram.Sync.SessionTest do
       DB.update!(PolicyLabel, loose.id, name: "still loose")
       route([live_effect(:patch_entity, PolicyLabel, loose.id, %{"name" => "still loose"})])
 
-      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      # The frame says only how far the numbers are final.
+      assert_receive {:sync_deltas, _cursor, [], nil, _final_seq}
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
     end
 
     # The part says the project can't be archived while the database says it can, so what goes out
@@ -3371,8 +3602,36 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, verdicts_part(project, project_verdicts(false))})
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
       assert deltas == [verdicts_patch(project, false)]
+    end
+
+    test "marks a row a whole type read again hands over as the client's own when its batch created it" do
+      page_types(%{})
+
+      session = start_session!(replica_id: @replica_id)
+      await_fill()
+
+      created =
+        %{public: true}
+        |> PolicyProject.new()
+        |> DB.create!()
+
+      part = %{
+        whole_type_part()
+        | own_puts: %{@replica_id => %{PolicyProject => PackedIds.pack([created.id])}}
+      }
+
+      send(session, {:live, part})
+
+      # The part reads no row of the batch, so the frame before drops it by id.
+      assert_receive {:sync_deltas, _cursor, [%{op: :put_entity} | _rows] = deltas, _applied_seq,
+                      _final_seq}
+
+      assert [%{data: data}] =
+               Enum.filter(deltas, &(&1.op == :put_entity and &1.id == created.id))
+
+      assert data[:"$own"] == true
     end
 
     # Nothing the batch wrote names the project, but a grant on the whole type reads it again, and
@@ -3390,7 +3649,7 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, whole_type_part()})
 
-      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq, _final_seq}
       assert deltas == [verdicts_patch(project, false)]
     end
 
@@ -3422,7 +3681,7 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, whole_type_part()})
 
-      assert_receive {:sync_deltas, _cursor, deltas, 7}
+      assert_receive {:sync_deltas, _cursor, deltas, 7, _final_seq}
       assert deltas == [verdicts_patch(project, false)]
     end
 
@@ -3439,11 +3698,11 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, whole_type_part()})
 
-      assert_receive {:sync_deltas, _cursor, [_patch], _applied_seq}
+      assert_receive {:sync_deltas, _cursor, [_patch], _applied_seq, _final_seq}
 
       send(session, {:live, whole_type_part()})
 
-      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
     end
 
     test "tells the verdicts a whole type read again moved in frames of the frame size", %{
@@ -3468,8 +3727,11 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, whole_type_part()})
 
-      assert_receive {:sync_deltas, first_cursor, [%{id: first_id, op: :patch_entity}], first_seq}
-      assert_receive {:sync_deltas, last_cursor, [%{id: last_id, op: :patch_entity}], last_seq}
+      assert_receive {:sync_deltas, first_cursor, [%{id: first_id, op: :patch_entity}], first_seq,
+                      _final_seq}
+
+      assert_receive {:sync_deltas, last_cursor, [%{id: last_id, op: :patch_entity}], last_seq,
+                      _final_seq}
 
       # In id order, all under the session's number, and only the batch's last frame carries its
       # place.
@@ -3480,7 +3742,7 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, whole_type_part()})
 
-      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
     end
 
     test "tells nothing of a held row's verdicts a whole type read again left as they were" do
@@ -3491,7 +3753,9 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, whole_type_part()})
 
-      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      # The frame says only how far the numbers are final.
+      assert_receive {:sync_deltas, _cursor, [], nil, _final_seq}
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}, 100
     end
 
     test "hands a row over with the verdicts its part carries" do
@@ -3507,33 +3771,34 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, verdicts_part(arrived, project_verdicts(false))})
 
-      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq,
+                      _final_seq}
+
       assert id == arrived.id
       assert data[:"$verdicts"] == project_verdicts(false)
     end
   end
 
-  # A part as `Hologram.Sync.Live.parts/5` builds one, for every type the suite's build syncs,
-  # telling nothing unless the given fields say otherwise.
+  # A part as `Hologram.Sync.Live.parts/7` builds one, for every type the suite's build syncs,
+  # telling nothing unless the given fields say otherwise, its numbers final up to its place.
   defp hand_built_part(fields) do
-    Map.merge(
-      %{
-        checked: %{},
-        moved: %{},
-        overtaking_seqs: %{},
-        own_seqs: %{},
-        pair_effects: %{},
-        pairs: %{},
-        place: at_seq(Oplog.last_serial() + 1),
-        readable: %{},
-        synced_types: QueryCache.synced_types(),
-        seq_range: {Oplog.last_serial() + 1, Oplog.last_serial() + 1},
-        verdicts: %{},
-        whole_types: [],
-        written: %{}
-      },
-      Map.new(fields)
-    )
+    %{
+      checked: %{},
+      moved: %{},
+      overtaking_seqs: %{},
+      own_seqs: %{},
+      pair_effects: %{},
+      pairs: %{},
+      place: at_seq(Oplog.last_serial() + 1),
+      readable: %{},
+      synced_types: QueryCache.synced_types(),
+      seq_range: {Oplog.last_serial() + 1, Oplog.last_serial() + 1},
+      verdicts: %{},
+      whole_types: [],
+      written: %{}
+    }
+    |> Map.merge(Map.new(fields))
+    |> then(&Map.put_new(&1, :final_seq, elem(&1.place, 0)))
   end
 
   # Drops what the session sent so far, so a test reads only what follows.
@@ -3620,6 +3885,7 @@ defmodule Hologram.Sync.SessionTest do
 
     %{
       checked: %{PolicyProject => PackedIds.pack([project.id])},
+      final_seq: elem(place, 0),
       overtaking_seqs: %{},
       own_puts: %{},
       own_seqs: %{},
@@ -3641,6 +3907,7 @@ defmodule Hologram.Sync.SessionTest do
 
     %{
       checked: %{},
+      final_seq: elem(place, 0),
       overtaking_seqs: %{},
       own_puts: %{},
       own_seqs: %{},

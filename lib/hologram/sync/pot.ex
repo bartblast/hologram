@@ -4,7 +4,7 @@ defmodule Hologram.Sync.Pot do
   # What one batch means for one client, given what it holds: which rows it is handed whole, which
   # of the rows it holds changed and how, which it may no longer hold, and which pairs it is told
   # were added or removed. Worked out from the session's part of the batch (see
-  # `Hologram.Sync.Live.parts/5`) and what the session knows of its client, with no reading of its
+  # `Hologram.Sync.Live.parts/7`) and what the session knows of its client, with no reading of its
   # own - so it can be judged without a database.
   #
   # A row is judged by what its user may read now, and what the client holds:
@@ -61,7 +61,7 @@ defmodule Hologram.Sync.Pot do
   row are the attributes the batch wrote that the row has - an attribute a newer peer wrote, which
   this build's row lacks, is passed over.
 
-  The rows go out in id order within each type, and the pairs as `Hologram.Sync.Frame.deltas/2`
+  The rows go out in id order within each type, and the pairs as `Hologram.Sync.Frame.deltas/4`
   takes them. Any order the frame applies them in leaves the same facts behind: a pair told here is
   never one a row handed over states.
 
@@ -86,7 +86,7 @@ defmodule Hologram.Sync.Pot do
   Without a salt, `hidden` is empty.
 
   Given `created:`, the rows the client's own batches in the part created, per entity type, packed
-  (see `Hologram.Sync.Live.parts/5`'s `own_puts`): the client files those itself once their batch
+  (see `Hologram.Sync.Live.parts/7`'s `own_puts`): the client files those itself once their batch
   is confirmed, so the ones the user may not read and the session doesn't take the client to hold
   are dropped, by id, like a held row the user may no longer read. Judged against the part's
   `readable` alone, not its `checked`: a catch-up's chunk has the rows an earlier chunk settled taken

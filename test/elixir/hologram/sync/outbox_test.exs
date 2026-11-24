@@ -7,7 +7,7 @@ defmodule Hologram.Sync.OutboxTest do
   alias Hologram.Test.Fixtures.Entity.Module2
 
   @cursor "g8uxAAAAZQ"
-  @marker {:sync_synced, :all, nil}
+  @marker {:sync_synced, :all, nil, nil}
 
   # The id is the one part of a chunk the outbox picks, so the chunk is compared with what the
   # frame encodes under the id it was given.
@@ -55,35 +55,35 @@ defmodule Hologram.Sync.OutboxTest do
       {:ok, _outbox} =
         self()
         |> new([])
-        |> put({:sync_deltas, @cursor, deltas, 7})
+        |> put({:sync_deltas, @cursor, deltas, 7, 9})
 
       session = self()
       assert_receive {:sync_frame, ^session, chunk}
 
       id = event_id(chunk)
-      assert chunk == Frame.encode_deltas_envelope(id, @cursor, deltas, 7)
+      assert chunk == Frame.encode_deltas_envelope(id, @cursor, deltas, 7, 9)
     end
 
     test "sends a synced message as the chunk the frame encodes, beside the session sending it" do
       {:ok, _outbox} =
         self()
         |> new([])
-        |> put({:sync_synced, {:types, [Module2], 7}, nil})
+        |> put({:sync_synced, {:types, [Module2], 7}, nil, 9})
 
       session = self()
       assert_receive {:sync_frame, ^session, chunk}
 
       id = event_id(chunk)
-      assert chunk == Frame.encode_synced_envelope(id, {:types, [Module2], 7}, nil)
+      assert chunk == Frame.encode_synced_envelope(id, {:types, [Module2], 7}, nil, 9)
     end
 
     test "sends the message as the term it is when raw" do
       {:ok, _outbox} =
         self()
         |> new(raw: true)
-        |> put({:sync_synced, :all, @cursor})
+        |> put({:sync_synced, :all, @cursor, nil})
 
-      assert_receive {:sync_synced, :all, @cursor}
+      assert_receive {:sync_synced, :all, @cursor, nil}
     end
 
     test "sends as many as it may without an answer" do

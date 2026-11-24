@@ -98,7 +98,7 @@ defmodule Hologram.Sync.Supervisor do
   # reading if it resumed anywhere but where it left off.
   defp dispatcher_child do
     {Dispatcher,
-     handler: &Live.route/3,
+     handler: &Live.route/4,
      notifications: @notifications,
      on_loss: &cut_sessions_on_loss/0,
      read_edge: ReadEdge}
