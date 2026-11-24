@@ -28,9 +28,10 @@ defmodule Hologram.Migration do
   Ops are declarations, recorded where they are written: aliases in an op resolve at that
   line, and an op inside an `if`, a comprehension or other module-body code is recorded
   regardless of it, and cannot read the module body's variables. Op arguments may call the
-  module's own functions and read its attributes, an attribute read giving the value it holds
-  at the op's line. In `backfill:` such a call or read is pinned, like `^my_fun()` or `^@x`,
-  since a bare name there is a field of the row.
+  module's own functions and guards, though not its other macros, and may read its
+  attributes, an attribute read giving the value it holds at the op's line. In `backfill:`
+  such a call or read is pinned, like `^my_fun()` or `^@x`, since a bare name there is a
+  field of the row.
 
   A migration's functions and ops may call only its own functions and the standard
   library's functions that compute on the values they are given - most of Kernel, String,
@@ -155,6 +156,7 @@ defmodule Hologram.Migration do
 
   alias Hologram.Migration.CallCheck
   alias Hologram.Migration.FieldAccess
+  alias Hologram.Migration.FieldAccess.Definitions
   alias Hologram.Migration.Loader
   alias Hologram.Migration.Value
 
@@ -168,6 +170,8 @@ defmodule Hologram.Migration do
   @fn_backfills_attribute :__hologram_migration_fn_backfills__
 
   @op_imports_attribute :__hologram_migration_op_imports__
+
+  @op_run_calls_attribute :__hologram_migration_op_run_calls__
 
   @locals_without_parens [
     add_attribute: 2,
@@ -226,6 +230,8 @@ defmodule Hologram.Migration do
     Module.register_attribute(__CALLER__.module, @snapshots_attribute, accumulate: true)
     Module.register_attribute(__CALLER__.module, @fn_backfills_attribute, accumulate: true)
     Module.register_attribute(__CALLER__.module, @op_imports_attribute, accumulate: true)
+    Module.register_attribute(__CALLER__.module, @op_run_calls_attribute, accumulate: true)
+    Definitions.register_guards(__CALLER__.module)
 
     quote do
       import Hologram.Migration,
@@ -289,6 +295,7 @@ defmodule Hologram.Migration do
   defmacro __before_compile__(env) do
     validate_snapshots_taken!(env)
     validate_op_imports!(env)
+    validate_no_op_macros!(env)
 
     {settled_ops, functions} =
       env.module
@@ -630,17 +637,8 @@ defmodule Hologram.Migration do
 
   # Options written as a list in place. Ones from a variable or a call are evaluated with the
   # op, and validate_ops!/2 checks a computed value they hold.
-  # A fn's body is judged on its own once it's known to be Elixir - inside query(...) its calls are
-  # words, whatever the file imports.
-  defp imports_at(quoted, caller) do
-    quoted
-    |> Macro.prewalk(fn
-      {:__hologram_fn_backfill__, meta, [index, value, _body]} ->
-        {:__hologram_fn_backfill__, meta, [index, value, nil]}
-
-      node ->
-        node
-    end)
+  defp imports_at(code, caller) do
+    code
     |> Value.local_calls(caller)
     |> Map.new(&{&1, Macro.Env.lookup_import(caller, &1)})
   end
@@ -1007,10 +1005,18 @@ defmodule Hologram.Migration do
 
     Module.put_attribute(caller.module, @ops_attribute, expand_aliases(quoted, caller))
 
+    code = without_fn_bodies(quoted)
+
     Module.put_attribute(
       caller.module,
       @op_imports_attribute,
-      {imports_at(quoted, caller), caller.line}
+      {imports_at(code, caller), caller.line}
+    )
+
+    Module.put_attribute(
+      caller.module,
+      @op_run_calls_attribute,
+      {Value.may_run_calls(code, caller), caller.line}
     )
 
     case Enum.reverse(snapshots) do
@@ -1227,6 +1233,28 @@ defmodule Hologram.Migration do
     end
   end
 
+  # An op's code is placed in a function defined at the end of the module, so a macro of the
+  # module it calls expands there, and an attribute the macro returns reads the value the body
+  # assigned last. A macro defined below the op counts too, so the calls are judged only here.
+  defp validate_no_op_macros!(env) do
+    env.module
+    |> Module.get_attribute(@op_run_calls_attribute)
+    |> Enum.each(fn {calls, line} ->
+      case Value.own_macro(calls, env.module) do
+        nil ->
+          :ok
+
+        {name, arity} ->
+          raise Hologram.CompileError,
+            message:
+              "a migration op can't call the migration's macro #{name}/#{arity} - make it a " <>
+                "defp, or a defguardp in a guard",
+            file: env.file,
+            line: line
+      end
+    end)
+  end
+
   # An op's code is placed in a function defined at the end of the module, under the imports in
   # force there, so a call an import changes after the op would run another function than the one
   # written, and could store another value.
@@ -1284,5 +1312,17 @@ defmodule Hologram.Migration do
             "op would record nil for it - ops are recorded wherever they are written, so " <>
             "write them outside if, case and the like:\n" <> lines
     end
+  end
+
+  # A fn's body is judged on its own once it's known to be Elixir - inside query(...) its calls are
+  # words, whatever the file imports.
+  defp without_fn_bodies(quoted) do
+    Macro.prewalk(quoted, fn
+      {:__hologram_fn_backfill__, meta, [index, value, _body]} ->
+        {:__hologram_fn_backfill__, meta, [index, value, nil]}
+
+      node ->
+        node
+    end)
   end
 end

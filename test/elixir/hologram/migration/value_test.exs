@@ -1631,6 +1631,30 @@ defmodule Hologram.Migration.ValueTest do
       end
     end
 
+    test "refuses the migration's macro in a guard" do
+      body = """
+      @o "1"
+      defmacrop same(x), do: quote(do: unquote(x) == @o)
+
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn t ->
+          case t do
+            x when same(x) -> x
+            _other -> "other"
+          end
+        end
+      end
+
+      @o "2"
+      """
+
+      error = assert_raise Hologram.CompileError, fn -> compiled(body) end
+
+      assert error.message =~
+               "can't call the migration's macro same/1 - make it a defp, or a defguardp in a " <>
+                 "guard"
+    end
+
     test "accepts a guard the migration defines" do
       module =
         compiled("""

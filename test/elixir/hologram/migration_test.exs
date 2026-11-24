@@ -454,6 +454,82 @@ defmodule Hologram.MigrationTest do
       end
     end
 
+    test "refuses a call to the migration's macro in an op" do
+      macros = """
+      defmacrop same(x), do: quote(do: unquote(x) == @o)
+      defmacrop up(x), do: x
+      """
+
+      cases = [
+        {"default: o()", "", "o/0"},
+        {~s|default: "a" \|> up()|, macros, "up/1"},
+        {"backfill: fn title -> coalesce(title, ^o()) end", "", "o/0"},
+        {~s|default: (case "1" do x when same(x) -> "y"; _x -> "n" end)|, macros, "same/1"},
+        # An unquote under options only the compiler can read may run.
+        {"default: inspect(quote(@opts, do: unquote(o())))", "", "o/0"},
+        # A guard defined where the module body doesn't run vouches for nothing.
+        {"default: g(1)", "if false, do: defguardp(g(x) when x == 1)\ndefmacrop g(x), do: x",
+         "g/1"},
+        # Nor does one beside another clause of its name, or one a macro replaced.
+        {"default: g(1)", "defmacrop g(1), do: quote(do: @o)\ndefguardp g(x) when x == 2", "g/1"},
+        {"default: g(1)",
+         "defguardp g(x) when x == 1\ndefoverridable g: 1\ndefmacrop g(_x), do: quote(do: @o)",
+         "g/1"},
+        {"default: g(1)",
+         "defguardp g(x) when x == 1\nModule.delete_definition(__MODULE__, {:g, 1})\n" <>
+           "defmacrop g(_x), do: quote(do: @o)", "g/1"}
+      ]
+
+      for kind <- ["defmacro", "defmacrop"],
+          {option, extra, call} <- cases do
+        body = """
+        @o "1"
+        @opts []
+        #{kind} o, do: quote(do: @o)
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string, #{option}
+        end
+
+        #{extra}
+        @o "2"
+        """
+
+        error =
+          assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+        assert error.message ==
+                 "a migration op can't call the migration's macro #{call} - make it a defp, or " <>
+                   "a defguardp in a guard"
+
+        assert error.line == 8
+      end
+    end
+
+    test "accepts a guard of the migration and a quoted call to its macro in an op" do
+      module =
+        compile_migration("20260813091522", """
+        @o "1"
+        defguardp short(x) when byte_size(x) < 3 and x != @o
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string, default: (case "ab" do x when short(x) -> "y"; _x -> "n" end)
+          add_attribute :second, :string, default: if(short("1"), do: "y", else: "n")
+          add_attribute :third, :string, default: inspect(quote(do: o()))
+        end
+
+        defmacrop o, do: quote(do: @o)
+        @o "2"
+        """)
+
+      assert [
+               %{opts: [default: "y"]},
+               %{opts: [default: "n"]},
+               %{opts: [default: "{:o, [], []}"]}
+             ] =
+               module.__hologram_migration__().ops
+    end
+
     # Collected from this compile alone, since stderr takes other tests' output too.
     test "raises no unused alias warning for an alias used only in ops" do
       {_module, diagnostics} =

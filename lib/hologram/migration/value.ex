@@ -11,6 +11,7 @@ defmodule Hologram.Migration.Value do
 
   alias Hologram.DB.Codec
   alias Hologram.Entity.Model
+  alias Hologram.Migration.FieldAccess.Definitions
   alias Hologram.Migration.Value.Check
   alias Hologram.Migration.Value.Resolver
   alias Hologram.Query.Expression
@@ -218,6 +219,32 @@ defmodule Hologram.Migration.Value do
       end)
 
     Enum.uniq(calls)
+  end
+
+  @doc """
+  Returns each local call the given code may run, as local_calls/2 does, leaving out the calls in
+  a quote's own code, which is data. A call only the compiler can tell runs, like in an unquote
+  under quote options an attribute holds, is kept.
+  """
+  @spec may_run_calls(Macro.t(), Macro.Env.t()) :: list({atom, non_neg_integer})
+  def may_run_calls(code, env) do
+    code
+    |> run_code(env, :may_run)
+    |> local_calls(env)
+  end
+
+  @doc """
+  Returns the first of the given local calls that runs a macro the given module defines, other
+  than a guard, or nil with none. Such a macro expands where it's called, and code placed at the
+  end of the module, as an op's is, would read the attributes there. Takes a module still being
+  compiled.
+  """
+  @spec own_macro(list({atom, non_neg_integer}), module) :: {atom, non_neg_integer} | nil
+  def own_macro(calls, module) do
+    Enum.find(calls, fn call ->
+      (Module.defines?(module, call, :defmacro) or Module.defines?(module, call, :defmacrop)) and
+        not Definitions.guard?(module, call)
+    end)
   end
 
   @doc """
@@ -1268,11 +1295,11 @@ defmodule Hologram.Migration.Value do
 
   # What the code runs: pipes expanded, and a quote reduced to the code it runs, since its own
   # code is data. Code only the compiler can tell runs, like under quote options an attribute
-  # holds, is left to the compiler.
-  defp run_code(expr, env), do: run_code(expr, env, true)
+  # holds, is left to the compiler, or kept with the given :may_run.
+  defp run_code(expr, env, which \\ :runs), do: run_code(expr, env, true, which)
 
-  defp run_code({_form, meta, args} = node, env, splicing) when is_list(args) do
-    case map_reduce_quote(node, env, splicing, [], &run_quote_code(&1, &2, &3, &4, env)) do
+  defp run_code({_form, meta, args} = node, env, splicing, which) when is_list(args) do
+    case map_reduce_quote(node, env, splicing, [], &run_quote_code(&1, &2, &3, &4, env, which)) do
       {:ok, _quote, code} ->
         {:__block__, meta, Enum.reverse(code)}
 
@@ -1281,29 +1308,30 @@ defmodule Hologram.Migration.Value do
           ^node ->
             {form, meta, args} = node
 
-            {run_code(form, env, splicing), meta, run_code(args, env, splicing)}
+            {run_code(form, env, splicing, which), meta, run_code(args, env, splicing, which)}
 
           unpiped ->
-            run_code(unpiped, env, splicing)
+            run_code(unpiped, env, splicing, which)
         end
     end
   end
 
-  defp run_code({left, right}, env, splicing) do
-    {run_code(left, env, splicing), run_code(right, env, splicing)}
+  defp run_code({left, right}, env, splicing, which) do
+    {run_code(left, env, splicing, which), run_code(right, env, splicing, which)}
   end
 
-  defp run_code(list, env, splicing) when is_list(list) do
-    Enum.map(list, &run_code(&1, env, splicing))
+  defp run_code(list, env, splicing, which) when is_list(list) do
+    Enum.map(list, &run_code(&1, env, splicing, which))
   end
 
-  defp run_code(other, _env, _splicing), do: other
+  defp run_code(other, _env, _splicing, _which), do: other
 
-  defp run_quote_code(code, found, true, splicing, env) do
-    {code, [run_code(code, env, splicing) | found]}
+  defp run_quote_code(code, found, runs, splicing, env, which)
+       when runs == true or which == :may_run do
+    {code, [run_code(code, env, splicing, which) | found]}
   end
 
-  defp run_quote_code(code, found, :unknown, _splicing, _env), do: {code, found}
+  defp run_quote_code(code, found, :unknown, _splicing, _env, :runs), do: {code, found}
 
   defp segment_sizes({:-, _meta, [left, right]}) do
     left
@@ -1541,26 +1569,22 @@ defmodule Hologram.Migration.Value do
     end
   end
 
-  # A macro of the migration can expand to an alias or an import the check above can't see. Any
-  # other module's macro is refused by the call check. A guard is a macro too, and one can't hold
-  # an alias. A quoted call never expands, and a guard in quoted code is data, so the quotes go
-  # first.
+  # A macro of the migration can expand to an alias or an import the check above can't see, and
+  # an attribute it returns reads the value assigned last, since the body is placed at the end of
+  # the module. Any other module's macro is refused by the call check. A guard is expanded where
+  # it's defined, so it can do neither (see own_macro/2).
   defp validate_no_own_macros!(reading, module, scope) do
     macro =
       reading.body
-      |> run_code(reading.env)
-      |> without_guards()
-      |> local_calls(reading.env)
-      |> Enum.find(fn call ->
-        Module.defines?(module, call, :defmacro) or Module.defines?(module, call, :defmacrop)
-      end)
+      |> may_run_calls(reading.env)
+      |> own_macro(module)
 
     if macro do
       {name, arity} = macro
 
       compile_error!(
         "an Elixir backfill fn can't call the migration's macro #{name}/#{arity} - make it a " <>
-          "defp",
+          "defp, or a defguardp in a guard",
         reading.body,
         scope
       )

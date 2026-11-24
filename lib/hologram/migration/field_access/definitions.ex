@@ -7,15 +7,17 @@ defmodule Hologram.Migration.FieldAccess.Definitions do
 
   alias Hologram.Migration.FieldAccess
 
+  @guards_attribute :__hologram_migration_guards__
+
   # credo:disable-for-next-line Credo.Check.Readability.Specs
   defmacro def(call), do: FieldAccess.define(:def, call)
 
   # credo:disable-for-next-line Credo.Check.Readability.Specs
   defmacro def(call, expr), do: FieldAccess.define(:def, call, expr)
 
-  defmacro defguard(guard), do: FieldAccess.define(:defguard, guard)
+  defmacro defguard(guard), do: define_guard(:defguard, guard)
 
-  defmacro defguardp(guard), do: FieldAccess.define(:defguardp, guard)
+  defmacro defguardp(guard), do: define_guard(:defguardp, guard)
 
   defmacro defp(call), do: FieldAccess.define(:defp, call)
 
@@ -38,4 +40,57 @@ defmodule Hologram.Migration.FieldAccess.Definitions do
        do: {{:., [], [receiver, field]}, [no_parens: true], []},
        else: quote(do: :erlang.map_get(unquote(field), unquote(receiver)))
   end
+
+  @doc """
+  Registers the attribute the given module records the guards it defines in.
+  """
+  @spec register_guards(module) :: :ok
+  def register_guards(module) do
+    Module.register_attribute(module, @guards_attribute, accumulate: true)
+  end
+
+  @doc """
+  Whether the given macro of the given module is a guard it defines, still in the one clause the
+  guard defined. A guard's code is expanded where the guard is defined, so it reads the module
+  there, unlike another macro's. Takes a module still being compiled.
+  """
+  @spec guard?(module, {atom, non_neg_integer}) :: boolean
+  def guard?(module, call) do
+    definition = Module.get_definition(module, call)
+
+    match?({:v1, _kind, _meta, [_clause]}, definition) and
+      {call, definition} in Module.get_attribute(module, @guards_attribute)
+  end
+
+  # The guard is recorded with its definition where the module body runs, as it's defined, so one
+  # in a branch that doesn't run, or one a macro has since replaced, can't vouch for another macro
+  # of its name. A guard made overridable counts as replaced, and one whose name is unquoted isn't
+  # recorded: both are refused like any other macro.
+  defp define_guard(kind, guard) do
+    case guard_call(guard) do
+      nil ->
+        FieldAccess.define(kind, guard)
+
+      call ->
+        quote do
+          unquote(FieldAccess.define(kind, guard))
+
+          Module.put_attribute(
+            __MODULE__,
+            unquote(@guards_attribute),
+            {unquote(call), Module.get_definition(__MODULE__, unquote(call))}
+          )
+        end
+    end
+  end
+
+  defp guard_call({:when, _meta, [{name, _call_meta, args}, _body]})
+       when is_atom(name) and is_list(args),
+       do: {name, length(args)}
+
+  defp guard_call({:when, _meta, [{name, _call_meta, context}, _body]})
+       when is_atom(name) and is_atom(context),
+       do: {name, 0}
+
+  defp guard_call(_guard), do: nil
 end
