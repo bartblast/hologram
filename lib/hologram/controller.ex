@@ -714,11 +714,23 @@ defmodule Hologram.Controller do
           expires_at
         )
 
+        # Who the stream will serve, as the cookie says: the cookie can lag an identity change the
+        # tab has already heard of, or tell the tab of one it never heard of. And a replica pair for
+        # this session, as a page render mints one, for a tab whose pair a change of user dropped.
+        replica_id = UUID.uuid4()
+
         conn
         |> send_json(%{
+          actorEntityId: Auth.canonical_id(current_user_id),
+          actorUserId: Auth.owner_key(current_user_id),
           handshakeId: handshake_id,
           heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
-          refreshedReceipts: serialize_to_fragment(refreshed_receipts)
+          identityTag: Session.identity_tag(conn),
+          refreshedReceipts: serialize_to_fragment(refreshed_receipts),
+          replica: %{
+            id: replica_id,
+            token: ReplicaIdentity.issue(replica_id, session_id, current_user_id)
+          }
         })
         |> Plug.Conn.halt()
     end

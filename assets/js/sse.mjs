@@ -144,12 +144,32 @@ export default class Sse {
       }
 
       const {
+        actorEntityId,
+        actorUserId,
         handshakeId,
         heartbeatIntervalMs,
+        identityTag,
         refreshedReceipts: serializedRefreshed,
+        replica,
       } = await response.json();
 
       if (isStale()) return;
+
+      // Before the receipts are judged: a tab the handshake moves to another user moves its
+      // identity period, so the previous user's receipts the server refused are dropped rather than
+      // taken for receipts that expired. A cookie behind the identity the tab follows opens no
+      // stream, records no period and changes no receipts: it isn't the session the tab is in, and
+      // the follow opens a new stream once the server says who is (see DataLayer.takeHandshake).
+      const opens =
+        Hologram.dataLayer?.takeHandshake({
+          actorEntityId,
+          actorUserId,
+          identityTag,
+          replica,
+        }) ?? true;
+
+      // The follow can have opened a new stream already.
+      if (isStale() || !opens) return;
 
       const refreshed = Deserializer.deserialize(serializedRefreshed);
 

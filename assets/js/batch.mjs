@@ -54,6 +54,11 @@ export default class Batch {
   // dropped, so nothing is left to hold a state.
   state = "open";
 
+  // Whether a refusal of it switched pairs since the last backoff retry. Every handshake hands the
+  // tab a new pair (see DataLayer.takeHandshake), so without it a refusal no pair cures would
+  // switch and resend with no pause for as long as the server refuses (see Batches.flush).
+  switchedPair = false;
+
   // Whether this tab numbered it with nowhere to file it - its store stopped before the batch was
   // written down. No other tab and no later page load can send it, so this tab is the only one
   // that can (see Batches.disownStored).

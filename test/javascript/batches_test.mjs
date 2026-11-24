@@ -1224,6 +1224,79 @@ describe("Batches", () => {
       assert.deepStrictEqual(Batches.pending, [batch]);
     });
 
+    // Every handshake hands the tab a new pair, so a refusal no pair cures would otherwise switch
+    // and send again for as long as it lasts, with no pause.
+    describe("a 403 of a batch sent under the pair it switched to", () => {
+      let delaying, reconnecting, timers;
+
+      beforeEach(() => {
+        timers = sinon.useFakeTimers();
+
+        sinon.stub(Durability, "persistReplica");
+
+        delaying = sinon.stub(Sse, "computeReconnectDelay").returns(60_000);
+
+        reconnecting = sinon.stub(Sse, "reconnect").callsFake(() => {
+          Replica.offer({id: "r-next", token: "statement-next"});
+        });
+
+        Replica.adopt({id: "r-stored", token: "statement-stored"});
+        Replica.offer({id: "r-fresh", token: "statement-fresh"});
+
+        sendStub.resolves({httpStatus: 403, status: "failed"});
+      });
+
+      it("waits out the backoff", async () => {
+        const batch = sealed(creating("t1", "first"));
+
+        await Batches.flush();
+
+        assert.equal(sendStub.callCount, 2);
+        assert.isTrue(reconnecting.calledOnce);
+        assert.equal(Replica.id, "r-fresh");
+        assert.equal(batch.state, "pending");
+        assert.isTrue(delaying.calledOnce);
+      });
+
+      afterEach(() => {
+        timers.restore();
+      });
+
+      // The new stream's opening flushes the queue, and would switch again with no pause.
+      it("switches no pair on a flush before the backoff ends", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await Batches.flush();
+
+        assert.equal(Replica.id, "r-fresh");
+        assert.isTrue(reconnecting.calledOnce);
+      });
+
+      // The user's actions flush the queue more often than the backoff lasts.
+      it("waits for the retry already set, through flushes that come before it", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(30_000);
+        await Batches.flush();
+        await timers.tickAsync(30_000);
+
+        assert.equal(Replica.id, "r-next");
+      });
+
+      // A later refusal can be a session that changed again, which the newest pair does cure.
+      it("may switch again once the backoff ends", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(60_000);
+
+        assert.equal(Replica.id, "r-next");
+        assert.isTrue(reconnecting.calledTwice);
+      });
+    });
+
     // The pair's twin: a dropped connection says nothing about who this client is, so what it is
     // holding stays. Spending the page's fresh pair on a network blip would leave nothing to
     // answer a real refusal with, and would restart the stream for no reason.

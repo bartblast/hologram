@@ -3971,6 +3971,93 @@ defmodule Hologram.ControllerTest do
       assert {:ok, %{"heartbeatIntervalMs" => 1000}} = Jason.decode(conn.resp_body)
     end
 
+    test "names the identity tag and the user the cookie signs in" do
+      session_data = %{
+        hologram_identity_stamp: 5,
+        hologram_session_id: "test-session-id",
+        hologram_user_id: 7
+      }
+
+      conn = post_handshake("test-instance-id", session_data)
+
+      expected_tag =
+        :post
+        |> Plug.Test.conn("/", "")
+        |> Plug.Test.init_test_session(session_data)
+        |> Session.identity_tag()
+
+      assert {:ok,
+              %{
+                "actorEntityId" => nil,
+                "actorUserId" => "i7",
+                "identityTag" => ^expected_tag
+              }} = Jason.decode(conn.resp_body)
+
+      assert String.starts_with?(expected_tag, "5.")
+    end
+
+    test "names a user entity's id as the actor's entity id" do
+      user_id = UUID.uuid4()
+
+      conn =
+        post_handshake("test-instance-id", %{
+          hologram_session_id: "test-session-id",
+          hologram_user_id: user_id
+        })
+
+      assert {:ok, %{"actorEntityId" => ^user_id, "actorUserId" => "u" <> _base62}} =
+               Jason.decode(conn.resp_body)
+    end
+
+    test "names no actor for a visitor" do
+      conn = post_handshake("test-instance-id", %{hologram_session_id: "test-session-id"})
+
+      assert {:ok, %{"actorEntityId" => nil, "actorUserId" => nil}} =
+               Jason.decode(conn.resp_body)
+    end
+
+    test "mints a replica pair for the signed-in user" do
+      conn =
+        post_handshake("test-instance-id", %{
+          hologram_session_id: "test-session-id",
+          hologram_user_id: 7
+        })
+
+      assert {:ok, %{"replica" => %{"id" => replica_id, "token" => token}}} =
+               Jason.decode(conn.resp_body)
+
+      assert {:ok, _info} = UUID.info(replica_id)
+      assert ReplicaIdentity.verify(token, replica_id, "other-session-id", 7) == :ok
+    end
+
+    test "mints a replica pair for a visitor's session" do
+      conn = post_handshake("test-instance-id", %{hologram_session_id: "test-session-id"})
+
+      assert {:ok, %{"replica" => %{"id" => replica_id, "token" => token}}} =
+               Jason.decode(conn.resp_body)
+
+      assert ReplicaIdentity.verify(token, replica_id, "test-session-id", nil) == :ok
+      assert ReplicaIdentity.verify(token, replica_id, "other-session-id", nil) != :ok
+    end
+
+    test "mints a new replica pair on every handshake" do
+      session_data = %{hologram_session_id: "test-session-id"}
+
+      {:ok, %{"replica" => %{"id" => first_id}}} =
+        "test-instance-id"
+        |> post_handshake(session_data)
+        |> Map.fetch!(:resp_body)
+        |> Jason.decode()
+
+      {:ok, %{"replica" => %{"id" => second_id}}} =
+        "test-instance-id"
+        |> post_handshake(session_data)
+        |> Map.fetch!(:resp_body)
+        |> Jason.decode()
+
+      assert first_id != second_id
+    end
+
     test "returns 401 when the session has no Hologram session_id" do
       conn = post_handshake("test-instance-id", %{})
 

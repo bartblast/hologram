@@ -240,6 +240,28 @@ describe("Tabs", () => {
       }
     });
 
+    // It followed the server to a pair every tab of the browser was handed, which the group's
+    // leader goes on sending under.
+    it("holds no identity in a tab that was following whose fresh one is the group's", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      Replica.adopt({id: "r-group", token: "statement-group"});
+      Replica.fresh = {id: "r-group", token: "statement-group"};
+
+      try {
+        Tabs.dissolve();
+
+        assert.isNull(Replica.id);
+        assert.isNull(Replica.token);
+        assert.isTrue(SyncStream.awaitingPair);
+      } finally {
+        SyncStream.awaitingPair = false;
+      }
+    });
+
     // The frames it was being handed stop here, so it needs a stream the server serves sync on.
     it("opens a stream of its own in a tab that was following", async () => {
       const group = nextGroup();
@@ -3170,6 +3192,18 @@ describe("Tabs", () => {
       Tabs.ready();
 
       assert.isFalse(Tabs.takingLead);
+    });
+
+    // A handshake answered while the tab joins mustn't take it for a tab that sends for itself (see
+    // DataLayer.takeHandshake).
+    it("is settling a start from the moment it moves", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      const moving = Tabs.move(nextGroup());
+
+      assert.isTrue(Tabs.takingLead);
+
+      await moving;
     });
 
     it("settles a follower's start the same way", async () => {

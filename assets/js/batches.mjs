@@ -426,16 +426,25 @@ export default class Batches {
           // stops this client applying its own writes twice. The batch keeps its number: nothing
           // has been recorded against the new identity, so any number is free under it.
           //
-          // Once per page load. `refresh` answers false when the fresh pair is already the one in
-          // use, which is the case where the session changed after this page loaded and there is
-          // nothing here that can help.
+          // Once per backoff: a batch refused again under the pair it switched to waits for the
+          // retry timer, which lets it switch again (see #scheduleRetry). Every handshake hands the
+          // tab a new pair (see DataLayer.takeHandshake), so a refusal that no pair cures, a failed
+          // CSRF check after the session was reset, would otherwise switch, reconnect and resend
+          // for as long as it lasts - the new stream's flush included. `refresh` answers false
+          // when the fresh pair is already the one in use, which nothing here can help.
           //
           // AWAITED, the same discipline the counter's write gets and for the same reason: nothing
           // is sent under an identity that is not recorded. Fired and forgotten, a reload landing
           // before the write commits would take up the REFUSED pair again while the counter had
           // moved on - and the batch that followed would be refused a second time before this path
           // could recover it.
-          if (answer.httpStatus === 403 && Replica.refresh()) {
+          if (
+            answer.httpStatus === 403 &&
+            !batch.switchedPair &&
+            Replica.refresh()
+          ) {
+            batch.switchedPair = true;
+
             await Durability.persistReplica(Replica.current());
 
             // The other tabs of this browser present the refused pair too, and would each find
@@ -453,7 +462,12 @@ export default class Batches {
             `Hologram: batch ${batch.seq} was not answered (${answer.httpStatus}) - it stays pending and goes again shortly, on the next write, or on reconnect`,
           );
 
-          Batches.#scheduleRetry();
+          // A batch waiting out a switch waits for the retry already set. Pushed back by every
+          // flush the user's actions start, it would never get to switch to the pair the next
+          // handshake hands.
+          if (!batch.switchedPair || Batches.#retryTimer === null) {
+            Batches.#scheduleRetry();
+          }
 
           return;
         }
@@ -896,6 +910,11 @@ export default class Batches {
 
     Batches.#retryTimer = setTimeout(() => {
       Batches.#retryTimer = null;
+
+      // The wait a refused switch was held to is over (see flush).
+      for (const batch of Batches.pending) {
+        batch.switchedPair = false;
+      }
 
       Batches.flush();
     }, Sse.computeReconnectDelay(++Batches.#retryAttempts));

@@ -12,6 +12,7 @@ import {
 import App from "../../assets/js/app.mjs";
 import Batches from "../../assets/js/batches.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import DataLayer from "../../assets/js/data_layer.mjs";
 import Deserializer from "../../assets/js/deserializer.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
@@ -67,6 +68,7 @@ describe("Sse", () => {
     refreshedReceipts = Type.list(),
     ok = true,
     status = 200,
+    ...session
   } = {}) {
     const serializedRefreshedReceipts = serializedValue(refreshedReceipts);
 
@@ -77,6 +79,7 @@ describe("Sse", () => {
         handshakeId,
         heartbeatIntervalMs,
         refreshedReceipts: serializedRefreshedReceipts,
+        ...session,
       }),
     });
   }
@@ -767,6 +770,122 @@ describe("Sse", () => {
         await Sse.connect();
 
         assert.equal(Sse.handshakePeriod, IdentityTracker.period);
+      });
+    });
+
+    // What it says of the session: who the cookie signs in, and a pair minted for it.
+    describe("with a data layer", () => {
+      const session = {
+        actorEntityId: "entity-2",
+        actorUserId: "u2",
+        identityTag: "2.tag-2",
+        replica: {id: "replica-2", token: "token-2"},
+      };
+
+      let taking;
+
+      beforeEach(() => {
+        setDataLayer();
+
+        taking = sinon.stub(DataLayer, "takeHandshake").returns(true);
+        sinon.stub(DataLayer, "buildStreamGreeting").returns({});
+        sinon.stub(DataLayer, "listenToStream");
+      });
+
+      afterEach(() => {
+        Sse.handshakePeriod = null;
+        IdentityTracker.init(null);
+        IdentityTracker.period = null;
+        IdentityTracker.documentPeriod = null;
+      });
+
+      it("hands it what the handshake says of the session", async () => {
+        stubHandshakeResponse(session);
+
+        await Sse.connect();
+
+        sinon.assert.calledOnceWithExactly(taking, session);
+        sinon.assert.calledOnce(globalThis.EventSource);
+      });
+
+      // A tab the handshake moves to another user has left the identity its receipts were
+      // authorized for, and the server refused them for that.
+      it("hands it over before the receipts are judged", async () => {
+        IdentityTracker.init("1.tag-1");
+
+        taking.callsFake(() => {
+          IdentityTracker.observe("2.tag-2");
+
+          return true;
+        });
+
+        SubscriptionReceiptRegistry.entries.set(
+          "key-a",
+          receipt(Type.atom("room_a"), "page", "refused-token"),
+        );
+
+        stubHandshakeResponse({...session, refreshedReceipts: Type.list()});
+
+        await Sse.connect();
+
+        sinon.assert.notCalled(globalThis.window.location.reload);
+        assert.equal(SubscriptionReceiptRegistry.entries.size, 0);
+        sinon.assert.calledOnce(globalThis.EventSource);
+      });
+
+      // A cookie behind the identity the tab follows: the stream would serve the previous user.
+      describe("when it holds the stream", () => {
+        beforeEach(() => {
+          taking.returns(false);
+        });
+
+        it("opens no stream", async () => {
+          stubHandshakeResponse(session);
+
+          await Sse.connect();
+
+          sinon.assert.notCalled(globalThis.EventSource);
+        });
+
+        // The cookie isn't the session the tab is in, so the next handshake's receipts are judged
+        // against the period the last real one left.
+        it("records no period", async () => {
+          IdentityTracker.init("1.tag-1");
+          Sse.handshakePeriod = IdentityTracker.period;
+          IdentityTracker.observe("2.tag-2");
+
+          stubHandshakeResponse(session);
+
+          await Sse.connect();
+
+          assert.notEqual(Sse.handshakePeriod, IdentityTracker.period);
+        });
+
+        it("changes no receipts, and reloads for none", async () => {
+          SubscriptionReceiptRegistry.entries.set("key-a", receiptA);
+
+          stubHandshakeResponse({...session, refreshedReceipts: Type.list()});
+
+          await Sse.connect();
+
+          assert.isTrue(SubscriptionReceiptRegistry.entries.has("key-a"));
+          sinon.assert.notCalled(globalThis.window.location.reload);
+        });
+      });
+
+      // A tab whose store already stopped reconnects as it follows.
+      it("opens nothing once the follow has opened a new stream", async () => {
+        taking.callsFake(() => {
+          Sse.runId++;
+
+          return true;
+        });
+
+        stubHandshakeResponse(session);
+
+        await Sse.connect();
+
+        sinon.assert.notCalled(globalThis.EventSource);
       });
     });
 

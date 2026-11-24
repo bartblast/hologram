@@ -37,6 +37,11 @@ export default class SyncStream {
   // session - which a tab that stops leading has to close (see DataLayer.followIdentity).
   static heldSync = false;
 
+  // Whether the last handshake was made under a cookie behind the identity this tab follows, which
+  // the stream would serve as the previous user (see DataLayer.takeHandshake). Writes wait for one
+  // that isn't: the server would refuse them as made for another user.
+  static laggingCookie = false;
+
   static renderScheduled = false;
 
   // The last rules a server handed this client in place of its bundle's, as the frame carried
@@ -629,11 +634,14 @@ export default class SyncStream {
   // model rather than the protocol, because the write endpoint compares only the model - under a
   // protocol stop, writes still land. Or the tab moved to another user and has no pair for them yet.
   // Any pair it holds after the move ends the wait: the event's, the one the store keeps for the
-  // new user, or the one the new user's group hands it. All three are the new user's, since the
-  // move dropped the previous user's.
+  // new user, the one the new user's group hands it, or the handshake's. All are the new user's,
+  // since the move dropped the previous user's. Or the session's cookie still names the previous
+  // user (see laggingCookie).
   static holdsWrites() {
     return (
-      $.stopReason === "model_hash" || ($.awaitingPair && Replica.id === null)
+      $.stopReason === "model_hash" ||
+      ($.awaitingPair && Replica.id === null) ||
+      $.laggingCookie
     );
   }
 }

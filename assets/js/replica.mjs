@@ -11,9 +11,10 @@
 // The offer is kept rather than dropped, because it is the recovery. A remembered statement stops
 // verifying when the session it was bound to is gone, or after the server's signing key is
 // rotated, and the server refuses such a batch outright - at which point the pair this page was
-// handed is exactly the fresh, valid one to switch to, and it is already here.
+// handed is exactly the fresh, valid one to switch to, and it is already here. Each handshake of the
+// stream offers one too, minted for the session as it stands (see DataLayer.takeHandshake).
 export default class Replica {
-  // The pair the current page offered, held whether or not it is the one in use.
+  // The pair last offered, by the page or a handshake, held whether or not it is the one in use.
   static fresh = null;
 
   static id = null;
@@ -48,9 +49,9 @@ export default class Replica {
     }
   }
 
-  // Switches to the pair the page offered, answering whether there was anywhere to switch TO. No
-  // when the offer is already what is in use, since a pair the server just refused cannot be
-  // recovered by presenting it again, and no when the page offered nothing at all.
+  // Switches to the pair last offered, answering whether there was anywhere to switch TO. No when
+  // the offer is already what is in use, since a pair the server just refused cannot be recovered
+  // by presenting it again, and no when nothing was offered.
   static refresh() {
     if (!Replica.fresh?.id || Replica.fresh.id === Replica.id) {
       return false;
