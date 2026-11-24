@@ -72,6 +72,10 @@ excluded_tags = ExUnit.configuration()[:exclude]
 
 ExUnit.start(exclude: exclude_opts)
 
+# The library's own tests don't run the database unit's supervisor, and a session marks the
+# processes it starts whether or not a run has a database.
+{:ok, _spawn_mark_pid} = Hologram.Auth.SpawnMark.start_link([])
+
 # A run that excludes the database tests (the modules of DatabaseCase and ScratchDatabaseCase,
 # and the tests tagged :database by hand) needs no server. It still needs the mapping and the
 # clock, which code that never touches a server reads. Every other run boots the database

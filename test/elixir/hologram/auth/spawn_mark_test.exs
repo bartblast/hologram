@@ -1,0 +1,120 @@
+defmodule Hologram.Auth.SpawnMarkTest do
+  use Hologram.Test.BasicCase, async: true
+
+  import Hologram.Auth.SpawnMark
+
+  # A trace session of the test's own, so nothing here touches the one the app runs on.
+  defp start_session do
+    tracer = spawn(fn -> Process.sleep(:infinity) end)
+
+    {:trace.session_create(__MODULE__, tracer, []), tracer}
+  end
+
+  defp marked_in_spawned_process(session) do
+    test_pid = self()
+    spawn(fn -> send(test_pid, {:marked, marked?(session)}) end)
+
+    assert_receive {:marked, marked?}
+
+    marked?
+  end
+
+  describe "marked?/1" do
+    test "is false for a process that was never marked" do
+      {session, _tracer} = start_session()
+
+      refute marked?(session)
+    end
+
+    test "is false with no trace session" do
+      refute marked?(nil)
+    end
+  end
+
+  describe "put/2" do
+    test "marks the calling process" do
+      {session, _tracer} = start_session()
+
+      assert put(true, session) == :ok
+      assert marked?(session)
+    end
+
+    test "clears the mark" do
+      {session, _tracer} = start_session()
+      put(true, session)
+
+      assert put(false, session) == :ok
+      refute marked?(session)
+    end
+
+    test "passes the mark to a process started while it is set" do
+      {session, _tracer} = start_session()
+      put(true, session)
+
+      assert marked_in_spawned_process(session)
+    end
+
+    test "doesn't pass the mark to a process started after it is cleared" do
+      {session, _tracer} = start_session()
+      put(true, session)
+      put(false, session)
+
+      refute marked_in_spawned_process(session)
+    end
+
+    test "does nothing with no trace session" do
+      assert put(true, nil) == :ok
+      refute marked?(nil)
+    end
+
+    test "raises when the tracer has ended, since the mark would silently not be set" do
+      {session, tracer} = start_session()
+      monitor = Process.monitor(tracer)
+      Process.exit(tracer, :kill)
+      assert_receive {:DOWN, ^monitor, :process, ^tracer, :killed}
+
+      assert_error RuntimeError,
+                   "can't mark this process as working for a session: Hologram.Auth.SpawnMark isn't running",
+                   fn -> put(true, session) end
+    end
+
+    test "clearing the mark doesn't raise when the tracer has ended" do
+      {session, tracer} = start_session()
+      monitor = Process.monitor(tracer)
+      Process.exit(tracer, :kill)
+      assert_receive {:DOWN, ^monitor, :process, ^tracer, :killed}
+
+      assert put(false, session) == :ok
+    end
+  end
+
+  describe "restore/2" do
+    test "sets the mark" do
+      {session, _tracer} = start_session()
+
+      assert restore(true, session) == :ok
+      assert marked?(session)
+    end
+
+    test "clears the mark" do
+      {session, _tracer} = start_session()
+      put(true, session)
+
+      assert restore(false, session) == :ok
+      refute marked?(session)
+    end
+
+    test "does nothing with no trace session" do
+      assert restore(true, nil) == :ok
+    end
+
+    test "doesn't raise when the tracer has ended" do
+      {session, tracer} = start_session()
+      monitor = Process.monitor(tracer)
+      Process.exit(tracer, :kill)
+      assert_receive {:DOWN, ^monitor, :process, ^tracer, :killed}
+
+      assert restore(true, session) == :ok
+    end
+  end
+end

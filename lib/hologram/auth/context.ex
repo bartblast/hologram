@@ -23,10 +23,20 @@ defmodule Hologram.Auth.Context do
   # continuing a session's work in another process re-establishes identity with with_actor/2.
 
   alias Hologram.Auth
+  alias Hologram.Auth.SpawnMark
   alias Hologram.Server
 
-  # Holds {:session, user_id}, so a signed-out visitor's nil user id is told from no session.
+  # Holds {:session, user_id}, so a signed-out visitor's nil user id is told from no session, or
+  # :server inside without_session/1, which is no session by explicit choice.
   @actor_key {__MODULE__, :actor_user_id}
+
+  # Set for good on a process once it has worked for a session, for the tasks a supervisor starts
+  # on its behalf to find: those are spawned by the supervisor, so they don't inherit SpawnMark.
+  @served_key {__MODULE__, :served_session}
+
+  # The search's answer, kept since how a process was started can't change, while what the search
+  # can read about its ancestors does as they end or go on to serve a session.
+  @started_by_request_key {__MODULE__, :started_by_request}
 
   @doc """
   Returns the user id of the actor set for the calling process, or nil for a signed-out visitor's
@@ -36,7 +46,7 @@ defmodule Hologram.Auth.Context do
   def actor_user_id do
     case Process.get(@actor_key) do
       {:session, user_id} -> user_id
-      nil -> nil
+      _no_session -> nil
     end
   end
 
@@ -56,7 +66,7 @@ defmodule Hologram.Auth.Context do
   # visitor's session.
   @spec put_actor(Server.identity_id() | nil) :: :ok
   def put_actor(user_id) do
-    Process.put(@actor_key, {:session, Server.validate_user_id!(user_id)})
+    enter_state({:session, Server.validate_user_id!(user_id)})
 
     :ok
   end
@@ -67,7 +77,40 @@ defmodule Hologram.Auth.Context do
   """
   @spec session?() :: boolean
   def session? do
-    Process.get(@actor_key) != nil
+    match?({:session, _user_id}, Process.get(@actor_key))
+  end
+
+  @doc """
+  Returns true when the calling process, outside any session or without_session/1 of its own, was
+  started for a session's work: by a process working for a session, or by a supervisor on behalf of
+  a process that has served one or has ended.
+
+  A task a supervisor started carries only its caller's pid, and the caller may have moved on to
+  other work, so a caller that has served a session counts even if it wasn't serving one then. An
+  ended ancestor stops the search, so a process started by a supervised task that has ended isn't
+  found. Neither is work handed to a process that was already running or that a supervisor started
+  with no record of who asked for it, nor a stream's workers when its enumeration began outside the
+  session. A process with the :sensitive flag, set before or during the session, passes on no mark
+  and shows no record of having served one, so what it starts isn't found either.
+
+  without_session/1 clears the mark for what the process spawns inside it, but a supervisor's task
+  has no mark to clear: a task whose caller has served a session or has ended counts, even one
+  handed over inside the block, and so does what such a task spawns inside the block. Both can
+  claim trust. That includes a run_as_server job's run whose worker has ended, until the next
+  worker kills it.
+  """
+  @spec started_by_request?() :: boolean
+  def started_by_request? do
+    cond do
+      Process.get(@actor_key) != nil ->
+        false
+
+      SpawnMark.marked?() ->
+        true
+
+      true ->
+        kept_search_answer()
+    end
   end
 
   @doc """
@@ -92,21 +135,103 @@ defmodule Hologram.Auth.Context do
   """
   @spec without_session((-> any)) :: any
   def without_session(fun) do
-    run_in_state(nil, fun)
+    run_in_state(:server, fun)
+  end
+
+  # The mark goes first: when it can't be set, the process is left as it was.
+  defp enter_state({:session, _user_id} = session) do
+    SpawnMark.put(true)
+    Process.put(@served_key, true)
+    Process.put(@actor_key, session)
+  end
+
+  defp enter_state(:server) do
+    SpawnMark.put(false)
+    Process.put(@actor_key, :server)
+  end
+
+  # A caller that spawned this process itself, directly or through plain spawns like the monitor
+  # of Task.async_stream/3, passed on its mark at the spawn, and the walk goes on to its own
+  # callers. So a plain Task from a process no request started isn't refused for having outlived
+  # it. Only a real hand-off, through a process started with proc_lib like a supervisor, is judged
+  # by what the caller has served.
+  defp handed_over_by_request?([caller | _callers] = callers, parent) do
+    not spawned_by?(parent, caller, []) and Enum.any?(callers, &served_or_ended?/1)
+  end
+
+  defp handed_over_by_request?(_no_callers, _parent), do: false
+
+  defp kept_search_answer do
+    case Process.get(@started_by_request_key) do
+      nil ->
+        answer = supervised_for_request?(self(), [])
+        Process.put(@started_by_request_key, answer)
+
+        answer
+
+      answer ->
+        answer
+    end
   end
 
   defp put_state(nil), do: Process.delete(@actor_key)
 
-  defp put_state(session), do: Process.put(@actor_key, session)
+  defp put_state(state), do: Process.put(@actor_key, state)
 
+  # The mark is put back unchecked: a tracer that ended during the function mustn't replace its
+  # result or its exception, and the next session this process enters refuses to start.
   defp run_in_state(state, fun) do
     previous_state = Process.get(@actor_key)
-    put_state(state)
+    previous_mark = SpawnMark.marked?()
+    enter_state(state)
 
     try do
       fun.()
     after
       put_state(previous_state)
+      SpawnMark.restore(previous_mark)
+    end
+  end
+
+  defp served_or_ended?(pid) when node(pid) != node(), do: false
+
+  defp served_or_ended?(pid) do
+    case Process.info(pid, {:dictionary, @served_key}) do
+      nil -> true
+      {_item, true} -> true
+      {_item, :undefined} -> false
+    end
+  end
+
+  defp spawned_by?(caller, caller, _seen), do: true
+
+  defp spawned_by?(pid, caller, seen) when is_pid(pid) and node(pid) == node() do
+    with false <- pid in seen,
+         [{:parent, parent}, {_ancestors_item, :undefined}] <-
+           Process.info(pid, [:parent, {:dictionary, :"$ancestors"}]) do
+      spawned_by?(parent, caller, [pid | seen])
+    else
+      _not_a_plain_spawn -> false
+    end
+  end
+
+  defp spawned_by?(_pid, _caller, _seen), do: false
+
+  # Goes up through the live ancestors. It never reads whether one is in a session or in
+  # without_session/1: that says what the ancestor is doing now rather than when it started this
+  # process, and the answer is kept, so a moment inside without_session/1 could clear request work
+  # for good.
+  defp supervised_for_request?(pid, _seen) when node(pid) != node(), do: false
+
+  defp supervised_for_request?(pid, seen) do
+    case Process.info(pid, [:parent, {:dictionary, :"$callers"}]) do
+      nil ->
+        false
+
+      [{:parent, parent}, {_callers_item, callers}] ->
+        handed_over_by_request?(callers, parent) or
+          (is_pid(parent) and parent not in seen and
+             supervised_for_request?(parent, [pid | seen]))
     end
   end
 end

@@ -3,6 +3,37 @@ defmodule Hologram.Auth.ContextTest do
 
   import Hologram.Auth.Context
 
+  # Runs the function in a spawned process and returns its result.
+  defp in_spawned(fun) do
+    caller = self()
+    ref = make_ref()
+    spawn(fn -> send(caller, {ref, fun.()}) end)
+
+    assert_receive {^ref, result}
+
+    result
+  end
+
+  defp await_down(pid) do
+    monitor = Process.monitor(pid)
+
+    assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
+  end
+
+  # Starts a process that waits for :go, then sends the function's result to report_to.
+  defp spawn_waiting(fun, report_to) do
+    ref = make_ref()
+
+    pid =
+      spawn(fn ->
+        receive do
+          :go -> send(report_to, {ref, fun.()})
+        end
+      end)
+
+    {pid, ref}
+  end
+
   test "actor_user_id/0" do
     assert actor_user_id() == nil
   end
@@ -90,6 +121,404 @@ defmodule Hologram.Auth.ContextTest do
         assert session?()
         assert actor_user_id() == nil
       end)
+    end
+  end
+
+  describe "started_by_request?/0" do
+    test "is false for a process no session started" do
+      refute started_by_request?()
+      refute in_spawned(fn -> started_by_request?() end)
+    end
+
+    test "is false in the process working for the session" do
+      refute with_actor("user_id_17", fn -> started_by_request?() end)
+    end
+
+    test "is false inside without_session/1 in a process a session started" do
+      refute with_actor("user_id_33", fn ->
+               in_spawned(fn -> without_session(&started_by_request?/0) end)
+             end)
+    end
+
+    test "is true for a process spawned in a session" do
+      assert with_actor("user_id_18", fn -> in_spawned(&started_by_request?/0) end)
+    end
+
+    test "is true for a process spawned in a signed-out visitor's session" do
+      assert with_actor(nil, fn -> in_spawned(&started_by_request?/0) end)
+    end
+
+    test "is true for a process spawned after put_actor/1" do
+      put_actor("user_id_19")
+
+      assert in_spawned(&started_by_request?/0)
+    end
+
+    test "is true for a Task started in a session" do
+      assert with_actor("user_id_20", fn ->
+               fn -> started_by_request?() end
+               |> Task.async()
+               |> Task.await()
+             end)
+    end
+
+    test "is true for a grandchild" do
+      assert with_actor("user_id_21", fn ->
+               in_spawned(fn -> in_spawned(&started_by_request?/0) end)
+             end)
+    end
+
+    test "stays true after the starter has ended" do
+      test_pid = self()
+
+      starter =
+        spawn(fn ->
+          with_actor("user_id_22", fn ->
+            send(test_pid, {:started, spawn_waiting(&started_by_request?/0, test_pid)})
+          end)
+        end)
+
+      assert_receive {:started, {pid, ref}}
+      await_down(starter)
+
+      send(pid, :go)
+
+      assert_receive {^ref, true}
+    end
+
+    test "stays true after the starter's session has ended on the same process" do
+      {pid, ref} =
+        with_actor("user_id_23", fn -> spawn_waiting(&started_by_request?/0, self()) end)
+
+      send(pid, :go)
+
+      assert_receive {^ref, true}
+    end
+
+    test "is false for a process spawned after the session ended on the same process" do
+      with_actor("user_id_24", fn -> :ok end)
+
+      refute in_spawned(&started_by_request?/0)
+    end
+
+    test "is false for a process spawned inside without_session/1 in a session" do
+      refute with_actor("user_id_25", fn ->
+               without_session(fn -> in_spawned(&started_by_request?/0) end)
+             end)
+    end
+
+    test "is true again for a process spawned after without_session/1 ends" do
+      assert with_actor("user_id_26", fn ->
+               without_session(fn -> :ok end)
+               in_spawned(&started_by_request?/0)
+             end)
+    end
+
+    test "keeps the mark of a marked process after a nested session ends" do
+      assert with_actor("user_id_27", fn ->
+               in_spawned(fn ->
+                 with_actor("user_id_28", fn -> :ok end)
+
+                 started_by_request?()
+               end)
+             end)
+    end
+
+    test "is true for a task a supervisor started for a process in a session" do
+      supervisor = start_supervised!(Task.Supervisor)
+
+      assert with_actor("user_id_29", fn ->
+               supervisor
+               |> Task.Supervisor.async(fn -> started_by_request?() end)
+               |> Task.await()
+             end)
+    end
+
+    test "is true for a task a supervisor started for a process that served a session earlier" do
+      supervisor = start_supervised!(Task.Supervisor)
+      with_actor("user_id_30", fn -> :ok end)
+
+      assert supervisor
+             |> Task.Supervisor.async(fn -> started_by_request?() end)
+             |> Task.await()
+    end
+
+    test "is true for a task a supervisor started for a process that has ended" do
+      supervisor = start_supervised!(Task.Supervisor)
+      test_pid = self()
+      ref = make_ref()
+
+      caller =
+        spawn(fn ->
+          {:ok, task} =
+            Task.Supervisor.start_child(supervisor, fn ->
+              receive do
+                :go -> send(test_pid, {ref, started_by_request?()})
+              end
+            end)
+
+          send(test_pid, {:task, task})
+        end)
+
+      assert_receive {:task, task}
+      await_down(caller)
+      send(task, :go)
+
+      assert_receive {^ref, true}
+    end
+
+    test "is false for a task a supervisor started for a process with no session" do
+      supervisor = start_supervised!(Task.Supervisor)
+
+      refute supervisor
+             |> Task.Supervisor.async(fn -> started_by_request?() end)
+             |> Task.await()
+    end
+
+    test "is true for a process a supervised task spawned for a session" do
+      supervisor = start_supervised!(Task.Supervisor)
+
+      assert with_actor("user_id_31", fn ->
+               supervisor
+               |> Task.Supervisor.async(fn -> in_spawned(&started_by_request?/0) end)
+               |> Task.await()
+             end)
+    end
+
+    test "is false for a plain Task whose starter, with no session, has ended" do
+      test_pid = self()
+      ref = make_ref()
+
+      starter =
+        spawn(fn ->
+          {:ok, task} =
+            Task.start(fn ->
+              receive do
+                :go -> send(test_pid, {ref, started_by_request?()})
+              end
+            end)
+
+          send(test_pid, {:task, task})
+        end)
+
+      assert_receive {:task, task}
+      await_down(starter)
+      send(task, :go)
+
+      assert_receive {^ref, false}
+    end
+
+    test "is true for a Task.start in a session" do
+      test_pid = self()
+      ref = make_ref()
+
+      with_actor("user_id_34", fn ->
+        Task.start(fn -> send(test_pid, {ref, started_by_request?()}) end)
+      end)
+
+      assert_receive {^ref, true}
+    end
+
+    test "is false for a nested Task whose first starter, with no session, has ended" do
+      test_pid = self()
+      ref = make_ref()
+
+      starter =
+        spawn(fn ->
+          Task.start(fn ->
+            {:ok, inner} =
+              Task.start(fn ->
+                receive do
+                  :go -> send(test_pid, {ref, started_by_request?()})
+                end
+              end)
+
+            send(test_pid, {:inner, inner})
+            Process.sleep(:infinity)
+          end)
+        end)
+
+      assert_receive {:inner, inner}
+      await_down(starter)
+      send(inner, :go)
+
+      assert_receive {^ref, false}
+    end
+
+    test "is true for a process a session's supervised task started inside without_session/1" do
+      supervisor = start_supervised!(Task.Supervisor)
+
+      assert with_actor("user_id_35", fn ->
+               supervisor
+               |> Task.Supervisor.async(fn ->
+                 without_session(fn -> in_spawned(&started_by_request?/0) end)
+               end)
+               |> Task.await()
+             end)
+    end
+
+    test "is true for a process a task of an ended caller started inside without_session/1" do
+      supervisor = start_supervised!(Task.Supervisor)
+      test_pid = self()
+      ref = make_ref()
+
+      caller =
+        spawn(fn ->
+          {:ok, task} =
+            Task.Supervisor.start_child(supervisor, fn ->
+              receive do
+                :go ->
+                  answer = without_session(fn -> in_spawned(&started_by_request?/0) end)
+                  send(test_pid, {ref, answer})
+              end
+            end)
+
+          send(test_pid, {:task, task})
+        end)
+
+      assert_receive {:task, task}
+      await_down(caller)
+      send(task, :go)
+
+      assert_receive {^ref, true}
+    end
+
+    # Reading the task's state at the check would answer false here, and keep it.
+    test "stays true for a child that first looks while its supervised task is in without_session/1" do
+      supervisor = start_supervised!(Task.Supervisor)
+      test_pid = self()
+      ref = make_ref()
+
+      {:ok, task} =
+        with_actor("user_id_40", fn ->
+          Task.Supervisor.start_child(supervisor, fn ->
+            child =
+              spawn(fn ->
+                receive do
+                  :look -> send(test_pid, {:first, started_by_request?()})
+                end
+
+                receive do
+                  :look_again -> send(test_pid, {ref, started_by_request?()})
+                end
+              end)
+
+            without_session(fn ->
+              send(child, :look)
+
+              receive do
+                :leave -> :ok
+              end
+            end)
+
+            send(test_pid, {:left, child})
+
+            receive do
+              :end -> :ok
+            end
+          end)
+        end)
+
+      assert_receive {:first, true}
+
+      send(task, :leave)
+      assert_receive {:left, child}
+
+      send(child, :look_again)
+      assert_receive {^ref, true}
+
+      send(task, :end)
+    end
+
+    test "is true for a Task.async_stream worker in a session" do
+      result =
+        with_actor("user_id_37", fn ->
+          [1]
+          |> Task.async_stream(fn _elem -> started_by_request?() end)
+          |> Enum.to_list()
+        end)
+
+      assert result == [ok: true]
+    end
+
+    test "is false for a Task.async_stream worker of a process that served a session earlier" do
+      with_actor("user_id_38", fn -> :ok end)
+
+      result =
+        [1]
+        |> Task.async_stream(fn _elem -> started_by_request?() end)
+        |> Enum.to_list()
+
+      assert result == [ok: false]
+    end
+
+    # The supervisor is in the caller's own lineage here, but it was spawned before the session, so
+    # it carries no mark and only the caller's record can tell.
+    test "is true for a task of a supervisor the process started itself before the session" do
+      {:ok, supervisor} = Task.Supervisor.start_link()
+
+      assert with_actor("user_id_39", fn ->
+               supervisor
+               |> Task.Supervisor.async(fn -> started_by_request?() end)
+               |> Task.await()
+             end)
+    end
+
+    test "keeps an answer of false after the caller serves a session" do
+      supervisor = start_supervised!(Task.Supervisor)
+      test_pid = self()
+      ref = make_ref()
+
+      {:ok, task} =
+        Task.Supervisor.start_child(supervisor, fn ->
+          first = started_by_request?()
+          send(test_pid, :looked)
+
+          receive do
+            :go -> send(test_pid, {ref, {first, started_by_request?()}})
+          end
+        end)
+
+      assert_receive :looked
+      with_actor("user_id_32", fn -> :ok end)
+      send(task, :go)
+
+      assert_receive {^ref, {false, false}}
+    end
+
+    test "keeps an answer of true after the supervised task that started the process ends" do
+      supervisor = start_supervised!(Task.Supervisor)
+      test_pid = self()
+      ref = make_ref()
+
+      with_actor("user_id_36", fn ->
+        Task.Supervisor.start_child(supervisor, fn ->
+          child =
+            spawn(fn ->
+              first = started_by_request?()
+              send(test_pid, {:looked, self()})
+
+              receive do
+                :go -> send(test_pid, {ref, {first, started_by_request?()}})
+              end
+            end)
+
+          send(test_pid, {:task, self(), child})
+
+          receive do
+            :end -> :ok
+          end
+        end)
+      end)
+
+      assert_receive {:task, task, child}
+      assert_receive {:looked, ^child}
+
+      send(task, :end)
+      await_down(task)
+      send(child, :go)
+
+      assert_receive {^ref, {true, true}}
     end
   end
 
