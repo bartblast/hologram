@@ -249,9 +249,10 @@ defmodule Hologram.Policy.Expression do
   defp option!({:only, value}, _operation, env), do: {:only, field_names!(value, :only, env)}
 
   defp option!({:to, value}, operation, env) do
-    value
-    |> List.wrap()
-    |> Enum.each(&refuse_new_reference!(&1, operation, env))
+    references = List.wrap(value)
+    alone? = match?([_reference], references)
+
+    Enum.each(references, &refuse_new_reference!(&1, alone?, operation, env))
 
     {:to, grant_references!(value, env)}
   end
@@ -362,24 +363,38 @@ defmodule Hologram.Policy.Expression do
     )
   end
 
-  defp refuse_new_reference!({role, scope} = ast, operation, env) do
+  # A reference listed next to others is one of the roles any of which grants, so its condition
+  # goes on a line of its own: one in the when: of the same line would have to hold as well.
+  defp refuse_new_reference!({role, scope} = ast, alone?, operation, env) do
     if QueryExpression.new_path?(scope) and atom_or_pin?(role) do
-      new_reference_error!(ast, hinted_name(role, ":role", env), scope, operation, env)
+      role = hinted_name(role, ":role", env)
+      new_reference_error!(ast, role, scope, alone?, operation, env)
     end
   end
 
-  defp refuse_new_reference!(ast, operation, env) do
+  defp refuse_new_reference!(ast, alone?, operation, env) do
     if QueryExpression.new_path?(ast),
-      do: new_reference_error!(ast, ":role", ast, operation, env)
+      do: new_reference_error!(ast, ":role", ast, alone?, operation, env)
   end
 
-  @spec new_reference_error!(Macro.t(), String.t(), Macro.t(), Macro.t(), Macro.Env.t()) ::
-          no_return
-  defp new_reference_error!(ast, role, target, operation, env) do
+  @spec new_reference_error!(
+          Macro.t(),
+          String.t(),
+          Macro.t(),
+          boolean,
+          Macro.t(),
+          Macro.Env.t()
+        ) :: no_return
+  defp new_reference_error!(ast, role, target, alone?, operation, env) do
     if operation != :update, do: QueryExpression.new_row_error!(target, env)
 
+    own_line =
+      if alone?,
+        do: "",
+        else: " on an allow line of its own, since to: holds on any one of its roles"
+
     QueryExpression.compile_error!(
-      "to reads the stored row, got: #{Macro.to_string(ast)} - a role on the row a change leads to goes in when: has_role(#{role}, #{Macro.to_string(target)})",
+      "to reads the stored row, got: #{Macro.to_string(ast)} - a role on the row a change leads to goes in when: has_role(#{role}, #{Macro.to_string(target)})#{own_line}",
       target,
       env
     )
