@@ -437,6 +437,49 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     assert shown_numbers(client, "t") == {above, above + 1}
   end
 
+  # A fill's marker makes the fill's limit only its own type's: the rows of a type still to come
+  # arrive in no number order, so one at or below the limit can still follow.
+  test "a client mid-fill holds back a type's numbers until that type's marker", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert await(fn -> Client.final_seq(client) != nil end)
+
+    request_id = request_id(client)
+    kept = Client.final_seq(client)
+    above = 1_000_000_000_000
+
+    marker = fn type ->
+      %{cursor: nil, final_seq: above, scope: "types", types: [wire_type(type)]}
+    end
+
+    send_frame(client, request_id, "sync_resync", %{reason: "gap_too_large"})
+    send_frame(client, request_id, "synced", marker.(Space))
+
+    send_frame(client, request_id, "sync_deltas", %{
+      cursor: nil,
+      deltas: %{
+        put_entity: %{
+          wire_type(Tag) => [
+            %{id: "t", name: "t", server_created_seq: above, server_updated_seq: above}
+          ]
+        }
+      }
+    })
+
+    assert shown_numbers(client, "t") == {nil, nil}
+    assert last_view(client).finals[Space] == above
+    assert last_view(client).finals[Tag] == kept
+
+    send_frame(client, request_id, "synced", marker.(Tag))
+
+    assert shown_numbers(client, "t") == {above, above}
+    assert last_view(client).finals[Tag] == above
+  end
+
   # The numbers came from a log that's gone, so none of them orders anything against the new one's.
   test "a client told its log is gone forgets the final limit and every number", %{
     users: [member | _users]

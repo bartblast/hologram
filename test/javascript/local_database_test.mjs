@@ -1685,6 +1685,98 @@ describe("LocalDatabase", () => {
       assert.isNull(LocalDatabase.finalSeq());
     });
 
+    // The point a fill's marker gives its type, which numbers of other types don't reach.
+    describe("raiseTypeFinal()", () => {
+      const NOTE = "MyApp.Note";
+
+      const created = (type, id) =>
+        LocalDatabase.baseRow(type, id).server_created_seq;
+
+      const holdNote = (item) =>
+        LocalDatabase.putRow(NOTE, LocalDatabase.holdNumbers(NOTE, item));
+
+      beforeEach(() => {
+        Model.reset();
+
+        globalThis.Hologram.sync.model[NOTE] =
+          globalThis.Hologram.sync.model[TASK];
+      });
+
+      it("files the waiting numbers of the given types, and only those", () => {
+        hold(row("t1", 80, 80));
+        holdNote(row("n1", 80, 80));
+
+        LocalDatabase.raiseTypeFinal([TASK], 100);
+
+        assert.equal(created(TASK, "t1"), 80);
+        assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+        assert.isNull(created(NOTE, "n1"));
+        assert.isNull(LocalDatabase.finalSeq());
+      });
+
+      it("files a number of the type at or below the point as it comes", () => {
+        LocalDatabase.raiseTypeFinal([TASK], 100);
+
+        hold(row("t1", 100, 100));
+        hold(row("t2", 101, 101));
+        holdNote(row("n1", 90, 90));
+
+        assert.equal(created(TASK, "t1"), 100);
+        assert.isNull(created(TASK, "t2"));
+        assert.isNull(created(NOTE, "n1"));
+      });
+
+      it("keeps the point every type has for the type", () => {
+        LocalDatabase.raiseFinal(50);
+        LocalDatabase.raiseTypeFinal([TASK], 40);
+
+        hold(row("t1", 45, 45));
+
+        assert.equal(created(TASK, "t1"), 45);
+      });
+
+      it("keeps the highest point it was told for the type", () => {
+        LocalDatabase.raiseTypeFinal([TASK], 100);
+        LocalDatabase.raiseTypeFinal([TASK], 90);
+        LocalDatabase.raiseTypeFinal([TASK], null);
+
+        hold(row("t1", 95, 95));
+
+        assert.equal(created(TASK, "t1"), 95);
+      });
+
+      it("takes a page's number of the type at or below the point as final", () => {
+        LocalDatabase.raiseTypeFinal([TASK], 100);
+
+        const filed = LocalDatabase.carryNumbers(TASK, row("t1", 90, 90));
+        const note = LocalDatabase.carryNumbers(NOTE, row("n1", 90, 90));
+
+        assert.equal(filed.server_created_seq, 90);
+        assert.isNull(note.server_created_seq);
+      });
+
+      for (const [name, end] of [
+        ["the marker for everything", () => LocalDatabase.markAllSynced()],
+        ["a refill", () => LocalDatabase.beginRefill()],
+        ["a lost log", () => LocalDatabase.forgetFinal()],
+        [
+          "the store's point taken up",
+          () => LocalDatabase.takeStoredFinal(null),
+        ],
+        ["a reset", () => LocalDatabase.reset()],
+      ]) {
+        it(`drops the type's point on ${name}`, () => {
+          LocalDatabase.raiseTypeFinal([TASK], 100);
+
+          end();
+
+          hold(row("t1", 90, 90));
+
+          assert.isNull(created(TASK, "t1"));
+        });
+      }
+    });
+
     it("files the waiting numbers the point reaches, and only those", () => {
       LocalDatabase.raiseFinal(10);
 

@@ -242,10 +242,32 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
                Checks.below_final([view], entries, @member, 9)
     end
 
-    test "judges only the types a view holds whole", %{entries: entries} do
-      view = %{view(5, 20, %{}) | rows: %{}, whole: MapSet.new([Space])}
+    test "judges only the types a view holds a limit for", %{entries: entries} do
+      view = %{view(5, 20, %{}) | finals: %{Space => 5}, rows: %{}}
 
       assert Checks.below_final([view], entries, @member, 9) == []
+    end
+
+    # A fill's marker gives its type the fill's limit, and only that type.
+    test "judges each type by its own limit", %{entries: entries} do
+      view = %{
+        view(9, 20, %{"t" => {5, 5}, "u" => {9, 9}})
+        | finals: %{Space => 5, Tag => 9},
+          rows: %{Space => %{"s" => {5, 9}}, Tag => %{"t" => {5, 5}, "u" => {9, 9}}}
+      }
+
+      assert [%{final_seq: 5, id: "s", problem: :above_final, type: Space}] =
+               Checks.below_final([view], entries, @member, 9)
+    end
+
+    test "flags a number shown in a type with no limit", %{entries: entries} do
+      view = %{
+        view(5, 20, %{"t" => {5, 5}})
+        | rows: %{Space => %{"s" => {5, 5}}, Tag => %{"t" => {5, 5}}}
+      }
+
+      assert [%{final_seq: nil, id: "s", problem: :above_final, type: Space}] =
+               Checks.below_final([view], entries, @member, 9)
     end
 
     # A commit that got the lock before the frame arrived can take a row away, so a row has to be
@@ -316,7 +338,7 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
   end
 
   defp view(final_seq, at, rows) do
-    %{at: at, final_seq: final_seq, rows: %{Tag => rows}, whole: MapSet.new([Tag])}
+    %{at: at, finals: %{Tag => final_seq}, rows: %{Tag => rows}}
   end
 
   defp record(carried, opts) do

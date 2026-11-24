@@ -149,10 +149,16 @@ defmodule HologramSyncTests.Consistency.Report do
        "#{problem.last_seq}", nil}
   end
 
+  defp describe_problem({:below_final, %{problem: :above_final, final_seq: nil} = problem}) do
+    {problem.client,
+     "was told at #{problem.at} no number of #{inspect(problem.type)} is final yet, and shows " <>
+       "#{problem.id} numbered #{inspect(problem.shown)}", problem.id}
+  end
+
   defp describe_problem({:below_final, %{problem: :above_final} = problem}) do
     {problem.client,
-     "was told at #{problem.at} the numbers are final up to #{problem.final_seq}, and shows " <>
-       "#{inspect(problem.type)} #{problem.id} numbered #{inspect(problem.shown)}, above it",
+     "was told at #{problem.at} the numbers of #{inspect(problem.type)} are final up to " <>
+       "#{problem.final_seq}, and shows #{problem.id} numbered #{inspect(problem.shown)}, above it",
      problem.id}
   end
 
@@ -163,8 +169,8 @@ defmodule HologramSyncTests.Consistency.Report do
         else: "shows its numbers as #{inspect(problem.shown)}"
 
     {problem.client,
-     "was told at #{problem.at} the numbers are final up to #{problem.final_seq}, and " <>
-       "#{shown}: #{inspect(problem.type)} #{problem.id} is numbered #{inspect(problem.wanted)} " <>
+     "was told at #{problem.at} the numbers of #{inspect(problem.type)} are final up to " <>
+       "#{problem.final_seq}, and #{shown}: #{problem.id} is numbered #{inspect(problem.wanted)} " <>
        "and its user could read it from commit #{problem.floor}, the last of the commits in " <>
        "lock order whose serials all lie at or below the limit, through every commit locked " <>
        "before the frame arrived", problem.id}

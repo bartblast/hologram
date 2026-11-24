@@ -396,9 +396,15 @@ export default class SyncStream {
         $.noteServedModel(frame.model_hash);
 
         // Ahead of the sweep, which goes by the rows rather than their numbers. A fill's marker
-        // carries its edge, which a type's rows reach once its marker arrives: the rows of a type
-        // still to come are a part of the truth anyway, until their own marker.
-        LocalDatabase.raiseFinal(frame.final_seq);
+        // carries its edge, which a type's rows reach once its marker arrives, and only that
+        // type's: the rows of a type still to come arrive in no number order, so one at or below
+        // the edge can still follow a higher one. The marker ending the fill makes it every
+        // type's.
+        if (frame.scope === "types") {
+          LocalDatabase.raiseTypeFinal(frame.types, frame.final_seq);
+        } else {
+          LocalDatabase.raiseFinal(frame.final_seq);
+        }
 
         if (frame.cursor) {
           $.syncCursor = frame.cursor;

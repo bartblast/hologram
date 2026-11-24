@@ -1953,6 +1953,154 @@ describe("SyncStream", () => {
     });
   });
 
+  // A fill's marker carries the fill's one final point, but each type's rows reach it only at that
+  // type's own marker: the rows of a type still to come arrive in no number order.
+  describe("a fill's final point", () => {
+    const NOTE = "MyApp.Note";
+    const TASK = "MyApp.Task";
+
+    const attributes = {
+      id: "uuid",
+      server_created_seq: "integer",
+      server_updated_seq: "integer",
+      title: "string",
+    };
+
+    const row = (id, seq) => ({
+      id,
+      server_created_seq: seq,
+      server_updated_seq: seq,
+      title: "Draft copy",
+    });
+
+    const chunk = (type, rows) => ({
+      applied_seq: null,
+      cursor: null,
+      deltas: {put_entity: {[type]: rows}},
+      final_seq: null,
+    });
+
+    const typeMarker = (type, finalSeq) => ({
+      applied_seq: null,
+      cursor: null,
+      final_seq: finalSeq,
+      scope: "types",
+      types: [type],
+    });
+
+    const allMarker = (finalSeq) => ({
+      cursor: "Nzc4LjA",
+      final_seq: finalSeq,
+      scope: "all",
+    });
+
+    const created = (type, id) =>
+      LocalDatabase.baseRow(type, id).server_created_seq;
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [NOTE]: {attributes, relationships: {}, serverOnly: []},
+          [TASK]: {attributes, relationships: {}, serverOnly: []},
+        },
+        modelHash: "a3f9c2",
+        protocolVersion: 1,
+      };
+
+      sinon.stub(Batches, "landUnsent");
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
+    // Filed at the first type's marker, a later type's 80 would read as the newest final number
+    // while its 60 is still on the way, and a read marker saved then would skip the 60.
+    it("holds a type's numbers back until that type's marker", () => {
+      SyncStream.receiveFrame("sync_deltas", chunk(TASK, [row("t1", 90)]));
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+      SyncStream.receiveFrame("sync_deltas", chunk(NOTE, [row("n1", 80)]));
+
+      assert.isNull(created(NOTE, "n1"));
+
+      SyncStream.receiveFrame("sync_deltas", chunk(NOTE, [row("n2", 60)]));
+
+      assert.isNull(created(NOTE, "n2"));
+
+      SyncStream.receiveFrame("synced", typeMarker(NOTE, 100));
+
+      assert.equal(created(NOTE, "n1"), 80);
+      assert.equal(created(NOTE, "n2"), 60);
+      assert.isNull(LocalDatabase.finalSeq());
+    });
+
+    it("files a number of a type already marked as it arrives", () => {
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+      SyncStream.receiveFrame("sync_deltas", chunk(TASK, [row("t1", 90)]));
+
+      assert.equal(created(TASK, "t1"), 90);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("holds a number above the marker's point back for its type", () => {
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+      SyncStream.receiveFrame("sync_deltas", chunk(TASK, [row("t1", 110)]));
+
+      assert.isNull(created(TASK, "t1"));
+    });
+
+    it("makes the point every type's at the marker ending the fill", () => {
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+      SyncStream.receiveFrame("sync_deltas", chunk(NOTE, [row("n1", 80)]));
+      SyncStream.receiveFrame("synced", allMarker(100));
+
+      assert.equal(LocalDatabase.finalSeq(), 100);
+      assert.equal(created(NOTE, "n1"), 80);
+    });
+
+    // The rows at or below the kept point stay held until the markers say which go, so their
+    // numbers stay final, while one above it waits for its type's marker.
+    it("keeps a refill's old point for every type", () => {
+      LocalDatabase.raiseFinal(50);
+
+      SyncStream.receiveFrame("sync_resync", {reason: "gap_too_large"});
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+
+      SyncStream.receiveFrame(
+        "sync_deltas",
+        chunk(NOTE, [row("n1", 40), row("n2", 70)]),
+      );
+
+      assert.equal(LocalDatabase.finalSeq(), 50);
+      assert.equal(created(NOTE, "n1"), 40);
+      assert.isNull(created(NOTE, "n2"));
+    });
+
+    // A fill begun again says nothing of a type until its own marker in it.
+    it("forgets a type's point when the fill starts over", () => {
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+      SyncStream.receiveFrame("sync_resync", {reason: "gap_too_large"});
+      SyncStream.receiveFrame("sync_deltas", chunk(TASK, [row("t1", 90)]));
+
+      assert.isNull(created(TASK, "t1"));
+    });
+
+    // A follower is handed the leader's frames, and has to hold back what the leader does.
+    it("holds the same numbers back in a tab that follows", () => {
+      const relay = (event, frame) =>
+        Tabs.receive({event, frame, kind: "frame"});
+
+      relay("synced", typeMarker(TASK, 100));
+      relay("sync_deltas", chunk(NOTE, [row("n1", 80)]));
+
+      assert.isNull(created(NOTE, "n1"));
+
+      relay("synced", typeMarker(NOTE, 100));
+
+      assert.equal(created(NOTE, "n1"), 80);
+    });
+  });
+
   // The tabs of a browser that have no stream of their own are handed what this one receives.
   describe("telling the group", () => {
     const frame = () =>

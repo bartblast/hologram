@@ -67,20 +67,24 @@ defmodule HologramSyncTests.Consistency.Checks do
   `Client.views/1`, given the history's entries and the limit the client held once the writes
   stopped and the server had read every commit, or nil.
 
-  Each view names a limit, and the server tells one only once it sent every change holding a
-  serial at or below it. The states in lock order up to the first commit holding a serial above the
-  limit are then all the client's to know - the last of them is the view's floor - while a commit
-  after it may yet be on its way, whatever it changed. A row of a type the view holds whole, with a
-  created number at or below the limit, that its user could read in the floor and in every state
-  after it whose transaction got the commit lock before the frame arrived, so that nothing still on
-  its way could have taken it away, has to be in the view, showing that number - and, when its
-  updated number is the same in all those states and at or below the limit, that one too.
+  Each view names a limit per type: the one every type has, which the server tells only once it
+  sent every change holding a serial at or below it, or a higher one a fill's marker gave its type,
+  told once the fill sent every row of the type. A type still filling is judged by the first, so a
+  limit vouching for rows that haven't come yet shows up here. For each, the states in lock order
+  up to the first commit holding a serial above the limit are all the client's to know - the last
+  of them is the floor - while a commit after it may yet be on its way, whatever it changed. A row
+  of the type, with a created number at or below its limit, that its user could read in the floor
+  and in every state after it whose transaction got the commit lock before the frame arrived, so
+  that nothing still on its way could have taken it away, has to be in the view, showing that
+  number - and, when its updated number is the same in all those states and at or below the limit,
+  that one too.
 
-  A number a view shows is one a reader finds, so it is always at or below the view's limit, in a
-  type held whole or not.
+  A number a view shows is one a reader finds, so it is always at or below its type's limit, and
+  a type with none shows no number.
 
-  Answers each row missing or showing other numbers, or showing one above the limit, by the view's
-  time and limit, and a limit held at the end that stops short of the last commit's serials.
+  Answers each row missing or showing other numbers, or showing one above its type's limit, by the
+  view's time and the type's limit, and a limit held at the end that stops short of the last
+  commit's serials.
   """
   @spec below_final(list(map), list(map), String.t() | nil, non_neg_integer | nil) :: list(map)
   def below_final(views, entries, user_id, final_seq) do
@@ -133,12 +137,13 @@ defmodule HologramSyncTests.Consistency.Checks do
 
   defp above_final(view) do
     for {type, rows} <- view.rows,
+        final_seq <- [Map.get(view.finals, type)],
         {id, shown} <- rows,
         {created_seq, updated_seq} = shown,
-        above?(created_seq, view.final_seq) or above?(updated_seq, view.final_seq),
+        above?(created_seq, final_seq) or above?(updated_seq, final_seq),
         do: %{
           at: view.at,
-          final_seq: view.final_seq,
+          final_seq: final_seq,
           id: id,
           problem: :above_final,
           shown: shown,
@@ -146,10 +151,20 @@ defmodule HologramSyncTests.Consistency.Checks do
         }
   end
 
-  defp above?(seq, final_seq), do: seq != nil and seq > final_seq
+  defp above?(nil, _final_seq), do: false
+
+  defp above?(_seq, nil), do: true
+
+  defp above?(seq, final_seq), do: seq > final_seq
 
   defp missing_or_misnumbered(view, indexed, user_id) do
-    case final_floor(view.final_seq, indexed) do
+    Enum.flat_map(view.finals, fn {type, final_seq} ->
+      type_missing_or_misnumbered(view, indexed, user_id, type, final_seq)
+    end)
+  end
+
+  defp type_missing_or_misnumbered(view, indexed, user_id, type, final_seq) do
+    case final_floor(final_seq, indexed) do
       nil ->
         []
 
@@ -161,16 +176,15 @@ defmodule HologramSyncTests.Consistency.Checks do
 
         {floor_entry, _floor} = Enum.find(window, &(elem(&1, 1) == floor))
 
-        for type <- whole_types(view.whole),
-            {id, {created_seq, _updated_seq}} <- seqs_of(floor_entry.state, type),
-            created_seq <= view.final_seq,
+        for {id, {created_seq, _updated_seq}} <- seqs_of(floor_entry.state, type),
+            created_seq <= final_seq,
             readable_throughout?(window, user_id, type, id),
-            problem = row_problem(view, window, type, id, created_seq),
+            problem = row_problem(view, window, type, id, created_seq, final_seq),
             problem != nil,
             do:
               Map.merge(problem, %{
                 at: view.at,
-                final_seq: view.final_seq,
+                final_seq: final_seq,
                 floor: floor,
                 id: id,
                 type: type
@@ -182,10 +196,10 @@ defmodule HologramSyncTests.Consistency.Checks do
     Enum.all?(window, fn {entry, _index} -> Model.readable?(entry.state, user_id, type, id) end)
   end
 
-  defp row_problem(view, window, type, id, created_seq) do
+  defp row_problem(view, window, type, id, created_seq, final_seq) do
     shown = get_in(view.rows, [type, id])
 
-    updated_seq = steady_updated_seq(window, type, id, view.final_seq)
+    updated_seq = steady_updated_seq(window, type, id, final_seq)
 
     cond do
       shown == nil ->
@@ -237,10 +251,6 @@ defmodule HologramSyncTests.Consistency.Checks do
       do: [%{final_seq: final_seq, last_seq: last_seq, problem: :not_final}],
       else: []
   end
-
-  defp whole_types(:all), do: Model.types()
-
-  defp whole_types(whole), do: Enum.sort(whole)
 
   defp seqs_of(state, type) do
     state

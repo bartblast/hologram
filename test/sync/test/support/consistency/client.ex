@@ -56,19 +56,16 @@ defmodule HologramSyncTests.Consistency.Client do
         }
 
   @typedoc """
-  What the client showed once a frame was in, when it held a final limit: the time the chunk
-  completing the frame arrived, the limit, the types it holds whole - every type, or the ones whose
-  marker came since its last refill began - and the numbers each of their rows shows,
-  `{server_created_seq, server_updated_seq}` by type and id, nil for one held back.
-
-  A type is whole once its marker came, and stays whole across a cut, a catch-up and a reload: what
-  a final limit vouches for is in the rows of a type whose fill ended, and only there.
+  What the client showed once a frame was in, when it held a final limit for a type: the time the
+  chunk completing the frame arrived, the limit each type's numbers are final to - the one every
+  type has, or the higher one a type's marker gave it in the fill running then - for every type
+  holding one, and the numbers each row of every type shows, `{server_created_seq,
+  server_updated_seq}` by type and id, nil for one held back.
   """
   @type view :: %{
           at: integer,
-          final_seq: non_neg_integer,
-          rows: %{module => %{String.t() => {integer | nil, integer | nil}}},
-          whole: :all | MapSet.t(module)
+          finals: %{module => non_neg_integer},
+          rows: %{module => %{String.t() => {integer | nil, integer | nil}}}
         }
 
   @doc """
@@ -214,10 +211,10 @@ defmodule HologramSyncTests.Consistency.Client do
        synced_all: false,
        synced_types: MapSet.new(),
        tables: %{},
+       type_finals: %{},
        user_id: Keyword.get(opts, :user_id),
        views: [],
-       waiting: %{},
-       whole: MapSet.new()
+       waiting: %{}
      }}
   end
 
@@ -424,12 +421,16 @@ defmodule HologramSyncTests.Consistency.Client do
   defp handle_frame(%{"event" => "synced", "data" => data}, state, _received_at) do
     frame = Jason.decode!(data)
 
-    # Ahead of the sweep, which goes by the rows rather than their numbers.
-    raised = raise_final(state, frame["final_seq"])
+    # Ahead of the sweep, which goes by the rows rather than their numbers. A type's marker makes
+    # the fill's limit only that type's - `SyncStream.receiveFrame`.
+    raised =
+      if frame["scope"] == "types",
+        do: raise_type_final(state, frame["types"], frame["final_seq"]),
+        else: raise_final(state, frame["final_seq"])
 
     marked =
       case frame["scope"] do
-        "all" -> %{mark_all_synced(raised) | complete?: true, whole: :all}
+        "all" -> %{mark_all_synced(raised) | complete?: true, type_finals: %{}}
         "types" -> mark_types_synced(raised, frame["types"])
         _unknown_scope -> raised
       end
@@ -621,7 +622,7 @@ defmodule HologramSyncTests.Consistency.Client do
 
     Enum.reduce(@numbers, {item, state}, fn name, {filed, acc} ->
       with {:ok, number} <- Map.fetch(item, name),
-           false <- final?(acc.final_seq, number) do
+           false <- final?(acc, type, number) do
         waiting =
           Map.update(
             acc.waiting,
@@ -637,11 +638,13 @@ defmodule HologramSyncTests.Consistency.Client do
     end)
   end
 
-  defp final?(_final_seq, nil), do: true
+  # At or below the limit every type has, or the one the type's marker gave it in the fill running
+  # now - `LocalDatabase.#isFinal`.
+  defp final?(_state, _type, nil), do: true
 
-  defp final?(nil, _number), do: false
-
-  defp final?(final_seq, number), do: number <= final_seq
+  defp final?(state, type, number) do
+    Enum.any?([state.final_seq, Map.get(state.type_finals, type)], &(&1 != nil and number <= &1))
+  end
 
   # Moves the limit up to the given one and files every waiting number it now reaches into a held
   # row, over a lower one or none. A limit at or below the one held moves nothing: another node
@@ -652,6 +655,19 @@ defmodule HologramSyncTests.Consistency.Client do
     do: state
 
   defp raise_final(state, final_seq), do: file_final(%{state | final_seq: final_seq})
+
+  # Moves the limit of each given type up to the given one, for the rest of the fill, and files
+  # every waiting number of theirs it now reaches - `LocalDatabase.raiseTypeFinal`.
+  defp raise_type_final(state, _types, nil), do: state
+
+  defp raise_type_final(state, types, final_seq) do
+    type_finals =
+      types
+      |> Enum.reject(&final?(state, &1, final_seq))
+      |> Enum.reduce(state.type_finals, &Map.put(&2, &1, final_seq))
+
+    file_final(%{state | type_finals: type_finals})
+  end
 
   # A waiting number of a row the client no longer holds stays, as the browser's does, until a
   # delete or a start over takes it - `LocalDatabase.#fileFinal`.
@@ -668,7 +684,7 @@ defmodule HologramSyncTests.Consistency.Client do
   end
 
   defp file_reached(state, {type, id} = key, held, numbers) do
-    {reached, waiting} = Map.split_with(numbers, fn {_name, n} -> final?(state.final_seq, n) end)
+    {reached, waiting} = Map.split_with(numbers, fn {_name, n} -> final?(state, type, n) end)
 
     waiting_left =
       if waiting == %{},
@@ -696,7 +712,7 @@ defmodule HologramSyncTests.Consistency.Client do
         {type, Map.new(rows, fn {id, row} -> {id, unnumbered(row)} end)}
       end)
 
-    %{state | final_seq: nil, tables: tables, waiting: %{}}
+    %{state | final_seq: nil, tables: tables, type_finals: %{}, waiting: %{}}
   end
 
   defp unnumbered(row) do
@@ -715,7 +731,7 @@ defmodule HologramSyncTests.Consistency.Client do
       | awaiting: MapSet.union(state.awaiting, MapSet.new(held)),
         synced_all: false,
         synced_types: MapSet.new(),
-        whole: MapSet.new()
+        type_finals: %{}
     }
   end
 
@@ -732,11 +748,7 @@ defmodule HologramSyncTests.Consistency.Client do
       |> MapSet.new()
       |> MapSet.difference(state.synced_types)
 
-    synced = %{
-      state
-      | synced_types: MapSet.union(state.synced_types, marked),
-        whole: add_whole(state.whole, types)
-    }
+    synced = %{state | synced_types: MapSet.union(state.synced_types, marked)}
 
     if state.synced_all do
       synced
@@ -771,8 +783,8 @@ defmodule HologramSyncTests.Consistency.Client do
         synced_types: MapSet.new(),
         stored_final: nil,
         tables: %{},
-        waiting: %{},
-        whole: MapSet.new()
+        type_finals: %{},
+        waiting: %{}
     }
   end
 
@@ -783,8 +795,11 @@ defmodule HologramSyncTests.Consistency.Client do
   defp restore(%{cursor: nil} = state), do: event(reset(state), :reload, %{from: :nothing})
 
   defp restore(state) do
+    # The page starts again, and has been told of no type's marker yet.
+    started = %{state | final_seq: state.stored_final, type_finals: %{}}
+
     restored =
-      Enum.reduce(state.tables, %{state | final_seq: state.stored_final}, fn {type, rows}, acc ->
+      Enum.reduce(state.tables, started, fn {type, rows}, acc ->
         Enum.reduce(rows, acc, fn {id, row}, row_acc -> unfile(row_acc, type, id, row) end)
       end)
 
@@ -793,7 +808,7 @@ defmodule HologramSyncTests.Consistency.Client do
 
   # A number already waiting for the same field is the newer one, so it stays.
   defp unfile(state, type, id, row) do
-    above = for name <- @numbers, not final?(state.final_seq, Map.get(row, name)), do: name
+    above = for name <- @numbers, not final?(state, type, Map.get(row, name)), do: name
 
     if above == [] do
       state
@@ -806,43 +821,36 @@ defmodule HologramSyncTests.Consistency.Client do
     end
   end
 
-  defp add_whole(:all, _types), do: :all
-
-  defp add_whole(whole, types) do
-    types
-    |> Enum.map(&model_type/1)
-    |> Enum.reject(&is_nil/1)
-    |> MapSet.new()
-    |> MapSet.union(whole)
-  end
-
-  # Kept only when the client holds a limit and a whole type, and only when it differs from the
-  # last one kept: the checks judge each by the rows readable when its frame arrived.
-  defp keep_view(%{final_seq: nil} = state, _received_at), do: state
-
+  # Kept only when the client holds a limit for some type, and only when it differs from the last
+  # one kept: the checks judge each by the rows readable when its frame arrived.
   defp keep_view(state, received_at) do
-    view = %{
-      at: received_at,
-      final_seq: state.final_seq,
-      rows: shown_numbers(state),
-      whole: state.whole
-    }
+    view = %{at: received_at, finals: finals(state), rows: shown_numbers(state)}
 
     case state.views do
-      [last | _views]
-      when last.final_seq == view.final_seq and last.whole == view.whole and
-             last.rows == view.rows ->
+      [last | _views] when last.finals == view.finals and last.rows == view.rows ->
         state
 
       _changed ->
-        if view.whole == MapSet.new(), do: state, else: %{state | views: [view | state.views]}
+        if view.finals == %{}, do: state, else: %{state | views: [view | state.views]}
+    end
+  end
+
+  defp finals(state) do
+    for module <- Model.types(),
+        point = type_final(state, wire_type(module)),
+        into: %{},
+        do: {module, point}
+  end
+
+  defp type_final(state, type) do
+    case Enum.reject([state.final_seq, Map.get(state.type_finals, type)], &is_nil/1) do
+      [] -> nil
+      points -> Enum.max(points)
     end
   end
 
   defp shown_numbers(state) do
-    types = if state.whole == :all, do: Model.types(), else: MapSet.to_list(state.whole)
-
-    Map.new(types, fn module ->
+    Map.new(Model.types(), fn module ->
       rows =
         state.tables
         |> Map.get(wire_type(module), %{})

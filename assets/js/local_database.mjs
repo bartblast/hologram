@@ -133,6 +133,14 @@ export default class LocalDatabase {
   // its own - until the log the numbers come from is another (see `forgetFinal`).
   static #finalSeq = null;
 
+  // type -> number: how far a fill's marker made the numbers of its type final, while the fill
+  // that sent it runs. The marker carries the fill's one point, but only for its own type: the
+  // rows of a type still to come arrive in no number order, so until its marker a number at or
+  // below the point can still be followed by a lower one. The marker ending the fill makes the
+  // point every type's, and anything that resets or replaces the final point drops them (see
+  // #dropTypeFinals).
+  static #typeFinalSeqs = {};
+
   // type -> id -> {numbers: {field: number}, shown?: {field: number}, own: boolean} - each number
   // a row came with above the final point, held back from the row until the point reaches it. The
   // row holds the number it had before, final, or null when it had none, so a number a reader
@@ -194,6 +202,7 @@ export default class LocalDatabase {
     LocalDatabase.#promotedSeqs = new Map();
 
     LocalDatabase.#dropCountable();
+    LocalDatabase.#dropTypeFinals();
     LocalDatabase.#syncedAll = false;
     LocalDatabase.#syncedTypes = new Set();
   }
@@ -375,7 +384,10 @@ export default class LocalDatabase {
     const held = LocalDatabase.baseRow(type, row.id);
 
     for (const field of SEQUENCE_FIELDS) {
-      if (!Object.hasOwn(row, field) || LocalDatabase.#isFinal(row[field])) {
+      if (
+        !Object.hasOwn(row, field) ||
+        LocalDatabase.#isFinal(type, row[field])
+      ) {
         continue;
       }
 
@@ -402,6 +414,7 @@ export default class LocalDatabase {
   // readers hold the rows they were handed.
   static forgetFinal() {
     LocalDatabase.#finalSeq = null;
+    LocalDatabase.#dropTypeFinals();
     LocalDatabase.#waiting = {};
 
     for (const [type, table] of Object.entries(LocalDatabase.#tables)) {
@@ -442,7 +455,7 @@ export default class LocalDatabase {
         continue;
       }
 
-      if (!LocalDatabase.#isFinal(item[field])) {
+      if (!LocalDatabase.#isFinal(type, item[field])) {
         entry.numbers[field] = item[field];
         filed[field] = held?.[field] ?? null;
       }
@@ -468,6 +481,23 @@ export default class LocalDatabase {
     }
 
     LocalDatabase.#finalSeq = finalSeq;
+
+    LocalDatabase.#fileFinal();
+  }
+
+  // Moves the final point of each given type up to the given one, for the rest of the fill whose
+  // marker named them, and files every waiting number of theirs it now reaches. A point the one
+  // held for everything reaches adds nothing.
+  static raiseTypeFinal(types, finalSeq) {
+    if (finalSeq === null || finalSeq === undefined) {
+      return;
+    }
+
+    for (const type of types) {
+      if (!LocalDatabase.#isFinal(type, finalSeq)) {
+        LocalDatabase.#typeFinalSeqs[type] = finalSeq;
+      }
+    }
 
     LocalDatabase.#fileFinal();
   }
@@ -637,6 +667,8 @@ export default class LocalDatabase {
   // told about, and a mark told again - a tab of the group posting its state on every join - is no
   // new word about it.
   static markAllSynced() {
+    LocalDatabase.#dropTypeFinals();
+
     if (LocalDatabase.#syncedAll) {
       return;
     }
@@ -908,6 +940,7 @@ export default class LocalDatabase {
   // shown, so a number in a row is still final here.
   static takeStoredFinal(finalSeq) {
     LocalDatabase.#finalSeq = finalSeq ?? null;
+    LocalDatabase.#dropTypeFinals();
 
     for (const [type, id] of LocalDatabase.carriedEntries()) {
       const held = LocalDatabase.baseRow(type, id);
@@ -919,7 +952,7 @@ export default class LocalDatabase {
       const above = SEQUENCE_FIELDS.filter(
         (field) =>
           (held[field] ?? null) !== null &&
-          !LocalDatabase.#isFinal(held[field]),
+          !LocalDatabase.#isFinal(type, held[field]),
       );
 
       if (above.length === 0) {
@@ -955,6 +988,7 @@ export default class LocalDatabase {
     LocalDatabase.#syncedAll = false;
     LocalDatabase.#syncedTypes = new Set();
     LocalDatabase.#tables = {};
+    LocalDatabase.#typeFinalSeqs = {};
     LocalDatabase.#waiting = {};
   }
 
@@ -966,6 +1000,13 @@ export default class LocalDatabase {
     }
 
     return copy;
+  }
+
+  // The points a fill's markers gave their types go once the fill is over, or another starts: the
+  // marker ending it makes its point everyone's, and a fill begun again says nothing of a type until
+  // its own marker.
+  static #dropTypeFinals() {
+    LocalDatabase.#typeFinalSeqs = {};
   }
 
   static #dropCountable() {
@@ -1171,7 +1212,7 @@ export default class LocalDatabase {
           for (const numbers of [entry.numbers, entry.shown ?? {}]) {
             const number = numbers[field];
 
-            if (number !== undefined && LocalDatabase.#isFinal(number)) {
+            if (number !== undefined && LocalDatabase.#isFinal(type, number)) {
               delete numbers[field];
 
               if (filed === null || BigInt(number) > BigInt(filed)) {
@@ -1210,7 +1251,8 @@ export default class LocalDatabase {
 
     const above = SEQUENCE_FIELDS.filter(
       (field) =>
-        (held[field] ?? null) !== null && !LocalDatabase.#isFinal(held[field]),
+        (held[field] ?? null) !== null &&
+        !LocalDatabase.#isFinal(type, held[field]),
     );
 
     if (above.length === 0) {
@@ -1238,13 +1280,17 @@ export default class LocalDatabase {
     return typeof number === "string" ? BigInt(number) : (number ?? null);
   }
 
-  static #isFinal(number) {
-    return (
-      number === null ||
-      number === undefined ||
-      (LocalDatabase.#finalSeq !== null &&
-        BigInt(number) <= BigInt(LocalDatabase.#finalSeq))
-    );
+  // Whether a number of the given type is final here: at or below the point every type has, or the
+  // one its type's marker gave it in the fill running now.
+  static #isFinal(type, number) {
+    if (number === null || number === undefined) {
+      return true;
+    }
+
+    return [
+      LocalDatabase.#finalSeq,
+      LocalDatabase.#typeFinalSeqs[type] ?? null,
+    ].some((point) => point !== null && BigInt(number) <= BigInt(point));
   }
 
   // A row whose created number is final is numbered, so it is no longer anybody's own, and an entry
