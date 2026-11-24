@@ -1844,10 +1844,15 @@ defmodule Hologram.Query.Expression do
   defp stored_target_fix(word, asked, target) do
     asked_spelled = Macro.to_string(asked)
     target_spelled = Macro.to_string(target)
-    option = if word == :can, do: "via", else: "to"
+    {option, scope} = stored_option(word)
 
-    "write #{word}(#{asked_spelled}, new(#{target_spelled})), and the stored row goes in #{option}: {#{asked_spelled}, #{target_spelled}}"
+    "write #{word}(#{asked_spelled}, new(#{target_spelled})), and the stored row goes in #{option}: {#{asked_spelled}, #{target_spelled}}, which #{scope}, so an or needs one allow line per alternative"
   end
+
+  defp stored_option(:can), do: {"via", "applies to the whole line"}
+
+  defp stored_option(:has_role),
+    do: {"to", "applies to the whole line and holds on any one of its roles"}
 
   # String.starts_with?/2 and String.contains?/2 compare bytes, and the query operators ignore case
   # and accents unless asked not to, so the refusal names both spellings with what was written.
