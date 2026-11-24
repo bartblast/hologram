@@ -2180,6 +2180,73 @@ defmodule Hologram.Migration.BackfillTest do
       end)
     end
 
+    # The rows are read in id order, and the one the fn raises on holds the largest id a random
+    # uuid can take, so it comes on the second page, after the first page is written.
+    test "keeps nothing of a fill whose fn raises on a later page, and applies on a retry", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      last_id = "ffffffff-ffff-4fff-bfff-ffffffffffff"
+
+      value =
+        elixir_fn(
+          ~s|fn code -> if code == "bad", do: raise("bad code"), else: String.upcase(code) end|
+        )
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        {:ok, _result} =
+          Connection.query(
+            ~s|INSERT INTO "hologram_data"."my_app_task" ("id", "code", "created_at", | <>
+              ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
+              ~s|SELECT gen_random_uuid(), 'code ' \|\| n, now(), now(), now(), now(), '{}' | <>
+              ~s|FROM generate_series(1, 1004) AS n|
+          )
+
+        {:ok, _result} =
+          Connection.query(
+            ~s|INSERT INTO "hologram_data"."my_app_task" ("id", "code", "created_at", | <>
+              ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
+              ~s|VALUES ($1::text::uuid, 'bad', now(), now(), now(), now(), '{}')|,
+            [last_id]
+          )
+
+        assert_error RuntimeError, ~r/raised on row #{last_id}: .*bad code/s, fn ->
+          apply_file([tighten_title(value)], create, first_model)
+        end
+
+        {:ok, %{rows: [[filled]]}} =
+          Connection.query(
+            ~s|SELECT COUNT(*) FROM "hologram_data"."my_app_task" WHERE "title" IS NOT NULL|
+          )
+
+        assert filled == 0
+        assert nullable?("title")
+        assert applied_versions() == MapSet.new(["20260813091522"])
+
+        {:ok, _result} =
+          Connection.query(
+            ~s|UPDATE "hologram_data"."my_app_task" SET "code" = 'fixed' WHERE "id" = $1::text::uuid|,
+            [last_id]
+          )
+
+        assert apply_file([tighten_title(value)], create, first_model) == :ok
+
+        {:ok, %{rows: [[total, wrong]]}} =
+          Connection.query(
+            ~s|SELECT COUNT(*), COUNT(*) FILTER (WHERE "title" IS DISTINCT FROM upper("code")) | <>
+              ~s|FROM "hologram_data"."my_app_task"|
+          )
+
+        assert total == 1005
+        assert wrong == 0
+        refute nullable?("title")
+        assert applied_versions() == MapSet.new(["20260813091522", "20260813142237"])
+      end)
+    end
+
     test "reads several fields, decoded", %{scratch: scratch} = context do
       value = elixir_fn(~s|fn code, rank -> code <> ":" <> Integer.to_string(rank) end|)
 
