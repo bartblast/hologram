@@ -797,8 +797,16 @@ defmodule Hologram.PolicyTest do
         allow :update, when: priority == 1 or new(priority) == 2
       end
 
-      assert [%{exact: %{predicates: [{:or, _alternatives}]}, predicates: []}] =
-               build(NewRowFixture3)[:update]
+      assert [
+               %{
+                 exact: %{
+                   predicates: [
+                     {:or, [[{:priority, :==, 1}], [{{:outer, 1, :priority}, :==, 2}]]}
+                   ]
+                 },
+                 predicates: []
+               }
+             ] = build(NewRowFixture3)[:update]
     end
 
     test "keeps a disjunction whose alternatives each keep a clause" do
