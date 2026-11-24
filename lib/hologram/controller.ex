@@ -700,10 +700,12 @@ defmodule Hologram.Controller do
       session_id ->
         current_user_id = Session.get_user_id(conn)
 
-        %{instance_id: instance_id, receipts: receipts} =
+        payload =
           conn.body_params
           |> Map.get("_json")
           |> Deserializer.deserialize()
+
+        %{instance_id: instance_id, receipts: receipts} = payload
 
         {validated_bindings, refreshed_receipts} =
           verify_and_refresh_receipts(receipts, instance_id, session_id, current_user_id)
@@ -721,21 +723,31 @@ defmodule Hologram.Controller do
         # Who the stream will serve, as the cookie says: the cookie can lag an identity change the
         # tab has already heard of, or tell the tab of one it never heard of. And a replica pair for
         # this session, as a page render mints one, for a tab whose pair a change of user dropped.
-        replica_id = UUID.uuid4()
+        # A tab that shows a pair asks for one minted for that pair's owner (see
+        # maybe_mint_replica/4).
+        session_replica_id = UUID.uuid4()
+
+        response =
+          maybe_mint_replica(
+            %{
+              actorEntityId: Auth.canonical_id(current_user_id),
+              actorUserId: Auth.owner_key(current_user_id),
+              handshakeId: handshake_id,
+              heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
+              identityTag: Session.identity_tag(conn),
+              refreshedReceipts: serialize_to_fragment(refreshed_receipts),
+              sessionReplica: %{
+                id: session_replica_id,
+                token: ReplicaIdentity.issue(session_replica_id, session_id, current_user_id)
+              }
+            },
+            payload,
+            session_id,
+            current_user_id
+          )
 
         conn
-        |> send_json(%{
-          actorEntityId: Auth.canonical_id(current_user_id),
-          actorUserId: Auth.owner_key(current_user_id),
-          handshakeId: handshake_id,
-          heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
-          identityTag: Session.identity_tag(conn),
-          refreshedReceipts: serialize_to_fragment(refreshed_receipts),
-          replica: %{
-            id: replica_id,
-            token: ReplicaIdentity.issue(replica_id, session_id, current_user_id)
-          }
-        })
+        |> send_json(response)
         |> Plug.Conn.halt()
     end
   end
@@ -1016,6 +1028,37 @@ defmodule Hologram.Controller do
   defp maybe_forbid_storing(conn, _server) do
     Plug.Conn.put_resp_header(conn, "cache-control", "no-store")
   end
+
+  # A tab that counts its batches in memory asks for an identity no other tab can hold. The one in
+  # its page can't be that, since a browser can serve one cached page to two tabs. Nothing is
+  # recorded: the signed statement is the whole of what makes the id usable.
+  #
+  # The tab shows the identity it holds, and the new one belongs to the same owner, so it can do no
+  # more than that one could. Bound to the session alone, the writes the tab has queued would be
+  # applied as whoever has signed in on that session since. An identity that no longer verifies
+  # earns no new one, and the tab's writes wait for a reload, as they do after a 403.
+  defp maybe_mint_replica(
+         response,
+         %{replica_id: presented_id, replica_token: presented_token},
+         session_id,
+         user_id
+       )
+       when is_binary(presented_id) and is_binary(presented_token) do
+    case ReplicaIdentity.verified_subject(presented_token, presented_id, session_id, user_id) do
+      {:ok, subject} ->
+        replica_id = UUID.uuid4()
+
+        Map.put(response, :replica, %{
+          id: replica_id,
+          token: ReplicaIdentity.issue_for(replica_id, subject)
+        })
+
+      {:error, _reason} ->
+        Map.put(response, :replicaRefused, true)
+    end
+  end
+
+  defp maybe_mint_replica(response, _payload, _session_id, _user_id), do: response
 
   # In dev a live reload builds the pages open in tabs first, and the page a tab shows is the page
   # it rendered last. A first page also renders the tab's document, which loads the app's assets, so

@@ -50,6 +50,12 @@ defmodule Hologram.Query do
   # quantifier the related row - or one of the row the given number of quantifiers out.
   @type name :: atom | path | {:outer, pos_integer, atom | path}
 
+  # What an update line's condition asks of the row a chain of relationships leads to: that its
+  # rules allow an operation, or that the acting user holds a role, expanded to the roles that
+  # imply it once built. It stands at the top of a condition or in an or, never in a quantifier.
+  @type new_row_check ::
+          {:can, {atom, list(atom)}} | {:has_role, {atom | list(atom), list(atom)}}
+
   @type operator ::
           :!=
           | :<
@@ -77,6 +83,13 @@ defmodule Hologram.Query do
   # The data form a filter is given in: a name or a placeholder paired with a value, an or: entry,
   # or a quantifier's any:, none: or all: entry.
   @type predicates :: list({name | Placeholder.t(), any})
+
+  # A clause of a policy condition: a filter's, or a check on a related row.
+  @type policy_clause :: clause | new_row_check | {:or, list(list(policy_clause))}
+
+  # The data form a policy condition is given in: a filter's, with a check on a related row keyed
+  # by what it asks and paired with the chain to that row.
+  @type policy_predicates :: list({name | Placeholder.t() | {:can | :has_role, atom}, any})
 
   # The operand is a literal, a placeholder, the acting user ({:actor}) - in a policy condition only
   # - or an attribute_operand.
@@ -453,7 +466,9 @@ defmodule Hologram.Query do
   holds then, which is what lets two writers moving one attribute add up instead of one
   overwriting the other. Only the recorded amount is written, never the field. The attribute's
   constraints are judged on that result at the write, so a move that would cross a declared
-  minimum, maximum or range is reported by DB.update/1.
+  minimum, maximum or range is reported by DB.update/1. In the browser only the server can judge
+  that result: DB.update/1 answers :ok and the move applies at once, and if the server refuses
+  it, all of the action's writes roll back.
 
   Stages apply in order and the struct holds one op per attribute: moving an attribute the
   struct already carries a put value for folds the amount into that value (put 10 then

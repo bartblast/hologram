@@ -751,6 +751,27 @@ describe("DataLayer", () => {
       });
     });
 
+    it("defines the struct functions of the model's entity types", () => {
+      const sync = globalThis.Hologram.sync;
+
+      globalThis.Hologram.sync = {model: {"MyApp.StructDefined": {}}};
+
+      try {
+        DataLayer.defineManuallyPortedFunctions();
+
+        assert.isTrue(
+          globalThis.Elixir_MyApp_StructDefined.__exports__.has("__struct__/0"),
+        );
+
+        assert.isTrue(
+          globalThis.Elixir_MyApp_StructDefined.__exports__.has("__struct__/1"),
+        );
+      } finally {
+        globalThis.Hologram.sync = sync;
+        delete globalThis.Elixir_MyApp_StructDefined;
+      }
+    });
+
     it("defines the hand-written Auth, DB, Entity, Job and Query.Stage functions as public functions of their modules", () => {
       DataLayer.defineManuallyPortedFunctions();
 
@@ -758,12 +779,15 @@ describe("DataLayer", () => {
         globalThis.Elixir_Hologram_Auth.__exports__,
         new Set([
           "can?/3",
+          "can?/4",
           "grant_role/2",
           "grant_role/3",
+          "grant_role/4",
           "has_role?/2",
           "has_role?/3",
           "revoke_role/2",
           "revoke_role/3",
+          "revoke_role/4",
         ]),
       );
 
@@ -888,6 +912,62 @@ describe("DataLayer", () => {
       DataLayer.flush();
 
       sinon.assert.calledOnceWithExactly(flushing);
+    });
+  });
+
+  describe("holdsUnsentWrites()", () => {
+    let originalMode;
+
+    beforeEach(() => {
+      originalMode = Durability.mode;
+      Durability.mode = "memory";
+
+      sinon.stub(Batches, "pendingCount").returns(1);
+      sinon.stub(Tabs, "sends").returns(true);
+      sinon.stub(SyncStream, "holdsWrites").returns(false);
+    });
+
+    afterEach(() => {
+      Durability.mode = originalMode;
+    });
+
+    it("is true for a tab with no store that can still send a write", () => {
+      assert.isTrue(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false when the store holds the writes", () => {
+      Durability.mode = "indexeddb";
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false with nothing to send", () => {
+      Batches.pendingCount.returns(0);
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false for a tab that doesn't send", () => {
+      Tabs.sends.returns(false);
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false for a tab stopped over its model", () => {
+      SyncStream.holdsWrites.returns(true);
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false for a tab the server refused an identity", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      try {
+        assert.isFalse(DataLayer.holdsUnsentWrites());
+      } finally {
+        Replica.reset();
+      }
     });
   });
 
@@ -1497,6 +1577,19 @@ describe("DataLayer", () => {
         assert.isTrue(followToSecondUser());
       });
 
+      // Asked for, or refused, the previous user.
+      it("forgets the pair this tab asked for", () => {
+        Replica.adoptOwn({id: "replica-1", token: "token-1"});
+        Replica.requestMint();
+        Replica.refuseMint();
+
+        followToSecondUser();
+
+        assert.isFalse(Replica.minted);
+        assert.isFalse(Replica.mintRefused);
+        assert.isFalse(Replica.awaitingMint);
+      });
+
       // The store or the new user's group hands it the new user's pair once the move settles.
       it("holds no pair in a group", () => {
         Replica.fresh = {id: "replica-1", token: "token-1"};
@@ -1886,7 +1979,7 @@ describe("DataLayer", () => {
           let disowning, leaving;
 
           beforeEach(() => {
-            disowning = sinon.stub(Batches, "disownStored");
+            disowning = sinon.stub(Batches, "disown");
             leaving = sinon.stub(Tabs, "leave");
 
             loading.callsFake(async () => {
@@ -2418,6 +2511,16 @@ describe("DataLayer", () => {
         assert.isFalse(SyncStream.holdsWrites());
       });
 
+      // Minted for this tab alone, so its batches are numbered under it as under one it asked for.
+      it("counts as the tab's own in a tab in no group that holds none", () => {
+        Replica.requestMint();
+
+        DataLayer.takeHandshake(answer());
+
+        assert.isTrue(Replica.minted);
+        assert.isFalse(Replica.withoutIdentity());
+      });
+
       describe("in a group", () => {
         beforeEach(() => {
           Tabs.name = "hologram.1.model.u1";
@@ -2788,6 +2891,56 @@ describe("DataLayer", () => {
       DataLayer.listenToStream(eventSource);
 
       sinon.assert.calledOnceWithExactly(listening, eventSource);
+    });
+
+    describe("when the stream says sync is starting over", () => {
+      let asking, resync;
+
+      beforeEach(() => {
+        const eventSource = {
+          addEventListener: (kind, listener) => {
+            if (kind === "sync_resync") resync = listener;
+          },
+        };
+
+        Replica.reset();
+
+        sinon.stub(SyncStream, "listen");
+        asking = sinon.stub(Sse, "askForReplica");
+
+        DataLayer.listenToStream(eventSource);
+      });
+
+      afterEach(() => {
+        Replica.reset();
+      });
+
+      const refuse = () => {
+        Replica.requestMint();
+        Replica.refuseMint();
+      };
+
+      it("has a refused tab ask again when the user changed", () => {
+        refuse();
+
+        resync({data: JSON.stringify({reason: "identity"})});
+
+        sinon.assert.calledOnce(asking);
+      });
+
+      it("leaves a refused tab alone for any other reason", () => {
+        refuse();
+
+        resync({data: JSON.stringify({reason: "no place to resume from"})});
+
+        sinon.assert.notCalled(asking);
+      });
+
+      it("leaves a tab that wasn't refused alone", () => {
+        resync({data: JSON.stringify({reason: "identity"})});
+
+        sinon.assert.notCalled(asking);
+      });
     });
   });
 
@@ -3337,6 +3490,103 @@ describe("DataLayer", () => {
     });
   });
 
+  describe("takeReplica()", () => {
+    const minted = {id: "replica-minted", token: "token-minted"};
+
+    afterEach(() => {
+      Replica.reset();
+    });
+
+    it("takes the identity and answers the sender's promise when the tab asked for one", () => {
+      const sending = Promise.resolve();
+      const flush = sinon.stub(Batches, "flush").returns(sending);
+
+      Replica.requestMint();
+
+      assert.strictEqual(DataLayer.takeReplica(minted), sending);
+      assert.equal(Replica.id, "replica-minted");
+      sinon.assert.calledOnce(flush);
+
+      flush.restore();
+    });
+
+    it("ends the asking when the server refused", () => {
+      const flush = sinon.stub(Batches, "flush");
+
+      Replica.requestMint();
+
+      assert.isNull(DataLayer.takeReplica(undefined, true));
+      assert.isFalse(Replica.awaitingMint);
+      assert.isTrue(Replica.mintRefused);
+      sinon.assert.notCalled(flush);
+
+      flush.restore();
+    });
+
+    it("wakes nothing when the tab did not ask", () => {
+      const flush = sinon.stub(Batches, "flush");
+
+      assert.isNull(DataLayer.takeReplica(minted));
+      assert.isNull(Replica.id);
+      sinon.assert.notCalled(flush);
+
+      flush.restore();
+    });
+  });
+
+  describe("replicaToReplace()", () => {
+    afterEach(() => {
+      Replica.reset();
+    });
+
+    it("answers the pair in use while the tab is asking for a new one", () => {
+      Replica.adopt({id: "replica-held", token: "token-held"});
+      Replica.requestMint();
+
+      assert.deepStrictEqual(DataLayer.replicaToReplace(), {
+        id: "replica-held",
+        token: "token-held",
+      });
+    });
+
+    // So a refusal can end when its owner signs back in.
+    it("answers the pair in use after a refusal", () => {
+      Replica.adopt({id: "replica-held", token: "token-held"});
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      assert.equal(DataLayer.replicaToReplace().id, "replica-held");
+    });
+
+    it("answers nothing otherwise", () => {
+      Replica.adopt({id: "replica-held", token: "token-held"});
+
+      assert.isNull(DataLayer.replicaToReplace());
+    });
+
+    // A tab that followed a change of user holds no pair. Shown as one, it would be refused for
+    // good, and the tab would wait for its own pair forever.
+    it("answers nothing while the tab asking holds no pair", () => {
+      Replica.requestMint();
+
+      assert.isNull(DataLayer.replicaToReplace());
+    });
+  });
+
+  describe("wantsReplica()", () => {
+    afterEach(() => {
+      Replica.reset();
+    });
+
+    it("answers whether the tab is waiting for an identity", () => {
+      assert.isFalse(DataLayer.wantsReplica());
+
+      Replica.requestMint();
+
+      assert.isTrue(DataLayer.wantsReplica());
+    });
+  });
+
   describe("streamOpened()", () => {
     it("wakes the sender", () => {
       const flushing = sinon.stub(Batches, "flush");
@@ -3344,6 +3594,30 @@ describe("DataLayer", () => {
       DataLayer.streamOpened();
 
       sinon.assert.calledOnceWithExactly(flushing);
+    });
+  });
+
+  describe("streamBeat()", () => {
+    it("wakes the sender when the queue is empty", () => {
+      const flushing = sinon.stub(Batches, "flush");
+
+      sinon.stub(Batches, "pendingCount").returns(0);
+
+      DataLayer.streamBeat();
+
+      sinon.assert.calledOnceWithExactly(flushing);
+    });
+
+    // A beat must never send a batch again: it would cut a retry's backoff short, and repeat a send
+    // that raised.
+    it("leaves a queue holding batches alone", () => {
+      const flushing = sinon.stub(Batches, "flush");
+
+      sinon.stub(Batches, "pendingCount").returns(1);
+
+      DataLayer.streamBeat();
+
+      sinon.assert.notCalled(flushing);
     });
   });
 });

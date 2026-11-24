@@ -1992,6 +1992,25 @@ describe("SyncStream", () => {
       delete globalThis.Hologram.sync;
     });
 
+    it("defines the struct functions of the types the rules hold", () => {
+      const original = globalThis.Elixir_MyApp_Doc;
+      delete globalThis.Elixir_MyApp_Doc;
+
+      try {
+        eventSource.listeners.sync_rules({data: envelope()});
+
+        assert.isTrue(
+          globalThis.Elixir_MyApp_Doc.__exports__.has("__struct__/0"),
+        );
+      } finally {
+        delete globalThis.Elixir_MyApp_Doc;
+
+        if (original !== undefined) {
+          globalThis.Elixir_MyApp_Doc = original;
+        }
+      }
+    });
+
     // A tab joining the group answers by the rules the group syncs under, which the stream handed
     // over to this tab alone.
     it("keeps the frame for the tabs joining later", () => {
@@ -2088,7 +2107,7 @@ describe("SyncStream", () => {
       eventSource.listeners.synced({data: envelope("all", "Nzc4LjA")});
 
       assert.isTrue(persisting.calledOnce);
-      assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA"]);
+      assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA", []]);
     });
 
     // The holder's stored record names the row the sweep took, and a reload would read it back.
@@ -2111,7 +2130,34 @@ describe("SyncStream", () => {
       });
 
       sinon.assert.calledOnceWithExactly(reading, written);
-      sinon.assert.calledOnceWithExactly(persisting, records, null);
+      sinon.assert.calledOnceWithExactly(persisting, records, null, []);
+    });
+
+    // A catch-up's marker can sweep a row a stored set names, with no row of its own to write. Only
+    // the tab storing a frame takes what it took out of stored sets, so a tab handed one still has
+    // it queued when it next hears a marker, by which time the pair may be back.
+    it("stores the pairs the marker's sweep took out, and none a relayed frame left", () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+
+      const removal = (id) => ({
+        id,
+        relationship: "tasks",
+        targetIds: ["t1"],
+        type: "MyApp.Project",
+      });
+
+      const taking = sinon.stub(LocalDatabase, "takeStoredFactRemovals");
+
+      taking.onFirstCall().returns([removal("relayed")]);
+      taking.onSecondCall().returns([removal("swept")]);
+
+      eventSource.listeners.synced({
+        data: JSON.stringify({cursor: null, scope: "all"}),
+      });
+
+      sinon.assert.calledOnceWithExactly(persisting, [], null, [
+        removal("swept"),
+      ]);
     });
 
     it("passes the marker's number on to what it settles", () => {

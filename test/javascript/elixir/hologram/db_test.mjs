@@ -59,6 +59,8 @@ describe("Elixir_Hologram_DB", () => {
 
   const ID_1 = "018f0000-0000-7000-8000-000000000001";
   const ID_2 = "018f0000-0000-7000-8000-000000000002";
+  const TAG_1 = "018f0000-0000-7000-8000-000000000011";
+  const TAG_2 = "018f0000-0000-7000-8000-000000000012";
 
   const field = (struct, name) =>
     struct.data[Type.encodeMapKey(Type.atom(name))][1];
@@ -106,7 +108,7 @@ describe("Elixir_Hologram_DB", () => {
           relationships: {},
           serverOnly: ["api_token"],
         },
-        // A counter with a floor, so a move can be judged on the value it ARRIVES at.
+        // A counter with a floor, to show a move past it is still sent.
         [ITEM]: {
           attributes: {id: "uuid", stock: "integer"},
           constraints: {stock: {min: Type.integer(0)}},
@@ -128,7 +130,7 @@ describe("Elixir_Hologram_DB", () => {
           relationships: {},
           serverOnly: [],
         },
-        // A job type - the three attributes its framework fills are what tells one apart here.
+        // A job type - the attributes its framework fills are what tells one apart here.
         [NOTIFY]: {
           attributes: {
             actor_id: "uuid",
@@ -140,7 +142,14 @@ describe("Elixir_Hologram_DB", () => {
           constraints: {},
           defaults: {},
           enumValues: {},
-          frameworkAttributes: ["actor_id", "error", "status"],
+          frameworkAttributes: [
+            "actor_id",
+            "attempt",
+            "error",
+            "run_as_server",
+            "scheduled_at",
+            "status",
+          ],
           relationships: {},
           serverOnly: [],
         },
@@ -426,6 +435,22 @@ describe("Elixir_Hologram_DB", () => {
       return held;
     };
 
+    it("raises for an id that isn't an entity id, and appends nothing", () => {
+      const entity = Model.box(TASK, {
+        done: false,
+        id: "NOT-AN-ID",
+        title: "alpha",
+      });
+
+      assertBoxedError(
+        () => create(entity),
+        "Hologram.MisuseError",
+        'invalid id "NOT-AN-ID" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+      );
+
+      assert.deepStrictEqual(Batches.current().writes, []);
+    });
+
     it("raises for a value the client was never shown", () => {
       assertBoxedError(
         () => create(withServerOnlyValue()),
@@ -604,11 +629,41 @@ describe("Elixir_Hologram_DB", () => {
       });
     });
 
+    it("says it was based on nothing for a field named like an inherited property", () => {
+      const entry = globalThis.Hologram.sync.model[TASK];
+
+      entry.attributes.constructor = "string";
+      entry.constraints = {...entry.constraints, constructor: {optional: true}};
+      Model.reset();
+
+      update(
+        putAttribute(held(), pairs([["constructor", Type.bitstring("x")]])),
+      );
+
+      assert.deepStrictEqual(Batches.current().writes[0].based_on, {});
+    });
+
     it("answers :ok", () => {
       assert.deepStrictEqual(
         update(putAttribute(held(), pairs([["title", Type.bitstring("x")]]))),
         Type.atom("ok"),
       );
+    });
+
+    it("raises for an edge whose target isn't an entity id, and appends nothing", () => {
+      const entity = addRelationship(
+        held(),
+        Type.atom("tags"),
+        Type.bitstring("nope"),
+      );
+
+      assertBoxedError(
+        () => update(entity),
+        "Hologram.MisuseError",
+        'invalid id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+      );
+
+      assert.deepStrictEqual(Batches.current().writes, []);
     });
 
     it("carries no deltas key for an update that only puts", () => {
@@ -619,9 +674,9 @@ describe("Elixir_Hologram_DB", () => {
 
     it("appends the edges it records, in one order", () => {
       const entity = addRelationship(
-        addRelationship(held(), Type.atom("tags"), Type.bitstring("g2")),
+        addRelationship(held(), Type.atom("tags"), Type.bitstring(TAG_2)),
         Type.atom("tags"),
-        Type.bitstring("g1"),
+        Type.bitstring(TAG_1),
       );
 
       update(entity);
@@ -629,8 +684,8 @@ describe("Elixir_Hologram_DB", () => {
       assert.deepStrictEqual(
         Batches.current().writes.map((write) => [write.op, write.target_id]),
         [
-          ["add_relationship", "g1"],
-          ["add_relationship", "g2"],
+          ["add_relationship", TAG_1],
+          ["add_relationship", TAG_2],
         ],
       );
     });
@@ -640,10 +695,10 @@ describe("Elixir_Hologram_DB", () => {
         addRelationship(
           putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
           Type.atom("tags"),
-          Type.bitstring("g1"),
+          Type.bitstring(TAG_1),
         ),
         Type.atom("tags"),
-        Type.bitstring("g2"),
+        Type.bitstring(TAG_2),
       );
 
       update(entity);
@@ -660,9 +715,9 @@ describe("Elixir_Hologram_DB", () => {
 
     it("marks the edges after the first of a call that changes only edges", () => {
       const entity = addRelationship(
-        addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")),
+        addRelationship(held(), Type.atom("tags"), Type.bitstring(TAG_1)),
         Type.atom("tags"),
-        Type.bitstring("g2"),
+        Type.bitstring(TAG_2),
       );
 
       update(entity);
@@ -674,7 +729,7 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("marks nothing on a call that writes one entry", () => {
-      update(addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")));
+      update(addRelationship(held(), Type.atom("tags"), Type.bitstring(TAG_1)));
 
       assert.notProperty(Batches.current().writes[0], "same_call");
     });
@@ -684,7 +739,7 @@ describe("Elixir_Hologram_DB", () => {
         addRelationship(
           putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
           Type.atom("tags"),
-          Type.bitstring("g1"),
+          Type.bitstring(TAG_1),
         ),
       );
 
@@ -704,7 +759,7 @@ describe("Elixir_Hologram_DB", () => {
       const entity = addRelationship(
         putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
         Type.atom("tags"),
-        Type.bitstring("g1"),
+        Type.bitstring(TAG_1),
       );
 
       update(entity);
@@ -915,7 +970,8 @@ describe("Elixir_Hologram_DB", () => {
       assert.notProperty(Batches.current().writes[0], "data");
     });
 
-    it("answers a refusal judging a move on the value it arrives at", () => {
+    // The value held here can be out of date, so where a move lands is the server's to judge.
+    it("sends a move the held value would take past a declared bound", () => {
       LocalDatabase.putRow(ITEM, {
         id: ID_2,
         stock: 0,
@@ -928,19 +984,48 @@ describe("Elixir_Hologram_DB", () => {
         decrement(item, Type.atom("stock"), Type.integer(1)),
       );
 
-      assert.deepStrictEqual(result.data[0], Type.atom("error"));
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.deepStrictEqual(Batches.current().writes[0].deltas, {stock: -1});
+      assert.strictEqual(LocalDatabase.getRow(ITEM, ID_2).stock, -1);
+    });
 
-      assert.deepStrictEqual(
-        result.data[1],
-        Type.map([
-          [
-            Type.atom("stock"),
-            Type.list([Type.tuple([Type.atom("min"), Type.integer(0)])]),
-          ],
-        ]),
+    it("sends a move the held value would take past what a column holds", () => {
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 9223372036854775807n,
+        $revisions: {stock: 12},
+      });
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      const result = update(
+        increment(item, Type.atom("stock"), Type.integer(1)),
       );
 
-      assert.deepStrictEqual(Batches.current().writes, []);
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.deepStrictEqual(Batches.current().writes[0].deltas, {stock: 1});
+
+      assert.strictEqual(
+        LocalDatabase.getRow(ITEM, ID_2).stock,
+        9223372036854775808n,
+      );
+    });
+
+    it("doesn't raise from update!/1 for a move the held value would take past a bound", () => {
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 0,
+        $revisions: {stock: 12},
+      });
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      const result = updateBang(
+        decrement(item, Type.atom("stock"), Type.integer(1)),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.deepStrictEqual(Batches.current().writes[0].deltas, {stock: -1});
     });
 
     // What the entries carry is asserted above; these read the same write back through the
@@ -1000,11 +1085,11 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("shows the edges it recorded", () => {
-      update(addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")));
+      update(addRelationship(held(), Type.atom("tags"), Type.bitstring(TAG_1)));
 
       assert.deepStrictEqual(
         LocalDatabase.getTargetIds(TASK, "tags", ID_1),
-        new Set(["g1"]),
+        new Set([TAG_1]),
       );
     });
 
@@ -1033,6 +1118,23 @@ describe("Elixir_Hologram_DB", () => {
         () => update(term),
         "Hologram.MisuseError",
         `update takes an entity struct, got: ${JSON.stringify(term)}`,
+      );
+    });
+
+    it("raises for an id that isn't a canonical UUID", () => {
+      const invalid = Model.box(TASK, {
+        done: false,
+        id: "constructor",
+        title: "x",
+      });
+
+      assertBoxedError(
+        () =>
+          update(
+            putAttribute(invalid, pairs([["title", Type.bitstring("y")]])),
+          ),
+        "Hologram.MisuseError",
+        'invalid id "constructor" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
       );
     });
 
@@ -1095,6 +1197,720 @@ describe("Elixir_Hologram_DB", () => {
     });
   });
 
+  // What the browser refuses by itself is what the values a call states can't pass, whatever the
+  // server holds. Everything else goes to the server, which judges every write.
+  describe("update/1 of rules reading the row after the change", () => {
+    const ACTOR = "018f0000-0000-7000-8000-00000000000a";
+    const BOARD = "MyApp.Board";
+    const BOARD_1 = "018f0000-0000-7000-8000-00000000000b";
+    const BOARD_2 = "018f0000-0000-7000-8000-00000000000c";
+    const CARD = "MyApp.Card";
+    const LABEL = "MyApp.Label";
+    const LABEL_1 = "018f0000-0000-7000-8000-00000000000d";
+
+    const rule = (overrides = {}) => ({
+      predicates: [],
+      to: null,
+      via: null,
+      ...overrides,
+    });
+
+    const newName = (name) => ({name, outer: 1});
+
+    const datetimeInYear = (year, utcOffset = 0n) =>
+      Type.struct("DateTime", [
+        [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+        [Type.atom("day"), Type.integer(1)],
+        [Type.atom("hour"), Type.integer(0)],
+        [
+          Type.atom("microsecond"),
+          Type.tuple([Type.integer(0), Type.integer(6)]),
+        ],
+        [Type.atom("minute"), Type.integer(0)],
+        [Type.atom("month"), Type.integer(1)],
+        [Type.atom("second"), Type.integer(0)],
+        [Type.atom("std_offset"), Type.integer(0)],
+        [Type.atom("time_zone"), Type.bitstring("Etc/UTC")],
+        [Type.atom("utc_offset"), Type.integer(utcOffset)],
+        [Type.atom("year"), Type.integer(year)],
+        [Type.atom("zone_abbr"), Type.bitstring("UTC")],
+      ]);
+
+    const dateInYear = (year) =>
+      Type.struct("Date", [
+        [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+        [Type.atom("day"), Type.integer(1)],
+        [Type.atom("month"), Type.integer(1)],
+        [Type.atom("year"), Type.integer(year)],
+      ]);
+
+    const exact = (predicates, overrides = {}) =>
+      rule({new: {predicates}, ...overrides});
+
+    const newIs = (name, value) => exact([[newName(name), "==", value]]);
+
+    const ok = Type.atom("ok");
+
+    let timers;
+
+    const defineCard = (policy) => {
+      const plain = (attributes) => ({
+        attributes,
+        constraints: {},
+        defaults: {},
+        enumValues: {},
+        frameworkAttributes: [],
+        inverses: {},
+        policy: {},
+        relationships: {},
+        serverOnly: [],
+      });
+
+      globalThis.Hologram.sync.model[BOARD] = plain({
+        archived: "boolean",
+        id: "uuid",
+      });
+
+      globalThis.Hologram.sync.model[LABEL] = plain({id: "uuid"});
+
+      globalThis.Hologram.sync.model[CARD] = {
+        ...plain({
+          count: "integer",
+          id: "uuid",
+          code: "string",
+          held_at: "datetime",
+          held_on: "date",
+          note: "string",
+          rating: "float",
+          status: "enum",
+          title: "string",
+        }),
+        constraints: {
+          code: {
+            format: {opts: Type.list([]), source: "^\\S+$"},
+            optional: true,
+          },
+          held_at: {optional: true},
+          held_on: {optional: true},
+          note: {optional: true},
+          rating: {optional: true},
+          title: {optional: true},
+        },
+        enumValues: {status: ["pending", "approved", "rejected"]},
+        policy,
+        relationships: {
+          board: {optional: true, toMany: false, type: BOARD},
+          labels: {toMany: true, type: LABEL},
+        },
+      };
+
+      Model.reset();
+
+      LocalDatabase.putRow(CARD, {
+        board_id: BOARD_1,
+        count: 9,
+        id: ID_1,
+        note: "a",
+        status: "pending",
+        title: "t",
+      });
+
+      LocalDatabase.putRow(BOARD, {archived: false, id: BOARD_1});
+      LocalDatabase.putRow(BOARD, {archived: false, id: BOARD_2});
+    };
+
+    const card = () => Model.box(CARD, LocalDatabase.getRow(CARD, ID_1));
+
+    const put = (values) =>
+      putAttribute(
+        card(),
+        Type.list(
+          Object.entries(values).map(([name, value]) =>
+            Type.tuple([Type.atom(name), value]),
+          ),
+        ),
+      );
+
+    const status = (label) => ({status: Type.atom(label)});
+    const note = (text) => ({note: Type.bitstring(text)});
+
+    const denied = (fields, hint = "") =>
+      `not allowed to update ${CARD} "${ID_1}" - no allow line that holds covers ${fields}${hint}`;
+
+    const assertDenied = (values, fields, hint) =>
+      assertBoxedError(
+        () => update(put(values)),
+        "Hologram.AccessDeniedError",
+        denied(fields, hint),
+      );
+
+    const assertSent = (entity) => {
+      assert.deepStrictEqual(update(entity), ok);
+      assert.equal(Batches.current().writes.length, 1);
+    };
+
+    beforeEach(() => {
+      timers = sinon.useFakeTimers(1_756_100_000_123);
+      Batches.open("todos");
+      LocalDatabase.actorEntityId = ACTOR;
+    });
+
+    afterEach(() => {
+      timers.restore();
+      LocalDatabase.actorEntityId = null;
+    });
+
+    describe("what the call alone decides", () => {
+      it("sends a value its rule allows", () => {
+        defineCard({"update:status": [newIs("status", "approved")]});
+
+        assertSent(put(status("approved")));
+      });
+
+      it("refuses a value its rule can't allow", () => {
+        defineCard({"update:status": [newIs("status", "approved")]});
+
+        assertDenied(status("rejected"), ":status");
+        assert.equal(Batches.current().writes.length, 0);
+      });
+
+      it("judges update/3 the same way", () => {
+        defineCard({"update:status": [newIs("status", "approved")]});
+
+        assertBoxedError(
+          () =>
+            updateById(
+              Type.alias(CARD),
+              Type.bitstring(ID_1),
+              Type.map([[Type.atom("status"), Type.atom("rejected")]]),
+            ),
+          "Hologram.AccessDeniedError",
+          denied(":status"),
+        );
+      });
+
+      it("refuses whatever the stored row holds, when the stated value fails", () => {
+        defineCard({
+          "update:status": [
+            exact([
+              ["status", "==", "pending"],
+              [newName("status"), "==", "approved"],
+            ]),
+          ],
+        });
+
+        assertDenied(status("rejected"), ":status");
+      });
+
+      it("refuses a rule with a role when its stated value fails", () => {
+        defineCard({
+          "update:status": [
+            exact([[newName("status"), "==", "approved"]], {
+              to: [["own", ["editor"]]],
+            }),
+          ],
+        });
+
+        assertDenied(status("rejected"), ":status");
+      });
+
+      it("compares two stated values", () => {
+        defineCard({
+          "update:note": [
+            exact([[newName("note"), "==", {attribute: newName("title")}]]),
+          ],
+          "update:title": [rule()],
+        });
+
+        assertDenied(
+          {note: Type.bitstring("x"), title: Type.bitstring("y")},
+          ":note",
+        );
+      });
+
+      it("reads a list of allowed values", () => {
+        defineCard({
+          "update:status": [
+            exact([[newName("status"), "in", ["approved", "pending"]]]),
+          ],
+        });
+
+        assertDenied(status("rejected"), ":status");
+      });
+
+      it("orders an enum by its declared values", () => {
+        defineCard({
+          "update:status": [exact([[newName("status"), ">", "pending"]])],
+        });
+
+        assertDenied(status("pending"), ":status");
+
+        assert.deepStrictEqual(
+          update(put(status("approved"))),
+          Type.atom("ok"),
+        );
+      });
+
+      it("refuses when every alternative of a disjunction fails", () => {
+        defineCard({
+          "update:status": [
+            exact([
+              {
+                or: [
+                  [[newName("status"), "==", "approved"]],
+                  [[newName("status"), "==", "pending"]],
+                ],
+              },
+            ]),
+          ],
+        });
+
+        assertDenied(status("rejected"), ":status");
+      });
+
+      it("judges an integer past 2^53 by its exact value", () => {
+        defineCard({
+          "update:count": [
+            exact([[newName("count"), "==", {$integer: "9007199254740993"}]]),
+          ],
+        });
+
+        assertDenied({count: Type.integer(9007199254740995n)}, ":count");
+        assertSent(put({count: Type.integer(9007199254740993n)}));
+      });
+
+      it("sends a change another line allows", () => {
+        defineCard({
+          "update:status": [
+            newIs("status", "approved"),
+            newIs("status", "rejected"),
+          ],
+        });
+
+        assertSent(put(status("rejected")));
+      });
+
+      it("reads a stated empty reference", () => {
+        defineCard({
+          "update:board": [exact([[newName("board_id"), "!=", null]])],
+        });
+
+        assertDenied({board_id: Type.nil()}, ":board");
+      });
+
+      it("refuses a changed field no line covers", () => {
+        defineCard({"update:status": [newIs("status", "approved")]});
+
+        assertDenied({...status("approved"), ...note("x")}, ":note");
+      });
+
+      it("names every refused field, sorted", () => {
+        defineCard({
+          "update:note": [newIs("note", "x")],
+          "update:status": [newIs("status", "approved")],
+        });
+
+        assertDenied({...status("rejected"), ...note("y")}, ":note, :status");
+      });
+
+      describe("a counter moved beside a value the rule refuses", () => {
+        const INVALID_COUNT =
+          " (the value given for :count is invalid, so its rule read the stored value)";
+
+        const moved = (amount) => () =>
+          update(
+            increment(
+              put(note("no")),
+              Type.atom("count"),
+              Type.integer(amount),
+            ),
+          );
+
+        beforeEach(() => {
+          defineCard({update: [newIs("note", "ok")]});
+        });
+
+        it("refuses it with the value it names as refused", () => {
+          assertBoxedError(
+            moved(1n),
+            "Hologram.AccessDeniedError",
+            denied(":count, :note"),
+          );
+        });
+
+        it("says a move past what the column holds was invalid", () => {
+          assertBoxedError(
+            moved(9_223_372_036_854_775_807n),
+            "Hologram.AccessDeniedError",
+            denied(":count, :note", INVALID_COUNT),
+          );
+        });
+
+        it("says an amount no column holds was invalid", () => {
+          assertBoxedError(
+            moved(10_000_000_000_000_000_000n),
+            "Hologram.AccessDeniedError",
+            denied(":count, :note", INVALID_COUNT),
+          );
+        });
+
+        // A move carrying a float, which only a hand-edited struct can.
+        const withFloatAmount = (entity) => {
+          const metaKey = Type.encodeMapKey(Type.atom("__meta__"));
+          const opsKey = Type.encodeMapKey(Type.atom("attribute_ops"));
+          const countKey = Type.encodeMapKey(Type.atom("count"));
+          const meta = entity.data[metaKey][1];
+          const ops = meta.data[opsKey][1];
+
+          const floatOp = Type.tuple([Type.atom("increment"), Type.float(1.5)]);
+
+          return {
+            ...entity,
+            data: {
+              ...entity.data,
+              [metaKey]: [
+                Type.atom("__meta__"),
+                {
+                  ...meta,
+                  data: {
+                    ...meta.data,
+                    [opsKey]: [
+                      Type.atom("attribute_ops"),
+                      {
+                        ...ops,
+                        data: {
+                          ...ops.data,
+                          [countKey]: [Type.atom("count"), floatOp],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          };
+        };
+
+        it("answers an amount that isn't an integer with its violation", () => {
+          defineCard({update: [rule()]});
+
+          const entity = increment(card(), Type.atom("count"), Type.integer(1));
+
+          assert.deepStrictEqual(
+            update(withFloatAmount(entity)),
+            Type.tuple([
+              Type.atom("error"),
+              Type.map([
+                [
+                  Type.atom("count"),
+                  Type.list([
+                    Type.tuple([Type.atom("type"), Type.atom("integer")]),
+                  ]),
+                ],
+              ]),
+            ]),
+          );
+        });
+
+        it("says an amount that isn't an integer was invalid when it refuses", () => {
+          const entity = increment(
+            put(note("no")),
+            Type.atom("count"),
+            Type.integer(1),
+          );
+
+          assertBoxedError(
+            () => update(withFloatAmount(entity)),
+            "Hologram.AccessDeniedError",
+            denied(":count, :note", INVALID_COUNT),
+          );
+        });
+
+        it("refuses it when this client holds no value for the counter", () => {
+          const entity = increment(
+            put(note("no")),
+            Type.atom("count"),
+            Type.integer(1),
+          );
+
+          LocalDatabase.putRow(CARD, {
+            ...LocalDatabase.getRow(CARD, ID_1),
+            count: null,
+          });
+
+          assertBoxedError(
+            () => update(entity),
+            "Hologram.AccessDeniedError",
+            denied(":count, :note"),
+          );
+        });
+
+        it("refuses it ahead of another field's invalid value", () => {
+          assertBoxedError(
+            () =>
+              update(
+                increment(
+                  put({...note("no"), ...status("bogus")}),
+                  Type.atom("count"),
+                  Type.integer(1),
+                ),
+              ),
+            "Hologram.AccessDeniedError",
+            denied(
+              ":count, :note, :status",
+              " (the value given for :status is invalid, so its rule read the stored value)",
+            ),
+          );
+        });
+      });
+
+      it("says a refused field's value was invalid", () => {
+        defineCard({"update:status": [newIs("note", "x")]});
+
+        assertDenied(
+          {...note("y"), ...status("bogus")},
+          ":note, :status",
+          " (the value given for :status is invalid, so its rule read the stored value)",
+        );
+      });
+    });
+
+    describe("what only the server can decide", () => {
+      it("leaves a type with no new() rule alone", () => {
+        defineCard({
+          "update:status": [rule({predicates: [["status", "==", "approved"]]})],
+        });
+
+        assertSent(put(status("rejected")));
+      });
+
+      it("leaves a condition on the stored value", () => {
+        defineCard({
+          "update:status": [
+            exact([
+              ["status", "==", "rejected"],
+              [newName("status"), "==", "approved"],
+            ]),
+          ],
+        });
+
+        assertSent(put(status("approved")));
+      });
+
+      it("leaves a counter, whatever the held value makes it", () => {
+        defineCard({
+          "update:count": [exact([[newName("count"), "<=", 10]])],
+        });
+
+        assertSent(increment(card(), Type.atom("count"), Type.integer(5)));
+      });
+
+      it("leaves a name the call doesn't state", () => {
+        defineCard({
+          "update:note": [exact([[newName("title"), "==", "other"]])],
+        });
+
+        assertSent(put(note("x")));
+      });
+
+      it("leaves a role", () => {
+        defineCard({
+          "update:board": [exact([{hasRole: [["board"], BOARD, ["member"]]}])],
+        });
+
+        assertSent(put({board_id: Type.bitstring(BOARD_2)}));
+      });
+
+      it("leaves a role line for a visitor", () => {
+        LocalDatabase.actorEntityId = null;
+
+        defineCard({
+          "update:status": [
+            exact([[newName("status"), "==", "approved"]], {
+              to: [["own", ["editor"]]],
+            }),
+          ],
+        });
+
+        assertSent(put(status("approved")));
+      });
+
+      it("leaves a delegation", () => {
+        defineCard({
+          "update:board": [exact([{can: ["read", ["board"]]}])],
+        });
+
+        assertSent(put({board_id: Type.bitstring(BOARD_2)}));
+      });
+
+      it("leaves a path through a related row", () => {
+        defineCard({
+          "update:board": [
+            exact([[newName(["board", "archived"]), "==", true]]),
+          ],
+        });
+
+        assertSent(put({board_id: Type.bitstring(BOARD_2)}));
+      });
+
+      it("leaves a reference to a row, which may not exist", () => {
+        defineCard({
+          "update:board": [exact([[newName("board_id"), "==", null]])],
+        });
+
+        assertSent(put({board_id: Type.bitstring(BOARD_2)}));
+      });
+
+      it("leaves a condition on the acting user", () => {
+        defineCard({
+          "update:note": [exact([[newName("note"), "==", {actor: true}]])],
+        });
+
+        assertSent(put(note("x")));
+      });
+
+      it("leaves a quantifier", () => {
+        defineCard({
+          "update:labels": [
+            exact([
+              {
+                filter: [],
+                quantifier: "none",
+                source: {name: ["labels"], outer: 1},
+              },
+            ]),
+          ],
+        });
+
+        LocalDatabase.putRow(LABEL, {id: LABEL_1});
+        LocalDatabase.addFact(CARD, "labels", ID_1, LABEL_1);
+
+        assertSent(
+          addRelationship(card(), Type.atom("labels"), Type.bitstring(ID_2)),
+        );
+      });
+
+      it("leaves a rule's clause the build sends as a marker", () => {
+        defineCard({"update:status": [exact([{server: true}])]});
+
+        assertSent(put(status("rejected")));
+      });
+
+      it("leaves a disjunction with an open alternative", () => {
+        defineCard({
+          "update:status": [
+            exact([
+              {
+                or: [
+                  [[newName("status"), "==", "approved"]],
+                  [["title", "==", "t"]],
+                ],
+              },
+            ]),
+          ],
+        });
+
+        assertSent(put(status("rejected")));
+      });
+
+      it("leaves a big whole float, which the server can read back as the next one", () => {
+        defineCard({
+          "update:rating": [
+            exact([[newName("rating"), "!=", 6.853704104479601e19]]),
+          ],
+        });
+
+        assertSent(put({rating: Type.float(6.853704104479601e19)}));
+      });
+
+      it("leaves a value with a format, which the two regex engines can judge differently", () => {
+        defineCard({"update:code": [newIs("code", "x")]});
+
+        assertSent(put({code: Type.bitstring("ab")}));
+      });
+
+      it("leaves a refused field with a format, whose hint it can't be sure of", () => {
+        defineCard({
+          "update:code": [newIs("note", "x")],
+          "update:note": [rule()],
+        });
+
+        assertSent(put({code: Type.bitstring("ab"), ...note("y")}));
+      });
+
+      it("leaves a date past what a JavaScript date holds", () => {
+        defineCard({
+          "update:held_on": [exact([[newName("held_on"), "==", "2026-01-01"]])],
+        });
+
+        assertSent(put({held_on: dateInYear(280000)}));
+      });
+
+      it("refuses a datetime whose offset moves it past what the database holds, as the server does", () => {
+        defineCard({
+          "update:held_at": [
+            exact([[newName("held_at"), ">=", "2026-01-01T00:00:00.000000Z"]]),
+          ],
+        });
+
+        assert.deepStrictEqual(
+          update(put({held_at: datetimeInYear(2026, -10_000_000_000_000n)})),
+          Type.tuple([
+            Type.atom("error"),
+            Type.map([
+              [
+                Type.atom("held_at"),
+                Type.list([
+                  Type.tuple([Type.atom("type"), Type.atom("datetime")]),
+                ]),
+              ],
+            ]),
+          ]),
+        );
+
+        assert.isUndefined(Batches.current()?.writes[0]);
+      });
+
+      it("doesn't refuse a field holding a far date, which a bound can't judge", () => {
+        defineCard({
+          "update:held_at": [newIs("note", "x")],
+          "update:note": [rule()],
+        });
+
+        globalThis.Hologram.sync.model[CARD].constraints.held_at = {
+          min: datetimeInYear(2000),
+          optional: true,
+        };
+
+        Model.reset();
+
+        const result = update(
+          put({held_at: datetimeInYear(300000), ...note("y")}),
+        );
+
+        assert.deepStrictEqual(result.data[0], Type.atom("error"));
+      });
+
+      it("leaves a write with an open field beside a refused one", () => {
+        defineCard({
+          "update:note": [exact([{server: true}])],
+          "update:status": [newIs("status", "approved")],
+        });
+
+        assertSent(put({...status("rejected"), ...note("y")}));
+      });
+
+      it("answers an invalid value with its violations when its rule is open", () => {
+        defineCard({"update:status": [newIs("status", "approved")]});
+
+        const result = update(put(status("bogus")));
+
+        assert.deepStrictEqual(result.data[0], Type.atom("error"));
+        assert.equal(Batches.current().writes.length, 0);
+      });
+    });
+  });
+
   describe("update/3", () => {
     const NOW_MS = 1_756_100_000_123;
     const STAMP = NOW_MS * 1024;
@@ -1150,6 +1966,290 @@ describe("Elixir_Hologram_DB", () => {
       );
 
       assert.equal(LocalDatabase.getRow(TASK, ID_1).title, "Ship it");
+    });
+
+    describe("changes the server would refuse", () => {
+      const invalid = (listed) =>
+        `invalid changes for ${TASK} - only declared attributes and to-one relationships can be updated: ${listed}`;
+
+      const pair = (name, value) => Type.tuple([name, value]);
+      const nope = Type.atom("nope");
+
+      const update = (given, id = ID_1) =>
+        updateById(task, Type.bitstring(id), given);
+
+      it("names a repeated unknown name once", () => {
+        assertBoxedError(
+          () =>
+            update(
+              Type.list([
+                pair(nope, Type.integer(1)),
+                pair(nope, Type.integer(2)),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          invalid(":nope"),
+        );
+      });
+
+      it("takes the last value of a repeated name", () => {
+        const title = Type.atom("title");
+
+        update(
+          Type.list([
+            pair(title, Type.bitstring("first")),
+            pair(title, Type.bitstring("last")),
+          ]),
+        );
+
+        assert.deepStrictEqual(Batches.current().writes[0].data, {
+          title: "last",
+        });
+      });
+
+      it("refuses an improper list as Map.new/1 does", () => {
+        const improper = Type.improperList([
+          pair(nope, Type.integer(1)),
+          pair(Type.atom("other"), Type.integer(2)),
+        ]);
+
+        assertBoxedError(
+          () => update(improper),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: not a proper list\n",
+        );
+      });
+
+      it("refuses a list holding something other than a pair as Map.new/1 does", () => {
+        assertBoxedError(
+          () => update(Type.list([Type.integer(1)])),
+          "ArgumentError",
+          "argument error",
+        );
+      });
+
+      it("reads a pair list whose key isn't an atom", () => {
+        assertBoxedError(
+          () => update(Type.list([pair(Type.bitstring("x"), Type.integer(1))])),
+          "Hologram.MisuseError",
+          invalid('"x"'),
+        );
+      });
+
+      it("names every refused key in the order of its printed text", () => {
+        assertBoxedError(
+          () =>
+            update(
+              Type.map([
+                [Type.map([]), Type.integer(1)],
+                [nope, Type.integer(2)],
+                [Type.bitstring("x"), Type.integer(3)],
+                [Type.integer(7), Type.integer(4)],
+                [Type.tuple([Type.atom("t")]), Type.integer(5)],
+                [Type.list([Type.integer(1)]), Type.integer(6)],
+              ]),
+            ),
+          "Hologram.MisuseError",
+          invalid('"x", %{}, 7, :nope, [1], {:t}'),
+        );
+      });
+
+      it("orders keys equal as numbers by their printed text", () => {
+        assertBoxedError(
+          () =>
+            update(
+              Type.map([
+                [Type.float(1.0), Type.atom("a")],
+                [Type.integer(1), Type.atom("b")],
+              ]),
+            ),
+          "Hologram.MisuseError",
+          invalid("1, 1.0"),
+        );
+      });
+
+      it("orders keys whatever their values are", () => {
+        const port = Type.port("nonode@nohost", [0, 11]);
+
+        assertBoxedError(
+          () =>
+            update(
+              Type.list([
+                pair(Type.atom("a"), Type.integer(1)),
+                pair(Type.integer(0), Type.integer(2)),
+                pair(Type.integer(1), port),
+                pair(Type.float(1.0), port),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          invalid("0, 1, 1.0, :a"),
+        );
+      });
+
+      it("refuses a bad value on a missing row with nobody signed in", () => {
+        assertBoxedError(
+          () => update(changes([["title", Type.integer(1)]]), ID_2),
+          "Hologram.MisuseError",
+          `cannot update ${TASK} - no entity with id "${ID_2}"`,
+        );
+      });
+
+      it("refuses a bad value on a missing row for a signed-in user", () => {
+        LocalDatabase.actorEntityId = ID_1;
+
+        try {
+          assertBoxedError(
+            () => update(changes([["title", Type.integer(1)]]), ID_2),
+            "Hologram.MisuseError",
+            `cannot update ${TASK} - no entity with id "${ID_2}"`,
+          );
+        } finally {
+          LocalDatabase.actorEntityId = null;
+        }
+      });
+
+      it("reads an enumerable that isn't a list or a plain map", () => {
+        const original = globalThis.Elixir_Enum;
+
+        globalThis.Elixir_Enum = {
+          "to_list/1": () =>
+            Type.list([pair(Type.atom("title"), Type.bitstring("Ship it"))]),
+        };
+
+        try {
+          update(Type.struct("MapSet", [[Type.atom("map"), Type.map([])]]));
+        } finally {
+          globalThis.Elixir_Enum = original;
+        }
+
+        assert.deepStrictEqual(Batches.current().writes[0].data, {
+          title: "Ship it",
+        });
+      });
+
+      it("answers no entity for a type the model doesn't carry", () => {
+        assertBoxedError(
+          () =>
+            updateById(
+              Type.alias("MyApp.Nothing"),
+              Type.bitstring(ID_1),
+              Type.map([[nope, Type.integer(1)]]),
+            ),
+          "Hologram.MisuseError",
+          `cannot update MyApp.Nothing - no entity with id "${ID_1}"`,
+        );
+      });
+
+      it("refuses an id that isn't a canonical UUID", () => {
+        assertBoxedError(
+          () =>
+            update(
+              changes([["title", Type.bitstring("Ship it")]]),
+              "constructor",
+            ),
+          "Hologram.MisuseError",
+          'invalid id "constructor" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+        );
+      });
+
+      it("refuses a bitstring id that isn't a binary", () => {
+        const id = Type.bitstring([1, 0, 1]);
+
+        assertBoxedError(
+          () =>
+            updateById(
+              task,
+              id,
+              changes([["title", Type.bitstring("Ship it")]]),
+            ),
+          "Hologram.MisuseError",
+          `invalid id ${Interpreter.inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
+        );
+      });
+
+      it("prints a map id with its keys sorted", () => {
+        const id = Type.map([
+          [Type.atom("zeta"), Type.integer(1)],
+          [Type.atom("alpha"), Type.integer(2)],
+        ]);
+
+        assertBoxedError(
+          () =>
+            updateById(
+              task,
+              id,
+              changes([["title", Type.bitstring("Ship it")]]),
+            ),
+          "Hologram.MisuseError",
+          "invalid id %{alpha: 2, zeta: 1} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings",
+        );
+      });
+
+      it("refuses a nil id", () => {
+        assertBoxedError(
+          () =>
+            updateById(
+              task,
+              Type.nil(),
+              changes([["title", Type.bitstring("Ship it")]]),
+            ),
+          "Hologram.MisuseError",
+          "invalid id nil - entity ids are canonical lowercase 8-4-4-4-12 UUID strings",
+        );
+      });
+
+      it("judges the names before the id", () => {
+        assertBoxedError(
+          () => update(Type.map([[nope, Type.integer(1)]]), "constructor"),
+          "Hologram.MisuseError",
+          invalid(":nope"),
+        );
+      });
+
+      it("reads no entry off the model object's prototype", () => {
+        assertBoxedError(
+          () =>
+            updateById(
+              Type.atom("constructor"),
+              Type.bitstring(ID_1),
+              Type.map([[nope, Type.integer(1)]]),
+            ),
+          "Hologram.MisuseError",
+          `cannot update constructor - no entity with id "${ID_1}"`,
+        );
+      });
+
+      it("judges the changes before looking up the row", () => {
+        assertBoxedError(
+          () => update(Type.map([[nope, Type.integer(1)]]), ID_2),
+          "Hologram.MisuseError",
+          invalid(":nope"),
+        );
+      });
+    });
+
+    it("names the given values in a refusal of update!/3 read as Map.new/1 reads them", () => {
+      const original = globalThis.Elixir_Enum;
+
+      globalThis.Elixir_Enum = {
+        "to_list/1": () =>
+          Type.list([Type.tuple([Type.atom("title"), Type.integer(1)])]),
+      };
+
+      try {
+        assertBoxedError(
+          () =>
+            Elixir_Hologram_DB["update!/3"](
+              task,
+              Type.bitstring(ID_1),
+              Type.struct("MapSet", [[Type.atom("map"), Type.map([])]]),
+            ),
+          "Hologram.WriteError",
+          `cannot update ${TASK} "${ID_1}":\n  * attribute :title must be of type :string, got: 1`,
+        );
+      } finally {
+        globalThis.Elixir_Enum = original;
+      }
     });
 
     it("takes a keyword list as well as a map", () => {
@@ -1260,7 +2360,7 @@ describe("Elixir_Hologram_DB", () => {
         $revisions: {done: 10, title: 11},
       });
 
-      LocalDatabase.addFact(TASK, "tags", ID_1, "g1");
+      LocalDatabase.addFact(TASK, "tags", ID_1, TAG_1);
     });
 
     afterEach(() => {

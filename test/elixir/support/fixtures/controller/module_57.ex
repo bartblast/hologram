@@ -2,17 +2,21 @@
 defmodule Hologram.Test.Fixtures.Controller.Module57 do
   use Hologram.Page
 
+  alias Hologram.Auth.Context
+  alias Hologram.Test.Fixtures.LayoutFixture
+
   route "/hologram-test-fixtures-controller-module57"
 
-  layout Hologram.Test.Fixtures.LayoutWithRuntime
+  layout LayoutFixture
 
-  @impl Page
-  def init(_params, component, server) do
-    {component, put_user_id(server, 7)}
+  middleware :report_session
+
+  def report_session(server, _opts) do
+    put_response_header(server, "x-in-session", to_string(Context.session?()))
   end
 
   @impl Page
   def template do
-    ~HOLO"Module57 page"
+    ~HOLO"Module57"
   end
 end

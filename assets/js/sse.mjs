@@ -2,6 +2,7 @@
 
 import App from "./app.mjs";
 import ComponentRegistry from "./component_registry.mjs";
+import Config from "./config.mjs";
 import Deserializer from "./deserializer.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
@@ -23,6 +24,13 @@ export default class Sse {
   static HEARTBEAT_TIMEOUT_INTERVALS = 2;
 
   static MAX_RECONNECT_DELAY = 5_000;
+
+  // How many answered handshakes can put off a reload for expired receipts while a tab still holds
+  // unsent writes only in memory. On the reconnect backoff that's a little over 40 seconds, longer
+  // than one send's deadline. It's a limit because a write the server keeps refusing never leaves,
+  // and the tab has no live stream until it reloads.
+  static MAX_RELOAD_DEFERRALS = 12;
+
   static RECONNECT_BACKOFF_FACTOR = 2;
   static RECONNECT_JITTER = 0.25;
   static SSE_PATH = "/hologram/sse";
@@ -58,12 +66,26 @@ export default class Sse {
 
   static reconnectAttempts = 0;
 
+  // How many times a refused tab asks for an identity after the signed-in user changed (see
+  // askForReplica). With the reconnect delays they span about 13 seconds.
+  static MAX_REPLICA_ASKS = 6;
+
+  // Tells apart the latest askForReplica() from one it replaced.
+  static replicaAskId = 0;
+
+  // Whether an askForReplica() is under way, or was when the page was left.
+  static isAskingForReplica = false;
+
+  // How many handshakes in a row have put off a reload (see MAX_RELOAD_DEFERRALS).
+  static reloadDeferrals = 0;
+
   // The pending retry after a stream died, held so a deliberate restart can call it off - the same
   // bookkeeping `Connection` keeps for the websocket's.
   static reconnectTimer = null;
 
-  // Tells apart a connect() run that suspend() has overtaken from the current one: a
-  // handshake in flight when the page is left must neither open a stream nor schedule a retry.
+  // Tells apart a connect() run that suspend() or reconnect() has overtaken from the current one: a
+  // handshake in flight when the page is left must neither open a stream nor schedule a retry, and
+  // one a deliberate restart replaced would close the stream that restart opens.
   static runId = 0;
 
   static stabilityTimer = null;
@@ -101,10 +123,82 @@ export default class Sse {
       App.subscriptionReceiptRegistry.entries.values(),
     ).map((triple) => triple.data[2]);
 
-    return Type.map([
+    const entries = [
       [Type.atom("instance_id"), Type.bitstring(App.instanceId)],
       [Type.atom("receipts"), Type.list(receipts)],
-    ]);
+    ];
+
+    const presented = Hologram.dataLayer?.replicaToReplace();
+
+    if (presented) {
+      entries.push(
+        [Type.atom("replica_id"), Type.bitstring(presented.id ?? "")],
+        [Type.atom("replica_token"), Type.bitstring(presented.token ?? "")],
+      );
+    }
+
+    return Type.map(entries);
+  }
+
+  // Asks for an identity again after the signed-in user changed, for a tab the server refused one.
+  // The stream hears of a sign-in before the response carrying the new session cookie reaches the
+  // browser, so the first answers can still be refusals under the old cookie. The open stream is
+  // left alone while asking: the server has already moved it to the new user, and a stream opened
+  // under the old cookie would serve the previous user's rows. It is replaced once a pair arrives,
+  // since its greeting names the identity it serves.
+  static async askForReplica() {
+    const askId = ++$.replicaAskId;
+
+    const isOver = () =>
+      askId !== $.replicaAskId || !Hologram.dataLayer?.replicaToReplace();
+
+    $.isAskingForReplica = true;
+
+    try {
+      for (let attempt = 1; attempt <= $.MAX_REPLICA_ASKS; attempt++) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, $.computeReconnectDelay(attempt)),
+        );
+
+        if (isOver()) return;
+
+        // A request that never answers is given up on, or it would hold back the asks after it.
+        const controller = new AbortController();
+
+        const deadline = setTimeout(
+          () => controller.abort(),
+          Config.mutationTimeoutMs,
+        );
+
+        try {
+          const response = await fetch($.HANDSHAKE_PATH, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: Serializer.serialize($.buildHandshakePayload(), "server"),
+            signal: controller.signal,
+          });
+
+          if (!response.ok) continue;
+
+          const {replica} = await response.json();
+
+          if (isOver()) return;
+
+          if (replica) {
+            Hologram.dataLayer.takeReplica(replica);
+
+            return $.reconnect();
+          }
+        } catch {
+          // No answer is one more try gone, as a refusal is.
+        } finally {
+          clearTimeout(deadline);
+        }
+      }
+    } finally {
+      // An ask the page's leaving cut short stays marked, so resume() starts another.
+      if (askId === $.replicaAskId) $.isAskingForReplica = false;
+    }
   }
 
   // Closes the stream there is, and stops the clocks it was keeping: the heartbeat watchdog, which
@@ -124,6 +218,21 @@ export default class Sse {
     const runId = $.runId;
     const isStale = () => runId !== $.runId;
 
+    // A tab with no identity to send under, waiting for one or refused one, holds its writes until
+    // a handshake brings it. One holding unsent writes may have to put off a reload over this
+    // answer, and one that already has needs the answer to decide it. For those, a handshake that
+    // never answers is given up on and tried again.
+    const controller = new AbortController();
+
+    const presented = Hologram.dataLayer?.replicaToReplace();
+
+    const deadline =
+      presented ||
+      Hologram.dataLayer?.holdsUnsentWrites() ||
+      $.reloadDeferrals > 0
+        ? setTimeout(() => controller.abort(), Config.mutationTimeoutMs)
+        : null;
+
     try {
       const presentedKeys = Array.from(
         App.subscriptionReceiptRegistry.entries.keys(),
@@ -133,6 +242,7 @@ export default class Sse {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: Serializer.serialize($.buildHandshakePayload(), "server"),
+        signal: controller.signal,
       });
 
       if (isStale()) return;
@@ -151,6 +261,8 @@ export default class Sse {
         identityTag,
         refreshedReceipts: serializedRefreshed,
         replica,
+        replicaRefused,
+        sessionReplica,
       } = await response.json();
 
       if (isStale()) return;
@@ -165,7 +277,7 @@ export default class Sse {
           actorEntityId,
           actorUserId,
           identityTag,
-          replica,
+          replica: sessionReplica,
         }) ?? true;
 
       // The follow can have opened a new stream already.
@@ -173,17 +285,50 @@ export default class Sse {
 
       const refreshed = Deserializer.deserialize(serializedRefreshed);
 
+      // Before the greeting, so the stream opens under the identity this tab will send with. The
+      // sender is woken here rather than when the stream opens: a proxy can block the stream while
+      // writes still get through.
+      const sending = Hologram.dataLayer?.takeReplica(
+        replica,
+        replicaRefused === true,
+        presented?.id,
+      );
+
       if ($.#hasIdentityMoved()) {
         $.#dropRefusedReceipts(presentedKeys, refreshed);
       } else if (presentedKeys.length > 0 && refreshed.data.length === 0) {
+        // A write held for that identity exists only in this tab's memory, so it goes out before
+        // the page does. A sender that failed says so in the check below.
+        await sending?.catch(() => {});
+
+        if (isStale()) return;
+
+        if (
+          Hologram.dataLayer?.holdsUnsentWrites() &&
+          $.reloadDeferrals < $.MAX_RELOAD_DEFERRALS
+        ) {
+          $.reloadDeferrals++;
+          $.scheduleReconnect();
+          return;
+        }
+
         window.location.reload();
         return;
       }
 
       $.handshakePeriod = IdentityTracker.period;
+      $.reloadDeferrals = 0;
 
       App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
       $.heartbeatIntervalMs = heartbeatIntervalMs;
+
+      // Still waiting after an answer: it came from a node of an older build during a deploy, or
+      // from a handshake that started before this tab asked. Writes are held until one brings the
+      // identity, so this asks again.
+      if (Hologram.dataLayer?.wantsReplica()) {
+        $.scheduleReconnect();
+        return;
+      }
 
       // An app without a data model greets with nothing, the way a tab that does not lead does.
       const greeting =
@@ -195,10 +340,10 @@ export default class Sse {
         ...greeting,
       });
 
-      // Whatever was here goes first. Two connects can be in flight at once - a retry scheduled
-      // by a dying stream, and a deliberate restart under a new identity - and the second to
-      // arrive would otherwise leave the first's stream open with nothing referring to it,
-      // delivering every action and every frame a second time.
+      // Whatever was here goes first. Two connects can be in flight at once, like a page's first
+      // one and a retry a dying stream scheduled, and the second to arrive would otherwise leave
+      // the first's stream open with nothing referring to it, delivering every action and every
+      // frame a second time.
       $.closeStream();
 
       $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
@@ -268,6 +413,9 @@ export default class Sse {
 
       $.eventSource.addEventListener("heartbeat", () => {
         $.armHeartbeatWatchdog();
+
+        // The one wake-up that comes with nothing happening (see DataLayer.streamBeat).
+        Hologram.dataLayer?.streamBeat();
       });
 
       $.eventSource.addEventListener("refresh_sub_receipts", (event) => {
@@ -312,6 +460,8 @@ export default class Sse {
 
       Logger.debug(`SSE handshake error: ${error}`);
       $.scheduleReconnect();
+    } finally {
+      clearTimeout(deadline);
     }
   }
 
@@ -351,6 +501,7 @@ export default class Sse {
 
     $.closeStream();
     $.eventSource = null;
+    $.runId++;
 
     return $.connect();
   }
@@ -366,6 +517,12 @@ export default class Sse {
     if ($.isStarted) {
       $.connect();
     }
+
+    // The new cookie may still be on its way, and this handshake alone could be refused under the
+    // old one. The ask waits out a delay first, so the handshake goes before it.
+    if ($.isAskingForReplica) {
+      $.askForReplica();
+    }
   }
 
   // Bump the failure counter and re-run the handshake protocol from scratch
@@ -373,6 +530,10 @@ export default class Sse {
   // and the post-open EventSource onerror handler so a failure anywhere in the
   // connect lifecycle backs off identically instead of leaving realtime down.
   static scheduleReconnect() {
+    // Overlapping handshakes can each ask for a retry. One timer is kept, so that suspend() and
+    // reconnect() can call it off.
+    clearTimeout($.reconnectTimer);
+
     $.reconnectAttempts++;
     const delay = $.computeReconnectDelay($.reconnectAttempts);
 
@@ -398,14 +559,16 @@ export default class Sse {
   // document open (https://issues.chromium.org/issues/358538891), and over HTTP/1.1 six such
   // streams use up the connections the browser allows per origin, so every further request
   // to it stalls. Everything that could reopen the stream is cancelled along with it: the
-  // timers, and a handshake in flight (see runId).
+  // timers, a handshake in flight (see runId), and an ask for an identity (see replicaAskId).
   static suspend() {
     $.isSuspended = true;
+    $.replicaAskId++;
     $.runId++;
 
     clearTimeout($.reconnectTimer);
 
     $.reconnectAttempts = 0;
+    $.reloadDeferrals = 0;
 
     $.closeStream();
   }

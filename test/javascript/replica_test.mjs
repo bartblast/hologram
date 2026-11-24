@@ -86,4 +86,202 @@ describe("Replica", () => {
       assert.equal(Replica.id, "replica-stored");
     });
   });
+
+  describe("requestMint()", () => {
+    it("marks the tab as waiting for a pair", () => {
+      Replica.requestMint();
+
+      assert.isTrue(Replica.awaitingMint);
+    });
+  });
+
+  describe("refuseMint()", () => {
+    it("ends the asking for good", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      assert.isFalse(Replica.awaitingMint);
+      assert.isTrue(Replica.mintRefused);
+    });
+
+    it("does nothing in a tab that wasn't asking", () => {
+      Replica.refuseMint();
+
+      assert.isFalse(Replica.mintRefused);
+    });
+
+    // Two handshakes can overlap, both showing the stored pair.
+    it("ignores a refusal of a pair the tab has moved on from", () => {
+      Replica.offer({id: "r-page", token: "statement-page"});
+      Replica.adopt({id: "r-stored", token: "statement-stored"});
+      Replica.requestMint();
+
+      Replica.refuseMint("r-stored");
+      Replica.refuseMint("r-stored");
+
+      assert.equal(Replica.id, "r-page");
+      assert.isTrue(Replica.awaitingMint);
+      assert.isFalse(Replica.mintRefused);
+
+      Replica.refuseMint("r-page");
+
+      assert.isFalse(Replica.awaitingMint);
+      assert.isTrue(Replica.mintRefused);
+    });
+
+    // The refused pair can be a stored one from a session that has ended.
+    it("gives the page's own pair a turn first", () => {
+      Replica.offer({id: "r-page", token: "statement-page"});
+      Replica.adopt({id: "r-stored", token: "statement-stored"});
+      Replica.requestMint();
+
+      Replica.refuseMint();
+
+      assert.equal(Replica.id, "r-page");
+      assert.isTrue(Replica.awaitingMint);
+      assert.isFalse(Replica.mintRefused);
+
+      Replica.refuseMint();
+
+      assert.isFalse(Replica.awaitingMint);
+      assert.isTrue(Replica.mintRefused);
+    });
+
+    it("can still take a pair afterwards", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      assert.isTrue(Replica.takeMinted({id: "r-minted", token: "statement"}));
+
+      assert.equal(Replica.id, "r-minted");
+      assert.isFalse(Replica.mintRefused);
+      assert.isTrue(Replica.minted);
+    });
+  });
+
+  describe("withoutIdentity()", () => {
+    it("is false for a tab with a pair to send under", () => {
+      assert.isFalse(Replica.withoutIdentity());
+    });
+
+    it("is true while asking", () => {
+      Replica.requestMint();
+
+      assert.isTrue(Replica.withoutIdentity());
+    });
+
+    it("is true once refused", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      assert.isTrue(Replica.withoutIdentity());
+    });
+
+    it("is false once the pair has arrived", () => {
+      Replica.requestMint();
+      Replica.takeMinted({id: "r-minted", token: "statement"});
+
+      assert.isFalse(Replica.withoutIdentity());
+    });
+  });
+
+  describe("takeMinted()", () => {
+    const minted = {id: "replica-minted", token: "token-minted"};
+
+    it("puts the pair in use and stops waiting", () => {
+      Replica.offer(fresh);
+      Replica.requestMint();
+
+      assert.isTrue(Replica.takeMinted(minted));
+      assert.deepStrictEqual(Replica.current(), minted);
+      assert.isFalse(Replica.awaitingMint);
+    });
+
+    // A browser can hand the same cached page to another tab, so the page's pair is not safe to go
+    // back to.
+    it("leaves refresh() no way back to the page's pair", () => {
+      Replica.offer(fresh);
+      Replica.requestMint();
+      Replica.takeMinted(minted);
+
+      assert.isFalse(Replica.refresh());
+      assert.deepStrictEqual(Replica.current(), minted);
+    });
+
+    // Two handshakes can be out at once, and numbers may already be spent under the first pair.
+    it("passes over a pair when the tab is not waiting for one", () => {
+      Replica.offer(fresh);
+
+      assert.isFalse(Replica.takeMinted(minted));
+      assert.deepStrictEqual(Replica.current(), fresh);
+    });
+
+    it("keeps waiting when the handshake brought no pair", () => {
+      Replica.offer(fresh);
+      Replica.requestMint();
+
+      assert.isFalse(Replica.takeMinted(undefined));
+      assert.isTrue(Replica.awaitingMint);
+      assert.deepStrictEqual(Replica.current(), fresh);
+    });
+  });
+
+  describe("adoptOwn()", () => {
+    const own = {id: "replica-own", token: "token-own"};
+
+    it("puts the pair in use and stops waiting", () => {
+      Replica.requestMint();
+      Replica.adoptOwn(own);
+
+      assert.deepStrictEqual(Replica.current(), own);
+      assert.isFalse(Replica.awaitingMint);
+    });
+
+    // Its batches are numbered under it as under one the tab asked for.
+    it("counts the pair as minted for this tab", () => {
+      Replica.adoptOwn(own);
+
+      assert.isTrue(Replica.minted);
+    });
+
+    it("ends a refusal", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+      Replica.adoptOwn(own);
+
+      assert.isFalse(Replica.withoutIdentity());
+    });
+  });
+
+  // Both were about the user the tab followed away from.
+  describe("endMint()", () => {
+    it("stops waiting for a pair", () => {
+      Replica.requestMint();
+      Replica.endMint();
+
+      assert.isFalse(Replica.awaitingMint);
+    });
+
+    it("forgets a pair minted for the tab", () => {
+      Replica.adoptOwn({id: "replica-own", token: "token-own"});
+      Replica.endMint();
+
+      assert.isFalse(Replica.minted);
+    });
+
+    it("forgets a refusal", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+      Replica.endMint();
+
+      assert.isFalse(Replica.withoutIdentity());
+    });
+  });
+
+  it("reset() stops waiting for a pair", () => {
+    Replica.requestMint();
+    Replica.reset();
+
+    assert.isFalse(Replica.awaitingMint);
+  });
 });

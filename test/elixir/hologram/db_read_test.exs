@@ -62,6 +62,68 @@ defmodule Hologram.DBReadTest do
       end
     end
 
+    test "reads what the rules give a visitor in a signed-out session" do
+      user = create_user("db_read_signed_out@example.com")
+
+      %{author_id: user.id}
+      |> PolicyModule6.new()
+      |> DB.create!()
+
+      shared_entity =
+        %{shared: true}
+        |> PolicyModule6.new()
+        |> DB.create!()
+
+      ids =
+        as_user(nil, fn ->
+          PolicyModule6
+          |> DB.read()
+          |> Enum.map(& &1.id)
+        end)
+
+      assert ids == [shared_entity.id]
+    end
+
+    test "counts only what the rules give a visitor in a signed-out session" do
+      user = create_user("db_read_signed_out_count@example.com")
+
+      %{author_id: user.id}
+      |> PolicyModule6.new()
+      |> DB.create!()
+
+      %{shared: true}
+      |> PolicyModule6.new()
+      |> DB.create!()
+
+      count =
+        as_user(nil, fn ->
+          PolicyModule6
+          |> count()
+          |> DB.read()
+        end)
+
+      assert count == 1
+    end
+
+    test "reads past the rules with trust in a signed-out session" do
+      entity = create_policy_module_2_entity()
+
+      results =
+        as_user(nil, fn ->
+          PolicyModule2
+          |> trust()
+          |> DB.read()
+        end)
+
+      assert results == [entity]
+    end
+
+    test "reads raw with no session" do
+      entity = create_policy_module_2_entity()
+
+      assert DB.read(PolicyModule2) == [entity]
+    end
+
     test "counts only the rows the acting user may read" do
       user = create_user("db_read_count@example.com")
       granted_entity = create_policy_module_2_entity()
@@ -269,6 +331,21 @@ defmodule Hologram.DBReadTest do
       entity = create_policy_module_2_entity()
 
       assert DB.read(PolicyModule2, entity.id) == entity
+    end
+
+    test "reads nil for a row the rules withhold from a signed-out session" do
+      entity = create_policy_module_2_entity()
+
+      assert as_user(nil, fn -> DB.read(PolicyModule2, entity.id) end) == nil
+    end
+
+    test "reads a row the rules give a visitor in a signed-out session" do
+      entity =
+        %{shared: true}
+        |> PolicyModule6.new()
+        |> DB.create!()
+
+      assert as_user(nil, fn -> DB.read(PolicyModule6, entity.id) end) == entity
     end
 
     test "reads nil for a row the acting user may not read" do

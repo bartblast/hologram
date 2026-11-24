@@ -111,15 +111,18 @@ export default class Tabs {
   // down yet (see #lead), so it sends nothing.
   static #unrecorded = false;
 
-  // The group is over, because the thing that made it one is gone: with no store there is nowhere
-  // to file a batch and nothing to share, so every tab goes back to being a replica of its own -
+  // The group is over for this tab, because what made it a member is gone: with no store there is
+  // nowhere to file a batch and nothing to share, so it goes back to being a replica of its own -
   // which is exactly what a tab is in a browser that never had storage at all.
   //
-  // The tab that was LEADING keeps the identity and the queue. Those batches were numbered under
-  // that identity, it is the only tab that can still send them, and nothing else about it changes.
+  // A tab that was LEADING keeps the identity and the queue. Those batches were numbered under that
+  // identity, and a tab that leads after it sends the same ones under the same numbers, which the
+  // server answers from its record.
   //
-  // Every other tab takes the fresh identity its own page was minted, lets the batches go, and
-  // opens a stream of its own - which it needs, because the frames it was being handed stop here.
+  // A tab that followed asks the server for an identity of its own, lets go of the batches the store
+  // holds, keeps the ones it doesn't (see Batches.disown), and opens a stream of its own - which it
+  // needs, because the frames it was being handed stop here. The page's pair won't do: a browser
+  // can serve one cached page to two tabs, and the store can hold it.
   // A tab still starting up has no stream to replace: the one its page opens after the mount
   // greets the server as the replica of its own it now is, and opening one before the mount would
   // greet it with none of the page's subscriptions (see where the page starts it, in hologram.mjs).
@@ -138,10 +141,14 @@ export default class Tabs {
   // Answers once the lock is really gone, the way leaving does - which is what lets anything
   // waiting on this tab's place in the group wait for it rather than for a moment.
   static dissolve() {
+    if (Tabs.name === null) {
+      return Promise.resolve();
+    }
+
     const followed = !Tabs.leader;
     const untaken = Tabs.#leadWhenReady || Tabs.takingLead;
 
-    if (Tabs.name !== null && !Tabs.#ready) {
+    if (!Tabs.#ready) {
       SyncStream.syncCursor = null;
     }
 
@@ -150,23 +157,40 @@ export default class Tabs {
     if (followed) {
       Batches.disown();
 
-      // A tab with no fresh pair has nothing of its own to switch to: a tab that followed to
-      // another user keeps none (see DataLayer.followIdentity). One whose fresh pair is the one in
-      // use has none left either, and doesn't keep it on a guess that no other tab sends under it:
-      // two senders under one pair is the thing leaving has to end. So it holds none, and its
-      // writes wait for the pair its next handshake hands it (see DataLayer.takeHandshake).
-      if (!Replica.refresh()) {
-        Replica.id = null;
-        Replica.token = null;
-        SyncStream.awaitingPair = true;
-      }
+      // A tab that followed to another user holds no pair (see DataLayer.followIdentity), so it
+      // shows none, and its handshake's pair for the session as it stands is minted for it alone
+      // (see DataLayer.takeHandshake).
+      Replica.requestMint();
     }
 
     if ((followed || untaken) && Sse.isStarted) {
       Sse.reconnect();
     }
 
+    // A tab that followed sends for itself from here on, and may hold a write the store never took.
+    Batches.flush();
+
     return released;
+  }
+
+  // This tab could not write to the store it shares, so it leaves the group.
+  //
+  // A tab that led has wiped the rows and the place for the whole browser, so the others are told.
+  // A tab that followed writes neither, so its failure leaves them true and the group carries on
+  // without it. If the disk really is full, the leader's next write fails and ends the group.
+  //
+  // Posted straight on the channel rather than through `post`: a message waiting behind a store
+  // write goes nowhere once the tab leaves, and this one has to arrive.
+  static storeLost() {
+    if (Tabs.leader) {
+      try {
+        Tabs.#channel?.postMessage({kind: "storage_failed"});
+      } catch {
+        // A channel that can't take it has nobody listening through it.
+      }
+    }
+
+    return Tabs.dissolve();
   }
 
   // Joins the group, answering whether this tab leads it.
@@ -330,7 +354,7 @@ export default class Tabs {
   static receive(message) {
     switch (message.kind) {
       // What the server said about a batch, on its way to every tab that is holding one. A tab
-      // that holds it promotes or rolls it back; a tab that does not has nothing to do.
+      // that holds it promotes or rolls it back; a tab that does not only keeps its number.
       case "answered":
         Batches.settle(message.seq, message.answer);
 
@@ -397,13 +421,17 @@ export default class Tabs {
 
         return;
 
-      // Another tab could not write, and what it wiped it wiped for the whole browser: the rows
-      // and the place they were dated at are gone from a store every tab of the group shares. So
-      // this tab stops writing too - going on would date rows the store no longer holds - and the
-      // group ends, because what made it one was the store.
+      // The tab that led could not write, and what it wiped it wiped for the whole browser: the
+      // rows and the place they were dated at are gone from a store every tab of the group shares.
+      // So this tab stops using it too, and the group ends, because what made it one was the store.
+      //
+      // Except in a tab that leads by now. The lock reached it after that wipe, so it finds a store
+      // with no place and starts over (see #lead), as it does when a leader simply closes.
       case "storage_failed":
-        Durability.detach();
-        Tabs.dissolve();
+        if (!Tabs.leader) {
+          Durability.detach();
+          Tabs.dissolve();
+        }
 
         return;
     }
@@ -460,14 +488,21 @@ export default class Tabs {
         try {
           channel.postMessage(message);
         } catch (error) {
-          try {
-            Logger.debug(
-              `Hologram: a message to the other tabs failed (${error})`,
-            );
-            // eslint-disable-next-line no-empty
-          } catch {}
+          Logger.debug(
+            `Hologram: a message to the other tabs failed (${error})`,
+          );
         }
-      });
+      })
+      // What a message's getter threw can be something a string can't hold, like a Symbol, so even
+      // saying it failed can throw.
+      .catch(() => {});
+  }
+
+  // Says something to the other tabs at once, ahead of anything `post` has waiting. For the tab
+  // sending a batch, announcing it: that has to reach them before any frame or answer about it, and
+  // it vouches for nothing waiting ahead of it, since the batch is already in the store.
+  static postNow(message) {
+    Tabs.#channel?.postMessage(message);
   }
 
   // This tab has everything it starts with - the rows its own page carried, and what a previous
@@ -549,7 +584,6 @@ export default class Tabs {
     }
 
     Tabs.#held = [];
-    Tabs.#leadWhenReady = false;
     Tabs.#ready = true;
 
     for (const [index, message] of held.entries()) {
@@ -575,10 +609,13 @@ export default class Tabs {
       }
     }
 
-    // A tab that moved to another group held its stream back from sync until now (see move).
+    // Cleared only now: a message above can lose the store and end the group, and the tab then
+    // needs a stream of its own, since it hasn't taken this lead (see dissolve). A tab that moved
+    // to another group held its stream back from sync until now too (see move).
     Tabs.takingLead = false;
 
     if (lead) {
+      Tabs.#leadWhenReady = false;
       Tabs.#onLead();
     } else if (Tabs.leader) {
       Tabs.postState();
@@ -614,12 +651,13 @@ export default class Tabs {
   // opened together, a succession, an identity switch. Found by CodeRabbit on PR #1169.)
   //
   // An ANSWER names a batch this tab takes up in the same breath: settling before the batch is
-  // there settles nothing, and the batch is then folded for ever - nothing answers it twice.
+  // there settles nothing, what it says about those writes is lost, and the batch is then passed
+  // over as answered.
   //
   // A BATCH another tab filed is taken up into a queue the store has not handed over yet. Taken
   // before the mount, it is passed over for a signed-in user, since the mount is what says whose
-  // batches this page takes up, and nothing takes it up later: the restore takes up only what its
-  // read of the store found. And in a tab that leads, taking one up wakes the sender, which would
+  // batches this page takes up, and a tab that follows may not hear of it again: the restore takes
+  // up only what its read of the store found. And in a tab that leads, taking one up wakes the sender, which would
   // send the stored queue under the page's own identity rather than the one it was numbered under.
   //
   // A tab ASKING for the group's state is asking for an identity and a place, which this tab holds
@@ -773,7 +811,8 @@ export default class Tabs {
       // The stream this tab has greeted the server with no sync - opened as a follower, while it
       // held a lead it was not ready to take, or while this was deciding - or has not greeted yet,
       // and would then greet with sync from whatever place the decision left; either way one the
-      // server serves sync on stands in its place, whichever answers last (see Sse.connect).
+      // server serves sync on stands in its place, and a handshake still in flight is dropped (see
+      // Sse.reconnect).
       // Holding no place when it took the lead, a tab handed the lead while starting has none yet:
       // its page starts one right after, which greets as the leader by itself, and a reconnect
       // would open a second one beside it.
@@ -857,6 +896,12 @@ export default class Tabs {
   static #takeState(message) {
     if (message.replica?.id) {
       Replica.adopt(message.replica);
+
+      // Not in a tab about to lead: its own restore can have written another pair over this one,
+      // and #lead writes down the one it settles on.
+      if (!Tabs.leader) {
+        Durability.noteStoredReplica(message.replica);
+      }
     }
 
     // And what model the server runs: the group syncs one, so a tab joining it goes to its next
@@ -967,9 +1012,9 @@ export default class Tabs {
     // The store could not be read, so nothing says which rows stand at the group's place - and the
     // next frame naming a place would hand it over anyway, over rows this tab never checked. So it
     // leaves the group, as a tab whose store cannot be read at boot does (see DataLayer.boot), and
-    // stops using the store: it was never the one sending, so it takes a fresh identity, lets its
-    // batches go and opens a stream of its own, which greets the server from nowhere, since the
-    // place it holds is the one in doubt (see Tabs.dissolve).
+    // stops using the store: it was never the one sending, so it asks for an identity of its own,
+    // lets go of the batches the store holds and opens a stream of its own, which greets the server
+    // from nowhere, since the place it holds is the one in doubt (see Tabs.dissolve).
     //
     // Unless the group handed it the lead meanwhile. Leaving would let go of the lock, and with no
     // tab waiting for it nobody would send the queue - its own writes among it - until a page
@@ -1106,6 +1151,11 @@ export default class Tabs {
       Tabs.leader = true;
       Tabs.#unrecorded = true;
 
+      // Before the lead is taken, which can lose the store and leave the group on the spot. Leaving
+      // lets go of the lock through what this sets up, and with nothing set up yet the lock would
+      // stay held by a tab that's no longer in the group.
+      const held = Tabs.#hold();
+
       // Not ready, it holds a place it cannot vouch for yet - the one it is reading the store again
       // to check (see #takeStore) - so a stream that greets the server meanwhile, reconnecting on
       // its own, asks for no sync from it (see SyncStream.buildGreeting). The lead's own reconnect
@@ -1118,7 +1168,7 @@ export default class Tabs {
         Tabs.takingLead = true;
       }
 
-      return Tabs.#hold();
+      return held;
     });
   }
 }

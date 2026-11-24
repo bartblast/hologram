@@ -52,19 +52,38 @@ describe("Elixir_Hologram_Job", () => {
         [NOTIFY]: {
           attributes: {
             actor_id: "uuid",
+            attempt: "integer",
             created_at: "datetime",
             error: "string",
             id: "uuid",
             reason: "string",
+            run_as_server: "boolean",
+            scheduled_at: "datetime",
             status: "enum",
             updated_at: "datetime",
           },
-          // The three the framework fills, declared the way use Hologram.Job declares them: the
-          // actor and the failure record optional, the status defaulted to :queued.
-          constraints: {actor_id: {optional: true}, error: {optional: true}},
-          defaults: {status: Type.atom("queued")},
+          // The ones the framework fills, declared the way use Hologram.Job declares them: the
+          // actor, the failure record and the due time optional, the attempt count defaulted to 0
+          // the server mark to false, and the status to :queued.
+          constraints: {
+            actor_id: {optional: true},
+            error: {optional: true},
+            scheduled_at: {optional: true},
+          },
+          defaults: {
+            attempt: Type.integer(0),
+            run_as_server: Type.boolean(false),
+            status: Type.atom("queued"),
+          },
           enumValues: {status: ["queued", "running", "done", "failed"]},
-          frameworkAttributes: ["actor_id", "error", "status"],
+          frameworkAttributes: [
+            "actor_id",
+            "attempt",
+            "error",
+            "run_as_server",
+            "scheduled_at",
+            "status",
+          ],
           operations: [
             "create",
             "delete",
@@ -122,7 +141,10 @@ describe("Elixir_Hologram_Job", () => {
       const [write] = Batches.current().writes;
 
       assert.notProperty(write.data, "actor_id");
+      assert.notProperty(write.data, "attempt");
       assert.notProperty(write.data, "error");
+      assert.notProperty(write.data, "run_as_server");
+      assert.notProperty(write.data, "scheduled_at");
       assert.notProperty(write.data, "status");
     });
 
@@ -243,12 +265,15 @@ describe("Elixir_Hologram_Job", () => {
   });
 
   describe("framework_attribute_names/0", () => {
-    it("answers the three the worker fills, sorted", () => {
+    it("answers the ones only the framework sets, sorted", () => {
       assert.deepStrictEqual(
         Elixir_Hologram_Job["framework_attribute_names/0"](),
         Type.list([
           Type.atom("actor_id"),
+          Type.atom("attempt"),
           Type.atom("error"),
+          Type.atom("run_as_server"),
+          Type.atom("scheduled_at"),
           Type.atom("status"),
         ]),
       );

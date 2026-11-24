@@ -66,7 +66,7 @@ function parseClaim(opts) {
   );
 }
 
-// A job type is one the build baked framework attributes for - the three only the worker sets.
+// A job type is one the build baked framework attributes for - the ones only the framework sets.
 // Nothing else carries them, which is the client's whole notion of Reflection.job?/1.
 function validateJobType(jobType) {
   const type = Type.isAlias(jobType)
@@ -120,10 +120,18 @@ const Elixir_Hologram_Job = {
   "create/3": (jobType, values, opts) =>
     createEntity(build(jobType, values, opts), validateJobType(jobType)),
 
-  // Sorted, the way every job type's are - the acting user at the enqueue, the failure record,
-  // and the status.
+  // Sorted, the way every job type's are - the acting user at the enqueue, how many runs have
+  // started, the failure record, whether it runs as the server, when the job is next due, and the
+  // status.
   "framework_attribute_names/0": () =>
-    Type.list([Type.atom("actor_id"), Type.atom("error"), Type.atom("status")]),
+    Type.list([
+      Type.atom("actor_id"),
+      Type.atom("attempt"),
+      Type.atom("error"),
+      Type.atom("run_as_server"),
+      Type.atom("scheduled_at"),
+      Type.atom("status"),
+    ]),
 };
 
 export default Elixir_Hologram_Job;

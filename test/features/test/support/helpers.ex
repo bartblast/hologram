@@ -13,9 +13,11 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
+  alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Bench
+  alias HologramFeatureTests.Entities.Binder
   alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Bookmark
   alias HologramFeatureTests.Entities.Bottle
@@ -23,15 +25,19 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Crate
+  alias HologramFeatureTests.Entities.Decal
   alias HologramFeatureTests.Entities.Docket
   alias HologramFeatureTests.Entities.Document
+  alias HologramFeatureTests.Entities.Errand
   alias HologramFeatureTests.Entities.Event
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.GuestEntry
   alias HologramFeatureTests.Entities.Inspection
   alias HologramFeatureTests.Entities.Item
+  alias HologramFeatureTests.Entities.Jar
   alias HologramFeatureTests.Entities.Label
   alias HologramFeatureTests.Entities.Leg
+  alias HologramFeatureTests.Entities.Lid
   alias HologramFeatureTests.Entities.Locker
   alias HologramFeatureTests.Entities.Membership
   alias HologramFeatureTests.Entities.Memo
@@ -39,6 +45,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Milestone
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Notice
+  alias HologramFeatureTests.Entities.Pantry
   alias HologramFeatureTests.Entities.Parcel
   alias HologramFeatureTests.Entities.Permit
   alias HologramFeatureTests.Entities.Post
@@ -53,6 +60,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
   alias HologramFeatureTests.Entities.Slip
+  alias HologramFeatureTests.Entities.Squad
   alias HologramFeatureTests.Entities.Sticker
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Ticket
@@ -64,9 +72,12 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Vault
   alias HologramFeatureTests.Entities.Waybill
   alias HologramFeatureTests.Entities.Workshop
+  alias HologramFeatureTests.Jobs.FlakyRun
   alias HologramFeatureTests.Jobs.HoldRun
   alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
+  alias HologramFeatureTests.Jobs.SlowRun
+  alias HologramFeatureTests.Jobs.UpdateMemo
   alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
@@ -277,6 +288,10 @@ defmodule HologramFeatureTests.Helpers do
   transaction that has not finished. Without it a test that reloads immediately can find an empty
   database and conclude, wrongly, that nothing was kept.
 
+  Only frames that have arrived are covered. The place a first fill is dated at comes with the
+  marker ending the fill, after its rows, so a test that reloads to read a first fill back waits
+  for `await_local_fill/1` first: rows stored with no place are dropped by the next page load.
+
   Answers `nil` rather than zero for a page whose runtime has not attached its window yet, which is
   what keeps the wait waiting instead of passing before the browser could have written anything.
   Raises if writes are still in flight after `@max_wait_time`.
@@ -373,24 +388,25 @@ defmodule HologramFeatureTests.Helpers do
   Blocks until this browser's local database holds a whole fill, then returns the `session`.
 
   The place the client greets a stream with is held once a fill has declared the local database
-  complete, so polling for it is how a test waits for a whole fill to have landed. Raising rather
-  than returning: an action it gates would otherwise read only the rows the render carried.
+  complete, so polling for it is how a test waits for a whole fill to have landed. Raises if no
+  place is held after `@max_wait_time` rather than returning: an action it gates would otherwise
+  read only the rows the render carried.
   """
-  @spec await_local_fill(Wallaby.Session.t(), non_neg_integer) :: Wallaby.Session.t()
-  def await_local_fill(session, attempts_left \\ 100)
+  @spec await_local_fill(Wallaby.Session.t(), integer | nil) :: Wallaby.Session.t()
+  def await_local_fill(session, start_time \\ nil) do
+    start_time = start_time || current_time()
 
-  def await_local_fill(session, 0) do
-    raise Wallaby.ExpectationNotMetError,
-          "Timed out waiting for the local database to fill, the client holds place " <>
-            inspect(script_result(session, @place_script))
-  end
+    cond do
+      script_result(session, @place_script) ->
+        session
 
-  def await_local_fill(session, attempts_left) do
-    if script_result(session, @place_script) do
-      session
-    else
-      Process.sleep(50)
-      await_local_fill(session, attempts_left - 1)
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for the local database to fill, the client holds no place"
+
+      true ->
+        :timer.sleep(50)
+        await_local_fill(session, start_time)
     end
   end
 
@@ -422,6 +438,58 @@ defmodule HologramFeatureTests.Helpers do
     else
       await_local_read(clicked, button_text, element_id, expected, attempts_left - 1)
     end
+  end
+
+  @doc """
+  Blocks until the server has read the operations log past its newest change, which it can only
+  once no transaction older than that change is still running on the database server.
+
+  For a test that leans on what the server tells a browser or a client about the rows the test
+  wrote before it connected: called after those writes and before the first visit or connect.
+
+  The server reads the log only up to the oldest transaction still running, and PostgreSQL counts
+  transactions per server, so one open anywhere on it holds the reading back - in another
+  database, like another test run's, as much as in this one. Such a test then fails in one of two
+  ways.
+
+  The place a session starts from is the oldest transaction still running when it starts, so it
+  can be below the test's changes. Below the log's oldest change it reads as one from before the
+  log, and a returning client is sent everything again instead of being caught up (#1763). Above
+  it, the changes after the place are replayed from the rows as they stand, so a row the test took
+  away since is told as gone.
+
+  A change the server hasn't read yet goes out live with whatever the test writes next: a row's
+  create read together with its update is sent as the whole row, not as a patch.
+
+  Raises `ArgumentError` on an empty log, where every returning client is sent everything again
+  whatever its place. Raises `Wallaby.ExpectationNotMetError` if the log isn't read that far after
+  `@max_wait_time`.
+  """
+  @spec await_log_settled() :: :ok
+  def await_log_settled do
+    statement = """
+    SELECT "tx"
+    FROM "#{Mapper.system_schema()}"."oplog"
+    ORDER BY "tx" DESC
+    LIMIT 1
+    """
+
+    case Connection.query(statement, []) do
+      {:ok, %{rows: [[newest_tx]]}} ->
+        do_await_log_settled(newest_tx, current_time())
+
+      {:ok, %{rows: []}} ->
+        raise ArgumentError,
+              "the operations log is empty, call await_log_settled/0 after the test's writes"
+    end
+  end
+
+  @doc """
+  Blocks until this tab has let go of its local store, then returns the `session`.
+  """
+  @spec await_memory_mode(Wallaby.Session.t()) :: Wallaby.Session.t()
+  def await_memory_mode(session) do
+    await_script_result(session, "return globalThis.Hologram.durability.mode() === 'memory';")
   end
 
   @doc """
@@ -800,6 +868,35 @@ defmodule HologramFeatureTests.Helpers do
         # Element not found - return immediately (fast path)
         error
     end
+  end
+
+  @doc """
+  Makes every later write to the `queue` object store of this tab's local store fail, until the
+  page goes away, then returns the `session`.
+
+  The store's connection is private to the page, so this wraps the browser's own `put` and
+  `delete`. A write is aborted once its request has succeeded, which is how a full disk fails a
+  transaction when it commits, after the transaction has read what it needed.
+  """
+  @spec fail_store_writes(Wallaby.Session.t()) :: Wallaby.Session.t()
+  def fail_store_writes(session) do
+    script = """
+    for (const method of ["delete", "put"]) {
+      const original = IDBObjectStore.prototype[method];
+
+      IDBObjectStore.prototype[method] = function (...args) {
+        const request = original.apply(this, args);
+
+        if (this.name === "queue") {
+          request.addEventListener("success", () => this.transaction.abort());
+        }
+
+        return request;
+      };
+    }
+    """
+
+    Browser.execute_script(session, script)
   end
 
   def go_back(session) do
@@ -1280,6 +1377,7 @@ defmodule HologramFeatureTests.Helpers do
       [
         Account,
         Bench,
+        Binder,
         Booking,
         Bookmark,
         Bottle,
@@ -1287,17 +1385,22 @@ defmodule HologramFeatureTests.Helpers do
         Cabin,
         Channel,
         Crate,
+        Decal,
         Docket,
         Document,
+        Errand,
         Event,
+        FlakyRun,
         Folder,
         GuestEntry,
         HoldRun,
         Inspection,
         Item,
+        Jar,
         KillRun,
         Label,
         Leg,
+        Lid,
         Locker,
         Membership,
         Memo,
@@ -1305,6 +1408,7 @@ defmodule HologramFeatureTests.Helpers do
         Milestone,
         Note,
         Notice,
+        Pantry,
         Parcel,
         Permit,
         Post,
@@ -1321,6 +1425,8 @@ defmodule HologramFeatureTests.Helpers do
         Ship,
         Shop,
         Slip,
+        SlowRun,
+        Squad,
         Sticker,
         Stop,
         Ticket,
@@ -1328,6 +1434,7 @@ defmodule HologramFeatureTests.Helpers do
         Tool,
         Topic,
         Trip,
+        UpdateMemo,
         User,
         Vault,
         Waybill,
@@ -1335,6 +1442,7 @@ defmodule HologramFeatureTests.Helpers do
       ]
       |> Enum.map(&Mapper.table_name/1)
       |> Enum.concat([
+        DB.join_table_name(Binder, :decals),
         DB.join_table_name(Docket, :stickers),
         DB.join_table_name(Message, :labels)
       ])
@@ -1641,6 +1749,27 @@ defmodule HologramFeatureTests.Helpers do
 
   defp current_time do
     :erlang.monotonic_time(:milli_seconds)
+  end
+
+  # The newest change is read once, by the caller: read again on every round, the wait would chase
+  # whatever is written meanwhile. The edge is nil until the server's first read.
+  defp do_await_log_settled(newest_tx, start_time) do
+    read_edge = ReadEdge.get(ReadEdge)
+
+    cond do
+      is_integer(read_edge) and read_edge > newest_tx ->
+        :ok
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for the server to read the operations log past transaction " <>
+                "#{newest_tx}, it has read up to #{inspect(read_edge)} - an older transaction " <>
+                "is still running on the database server, or the server's reads are failing"
+
+      true ->
+        :timer.sleep(50)
+        do_await_log_settled(newest_tx, start_time)
+    end
   end
 
   defp do_execute_query_once(%{driver: driver} = parent, query) do

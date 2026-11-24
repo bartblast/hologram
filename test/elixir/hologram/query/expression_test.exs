@@ -402,6 +402,12 @@ defmodule Hologram.Query.ExpressionTest do
                    end
     end
 
+    test "raises on new() when the line has no row after a change" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: new(status)",
+                   fn -> lower_condition("new(status) == :approved") end
+    end
+
     test "raises on nil" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:7: unsupported expression in a condition: nil - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), or a pinned list of predicates",
@@ -1009,6 +1015,24 @@ defmodule Hologram.Query.ExpressionTest do
   end
 
   describe "predicates/2" do
+    test "raises on a call of new as the left side" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: the left side of a comparison names an attribute of the queried entity or a path to one, got: new(status)",
+                   fn -> lower_predicates("new(status) == :approved") end
+    end
+
+    test "reads a call of new as the surrounding code's function, whose pin the refusal names" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute, a path or a pinned expression, got: new(term) - a value from the surrounding code is pinned: ^new(term)",
+                   fn -> lower_predicates("status == new(term)") end
+    end
+
+    test "raises on a call of new as a quantifier's source" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a quantifier's source is a relationship or a path to one, got: new(project).members",
+                   fn -> lower_predicates("any(new(project).members)") end
+    end
+
     test "flattens a chain of disjunctions" do
       assert lower_predicates("a == 1 or b == 2 or c == 3") ==
                [or: [[a: {:==, 1}], [b: {:==, 2}], [c: {:==, 3}]]]

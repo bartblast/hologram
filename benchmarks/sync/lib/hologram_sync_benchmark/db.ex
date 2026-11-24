@@ -17,6 +17,11 @@ defmodule HologramSyncBenchmark.DB do
   # PG 14 an idle backend keeps its counts until its next transaction, so a read can miss them.
   @min_server_version 150_000
 
+  @backend_sample_ms 200
+
+  # What sync's own database pool names its connections (see Hologram.Sync.Pool).
+  @sync_application_name "hologram_sync"
+
   # Hologram's own tables a case's runs fill: the log and the record of browser batches.
   @log_tables ["oplog", "mutation"]
 
@@ -66,6 +71,81 @@ defmodule HologramSyncBenchmark.DB do
       )
 
     runs
+  end
+
+  @doc """
+  Starts counting the backends running a statement in the benchmark's database, every 200 ms on a
+  connection of its own, and returns the sampler, for `stop_backend_sampler/1`.
+
+  Not linked, so a sampler that fails doesn't take the driver and the sweep's unwritten results
+  with it. It goes when the caller does.
+  """
+  @spec start_backend_sampler :: pid
+  def start_backend_sampler do
+    caller = self()
+
+    spawn(fn ->
+      caller_ref = Process.monitor(caller)
+
+      {:ok, conn} =
+        Config.connection_opts()
+        |> Keyword.merge(backoff_type: :stop, sync_connect: true)
+        |> Postgrex.start_link()
+
+      sample_backends(conn, caller_ref, %{other: 0, sync: 0})
+    end)
+  end
+
+  @doc """
+  Stops the given sampler and returns the most backends it saw running a statement at once, those
+  of sync's own pool and the rest apart. A lower bound: a statement shorter than the time between
+  two samples can be missed. Both are nil for a sampler that failed, since a figure it couldn't
+  read is no reason to lose the rest of a sweep's.
+  """
+  @spec stop_backend_sampler(pid) :: %{
+          other: non_neg_integer | nil,
+          sync: non_neg_integer | nil
+        }
+  def stop_backend_sampler(sampler) do
+    ref = Process.monitor(sampler)
+    send(sampler, {:stop, self(), ref})
+
+    receive do
+      {^ref, peak} ->
+        Process.demonitor(ref, [:flush])
+        peak
+
+      {:DOWN, ^ref, :process, ^sampler, _reason} ->
+        %{other: nil, sync: nil}
+    end
+  end
+
+  defp sample_backends(conn, caller_ref, peak) do
+    receive do
+      {:stop, from, ref} ->
+        GenServer.stop(conn)
+        send(from, {ref, peak})
+
+      {:DOWN, ^caller_ref, :process, _caller, _reason} ->
+        GenServer.stop(conn)
+    after
+      @backend_sample_ms ->
+        %{rows: [[sync, other]]} =
+          Postgrex.query!(
+            conn,
+            """
+            SELECT count(*) FILTER (WHERE application_name = $1),
+                   count(*) FILTER (WHERE application_name <> $1)
+            FROM pg_stat_activity
+            WHERE datname = current_database() AND state = 'active' AND pid <> pg_backend_pid()
+            """,
+            [@sync_application_name]
+          )
+
+        peak = %{other: max(peak.other, other), sync: max(peak.sync, sync)}
+
+        sample_backends(conn, caller_ref, peak)
+    end
   end
 
   @doc """

@@ -25,6 +25,16 @@ export default class Replica {
 
   static token = null;
 
+  // Whether this tab is waiting for the server to mint it a pair of its own (see requestMint).
+  static awaitingMint = false;
+
+  // Whether the pair in use is one the server minted for this tab alone.
+  static minted = false;
+
+  // Whether the server refused to mint one, because the pair this tab showed it no longer holds
+  // for whoever is signed in (see refuseMint).
+  static mintRefused = false;
+
   static adopt(replica) {
     Replica.id = replica.id;
     Replica.token = replica.token;
@@ -62,9 +72,82 @@ export default class Replica {
     return true;
   }
 
+  // Asks for a pair no other tab can hold, for a tab that counts its batches in memory. The pair in
+  // its page can't be that: a browser can serve one cached page to two tabs, or again on Back, and
+  // each would count from 1 under it, so the server would answer one write from the record of
+  // another. The next stream handshake brings the pair, and nothing is sent until it has.
+  static requestMint() {
+    Replica.awaitingMint = true;
+  }
+
+  // The pair the server minted, put in use if this tab is still waiting for one, answering whether
+  // it was. The page's pair is let go of for good: refresh() going back to it would undo the point
+  // of asking.
+  static takeMinted(replica) {
+    if (!Replica.withoutIdentity() || !replica?.id) {
+      return false;
+    }
+
+    Replica.awaitingMint = false;
+    Replica.fresh = null;
+    Replica.minted = true;
+    Replica.mintRefused = false;
+
+    Replica.adopt(replica);
+
+    return true;
+  }
+
+  // The server won't mint for the owner of the pair this tab showed. A stored pair can simply be
+  // stale, from a session that has ended, so the page's own gets a turn. With that refused too,
+  // somebody else holds the session: nothing goes out, since the writes this tab holds are its
+  // owner's. It stops asking, and later handshakes still show the pair, so it recovers if its owner
+  // signs back in.
+  //
+  // Only a refusal of the pair in use counts. Two handshakes can overlap and both show the stored
+  // pair, and the second refusal would otherwise end the asking before the page's pair was tried.
+  static refuseMint(presentedId = Replica.id) {
+    if (
+      !Replica.awaitingMint ||
+      presentedId !== Replica.id ||
+      Replica.refresh()
+    ) {
+      return;
+    }
+
+    Replica.awaitingMint = false;
+    Replica.mintRefused = true;
+  }
+
+  // A pair the server minted for this tab alone, taken up by a tab in no group, which counts its
+  // batches under it as under one it asked for (see DataLayer.takeHandshake).
+  static adoptOwn(replica) {
+    Replica.awaitingMint = false;
+    Replica.minted = true;
+    Replica.mintRefused = false;
+
+    Replica.adopt(replica);
+  }
+
+  // Forgets the pair this tab asked for, and any refusal of it, for a tab that followed a change of
+  // user: both were about the previous owner (see DataLayer.followIdentity).
+  static endMint() {
+    Replica.awaitingMint = false;
+    Replica.minted = false;
+    Replica.mintRefused = false;
+  }
+
+  // Whether this tab has no pair it may send under, for now or for good.
+  static withoutIdentity() {
+    return Replica.awaitingMint || Replica.mintRefused;
+  }
+
   static reset() {
+    Replica.awaitingMint = false;
     Replica.fresh = null;
     Replica.id = null;
+    Replica.minted = false;
+    Replica.mintRefused = false;
     Replica.owner = undefined;
     Replica.token = null;
   }

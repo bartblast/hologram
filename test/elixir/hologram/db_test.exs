@@ -158,7 +158,9 @@ defmodule Hologram.DBTest do
 
       assert module.write().__meta__.attribute_ops == %{c: {:put, "abc"}}
       assert module.executor() == pool_name()
-      assert module.job_fields() == [:actor_id, :error, :status]
+
+      assert module.job_fields() ==
+               [:actor_id, :attempt, :error, :run_as_server, :scheduled_at, :status]
     end
   end
 
@@ -422,6 +424,29 @@ defmodule Hologram.DBTest do
         pool = start_unreachable_pool()
 
         assert_raise Postgrex.Error, ~r/hologram_no_such_database/, fn ->
+          Connection.with_connection(pool, fn ->
+            await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+          end)
+        end
+
+        stop_unreachable_pool()
+      end)
+    end
+
+    test "names the reset when the database doesn't exist in dev" do
+      System.put_env("HOLOGRAM_ENV", "dev")
+      on_exit(fn -> System.delete_env("HOLOGRAM_ENV") end)
+
+      connection_opts = Config.connection_opts(database: "hologram_no_such_database")
+
+      expected_msg =
+        ~s(database "hologram_no_such_database" does not exist - create it, or run ) <>
+          "mix holo.db.reset to create it with Hologram's tables"
+
+      capture_log(fn ->
+        pool = start_unreachable_pool()
+
+        assert_raise RuntimeError, expected_msg, fn ->
           Connection.with_connection(pool, fn ->
             await_database(connection_opts: connection_opts, retry_interval_ms: 10)
           end)

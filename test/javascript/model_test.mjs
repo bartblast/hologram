@@ -7,6 +7,7 @@ import {
   defineRuntimeGlobals,
 } from "./support/helpers.mjs";
 
+import Bitstring from "../../assets/js/bitstring.mjs";
 import Erlang_Re from "../../assets/js/erlang/re.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Model from "../../assets/js/model.mjs";
@@ -135,7 +136,7 @@ describe("Model", () => {
           roles: ["editor", "owner"],
           serverOnly: [],
         },
-        // A job type, whose three framework attributes are the worker's to fill and no client's
+        // A job type, whose framework attributes are the worker's to fill and no client's
         // to write.
         [NOTIFY]: {
           attributes: {
@@ -149,7 +150,14 @@ describe("Model", () => {
           constraints: {},
           defaults: {},
           enumValues: {reason: ["created"], status: ["queued", "running"]},
-          frameworkAttributes: ["actor_id", "error", "status"],
+          frameworkAttributes: [
+            "actor_id",
+            "attempt",
+            "error",
+            "run_as_server",
+            "scheduled_at",
+            "status",
+          ],
           relationships: {},
           serverOnly: ["error"],
         },
@@ -1084,6 +1092,24 @@ describe("Model", () => {
       assert.equal(Model.unbox(Type.bitstring("t1"), "uuid"), "t1");
     });
 
+    it("unboxes a string holding a lone surrogate the way the server stores it", () => {
+      assert.equal(
+        Model.unbox(Type.bitstring("a\uD800b"), "string"),
+        "a\uFFFDb",
+      );
+    });
+
+    it("keeps a whole surrogate pair in a string", () => {
+      assert.equal(
+        Model.unbox(Type.bitstring("a\u{1F600}b"), "string"),
+        "a\u{1F600}b",
+      );
+    });
+
+    it("unboxes a binary that isn't text without throwing", () => {
+      assert.isFalse(Model.unbox(Bitstring.fromBytes([255]), "string"));
+    });
+
     it("unboxes a boolean, an integer and a float as plain values", () => {
       assert.isFalse(Model.unbox(Type.boolean(false), "boolean"));
       assert.equal(Model.unbox(Type.integer(7), "integer"), 7);
@@ -1887,6 +1913,68 @@ describe("Model", () => {
       Model.reset();
     });
 
+    it("remembers the update names the new rules no longer carry", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["approve", "archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: ["approve"],
+          policy: {},
+          updateNames: ["approve"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("remembers the update names of a held type the entries leave out", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("keeps a removed update name across a later refresh", () => {
+      globalThis.Hologram.sync.model[DOC].formerUpdateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("forgets a removed update name the new rules bring back", () => {
+      globalThis.Hologram.sync.model[DOC].formerUpdateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: ["archive"],
+          policy: {},
+          updateNames: ["archive"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        [],
+      );
+    });
+
     it("takes a held type's rules from its entry", () => {
       const policy = {
         read: [
@@ -1931,6 +2019,49 @@ describe("Model", () => {
         globalThis.Hologram.sync.model[DOC].verdicts,
         verdicts,
       );
+    });
+
+    it("takes the update names of a held type's entry", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: [],
+          policy: {},
+          updateNames: ["approve"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(globalThis.Hologram.sync.model[DOC].updateNames, [
+        "approve",
+      ]);
+    });
+
+    it("drops the update names of a held type its entry carries none for", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: [],
+          policy: {},
+          verdicts: {},
+        },
+      });
+
+      assert.equal(globalThis.Hologram.sync.model[DOC].updateNames, undefined);
+    });
+
+    it("drops the update names of a held type the entries leave out", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.equal(globalThis.Hologram.sync.model[DOC].updateNames, undefined);
     });
 
     // The bundle's own code can still ask about an operation the new build dropped, and is denied

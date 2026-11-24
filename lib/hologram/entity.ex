@@ -209,8 +209,7 @@ defmodule Hologram.Entity do
       changes is covered by some update line that holds - a line without either option covers
       every field. `can?(user, :update, row)` and `via: {:update, relationship}` count only the
       lines without either. A line covering a relationship lets its holders point the row at any
-      row of the related type: a condition reads the row as stored, so it can't say anything about
-      the row the change points it at.
+      row of the related type its condition allows.
     * `to:` - who holds the operation: a role name (`:editor`), a global role module (`Admin`), a
       role held on the row a to-one relationship, or a path of them, points at as
       `{role, relationship}` (`{:editor, project}`, `{:owner, trip.user}`), a role held on a whole
@@ -1358,8 +1357,8 @@ defmodule Hologram.Entity do
   end
 
   # A job is enqueued as queued, by whoever is acting, and what happens to it afterwards is the
-  # worker's to record - so the three attributes carrying that are refused here rather than
-  # silently overwritten at the write.
+  # worker's to record - so the attributes carrying that are refused here rather than silently
+  # overwritten at the write.
   defp validate_framework_values!(entity_type, values_map) do
     framework_name =
       if Reflection.job?(entity_type) do

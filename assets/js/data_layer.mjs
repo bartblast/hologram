@@ -9,7 +9,9 @@ import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
 import ManuallyPortedElixirHologramDB from "./elixir/hologram/db.mjs";
-import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
+import ManuallyPortedElixirHologramEntity, {
+  defineStructFunctions,
+} from "./elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "./elixir/hologram/query/stage.mjs";
 import Model from "./model.mjs";
@@ -226,13 +228,23 @@ export default class DataLayer {
 
   // Defines the hand-written client versions of the Hologram.Auth, Hologram.DB, Hologram.Entity,
   // Hologram.Job and Hologram.Query.Stage functions as the functions of their modules. No bundle
-  // carries their Elixir originals.
+  // carries their Elixir originals. With them, the struct functions of the model's entity types,
+  // before any chunk's definitions run, so that a chunk's own functions replace them.
   static defineManuallyPortedFunctions() {
+    defineStructFunctions();
+
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Auth",
       "can?/3",
       "public",
       ManuallyPortedElixirHologramAuth["can?/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "can?/4",
+      "public",
+      ManuallyPortedElixirHologramAuth["can?/4"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -247,6 +259,13 @@ export default class DataLayer {
       "grant_role/3",
       "public",
       ManuallyPortedElixirHologramAuth["grant_role/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "grant_role/4",
+      "public",
+      ManuallyPortedElixirHologramAuth["grant_role/4"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -275,6 +294,13 @@ export default class DataLayer {
       "revoke_role/3",
       "public",
       ManuallyPortedElixirHologramAuth["revoke_role/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
+      "revoke_role/4",
+      "public",
+      ManuallyPortedElixirHologramAuth["revoke_role/4"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -604,6 +630,19 @@ export default class DataLayer {
     Batches.flush();
   }
 
+  // Whether this tab holds writes only in its memory that it can still send, which a reload would
+  // lose. A tab stopped over its model, or refused an identity, is left out: only a reload moves it
+  // on.
+  static holdsUnsentWrites() {
+    return (
+      Durability.mode === "memory" &&
+      Batches.pendingCount() > 0 &&
+      Tabs.sends() &&
+      !SyncStream.holdsWrites() &&
+      !Replica.mintRefused
+    );
+  }
+
   // Before the first render, so that a prop reading a query answers from the database rather than
   // from nothing - the rows the server read to render this page are the rows those queries need,
   // and they go in through the same ingest the stream uses. Every page visit carries again, which
@@ -722,8 +761,10 @@ export default class DataLayer {
       // The pair goes with the user. The previous user's would be written into the new user's
       // slot, or sent under the new user's session: the tab holds none until the store, its group
       // or a handshake gives it the new user's (see SyncStream.awaitingPair). The page's offer was
-      // minted for the previous user too.
+      // minted for the previous user too. So does any pair this tab asked the server for: it was
+      // minted for the previous user, or refused them.
       Replica.owner = owner;
+      Replica.endMint();
       $.#holdNoPair();
     }
 
@@ -788,13 +829,14 @@ export default class DataLayer {
         !Tabs.takingLead &&
         Replica.owner === (LocalDatabase.actorUserId ?? null);
 
-      if (Replica.id === null && (Tabs.name === null || leadsForItself)) {
+      // The server minted it for this tab alone, so a tab in no group counts its batches under it
+      // as under a pair it asked for (see Replica.requestMint).
+      if (Replica.id === null && Tabs.name === null) {
+        Replica.adoptOwn(Replica.fresh);
+      } else if (Replica.id === null && leadsForItself) {
         Replica.adopt(Replica.fresh);
-
-        if (Tabs.name !== null) {
-          Durability.persistReplica(Replica.current());
-          Tabs.postState();
-        }
+        Durability.persistReplica(Replica.current());
+        Tabs.postState();
       }
     }
 
@@ -863,8 +905,9 @@ export default class DataLayer {
     // leads itself and lets go of the batches the store holds, as at boot. The tab leading the new
     // user's group sends those, or the next page load does. Kept, each would be sent twice: by this
     // tab, and from the store under another pair. The ones its actions sealed after the store
-    // stopped are kept: nothing else holds them. Its filings settle first, since that is what tells
-    // the two apart. The other tabs are told nothing, since the store failed only for this one.
+    // stopped are kept: nothing else holds them (see Batches.disown). Its filings settle first,
+    // since that is what tells the two apart. The other tabs are told nothing, since the store
+    // failed only for this one.
     //
     // Its stream is a replica's of its own from here, served sync from no place, and it holds no
     // pair until that stream's handshake hands it one. Any fresh pair a handshake handed it while
@@ -879,7 +922,7 @@ export default class DataLayer {
 
       Tabs.leave();
       $.#holdNoPair();
-      Batches.disownStored();
+      Batches.disown();
 
       if (Sse.isStarted) {
         Sse.reconnect();
@@ -917,9 +960,17 @@ export default class DataLayer {
     $.#reconnectsAfterMount = Sse.isStarted;
   }
 
-  // The four sync kinds the stream delivers (see SyncStream.listen).
+  // The four sync kinds the stream delivers (see SyncStream.listen). A tab the server refused an
+  // identity shows its pair only on a handshake, so when the signed-in user changes it asks again,
+  // since its owner may be back.
   static listenToStream(eventSource) {
     SyncStream.listen(eventSource);
+
+    eventSource.addEventListener("sync_resync", (event) => {
+      if (JSON.parse(event.data).reason === "identity" && Replica.mintRefused) {
+        Sse.askForReplica();
+      }
+    });
   }
 
   // Called by every render: the rows the derived fields read are now the ones it computed them
@@ -1023,6 +1074,15 @@ export default class DataLayer {
 
       Sse.reconnect();
     }
+  }
+
+  // The pair a stream handshake shows the server when this tab needs a new one, which it mints for
+  // the same owner (see Replica.requestMint). A tab that followed a change of user holds none to
+  // show, and takes the handshake's pair for the session as it stands (see takeHandshake).
+  static replicaToReplace() {
+    return Replica.withoutIdentity() && Replica.id !== null
+      ? Replica.current()
+      : null;
   }
 
   // Takes up what a previous page load left - the place to resume the stream from, the number to
@@ -1154,6 +1214,38 @@ export default class DataLayer {
   // no answer is still pending, and this is what wakes the queue that stopped behind it.
   static streamOpened() {
     Batches.flush();
+  }
+
+  // A batch whose tab closed before saying it filed one has nothing to wake the sender, so with
+  // nobody acting it would sit in the store unsent. The stream's heartbeat is a clock this tab
+  // already has, and it stops while offline, where there is nothing to send to anyway.
+  //
+  // Only with an empty queue, so a beat can never send a batch a second time. A queue holding one
+  // may be sending it, waiting out a retry's backoff, holding it for a stopped tab, or stopped by
+  // a send that raised.
+  static streamBeat() {
+    if (Batches.pendingCount() === 0) {
+      Batches.flush();
+    }
+  }
+
+  // Takes up the identity a stream handshake brought, if this tab asked for one, and wakes the
+  // sender that was holding for it. Answers the sender's promise, so a page about to reload can let
+  // it finish. A handshake that refused the pair it showed ends the asking, so the stream can open.
+  static takeReplica(replica, refused = false, presentedId = undefined) {
+    if (refused) {
+      Replica.refuseMint(presentedId);
+
+      return null;
+    }
+
+    return Replica.takeMinted(replica) ? Batches.flush() : null;
+  }
+
+  // Whether the next stream handshake should ask the server for an identity (see
+  // Replica.requestMint).
+  static wantsReplica() {
+    return Replica.awaitingMint;
   }
 
   // What a render that handed a page over counted, for as long as this client's own database cannot

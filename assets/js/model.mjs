@@ -517,6 +517,15 @@ export default class Model {
           ? Model.#heldInteger(value.value)
           : Number(value.value);
 
+      // A lone surrogate, half of a pair, is spelled the way the server will store it, so the row
+      // on this screen and the row the server holds are one value. A struct edited in an action can
+      // hold a non-text binary until it's validated, and that has no text to mend.
+      case "string": {
+        const text = Bitstring.toText(value);
+
+        return typeof text === "string" ? text.toWellFormed() : text;
+      }
+
       case "time":
         return Model.#unboxTime(value);
 
@@ -577,14 +586,22 @@ export default class Model {
         ? {
             ...held,
             derived: {...held.derived, ...entry.derived},
+            formerUpdateNames: Model.#formerUpdateNames(held, entry),
             inverses: {...held.inverses, ...entry.inverses},
             operations: [
               ...new Set([...(held.operations ?? []), ...entry.operations]),
             ].sort(),
             policy: entry.policy,
+            updateNames: entry.updateNames,
             verdicts: entry.verdicts,
           }
-        : {...held, policy: {}, verdicts: {}};
+        : {
+            ...held,
+            formerUpdateNames: Model.#formerUpdateNames(held, null),
+            policy: {},
+            updateNames: undefined,
+            verdicts: {},
+          };
     }
 
     for (const [type, entry] of Object.entries(entries)) {
@@ -1080,6 +1097,21 @@ export default class Model {
 
   static #field(struct, name) {
     return struct.data[Type.encodeMapKey(Type.atom(name))][1];
+  }
+
+  // The names of update lines this tab's code can still ask about that the current rules no longer
+  // carry. can? with values answers no for one, where any other name it doesn't know is a mistake.
+  static #formerUpdateNames(held, entry) {
+    const current = entry?.updateNames ?? [];
+
+    return [
+      ...new Set([
+        ...(held.formerUpdateNames ?? []),
+        ...(held.updateNames ?? []),
+      ]),
+    ]
+      .filter((name) => !current.includes(name))
+      .sort();
   }
 
   // The framework's state on the struct, as the server would fill it for a row that was READ:
