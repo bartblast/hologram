@@ -46,6 +46,9 @@ defmodule Hologram.Migration.Value do
           run_calls: list({atom, non_neg_integer})
         }
 
+  # What map_reduce_quote/4 calls on each part of a quote that runs.
+  @type quote_mapper :: (Macro.t(), any, true | :unknown -> {Macro.t(), any})
+
   @typep scope :: %{args: list(atom), env: Macro.Env.t(), in_fn: boolean}
 
   @type fill :: %{
@@ -84,7 +87,7 @@ defmodule Hologram.Migration.Value do
   @query_calls @words ++ @stages
 
   # What can change the meaning of a name inside an Elixir body.
-  @scope_changing_forms [:alias, :import, :require, :unquote, :unquote_splicing]
+  @scope_changing_forms [:alias, :import, :require]
 
   # The ones an Elixir body can't call, since nothing else would give them a meaning there.
   @elixir_refused_words [:filter | @words]
@@ -213,6 +216,47 @@ defmodule Hologram.Migration.Value do
   end
 
   @doc """
+  Maps the code a quote runs where it's written, when the given node is one: its options, and
+  what its body unquotes unless the options turn that off. The function takes each, the
+  accumulator and true, or :unknown when only the compiler can read whether the body unquotes,
+  like when an attribute holds the options. A body piped into a quote is unquoted whatever the
+  options say: the function the quote is written in reads its unquotes before the pipe expands,
+  and splices them in itself.
+
+  Returns :error for a node that isn't a quote.
+  """
+  @spec map_reduce_quote(Macro.t(), Macro.Env.t(), any, quote_mapper) ::
+          {:ok, Macro.t(), any} | :error
+  def map_reduce_quote({:quote, meta, args}, _env, acc, fun) when is_list(args) do
+    {args, acc} = map_reduce_quote_args(args, quote_unquotes(args), acc, fun)
+
+    {:ok, {:quote, meta, args}, acc}
+  end
+
+  def map_reduce_quote({pipe, meta, [left, {:quote, quote_meta, args}]} = node, env, acc, fun) do
+    case {unpiped_call(node, env), args} do
+      # The function the quote is written in splices in the unquotes of a body left of the pipe.
+      {{:quote, _meta, [^left]}, _written} ->
+        {[left], all_acc} = map_reduce_quote_args([left], true, acc, fun)
+
+        {:ok, {pipe, meta, [left, {:quote, quote_meta, args}]}, all_acc}
+
+      # Left of the pipe are the quote's separate options.
+      {{:quote, _meta, [^left, block]}, [block]} ->
+        {options, options_acc} = fun.(left, acc, true)
+        unquotes = quote_unquotes([left, block])
+        {block, all_acc} = map_reduce_quote_block(block, unquotes, options_acc, fun)
+
+        {:ok, {pipe, meta, [options, {:quote, quote_meta, [block]}]}, all_acc}
+
+      _call ->
+        :error
+    end
+  end
+
+  def map_reduce_quote(_node, _env, _acc, _fun), do: :error
+
+  @doc """
   Lowers the given `backfill:` value of a migration op to the AST the op carries.
 
   A literal stays as written, and a pinned expression becomes that expression: both are constants.
@@ -265,7 +309,7 @@ defmodule Hologram.Migration.Value do
       # A call in quoted code is data, so only these count as a query(...) or a query word. The
       # calls above keep the quoted ones for the import check, since a quote records the imports
       # in force.
-      run_calls: body |> run_code(env) |> local_calls(env)
+      run_calls: local_calls(run_code(body, env), env)
     }
   end
 
@@ -628,6 +672,92 @@ defmodule Hologram.Migration.Value do
     end)
   end
 
+  defp map_reduce_quote_args([options, block], unquotes, acc, fun) do
+    {options, options_acc} = fun.(options, acc, true)
+    {block, all_acc} = map_reduce_quote_block(block, unquotes, options_acc, fun)
+
+    {[options, block], all_acc}
+  end
+
+  defp map_reduce_quote_args(args, unquotes, acc, fun) do
+    Enum.map_reduce(args, acc, fn arg, acc ->
+      if Keyword.keyword?(arg) do
+        Enum.map_reduce(arg, acc, &map_reduce_quote_option(&1, unquotes, &2, fun))
+      else
+        fun.(arg, acc, true)
+      end
+    end)
+  end
+
+  # With separate options, Elixir ignores any beside the do.
+  defp map_reduce_quote_block(block, unquotes, acc, fun) do
+    if Keyword.keyword?(block) do
+      Enum.map_reduce(block, acc, fn
+        {:do, _body} = option, acc -> map_reduce_quote_option(option, unquotes, acc, fun)
+        ignored, acc -> {ignored, acc}
+      end)
+    else
+      fun.(block, acc, true)
+    end
+  end
+
+  defp map_reduce_quote_option({:do, body}, false, acc, _fun), do: {{:do, body}, acc}
+
+  defp map_reduce_quote_option({:do, body}, unquotes, acc, fun) do
+    {body, acc} = map_reduce_unquoted(body, acc, &fun.(&1, &2, unquotes))
+
+    {{:do, body}, acc}
+  end
+
+  defp map_reduce_quote_option({key, value}, _unquotes, acc, fun) do
+    {value, acc} = fun.(value, acc, true)
+
+    {{key, value}, acc}
+  end
+
+  # A nested quote keeps its body's unquotes for itself, but not its separate options'.
+  defp map_reduce_unquoted({:quote, meta, [options, body]}, acc, fun) do
+    {options, acc} = map_reduce_unquoted(options, acc, fun)
+
+    {{:quote, meta, [options, body]}, acc}
+  end
+
+  defp map_reduce_unquoted({:quote, _meta, args} = node, acc, _fun) when is_list(args),
+    do: {node, acc}
+
+  defp map_reduce_unquoted({form, meta, [value]}, acc, fun)
+       when form in [:unquote, :unquote_splicing] do
+    {value, acc} = fun.(value, acc)
+
+    {{form, meta, [value]}, acc}
+  end
+
+  # Elixir has no remote unquote_splicing, and the receiver is still unquoted.
+  defp map_reduce_unquoted({{:., dot_meta, [receiver, :unquote]}, meta, [value]}, acc, fun) do
+    {receiver, receiver_acc} = map_reduce_unquoted(receiver, acc, fun)
+    {value, all_acc} = fun.(value, receiver_acc)
+
+    {{{:., dot_meta, [receiver, :unquote]}, meta, [value]}, all_acc}
+  end
+
+  defp map_reduce_unquoted({form, meta, args}, acc, fun) do
+    {[form, args], acc} = map_reduce_unquoted([form, args], acc, fun)
+
+    {{form, meta, args}, acc}
+  end
+
+  defp map_reduce_unquoted({left, right}, acc, fun) do
+    {[left, right], acc} = map_reduce_unquoted([left, right], acc, fun)
+
+    {{left, right}, acc}
+  end
+
+  defp map_reduce_unquoted(list, acc, fun) when is_list(list) do
+    Enum.map_reduce(list, acc, &map_reduce_unquoted(&1, &2, fun))
+  end
+
+  defp map_reduce_unquoted(other, acc, _fun), do: {other, acc}
+
   # What query(...) wraps, in a tuple since the wrapped expression can be nil, or nil when the body
   # isn't marked.
   defp marked_inner({:query, _meta, [inner]}), do: {inner}
@@ -819,25 +949,34 @@ defmodule Hologram.Migration.Value do
   end
 
   # Quoted code is data, so a quote reads its options, and what its body unquotes unless they turn
-  # that off.
+  # that off. Options only the compiler can read, like an attribute, leave the body to the
+  # compiler.
   defp quote_reads(args) do
-    {body, options} =
-      args
-      |> Enum.flat_map(&if(Keyword.keyword?(&1), do: &1, else: [options: &1]))
-      |> Keyword.pop(:do)
+    {_args, reads} =
+      map_reduce_quote_args(args, quote_unquotes(args), [], fn
+        code, reads, true -> {code, [code | reads]}
+        code, reads, :unknown -> {code, reads}
+      end)
 
-    # With separate options, Elixir ignores any beside the do. Options only the compiler can read,
-    # like an attribute, leave the body to the compiler.
-    settings =
+    reads
+  end
+
+  # Whether a quote with the given args unquotes its body: true or false as its options spell it,
+  # or :unknown when only the compiler can read them, like an attribute. With separate options,
+  # Elixir ignores any beside the do.
+  defp quote_unquotes(args) do
+    written =
       case args do
-        [first, _block] -> if Keyword.keyword?(first), do: first, else: [unquote: first]
-        _single -> options
+        [first, _block] -> first
+        [single] -> single
+        _other -> []
       end
 
-    if Keyword.get(settings, :unquote, not Keyword.has_key?(settings, :bind_quoted)) == true do
-      [options | unquoted(body)]
-    else
-      [options]
+    settings = if Keyword.keyword?(written), do: written, else: [unquote: written]
+
+    case Keyword.get(settings, :unquote, not Keyword.has_key?(settings, :bind_quoted)) do
+      setting when is_boolean(setting) -> setting
+      _compiler_read -> :unknown
     end
   end
 
@@ -1237,30 +1376,6 @@ defmodule Hologram.Migration.Value do
 
   defp unpiped_call(node, _env), do: node
 
-  defp unquoted(ast) do
-    {_ast, values} =
-      Macro.prewalk(ast, [], fn
-        # A nested quote keeps its body's unquotes for itself, but not its separate options'.
-        {:quote, _meta, [options, _body]}, found ->
-          {{:__block__, [], [options]}, found}
-
-        {:quote, _meta, args}, found when is_list(args) ->
-          {nil, found}
-
-        {form, _meta, [value]}, found when form in [:unquote, :unquote_splicing] ->
-          {nil, [value | found]}
-
-        # Elixir has no remote unquote_splicing, and the receiver is still unquoted.
-        {{:., _dot_meta, [receiver, :unquote]}, _meta, [value]}, found ->
-          {{:__block__, [], [receiver]}, [value | found]}
-
-        node, found ->
-          {node, found}
-      end)
-
-    values
-  end
-
   defp valid_args?(args),
     do: is_list(args) and not List.improper?(args) and Enum.all?(args, &is_atom/1)
 
@@ -1359,10 +1474,12 @@ defmodule Hologram.Migration.Value do
 
   # A macro of the migration can expand to an alias or an import the check above can't see. Any
   # other module's macro is refused by the call check. A guard is a macro too, and one can't hold
-  # an alias.
+  # an alias. A quoted call never expands, and a guard in quoted code is data, so the quotes go
+  # first.
   defp validate_no_own_macros!(reading, module, scope) do
     macro =
       reading.body
+      |> run_code(reading.env)
       |> without_guards()
       |> local_calls(reading.env)
       |> Enum.find(fn call ->
@@ -1383,12 +1500,30 @@ defmodule Hologram.Migration.Value do
 
   # An Elixir body's aliases are expanded where the op is written, and its calls judged by the
   # imports there, so one it changes for itself would run another function than the one written.
-  # An unquote can splice one in unseen.
+  # Quoted code changes nothing, but an unquote can splice one in unseen. Even a quote's own
+  # unquote is refused: the function the body runs in splices in itself the unquotes of a quote a
+  # pipe passes them to, since it reads them before the pipe expands.
   defp validate_no_scope_change!(body, scope) do
-    {_ast, changed} =
+    {_ast, unquoted} =
       body
       |> Macro.prewalk(&unpiped_call(&1, scope.env))
       |> Macro.prewalk(nil, fn
+        {form, _meta, args} = node, nil
+        when form in [:unquote, :unquote_splicing] and is_list(args) ->
+          {node, form}
+
+        # A remote unquote splices in the function's name, piped too.
+        {{:., _dot_meta, [_receiver, :unquote]}, _meta, args} = node, nil when is_list(args) ->
+          {node, :unquote}
+
+        node, found ->
+          {node, found}
+      end)
+
+    {_ast, changed} =
+      body
+      |> run_code(scope.env)
+      |> Macro.prewalk(unquoted, fn
         {kind, _meta, args} = node, nil when kind in @scope_changing_forms and is_list(args) ->
           {node, kind}
 

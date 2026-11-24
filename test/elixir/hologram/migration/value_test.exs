@@ -1765,6 +1765,81 @@ defmodule Hologram.Migration.ValueTest do
                "write String.split/2"
     end
 
+    test "takes what a quote with separate options ignores beside the do as data" do
+      {module, _value} =
+        elixir_op(
+          ~s|fn title -> inspect(quote([], bind_quoted: [y: split(title, ",")], do: 1)) <> title end|
+        )
+
+      assert module.__backfill_0__("a") == "1a"
+    end
+
+    test "takes a call to the migration's own macro inside a quote as data" do
+      for kind <- ["defmacro", "defmacrop"] do
+        {module, _value} =
+          elixir_op(
+            ~s|fn title -> inspect(quote(do: shout(title))) <> title end|,
+            "#{kind} shout(text), do: text"
+          )
+
+        assert module.__backfill_0__("a") =~ ~r/^\{:shout, \[\], \[\{:title, .*\}a$/
+      end
+    end
+
+    test "takes an alias, an import or a require inside a quote as data" do
+      for kind <- ["alias", "import", "require"] do
+        {module, _value} =
+          elixir_op(~s|fn title -> inspect(quote(do: #{kind}(String))) <> title end|)
+
+        assert module.__backfill_0__("a") =~ ~r/^\{:#{kind}, .*a$/
+      end
+    end
+
+    test "refuses an import or the migration's own macro in a quote's options, which run" do
+      for {call, message} <- [
+            {"import(String, only: [trim: 1])", "can't import inside its body"},
+            {"shout(title)", "can't call the migration's macro shout/1"}
+          ] do
+        body = """
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: fn title ->
+            inspect(quote(bind_quoted: [x: #{call}], do: x)) <> title
+          end
+        end
+
+        defmacro shout(text), do: text
+        """
+
+        assert compiled_refusal(body) =~ message
+      end
+    end
+
+    test "refuses a remote unquote in the body, which splices in a function's name" do
+      for expression <- [
+            "String.unquote(@fun)(title)",
+            "title |> String.unquote(@fun)",
+            "Kernel.|>(title, String.unquote(@fun))"
+          ] do
+        assert refusal("fn title -> #{expression} end") =~
+                 "can't unquote inside its body - read a value of the file as @x"
+      end
+    end
+
+    # The function the body runs in splices in the unquotes of a quote a pipe passes them to.
+    test "refuses an unquote even inside a quote" do
+      for expression <- [
+            "quote(do: unquote(title))",
+            "quote(do: [unquote_splicing([title])])",
+            "quote(unquote: false, do: unquote(title))",
+            "quote(unquote(title), do: 1)",
+            "[do: unquote(title)] |> quote()",
+            "Kernel.|>([do: unquote(title)], quote())"
+          ] do
+        assert refusal("fn title -> inspect(#{expression}) <> title end") =~
+                 "can't unquote"
+      end
+    end
+
     test "refuses the other words, saying it has no query" do
       for word <- [
             "count(title)",

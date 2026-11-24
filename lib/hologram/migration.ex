@@ -989,7 +989,7 @@ defmodule Hologram.Migration do
   # returns the stored ops (see validate_placement!/1). What the op leaves in the body are the
   # snapshots of the attributes it reads (see snapshot_attribute_reads/3).
   defp register(quoted, caller) do
-    {quoted, snapshots} = snapshot_attribute_reads(quoted, caller.module, [])
+    {quoted, snapshots} = snapshot_attribute_reads(quoted, caller, [])
 
     Module.put_attribute(caller.module, @ops_attribute, expand_aliases(quoted, caller))
 
@@ -1038,9 +1038,15 @@ defmodule Hologram.Migration do
   # assigned last. Each read becomes a read of a snapshot attribute of its own, set at the
   # op's line by an assignment the op leaves in the body. Snapshots are numbered per module,
   # so a recompile names them alike, and carry the attribute's name, which an error about
-  # the value then shows. A quote is left alone - its @name is code, not a read.
-  defp snapshot_attribute_reads({:quote, _meta, _args} = node, _module, snapshots) do
-    {node, snapshots}
+  # the value then shows. A quote's code is data, so only what it runs is snapshot.
+  defp snapshot_attribute_reads(ast, caller, snapshots)
+
+  defp snapshot_attribute_reads({form, _meta, _args} = node, caller, snapshots)
+       when form in [:quote, :|>] or is_tuple(form) do
+    case Value.map_reduce_quote(node, caller, snapshots, &snapshot_quote_code(&1, caller, &2, &3)) do
+      {:ok, node, all_snapshots} -> {node, all_snapshots}
+      :error -> snapshot_call_attribute_reads(node, caller, snapshots)
+    end
   end
 
   # The atom is built at compile time from an attribute name the migration's source spells and a
@@ -1048,39 +1054,67 @@ defmodule Hologram.Migration do
   # sobelow_skip ["DOS.BinToAtom"]
   defp snapshot_attribute_reads(
          {:@, meta, [{name, _name_meta, context}]} = read,
-         module,
+         caller,
          snapshots
        )
        when is_atom(name) and (is_atom(context) or context == []) do
-    taken = Module.get_attribute(module, @snapshots_attribute)
+    taken = Module.get_attribute(caller.module, @snapshots_attribute)
 
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     snapshot = :"__hologram_migration_#{name}_#{length(taken)}__"
 
-    Module.put_attribute(module, @snapshots_attribute, {snapshot, name, meta[:line]})
+    Module.put_attribute(caller.module, @snapshots_attribute, {snapshot, name, meta[:line]})
 
     assignment = {:@, meta, [{snapshot, meta, [read]}]}
 
     {{:@, meta, [{snapshot, meta, nil}]}, [assignment | snapshots]}
   end
 
-  defp snapshot_attribute_reads({form, meta, args}, module, snapshots) do
-    {[form, args], all_snapshots} = snapshot_attribute_reads([form, args], module, snapshots)
-
-    {{form, meta, args}, all_snapshots}
+  defp snapshot_attribute_reads({_form, _meta, _args} = node, caller, snapshots) do
+    snapshot_call_attribute_reads(node, caller, snapshots)
   end
 
-  defp snapshot_attribute_reads({left, right}, module, snapshots) do
-    {[left, right], all_snapshots} = snapshot_attribute_reads([left, right], module, snapshots)
+  defp snapshot_attribute_reads({left, right}, caller, snapshots) do
+    {[left, right], all_snapshots} = snapshot_attribute_reads([left, right], caller, snapshots)
 
     {{left, right}, all_snapshots}
   end
 
-  defp snapshot_attribute_reads(list, module, snapshots) when is_list(list) do
-    Enum.map_reduce(list, snapshots, &snapshot_attribute_reads(&1, module, &2))
+  defp snapshot_attribute_reads(list, caller, snapshots) when is_list(list) do
+    Enum.map_reduce(list, snapshots, &snapshot_attribute_reads(&1, caller, &2))
   end
 
-  defp snapshot_attribute_reads(other, _module, snapshots), do: {other, snapshots}
+  defp snapshot_attribute_reads(other, _caller, snapshots), do: {other, snapshots}
+
+  defp snapshot_call_attribute_reads({form, meta, args}, caller, snapshots) do
+    {[form, args], all_snapshots} = snapshot_attribute_reads([form, args], caller, snapshots)
+
+    {{form, meta, args}, all_snapshots}
+  end
+
+  # Whether a quote unquotes its body can be up to options only the compiler reads, and then an
+  # attribute the body unquotes may or may not be read, so it's refused.
+  defp snapshot_quote_code(code, caller, snapshots, true) do
+    snapshot_attribute_reads(code, caller, snapshots)
+  end
+
+  defp snapshot_quote_code(code, caller, snapshots, :unknown) do
+    case snapshot_attribute_reads(code, caller, []) do
+      {_code, []} ->
+        {code, snapshots}
+
+      {_code, unknown} ->
+        {:@, meta,
+         [{_snapshot, _snapshot_meta, [{:@, _read_meta, [{name, _name_meta, _context}]}]}]} =
+          List.last(unknown)
+
+        raise Hologram.CompileError,
+          message:
+            "an op can't unquote @#{name} in a quote whose options only the compiler can read, " <>
+              "like an attribute (line #{statement_line(meta, caller)}) - write the options out, or " <>
+              "don't unquote the attribute"
+    end
+  end
 
   defp statement_line(meta, caller) do
     Keyword.get(meta, :line, caller.line)

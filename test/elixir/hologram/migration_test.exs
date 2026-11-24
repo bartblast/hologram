@@ -306,6 +306,96 @@ defmodule Hologram.MigrationTest do
       assert_received {:ops, [%{opts: [default: "a"]}]}
     end
 
+    test "reads an attribute a quote runs where the op is written" do
+      for {backfill, value} <- [
+            {"fn title -> inspect(quote(bind_quoted: [x: @o], do: x)) <> title end", ~s("1")},
+            {"fn title -> inspect([bind_quoted: [x: @o], do: x] |> quote()) <> title end",
+             ~s("1")},
+            {"fn title -> coalesce(title, ^inspect(quote(do: unquote(@o)))) end", ~s("1")},
+            # A quote's separate options are code even in a quote of a quote.
+            {"fn title -> coalesce(title, ^inspect(quote(do: quote(unquote(@o), do: 1)))) end",
+             ~s("1")},
+            # The function the pin runs in splices this unquote in itself.
+            {"fn title -> coalesce(title, ^inspect([unquote: false, do: unquote(@o)] |> quote())) end",
+             ~s("1")},
+            {"fn title -> coalesce(title, ^inspect([] |> quote(do: unquote(@o)))) end", ~s("1")}
+          ] do
+        module =
+          compile_migration("20260813091522", """
+          @o "1"
+
+          change_entity MyApp.Task do
+            add_attribute :first, :string, backfill: #{backfill}
+          end
+
+          @o "2"
+
+          change_entity MyApp.Task do
+            add_attribute :second, :string, default: @o
+          end
+          """)
+
+        assert [%{opts: [backfill: backfill_value]}, %{opts: [default: "2"]}] =
+                 module.__hologram_migration__().ops
+
+        result =
+          case backfill_value.term do
+            {:function, ^module, name, [:title]} -> apply(module, name, [""])
+            {:coalesce, [{:name, [:title]}, {:value, result}]} -> result
+          end
+
+        assert result =~ value
+        refute result =~ ~s("2")
+      end
+    end
+
+    test "leaves an attribute in a quote's body as data, piped or not" do
+      for quoted <- [
+            "quote(do: @o)",
+            "[do: @o] |> quote()",
+            "quote(do: quote(do: unquote(@o)))",
+            "quote(unquote: false, do: unquote(@o))",
+            # Left of the pipe are the quote's separate options.
+            "[unquote: false] |> quote(do: unquote(@o))",
+            "Kernel.|>([bind_quoted: [y: 2]], quote(do: unquote(@o)))"
+          ] do
+        module =
+          compile_migration("20260813091522", """
+          change_entity MyApp.Task do
+            add_attribute :first, :string, backfill: fn title -> coalesce(title, ^inspect(#{quoted})) end
+          end
+          """)
+
+        assert [%{opts: [backfill: %{term: {:coalesce, [{:name, [:title]}, {:value, result}]}}]}] =
+                 module.__hologram_migration__().ops
+
+        assert result =~ "{:o, "
+        refute result =~ "__hologram_migration_"
+      end
+    end
+
+    test "refuses an attribute a quote unquotes under options only the compiler can read" do
+      for quoted <- ["quote(@opts, do: unquote(@o))", "@opts |> quote(do: unquote(@o))"] do
+        body = """
+        @opts []
+        @o "1"
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string,
+            backfill: fn title -> coalesce(title, ^inspect(#{quoted})) end
+        end
+        """
+
+        error =
+          assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+        assert error.message ==
+                 "an op can't unquote @o in a quote whose options only the compiler can read, " <>
+                   "like an attribute (line 9) - write the options out, or don't unquote the " <>
+                   "attribute"
+      end
+    end
+
     # Collected from this compile alone, since stderr takes other tests' output too.
     test "raises no unused alias warning for an alias used only in ops" do
       {_module, diagnostics} =
