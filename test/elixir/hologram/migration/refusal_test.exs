@@ -349,10 +349,13 @@ defmodule Hologram.Migration.RefusalTest do
 
         assert run([create, add_grade, tighten], full_model, @context) == :ok
 
-        assert {:ok, %{rows: [["a"]]}} =
-                 Connection.query(
-                   ~s|SELECT DISTINCT "grade"::text FROM "hologram_data"."my_app_task"|
-                 )
+        {:ok, %{rows: rows}} =
+          Connection.query(
+            ~s|SELECT "title", "grade"::text FROM "hologram_data"."my_app_task" ORDER BY "title"|
+          )
+
+        assert rows == [["one", "a"], ["two", "a"]]
+        assert Introspection.schema().tables["my_app_task"].columns["grade"].null == false
       end)
     end
 
