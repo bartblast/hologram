@@ -568,10 +568,15 @@ defmodule Hologram.Migration.RendererTest do
         add_member(:add_attribute, :kind, :enum, values: [:a, :b, :c], optional: true)
       ]
 
-      kinds = op_kinds(render(ops, pre_model).transactional)
+      transactional = render(ops, pre_model).transactional
+      kinds = op_kinds(transactional)
 
-      assert :drop_enum_type in kinds
-      assert :create_enum_type in kinds
+      changes =
+        for %{op: op, enum_type: "my_app_task_kind_$enum"} <- transactional,
+            op in [:create_enum_type, :drop_enum_type],
+            do: op
+
+      assert changes == [:drop_enum_type, :create_enum_type]
       refute :add_enum_value in kinds
       refute :alter_column in kinds
     end
@@ -596,10 +601,12 @@ defmodule Hologram.Migration.RendererTest do
         add_member(:add_relationship, :tags, [MyApp.Place], [])
       ]
 
-      kinds = op_kinds(render(ops, pre_model).transactional)
+      changes =
+        for %{op: op, table: "my_app_task_tags_$join"} <- render(ops, pre_model).transactional,
+            op in [:create_table, :drop_table],
+            do: op
 
-      assert :drop_table in kinds
-      assert :create_table in kinds
+      assert changes == [:drop_table, :create_table]
     end
 
     test "treats an attribute taking a deleted to-one's column as the same name", %{
@@ -759,10 +766,13 @@ defmodule Hologram.Migration.RendererTest do
         }
       ]
 
-      kinds = op_kinds(render(ops, pre_model).transactional)
+      changes =
+        for %{op: op, table: "my_app_task_item_tags_$join"} <-
+              render(ops, pre_model).transactional,
+            op in [:create_table, :drop_table],
+            do: op
 
-      assert :drop_table in kinds
-      assert :create_table in kinds
+      assert changes == [:drop_table, :create_table]
     end
 
     test "leaves a delete and an add of different names in one chunk", %{pre_model: pre_model} do
