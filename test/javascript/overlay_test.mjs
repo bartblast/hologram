@@ -797,6 +797,21 @@ describe("Overlay", () => {
       });
     });
 
+    // A delete that lost, answered with no row because a later delete of the batch took it.
+    it("takes the row away under a dropped delete answered with nothing", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(
+        {id: "t1", op: "delete", stamp: 5, type: TODO},
+        {id: "t1", op: "delete", stamp, type: TODO},
+      );
+
+      Overlay.promote(batch, {}, {dropped: {0: {done: null, title: null}}});
+
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+      assert.isFalse(Overlay.names(TODO, "t1"));
+    });
+
     describe("a write the answer withholds", () => {
       const withheld = {0: {$withheld: true}};
 
@@ -1023,6 +1038,25 @@ describe("Overlay", () => {
       );
 
       assert.equal(LocalDatabase.baseRow(TODO, "t1").constructor, "winner");
+    });
+
+    // The server answers the lost column less the later delta, at the revision the batch left it.
+    it("lands a later delta and skips a later set on a value sent back for a dropped column", () => {
+      LocalDatabase.putRow(TODO, base({votes: 3}));
+
+      const batch = pushed(
+        updateWrite({data: {votes: 9}, stamp: 5}),
+        updateWrite({deltas: {votes: 2}, stamp: 5}),
+        updateWrite({data: {votes: 20}}),
+      );
+
+      Overlay.promote(
+        batch,
+        {0: {votes: 18, $revisions: {votes: stamp}}},
+        {dropped: {0: {votes: 9}}},
+      );
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").votes, 20);
     });
 
     it("takes the value the server sent back for a dropped column", () => {

@@ -291,8 +291,8 @@ defmodule Hologram.MutationTest do
     end
   end
 
-  # A counter row anyone may update - Module20's allow lines are bare, so its writes are granted
-  # with or without an actor, which is what a delta test needs and no other fixture offers.
+  # A counter row anyone may update or delete - Module20's allow lines are bare, so its writes are
+  # granted with or without an actor, which is what a delta test needs and no other fixture offers.
   defp create_counter(count) do
     %{count: count}
     |> Module20.new()
@@ -685,6 +685,81 @@ defmodule Hologram.MutationTest do
       assert EntityOperations.get(Module20, row.id).count == 3
     end
 
+    # The browser adds the later delta to whatever this answer files, so a count answered as it
+    # stands would show 5 until the frame lands.
+    test "answers a lost counter less what a later write of the batch moves it by" do
+      row = create_counter(1)
+      stale = row.__meta__.revisions.count - 1
+
+      put = update_write(Module20, row.id, %{"count" => 9}, stamp: stale)
+      moved = update_write(Module20, row.id, nil, deltas: %{"count" => 2}, stamp: stale)
+
+      assert {:ok, answer} = run(envelope([put, moved]), server())
+
+      reloaded = EntityOperations.get(Module20, row.id)
+
+      assert reloaded.count == 3
+
+      assert answer["kept"] == %{
+               "0" => %{
+                 "count" => 1,
+                 "$revisions" => %{"count" => reloaded.__meta__.revisions.count}
+               }
+             }
+    end
+
+    test "answers each lost counter less only what the writes after it move it by" do
+      row = create_counter(1)
+      stale = row.__meta__.revisions.count - 1
+
+      writes = [
+        update_write(Module20, row.id, %{"count" => 9}, stamp: stale),
+        update_write(Module20, row.id, nil, deltas: %{"count" => 2}, stamp: stale),
+        update_write(Module20, row.id, %{"count" => 7}, stamp: stale),
+        update_write(Module20, row.id, nil, deltas: %{"count" => 3}, stamp: stale)
+      ]
+
+      assert {:ok, answer} = run(envelope(writes), server())
+
+      assert EntityOperations.get(Module20, row.id).count == 6
+
+      assert answer["kept"]["0"]["count"] == 1
+      assert answer["kept"]["2"]["count"] == 3
+    end
+
+    # The browser adds the delta to the answered 18 and skips the set, whose stamp the revision
+    # answered with already covers.
+    test "answers a lost counter less a later move under a later set of the batch" do
+      row = create_counter(1)
+      stale = row.__meta__.revisions.count - 1
+
+      writes = [
+        update_write(Module20, row.id, %{"count" => 9}, stamp: stale),
+        update_write(Module20, row.id, nil, deltas: %{"count" => 2}, stamp: stale),
+        update_write(Module20, row.id, %{"count" => 20}, stamp: stamp_above(row) + 1_000)
+      ]
+
+      assert {:ok, answer} = run(envelope(writes), server())
+
+      assert EntityOperations.get(Module20, row.id).count == 20
+
+      assert answer["kept"]["0"]["count"] == 18
+    end
+
+    test "answers the row a dropped delete lost to less what a later write of the batch moves it by" do
+      row = create_counter(1)
+      stale = row.__meta__.revisions.count - 1
+
+      delete = delete_write(Module20, row.id, stamp: stale)
+      moved = update_write(Module20, row.id, nil, deltas: %{"count" => 2}, stamp: stale)
+
+      assert {:ok, answer} = run(envelope([delete, moved]), server())
+
+      assert EntityOperations.get(Module20, row.id).count == 3
+
+      assert answer["kept"]["0"]["count"] == 1
+    end
+
     test "adds up deltas from two batches authored against one value" do
       row = create_counter(1)
 
@@ -847,6 +922,33 @@ defmodule Hologram.MutationTest do
       assert {:ok, answer} = run(envelope([stale, winning]), server(user.id))
 
       assert answer["dropped"] == %{"0" => %{"priority" => nil}}
+      assert answer["kept"] == %{}
+
+      assert EntityOperations.get(MutationModule1, row.id) == nil
+    end
+
+    test "answers an update that lost a column of a row a later write of the batch deletes as one that won" do
+      user = create_user("lost_then_gone@example.com")
+      row = create_authored(user, priority: 5, public: true)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      stale =
+        update_write(MutationModule1, row.id, %{"priority" => 1},
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      winning =
+        delete_write(MutationModule1, row.id,
+          based_on: %{"priority" => newer},
+          stamp: newer + 1
+        )
+
+      assert {:ok, answer} = run(envelope([stale, winning]), server(user.id))
+
+      assert answer["dropped"] == %{"0" => %{"priority" => 1}}
       assert answer["kept"] == %{}
 
       assert EntityOperations.get(MutationModule1, row.id) == nil

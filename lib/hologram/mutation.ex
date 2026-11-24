@@ -349,12 +349,12 @@ defmodule Hologram.Mutation do
     verdicts =
       writes
       |> calls()
-      |> Enum.reduce(%{created: MapSet.new(), dropped: %{}, kept: %{}}, &collect_verdicts/2)
+      |> Enum.reduce(%{created: MapSet.new(), dropped: %{}, specs: %{}}, &collect_verdicts/2)
 
     %{
       "status" => "confirmed",
       "dropped" => verdicts.dropped,
-      "kept" => readable_kept(verdicts.kept, writes)
+      "kept" => readable_kept(verdicts.specs, writes)
     }
   end
 
@@ -407,20 +407,21 @@ defmodule Hologram.Mutation do
       Enum.any?(based_on, fn {_name, revision} -> stamp <= revision end)
   end
 
-  # What each write LOST and what the row KEPT in its place, both keyed by the write's position. A
-  # call answers under its leading write's: the writes that follow it are edges, which have no merge
-  # and so lose nothing, and a refusal of the call names the write it starts at.
+  # What each write LOST and what its answer is to say stands in its place (readable_kept/2), both
+  # keyed by the write's position. A call answers under its leading write's: the writes that follow
+  # it are edges, which have no merge and so lose nothing, and a refusal of the call names the write
+  # it starts at.
   #
   # The index is a string because the answer is stored as jsonb and sent as JSON, where an object's
   # keys are strings whatever they started as.
   defp collect_verdicts({write, index, followers}, verdicts) do
-    {lost, kept} = apply_write(write, followers, index, verdicts.created)
+    {lost, spec} = apply_write(write, followers, index, verdicts.created)
     key = Integer.to_string(index)
 
     verdicts
     |> put_created(write)
     |> put_verdict(:dropped, key, lost)
-    |> put_verdict(:kept, key, kept)
+    |> put_verdict(:specs, key, spec)
   rescue
     # A denial is the one refusal the executor RAISES rather than returns, because on the server it
     # is a programming error to write what the acting user may not. Here it is an ordinary answer:
@@ -443,8 +444,7 @@ defmodule Hologram.Mutation do
   # read it, and otherwise says it's withheld, which has the browser leave the write's row alone.
   # Any other row or columns come back as recorded, even from a row hidden from its user since: a
   # patch names no type or id to read it again by and a row no type, the writes a resend carries
-  # are whatever its sender chose, and the values are what the same session was shown when it could
-  # read the row.
+  # are whatever its sender chose, and its user could read the row when the batch landed.
   defp current_answer(%{"status" => "confirmed", "kept" => kept} = result, writes, actor_id) do
     rejudged = Map.new(kept, fn {key, entry} -> {key, current_kept(entry, actor_id)} end)
 
@@ -696,22 +696,31 @@ defmodule Hologram.Mutation do
   # write of the batch or a later delete of the row. Read off the row then, so a value that stood
   # only while the row was hidden never comes back either. Read where each row is still locked by
   # its write, so what the answer says is what the batch commits.
-  defp readable_kept(kept, writes) do
+  defp readable_kept(specs, writes) do
     actor_id = Context.actor_user_id()
 
-    kept
+    specs
     |> Enum.map(fn {key, spec} ->
-      write = Enum.at(writes, String.to_integer(key))
-      {key, readable_entry(write, spec, actor_id)}
+      [write | later_writes] = Enum.drop(writes, String.to_integer(key))
+      {key, readable_entry(write, spec, later_writes, actor_id)}
     end)
     |> Enum.reject(fn {_key, entry} -> entry == nil end)
     |> Map.new()
   end
 
-  defp readable_entry(%Write{entity_type: entity_type, id: id} = write, spec, actor_id) do
+  defp readable_entry(
+         %Write{entity_type: entity_type, id: id} = write,
+         spec,
+         later_writes,
+         actor_id
+       ) do
     case EntityOperations.get(entity_type, id) do
-      nil -> gone_entry(write, spec)
-      row -> kept_entry(spec, row, Auth.can?(actor_id, :read, row))
+      nil ->
+        gone_entry(write, spec)
+
+      row ->
+        readable? = Auth.can?(actor_id, :read, row)
+        kept_entry(spec, without_later_moves(row, write, later_writes), readable?)
     end
   end
 
@@ -812,6 +821,20 @@ defmodule Hologram.Mutation do
   defp stringify_entry({:"$revisions", revisions}), do: {"$revisions", stringify(revisions)}
 
   defp stringify_entry({name, value}), do: {Atom.to_string(name), value}
+
+  # The row an answer is built from, less what the batch's later writes moved its counters by. The
+  # browser applies those writes after this one's answer, adding each delta to whatever it holds,
+  # so answering the counter as it stands would count them twice. What comes back isn't always a
+  # value the row held, only the one the browser starts from; the revisions are the batch's last,
+  # so a later write's set the server already applied isn't applied again on top. When a frame
+  # carrying the row lands first, the browser applies none of the batch's writes to it and files
+  # nothing of the answer, so the values never show.
+  defp without_later_moves(row, %Write{entity_type: entity_type, id: id}, later_writes) do
+    later_writes
+    |> Enum.filter(&(&1.op == :update and &1.entity_type == entity_type and &1.id == id))
+    |> Enum.flat_map(& &1.deltas)
+    |> Enum.reduce(row, fn {name, amount}, row -> Map.update!(row, name, &(&1 - amount)) end)
+  end
 
   # Three things a browser can't know before it sends, answered as refusals of the write because
   # raising would have it retry them forever. An edge's target may be gone: deleted while the device
