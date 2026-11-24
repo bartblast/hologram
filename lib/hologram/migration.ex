@@ -87,7 +87,8 @@ defmodule Hologram.Migration do
     * `count(set)` counts the rows of a to-many relationship, giving 0 for none
     * `most_common(set, attribute)` gives the attribute's most frequent value among the
       set's rows, skipping nil, a tie going to the smallest in `sort` order, and nil when no
-      row holds a value
+      row holds a value. It doesn't take a `:float` attribute: `0.0` and `-0.0` count as one
+      value, so which of them it gives isn't defined
 
   A `fn` names the row's fields and relationships it reads as its arguments. Its body is a query
   when its outermost part is one of these words other than `<>`, when it's only a field or a path,
