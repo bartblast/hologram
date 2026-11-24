@@ -145,15 +145,23 @@ defmodule HologramFeatureTests.MultiTabTest do
       |> click(button("Create alpha"))
 
     first = tab_handle(leading)
+    replica = replica_id(leading)
 
     assert [%Todo{title: "alpha"}] = await_server_todos(1)
 
-    failing =
+    following =
       leading
       |> await_pending_writes(0)
       |> open_tab(WriteQueuePage)
+
+    refute leader?(following)
+    assert replica_id(following) == replica
+
+    failing =
+      following
       |> fail_store_writes()
       |> click(button("Create gamma"))
+      |> await_memory_mode()
       |> assert_text(css("#todos"), "gamma 0")
 
     failing_tab = tab_handle(failing)
