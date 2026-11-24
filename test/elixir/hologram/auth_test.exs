@@ -10,11 +10,19 @@ defmodule Hologram.AuthTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Oplog
+  alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.MisuseError
   alias Hologram.Policy
+  alias Hologram.Policy.Evaluator
+  alias Hologram.Query
   alias Hologram.Sync.Carry
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module26, as: Channel
+  alias Hologram.Test.Fixtures.Entity.Module28, as: Message
+  alias Hologram.Test.Fixtures.Entity.Module29, as: Label
+  alias Hologram.Test.Fixtures.Entity.Module32, as: CountedChannel
+  alias Hologram.Test.Fixtures.Entity.Module33, as: CountedMessage
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module10
   alias Hologram.Test.Fixtures.Policy.Module11
@@ -39,7 +47,10 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module48
   alias Hologram.Test.Fixtures.Policy.Module49
   alias Hologram.Test.Fixtures.Policy.Module5
+  alias Hologram.Test.Fixtures.Policy.Module58, as: ChangedProject
+  alias Hologram.Test.Fixtures.Policy.Module59, as: ChangedTask
   alias Hologram.Test.Fixtures.Policy.Module8
+  alias Hologram.Test.Fixtures.Policy.Module9, as: SelfParent
   alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
   alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
   alias Hologram.Test.Fixtures.Policy.Readers.Module25, as: ReadersModule25
@@ -990,7 +1001,7 @@ defmodule Hologram.AuthTest do
     end
   end
 
-  describe "can?/4" do
+  describe "can_from?/4" do
     test "answers a user id in a spelling Hologram doesn't generate as an anonymous session" do
       user = create_user("user_168@example.com")
       entity = %Module1{id: Entity.generate_id()}
@@ -1002,9 +1013,9 @@ defmodule Hologram.AuthTest do
         role: :viewer
       }
 
-      assert can?(user.id, :read, entity, [grant])
-      refute can?(String.upcase(user.id), :read, entity, [grant])
-      refute can?(7, :read, %ReadersModule5{owner_id: nil}, [])
+      assert can_from?(user.id, :read, entity, [grant])
+      refute can_from?(String.upcase(user.id), :read, entity, [grant])
+      refute can_from?(7, :read, %ReadersModule5{owner_id: nil}, [])
     end
 
     test "answers from the given grants rather than the stored ones" do
@@ -1019,7 +1030,7 @@ defmodule Hologram.AuthTest do
       }
 
       refute can?(user, :read, entity)
-      assert can?(user, :read, entity, [grant])
+      assert can_from?(user, :read, entity, [grant])
     end
 
     test "denies what the given grants do not hold though the store does" do
@@ -1029,7 +1040,7 @@ defmodule Hologram.AuthTest do
       grant_role(user, :viewer, entity)
 
       assert can?(user, :read, entity)
-      refute can?(user, :read, entity, [])
+      refute can_from?(user, :read, entity, [])
     end
 
     test "matches a global grant" do
@@ -1038,7 +1049,7 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{user_id: user.id, role: Role.Module1}
 
-      assert can?(user, :archive, entity, [grant])
+      assert can_from?(user, :archive, entity, [grant])
     end
 
     test "matches a type-wide grant" do
@@ -1051,7 +1062,7 @@ defmodule Hologram.AuthTest do
         role: :admin
       }
 
-      assert can?(user, :read, entity, [grant])
+      assert can_from?(user, :read, entity, [grant])
     end
 
     # An own-scope check admits the row's grant AND the type-wide one, which the store's own
@@ -1066,7 +1077,7 @@ defmodule Hologram.AuthTest do
         role: :viewer
       }
 
-      assert can?(user, :read, entity, [grant])
+      assert can_from?(user, :read, entity, [grant])
     end
 
     test "matches a grant on the row itself" do
@@ -1080,7 +1091,7 @@ defmodule Hologram.AuthTest do
         role: :editor
       }
 
-      assert can?(user, :update, entity, [grant])
+      assert can_from?(user, :update, entity, [grant])
     end
 
     test "matches a grant on a related row" do
@@ -1095,7 +1106,7 @@ defmodule Hologram.AuthTest do
         role: :admin
       }
 
-      assert can?(user, :delete, entity, [grant])
+      assert can_from?(user, :delete, entity, [grant])
     end
 
     # A delegation asks the RELATED row's policy, so the list has to reach that far too - a
@@ -1108,7 +1119,7 @@ defmodule Hologram.AuthTest do
       grant = %RoleGrant{user_id: user.id, role: Role.Module1}
 
       refute can?(user, :archive, entity)
-      assert can?(user, :archive, entity, [grant])
+      assert can_from?(user, :archive, entity, [grant])
     end
 
     test "reads the related row a delegation reads without a lock" do
@@ -1116,7 +1127,7 @@ defmodule Hologram.AuthTest do
       parent = create_parent()
       grant = %RoleGrant{user_id: user.id, role: Role.Module1}
 
-      assert can?(user, :archive, %Module4{id: Entity.generate_id(), parent_id: parent.id}, [
+      assert can_from?(user, :archive, %Module4{id: Entity.generate_id(), parent_id: parent.id}, [
                grant
              ])
 
@@ -1141,8 +1152,8 @@ defmodule Hologram.AuthTest do
         role: :member
       }
 
-      refute can?(user, :read, row, [])
-      assert can?(user, :read, row, [grant])
+      refute can_from?(user, :read, row, [])
+      assert can_from?(user, :read, row, [grant])
     end
 
     test "denies a grant held by somebody else" do
@@ -1157,7 +1168,7 @@ defmodule Hologram.AuthTest do
         role: :viewer
       }
 
-      refute can?(user, :read, entity, [grant])
+      refute can_from?(user, :read, entity, [grant])
     end
 
     # A check answered from a list is nobody's question, so a render gathers nothing from it -
@@ -1174,7 +1185,7 @@ defmodule Hologram.AuthTest do
       }
 
       Carry.start()
-      assert can?(user, :read, entity, [grant])
+      assert can_from?(user, :read, entity, [grant])
       assert Carry.take_grant_scopes() == MapSet.new()
 
       Carry.start()
@@ -1197,8 +1208,8 @@ defmodule Hologram.AuthTest do
 
       grant_role(user, :editor, %Module1{id: entity.id})
 
-      assert can?(user, :update, entity, :held)
-      refute can?(other_user, :update, entity, :held)
+      assert can_from?(user, :update, entity, :held)
+      refute can_from?(other_user, :update, entity, :held)
     end
 
     test "with :held matches a type-wide grant" do
@@ -1207,7 +1218,7 @@ defmodule Hologram.AuthTest do
 
       grant_role(user, :editor, Module1)
 
-      assert can?(user, :update, entity, :held)
+      assert can_from?(user, :update, entity, :held)
     end
 
     test "with :held matches a type-wide grant on another entity type" do
@@ -1215,7 +1226,7 @@ defmodule Hologram.AuthTest do
 
       grant_role(user, :admin, Module2)
 
-      assert can?(user, :read, %Module1{id: Entity.generate_id()}, :held)
+      assert can_from?(user, :read, %Module1{id: Entity.generate_id()}, :held)
     end
 
     test "with :held matches a global role module grant" do
@@ -1224,7 +1235,7 @@ defmodule Hologram.AuthTest do
 
       insert_global_grant(user.id, Role.Module1)
 
-      assert can?(user, :archive, entity, :held)
+      assert can_from?(user, :archive, entity, :held)
     end
 
     test "with :held matches a grant on a related row" do
@@ -1233,8 +1244,14 @@ defmodule Hologram.AuthTest do
 
       grant_role(user, :admin, parent)
 
-      assert can?(user, :delete, %Module1{id: Entity.generate_id(), parent_id: parent.id}, :held)
-      refute can?(user, :delete, %Module1{id: Entity.generate_id(), parent_id: nil}, :held)
+      assert can_from?(
+               user,
+               :delete,
+               %Module1{id: Entity.generate_id(), parent_id: parent.id},
+               :held
+             )
+
+      refute can_from?(user, :delete, %Module1{id: Entity.generate_id(), parent_id: nil}, :held)
     end
 
     test "with :held follows a delegation" do
@@ -1242,11 +1259,11 @@ defmodule Hologram.AuthTest do
       parent = create_parent()
       entity = %Module4{id: Entity.generate_id(), parent_id: parent.id}
 
-      refute can?(user, :archive, entity, :held)
+      refute can_from?(user, :archive, entity, :held)
 
       insert_global_grant(user.id, Role.Module1)
 
-      assert can?(user, :archive, entity, :held)
+      assert can_from?(user, :archive, entity, :held)
     end
 
     # A locking read shows in pg_locks as RowShareLock on the relation, even uncontended - the row
@@ -1258,7 +1275,7 @@ defmodule Hologram.AuthTest do
 
       # The answer is false - Module2's :archive wants a global role the user does not hold - and
       # beside the point: the parent row is read before any grant is asked.
-      can?(user, :archive, %Module4{id: Entity.generate_id(), parent_id: parent.id}, :held)
+      can_from?(user, :archive, %Module4{id: Entity.generate_id(), parent_id: parent.id}, :held)
 
       assert "RowShareLock" in relation_lock_modes(Module2)
     end
@@ -1278,7 +1295,12 @@ defmodule Hologram.AuthTest do
         |> Module5.new()
         |> DB.create!()
 
-      assert can?(user, :read, %Module8{id: Entity.generate_id(), parent_id: middle.id}, :held)
+      assert can_from?(
+               user,
+               :read,
+               %Module8{id: Entity.generate_id(), parent_id: middle.id},
+               :held
+             )
 
       assert "RowShareLock" in relation_lock_modes(Module5)
     end
@@ -1289,7 +1311,12 @@ defmodule Hologram.AuthTest do
       user = create_user("user_160@example.com")
       parent = DB.create!(Module10.new())
 
-      refute can?(user, :create, %Module11{id: Entity.generate_id(), parent_id: parent.id}, :held)
+      refute can_from?(
+               user,
+               :create,
+               %Module11{id: Entity.generate_id(), parent_id: parent.id},
+               :held
+             )
 
       assert "RowShareLock" in relation_lock_modes(Module10)
     end
@@ -1301,7 +1328,7 @@ defmodule Hologram.AuthTest do
       {_resource, middle} = create_path_rows(parent.id)
       entity = %Module12{id: Entity.generate_id(), parent_id: middle.id}
 
-      assert can?(create_user("user_163@example.com"), :publish, entity, :held)
+      assert can_from?(create_user("user_163@example.com"), :publish, entity, :held)
 
       assert "RowShareLock" in relation_lock_modes(Module5)
     end
@@ -1312,7 +1339,12 @@ defmodule Hologram.AuthTest do
 
       grant_role(user, :viewer, resource)
 
-      assert can?(user, :update, %Module12{id: Entity.generate_id(), parent_id: middle.id}, :held)
+      assert can_from?(
+               user,
+               :update,
+               %Module12{id: Entity.generate_id(), parent_id: middle.id},
+               :held
+             )
 
       assert "RowShareLock" in relation_lock_modes(Module5)
     end
@@ -1332,7 +1364,7 @@ defmodule Hologram.AuthTest do
 
       entity = %Module12{id: Entity.generate_id(), parent_id: middle.id}
 
-      assert can?(create_user("user_165@example.com"), :read, entity, :held)
+      assert can_from?(create_user("user_165@example.com"), :read, entity, :held)
 
       assert "RowShareLock" in relation_lock_modes(Module5)
     end
@@ -1348,19 +1380,19 @@ defmodule Hologram.AuthTest do
         entity_id: resource.id
       }
 
-      refute can?(user, :read, row, :held)
+      refute can_from?(user, :read, row, :held)
 
       grant_role(user, :member, resource)
 
-      assert can?(user, :read, row, :held)
+      assert can_from?(user, :read, row, :held)
     end
 
     test "with :held answers false for an anonymous session" do
-      refute can?(nil, :update, %Module1{id: Entity.generate_id(), priority: 5}, :held)
+      refute can_from?(nil, :update, %Module1{id: Entity.generate_id(), priority: 5}, :held)
     end
   end
 
-  describe "can?/4 for quantified rules over stored rows" do
+  describe "can_from?/4 for quantified rules over stored rows" do
     defp create_project(values \\ %{}) do
       values
       |> PolicyProject.new()
@@ -1401,33 +1433,33 @@ defmodule Hologram.AuthTest do
       project = create_project()
       create_member(project, "half")
 
-      refute can?(nil, :update, project, :stored)
+      refute can_from?(nil, :update, project, :stored)
 
       create_member(project, "full")
 
-      assert can?(nil, :update, project, :stored)
+      assert can_from?(nil, :update, project, :stored)
     end
 
     test "answers a none over a stored to-many" do
       project = create_project()
       locked = create_label("locked")
 
-      assert can?(nil, :archive, project, :stored)
+      assert can_from?(nil, :archive, project, :stored)
 
       :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
 
-      refute can?(nil, :archive, project, :stored)
+      refute can_from?(nil, :archive, project, :stored)
     end
 
     test "answers an any over an inverse of a to-many" do
       tag = create_tag("x")
       task = create_task(%{subject: "open"})
 
-      refute can?(nil, :read, tag, :stored)
+      refute can_from?(nil, :read, tag, :stored)
 
       :ok = EntityOperations.add_relationship(PolicyTask, task.id, :tags, tag.id)
 
-      assert can?(nil, :read, tag, :stored)
+      assert can_from?(nil, :read, tag, :stored)
     end
 
     test "answers a none over a set read through a to-one" do
@@ -1435,11 +1467,11 @@ defmodule Hologram.AuthTest do
       task = create_task(%{project_id: project.id})
       locked = create_label("locked")
 
-      assert can?(nil, :update, task, :stored)
+      assert can_from?(nil, :update, task, :stored)
 
       :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
 
-      refute can?(nil, :update, task, :stored)
+      refute can_from?(nil, :update, task, :stored)
     end
 
     # Only the second task holds the tag, so every task's set is read, not the first one's alone.
@@ -1449,11 +1481,11 @@ defmodule Hologram.AuthTest do
       second_task = create_task(%{project_id: project.id})
       done = create_tag("done")
 
-      refute can?(nil, :close, project, :stored)
+      refute can_from?(nil, :close, project, :stored)
 
       :ok = EntityOperations.add_relationship(PolicyTask, second_task.id, :tags, done.id)
 
-      assert can?(nil, :close, project, :stored)
+      assert can_from?(nil, :close, project, :stored)
     end
 
     # Every task's shelf is followed to its cards, the second task's among them.
@@ -1463,11 +1495,11 @@ defmodule Hologram.AuthTest do
       create_task(%{project_id: project.id})
       create_task(%{project_id: project.id, shelf_id: shelf.id})
 
-      assert can?(nil, :publish, project, :stored)
+      assert can_from?(nil, :publish, project, :stored)
 
       create_card(%{flagged: true, shelf_id: shelf.id})
 
-      refute can?(nil, :publish, project, :stored)
+      refute can_from?(nil, :publish, project, :stored)
     end
 
     # The profile is an inverse holding one row, read on the way to its badges.
@@ -1481,11 +1513,11 @@ defmodule Hologram.AuthTest do
 
       banned = create_label("banned")
 
-      assert can?(nil, :feature, project, :stored)
+      assert can_from?(nil, :feature, project, :stored)
 
       :ok = EntityOperations.add_relationship(PolicyProfile, profile.id, :badges, banned.id)
 
-      refute can?(nil, :feature, project, :stored)
+      refute can_from?(nil, :feature, project, :stored)
     end
 
     test "answers an any over a set a row moved out of" do
@@ -1493,11 +1525,11 @@ defmodule Hologram.AuthTest do
       member = create_member(project, "full")
       other_project = create_project()
 
-      assert can?(nil, :update, project, :stored)
+      assert can_from?(nil, :update, project, :stored)
 
       DB.update!(PolicyMember, member.id, project_id: other_project.id)
 
-      refute can?(nil, :update, project, :stored)
+      refute can_from?(nil, :update, project, :stored)
     end
 
     # A none rests on the whole set, so :held holds it and share-locks the rows it reads.
@@ -1505,20 +1537,20 @@ defmodule Hologram.AuthTest do
       project = create_project()
       locked = create_label("locked")
 
-      assert can?(nil, :archive, project, :held)
+      assert can_from?(nil, :archive, project, :held)
 
       :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
 
-      refute can?(nil, :archive, project, :held)
+      refute can_from?(nil, :archive, project, :held)
     end
 
     # A row not created yet has nothing in any set of its.
     test "answers an any asked of a row not created yet false" do
-      refute can?(nil, :update, %{PolicyProject.new() | id: nil}, :stored)
+      refute can_from?(nil, :update, %{PolicyProject.new() | id: nil}, :stored)
     end
 
     test "answers a none asked of a row not created yet true" do
-      assert can?(nil, :archive, %{PolicyProject.new() | id: nil}, :stored)
+      assert can_from?(nil, :archive, %{PolicyProject.new() | id: nil}, :stored)
     end
 
     # The board's top two cards by rank leave the flagged one out until it ranks among them.
@@ -1530,11 +1562,618 @@ defmodule Hologram.AuthTest do
         create_card(%{board_id: board.id, rank: rank})
       end
 
-      refute can?(nil, :read, board, :stored)
+      refute can_from?(nil, :read, board, :stored)
 
       DB.update!(PolicyCard, flagged.id, rank: 4)
 
-      assert can?(nil, :read, board, :stored)
+      assert can_from?(nil, :read, board, :stored)
+    end
+  end
+
+  describe "after_checker/2" do
+    defp create_channel(name \\ "general") do
+      %{name: name}
+      |> Channel.new()
+      |> DB.create!()
+    end
+
+    defp create_message(channel, body) do
+      %{body: body, channel_id: channel && channel.id, position: 1}
+      |> Message.new()
+      |> DB.create!()
+    end
+
+    defp create_named_label(name) do
+      %{name: name}
+      |> Label.new()
+      |> DB.create!()
+    end
+
+    defp create_target(public) do
+      %{public: public}
+      |> Module1.new()
+      |> DB.create!()
+    end
+
+    defp stored(%entity_type{id: id}), do: EntityOperations.get(entity_type, id)
+
+    # Whether the given exact clauses hold for the given stored row under the given change.
+    defp holds_after?(clauses, row, values, edges \\ %{}, source \\ :stored) do
+      new_row = after_row(row, values, %{}, edges)
+      rule = %{exact: %{predicates: clauses}, predicates: [], to: nil, via: nil}
+
+      Evaluator.rule_matches?(rule, row, new_row, nil, after_checker(new_row, source))
+    end
+
+    defp none_pinned(source) do
+      [{:none, {source, [{:body, :==, "pinned"}]}}]
+    end
+
+    defp any_pinned(source) do
+      [{:any, {source, [{:body, :==, "pinned"}]}}]
+    end
+
+    test "sees a row of the set changing to a value" do
+      message = create_message(create_channel(), "plain")
+
+      refute holds_after?(none_pinned({:outer, 1, [:channel, :messages]}), message, %{
+               body: "pinned"
+             })
+    end
+
+    test "sees a row of the set changing away from a value" do
+      message = create_message(create_channel(), "pinned")
+
+      assert holds_after?(none_pinned({:outer, 1, [:channel, :messages]}), message, %{
+               body: "plain"
+             })
+    end
+
+    test "reads the stored set from the stored row" do
+      message = create_message(create_channel(), "plain")
+
+      assert holds_after?(none_pinned([:channel, :messages]), message, %{body: "pinned"})
+    end
+
+    test "sees a row joining the set it moves into" do
+      target = create_channel("target")
+      message = create_message(create_channel("source"), "pinned")
+
+      assert holds_after?(any_pinned({:outer, 1, [:channel, :messages]}), message, %{
+               channel_id: target.id
+             })
+    end
+
+    test "leaves a row out of the set it moves away from" do
+      channel = create_channel()
+      label = create_named_label("shared")
+      message = create_message(channel, "pinned")
+      other = create_message(channel, "plain")
+      source = {:outer, 1, [:labels, :messages, :channel, :messages]}
+      any_plain = [{:any, {source, [{:body, :==, "plain"}]}}]
+
+      EntityOperations.add_relationship(Message, message.id, :labels, label.id)
+      EntityOperations.add_relationship(Message, other.id, :labels, label.id)
+
+      assert holds_after?(any_pinned(source), stored(message), %{})
+      refute holds_after?(any_pinned(source), stored(message), %{channel_id: nil})
+      assert holds_after?(any_plain, stored(message), %{channel_id: nil})
+    end
+
+    test "follows a reference to the changed row as it will be" do
+      channel = create_channel("old")
+      create_message(channel, "plain")
+
+      clauses = [
+        {:any, {{:outer, 1, [:messages]}, [{[:channel, :name], :==, "new"}]}}
+      ]
+
+      assert holds_after?(clauses, stored(channel), %{name: "new"})
+    end
+
+    test "applies an edge the call adds" do
+      label = create_named_label("urgent")
+      message = create_message(create_channel(), "plain")
+      clauses = [{:any, {{:outer, 1, [:labels]}, [{:name, :==, "urgent"}]}}]
+
+      refute holds_after?(clauses, message, %{})
+      assert holds_after?(clauses, message, %{}, %{{:labels, label.id} => :add})
+    end
+
+    test "applies an edge the call deletes" do
+      label = create_named_label("urgent")
+      message = create_message(create_channel(), "plain")
+      EntityOperations.add_relationship(Message, message.id, :labels, label.id)
+      clauses = [{:any, {{:outer, 1, [:labels]}, [{:name, :==, "urgent"}]}}]
+
+      assert holds_after?(clauses, message, %{})
+      refute holds_after?(clauses, message, %{}, %{{:labels, label.id} => :delete})
+    end
+
+    test "changes nothing for an add already stored or a delete not stored" do
+      kept = create_named_label("urgent")
+      absent = create_named_label("other")
+      message = create_message(create_channel(), "plain")
+      EntityOperations.add_relationship(Message, message.id, :labels, kept.id)
+      clauses = [{:any, {{:outer, 1, [:labels]}, [{:name, :==, "urgent"}]}}]
+
+      assert holds_after?(clauses, message, %{}, %{
+               {:labels, kept.id} => :add,
+               {:labels, absent.id} => :delete
+             })
+    end
+
+    test "leaves out an added edge's target that is gone" do
+      message = create_message(create_channel(), "plain")
+      edges = %{{:labels, Entity.generate_id()} => :add}
+
+      assert holds_after?([{:none, {{:outer, 1, [:labels]}, []}}], message, %{}, edges)
+    end
+
+    test "overrides a stored pair by the call's edge from the other side of the set" do
+      channel = create_channel()
+      label = create_named_label("shared")
+      message = create_message(channel, "pinned")
+      other = create_message(channel, "plain")
+      EntityOperations.add_relationship(Message, message.id, :labels, label.id)
+      EntityOperations.add_relationship(Message, other.id, :labels, label.id)
+
+      source = {:outer, 1, [:channel, :messages, :labels, :messages]}
+
+      assert holds_after?(any_pinned(source), message, %{})
+      refute holds_after?(any_pinned(source), message, %{}, %{{:labels, label.id} => :delete})
+    end
+
+    test "carries the change into a nested quantifier" do
+      label = create_named_label("urgent")
+      message = create_message(create_channel(), "plain")
+
+      clauses = [
+        {:any,
+         {{:outer, 1, [:channel, :messages]}, [{:any, {[:labels], [{:name, :==, "urgent"}]}}]}}
+      ]
+
+      assert holds_after?(clauses, message, %{}, %{{:labels, label.id} => :add})
+    end
+
+    test "counts a derived field over the set as the change leaves it" do
+      put_derived_definitions([CountedChannel, CountedMessage])
+
+      target =
+        %{name: "target"}
+        |> CountedChannel.new()
+        |> DB.create!()
+
+      message =
+        %{body: "plain", position: 1}
+        |> CountedMessage.new()
+        |> DB.create!()
+
+      clauses = [{{:outer, 1, [:channel, :message_count]}, :==, 1}]
+
+      assert holds_after?(clauses, stored(message), %{channel_id: target.id})
+    end
+
+    test "holds the set of a none read whole under :held" do
+      message = create_message(create_channel(), "plain")
+
+      assert holds_after?(
+               none_pinned({:outer, 1, [:channel, :messages]}),
+               message,
+               %{body: "other"},
+               %{},
+               :held
+             )
+
+      {class_key, object_key} = SetLock.keys(Channel, message.channel_id)
+
+      statement =
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND objsubid = 2 " <>
+          "AND pid = pg_backend_pid() AND mode = 'ExclusiveLock' " <>
+          "AND classid = $1::bigint::oid AND objid = $2::bigint::oid"
+
+      unsigned = fn key -> if key < 0, do: key + 4_294_967_296, else: key end
+
+      assert {:ok, %Postgrex.Result{rows: [[1]]}} =
+               Connection.query(statement, [unsigned.(class_key), unsigned.(object_key)])
+    end
+
+    test "asks a role about the row the new reference leads to" do
+      user = create_user("after-role@example.com")
+      granted = create_target(false)
+      other = create_target(false)
+      grant_role(user, :editor, granted)
+
+      row = %Module5{id: Entity.generate_id(), parent_id: other.id}
+      new_row = after_row(row, %{parent_id: granted.id}, %{}, %{})
+      checker = after_checker(new_row, :stored)
+
+      assert checker.({:rel, [:parent], [:editor]}, new_row, user.id)
+
+      refute checker.(
+               {:rel, [:parent], [:editor]},
+               after_row(row, %{}, %{}, %{}),
+               user.id
+             )
+    end
+
+    test "asks a delegated rule about the stored row when the chain leads back to the changed row" do
+      row =
+        %{archived: true}
+        |> SelfParent.new()
+        |> DB.create!()
+
+      new_row = after_row(row, %{archived: false, parent_id: row.id}, %{}, %{})
+      checker = after_checker(new_row, :stored)
+
+      refute checker.({:via, :update, [:parent]}, new_row, nil)
+    end
+
+    test "asks a delegated rule about the row the new reference leads to" do
+      public = create_target(true)
+      hidden = create_target(false)
+
+      row = %Module5{id: Entity.generate_id(), parent_id: hidden.id}
+      new_row = after_row(row, %{parent_id: public.id}, %{}, %{})
+      checker = after_checker(new_row, :stored)
+
+      assert checker.({:via, :read, [:parent]}, new_row, nil)
+      refute checker.({:via, :read, [:parent]}, after_row(row, %{}, %{}, %{}), nil)
+    end
+  end
+
+  describe "after_row/4" do
+    test "puts the values and keeps the edges" do
+      edges = %{{:labels, "id"} => :add}
+
+      new_row =
+        after_row(%Module14{email: "old@example.com"}, %{email: "new@example.com"}, %{}, edges)
+
+      assert new_row.email == "new@example.com"
+      assert new_row.__meta__.relationship_ops == edges
+    end
+
+    test "moves a counter by its amount" do
+      row = %Message{position: 3}
+
+      assert after_row(row, %{}, %{position: -1}, %{}).position == 2
+    end
+  end
+
+  describe "can?/4 for one specific change" do
+    defp create_values_task(values \\ %{}) do
+      task =
+        values
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      EntityOperations.get(ChangedTask, task.id)
+    end
+
+    defp create_values_project(archived \\ false) do
+      %{archived: archived}
+      |> ChangedProject.new()
+      |> DB.create!()
+    end
+
+    defp create_task_admin(task) do
+      user = create_user("values-admin@example.com")
+      grant_role(user, :admin, task)
+
+      user
+    end
+
+    test ":update answers on the row the values leave" do
+      task = create_values_task()
+      user = create_task_admin(task)
+
+      assert can?(user, :update, task, status: :approved)
+      refute can?(user, :update, task, status: :rejected)
+    end
+
+    test ":update counts the lines limited to a field, as a write does" do
+      task = create_values_task(%{count: 1})
+
+      assert can?(nil, :update, task, count: 10)
+      refute can?(nil, :update, task, count: 11)
+    end
+
+    test ":update needs every changed field covered" do
+      task = create_values_task(%{count: 1})
+
+      refute can?(nil, :update, task, count: 2, status: :approved)
+    end
+
+    test "a name asks that name's rules" do
+      task = create_values_task()
+      user = create_task_admin(task)
+
+      assert can?(user, :approve, task, status: :approved)
+      refute can?(user, :approve, task, status: :rejected)
+      refute can?(nil, :approve, task, status: :approved)
+    end
+
+    test "{:update, field} asks that field's rules" do
+      archived = create_values_project(true)
+      open = create_values_project()
+      task = create_values_task(%{project_id: archived.id})
+
+      assert can?(nil, {:update, :note}, task, note: "x", project_id: open.id)
+      refute can?(nil, {:update, :note}, task, note: "x")
+    end
+
+    test "{:update, fields} asks every field's rules" do
+      task = create_values_task(%{count: 1})
+      user = create_task_admin(task)
+
+      assert can?(user, {:update, [:count, :status]}, task, count: 2, status: :approved)
+      refute can?(user, {:update, [:count, :status]}, task, count: 11, status: :approved)
+    end
+
+    test "takes the values as a map" do
+      task = create_values_task(%{count: 1})
+
+      assert can?(nil, :update, task, %{count: 10})
+      refute can?(nil, :update, task, %{count: 11})
+    end
+
+    test "names a to-one by its reference" do
+      user = create_user("values-mover@example.com")
+      source = create_values_project()
+      granted = create_values_project()
+      other = create_values_project()
+      task = create_values_task(%{project_id: source.id})
+      grant_role(user, :member, source)
+      grant_role(user, :member, granted)
+
+      assert can?(user, :update, task, project_id: granted.id)
+      refute can?(user, :update, task, project_id: other.id)
+    end
+
+    test "reads a value failing its declaration as stored" do
+      task = create_values_task()
+      user = create_task_admin(task)
+
+      refute can?(user, :update, task, status: :bogus)
+    end
+
+    test "reads a reference naming no row as stored" do
+      user = create_user("values-missing@example.com")
+      project = create_values_project()
+      task = create_values_task(%{project_id: project.id})
+      grant_role(user, :member, project)
+
+      assert can?(user, :update, task, project_id: Entity.generate_id())
+    end
+
+    test "answers a rule with no new() as it stands" do
+      user = create_user("values-plain@example.com")
+      parent = create_parent()
+      grant_role(user, :admin, parent)
+
+      assert can?(user, :update, parent, public: true)
+      refute can?(nil, :update, parent, public: true)
+    end
+
+    test "writes nothing" do
+      task = create_values_task(%{count: 1})
+
+      assert can?(nil, :update, task, count: 10)
+      assert EntityOperations.get(ChangedTask, task.id).count == 1
+    end
+
+    test "refuses a row carrying recorded changes" do
+      task = Query.put_attribute(create_values_task(), :count, 2)
+
+      expected_msg =
+        "can? with values asks about a row as stored - #{inspect(ChangedTask)} #{inspect(task.id)} carries recorded changes, so its fields no longer hold the stored values"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?(nil, :update, task, count: 3)
+      end
+    end
+
+    test "refuses values that are neither a keyword list nor a map" do
+      task = create_values_task()
+
+      expected_msg = "can? takes the values of a change as a keyword list or a map - got [1]"
+
+      assert_error MisuseError, expected_msg, fn -> can?(nil, :update, task, [1]) end
+    end
+
+    test "refuses a struct as the values" do
+      task = create_values_task()
+
+      expected_msg =
+        "can? takes the values of a change as a keyword list or a map - got #{inspect(task)}"
+
+      assert_error MisuseError, expected_msg, fn -> can?(nil, :update, task, task) end
+    end
+
+    test "refuses a value name DB.update/3 refuses" do
+      task = create_values_task()
+
+      expected_msg =
+        "invalid changes for #{inspect(ChangedTask)} - only declared attributes and to-one relationships can be updated: :nope"
+
+      assert_error MisuseError, expected_msg, fn -> can?(nil, :update, task, nope: 1) end
+    end
+
+    test "refuses a keyword list naming a struct key" do
+      task = create_values_task()
+
+      expected_msg =
+        "can? takes the values of a change as a keyword list or a map - got [__struct__: URI, count: 1]"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?(nil, :update, task, __struct__: URI, count: 1)
+      end
+    end
+
+    test "refuses a map naming a struct key" do
+      task = create_values_task()
+
+      assert_raise MisuseError, fn -> can?(nil, :update, task, %{__struct__: URI}) end
+    end
+
+    test "answers for a row that isn't stored yet" do
+      assert can?(nil, {:update, :labels}, %ChangedTask{}, note: "x")
+    end
+
+    test "refuses empty values, as DB.update/3 does" do
+      task = create_values_task()
+
+      expected_msg =
+        "invalid changes for #{inspect(ChangedTask)} - at least one declared attribute or to-one relationship must be changed"
+
+      assert_error MisuseError, expected_msg, fn -> can?(nil, :update, task, []) end
+    end
+
+    test "refuses an operation that isn't an update" do
+      task = create_values_task()
+
+      expected_msg =
+        "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got :read"
+
+      assert_error MisuseError, expected_msg, fn -> can?(nil, :read, task, count: 1) end
+    end
+
+    test "refuses a role operation" do
+      task = create_values_task()
+
+      expected_msg =
+        "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got {:grant_role, :admin}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?(nil, {:grant_role, :admin}, task, count: 1)
+      end
+    end
+  end
+
+  describe "can?/4 for a rule reading the timestamp a write moves" do
+    setup do
+      task =
+        %{}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      table = Map.fetch!(DB.mapping(), ChangedTask).table
+
+      {:ok, _result} =
+        Connection.query(
+          ~s|UPDATE "hologram_data"."#{table}" SET "updated_at" = "updated_at" - interval '1 hour' | <>
+            ~s|WHERE "id" = $1|,
+          [Codec.encode(task.id, :uuid)]
+        )
+
+      [task: EntityOperations.get(ChangedTask, task.id)]
+    end
+
+    test "moves it for a value that can be on the row", %{task: task} do
+      assert can?(nil, {:update, :mark}, task, mark: "ok")
+    end
+
+    test "leaves it as stored when no value can be on the row", %{task: task} do
+      refute can?(nil, {:update, :mark}, task, mark: "too long")
+    end
+  end
+
+  describe "judged_deltas/2" do
+    test "keeps a move to a value the column can hold" do
+      row = %ChangedTask{count: 5}
+
+      assert judged_deltas(row, %{count: 2}) == {%{count: 2}, []}
+    end
+
+    test "names a move past what the column can hold" do
+      row = %ChangedTask{count: 5}
+
+      assert judged_deltas(row, %{count: 9_223_372_036_854_775_807}) == {%{}, [:count]}
+    end
+
+    test "names an amount the column can't take, whatever it would move the value to" do
+      row = %ChangedTask{count: -5_000_000_000_000_000_000}
+
+      assert judged_deltas(row, %{count: 10_000_000_000_000_000_000}) == {%{}, [:count]}
+    end
+
+    test "names a move to a value its declaration refuses" do
+      row = %Hologram.Test.Fixtures.Entity.Module10{count: 1}
+
+      assert judged_deltas(row, %{count: -1}) == {%{}, [:count]}
+    end
+  end
+
+  describe "judged_values/3" do
+    test "keeps values the row can hold" do
+      project = DB.create!(ChangedProject.new())
+      values = %{code: "abc", project_id: project.id}
+
+      assert judged_values(ChangedTask, values, :stored) == {values, [], []}
+    end
+
+    test "names a value failing its declaration" do
+      assert judged_values(ChangedTask, %{code: "too long", note: "x"}, :stored) ==
+               {%{note: "x"}, [:code], []}
+    end
+
+    test "names a reference to a row that doesn't exist" do
+      values = %{note: "x", project_id: Entity.generate_id()}
+
+      assert judged_values(ChangedTask, values, :stored) == {%{note: "x"}, [], [:project_id]}
+    end
+
+    test "names a malformed reference without looking it up" do
+      assert judged_values(ChangedTask, %{project_id: "not-a-uuid"}, :stored) ==
+               {%{}, [:project_id], []}
+    end
+
+    test "keeps a nil reference" do
+      assert judged_values(ChangedTask, %{project_id: nil}, :stored) ==
+               {%{project_id: nil}, [], []}
+    end
+
+    test "holds a reference's target under :held" do
+      project = DB.create!(ChangedProject.new())
+
+      statement =
+        ~s|SELECT xmax <> '0' FROM "hologram_data"."test_fixtures_policy_module58" WHERE id = $1|
+
+      params = [Codec.encode(project.id, :uuid)]
+
+      assert {:ok, %Postgrex.Result{rows: [[false]]}} = Connection.query(statement, params)
+
+      assert judged_values(ChangedTask, %{project_id: project.id}, :held) ==
+               {%{project_id: project.id}, [], []}
+
+      assert {:ok, %Postgrex.Result{rows: [[true]]}} = Connection.query(statement, params)
+    end
+  end
+
+  describe "uncovered_fields/5" do
+    test "judges a rule reading the row after the change on the given row" do
+      task =
+        %{count: 9}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      row = EntityOperations.get(ChangedTask, task.id)
+
+      assert uncovered_fields(nil, row, [:count], :stored, after_row(row, %{count: 10}, %{}, %{})) ==
+               []
+
+      assert uncovered_fields(nil, row, [:count], :stored, after_row(row, %{count: 11}, %{}, %{})) ==
+               [:count]
+    end
+
+    test "asks whether some change could pass when given no row" do
+      task =
+        %{count: 11}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      assert uncovered_fields(nil, EntityOperations.get(ChangedTask, task.id), [:count], :stored) ==
+               []
     end
   end
 

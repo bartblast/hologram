@@ -202,6 +202,13 @@ export default class DataLayer {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Auth",
+      "can?/4",
+      "public",
+      ManuallyPortedElixirHologramAuth["can?/4"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Auth",
       "grant_role/2",
       "public",
       ManuallyPortedElixirHologramAuth["grant_role/2"],

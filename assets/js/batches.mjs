@@ -724,6 +724,7 @@ export default class Batches {
       // No place and not everything marked is a client waiting for a fill or part way through one,
       // or a tab the server stopped, whose row then just stays unstored.
       Overlay.promote(batch, answer.kept, {
+        dropped: answer.dropped,
         fillPending:
           SyncStream.syncCursor === null && !LocalDatabase.isAllSynced(),
       });

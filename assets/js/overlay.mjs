@@ -127,12 +127,16 @@ export default class Overlay {
   // with nothing shown in between. Without it the only thing left to show is the value the row
   // held before either writer touched it, which is a value nobody wrote.
   //
+  // A column named in `dropped` that the server sent no value back for is left as the base holds
+  // it: the value lost, and the server doesn't say what stands there to someone whose rule couldn't
+  // judge it, so the winner's frame is what brings it.
+  //
   // Given `fillPending`, a whole fill is on its way, so a create filed here is one nothing has
   // vouched for yet (see LocalDatabase.markPromoted). Past its type's marker it is a batch the fill
   // didn't read, since the marker landed the ones it did (see Batches.landUnsent), and it waits for
   // its session. Asked of the base before the write, since #absorb can file the row itself. A
   // create over a row the base holds files nothing.
-  static promote(batch, kept, {fillPending = false} = {}) {
+  static promote(batch, kept, {dropped, fillPending = false} = {}) {
     batch.writes.forEach((write, index) => {
       // A write whose frame has already arrived is in the base as the server resolved it, so
       // there is nothing left to move - and folding it in again would apply a moved counter a
@@ -173,7 +177,9 @@ export default class Overlay {
         return;
       }
 
-      Overlay.#promoteWrite(write);
+      Overlay.#promoteWrite(
+        Overlay.#withoutUnanswered(write, dropped?.[String(index)], keptEntry),
+      );
 
       if (awaitsMarker) {
         LocalDatabase.markPromoted(write.type, write.id, batch.seq);
@@ -265,9 +271,9 @@ export default class Overlay {
     );
 
     for (const [field, value] of columns) {
-      const revision = revisions[field] ?? 0;
+      const revision = Overlay.#revision(revisions, field);
 
-      if (revision > (absorbed["$revisions"][field] ?? 0)) {
+      if (revision > Overlay.#revision(absorbed["$revisions"], field)) {
         absorbed[field] = value;
         absorbed["$revisions"][field] = revision;
       }
@@ -615,7 +621,34 @@ export default class Overlay {
   // A column the base holds no revision for reads as revision zero: never set by anyone, so
   // nothing can have moved past it. The same reading the server makes.
   static #wins(row, write, field) {
-    return write.stamp > (row["$revisions"]?.[field] ?? 0);
+    return write.stamp > Overlay.#revision(row["$revisions"], field);
+  }
+
+  // The revision recorded for a column, or zero. Only an own property counts, since a column can
+  // be named like something every object inherits, such as constructor.
+  static #revision(revisions, field) {
+    return (
+      (Object.hasOwn(revisions ?? {}, field) ? revisions[field] : null) ?? 0
+    );
+  }
+
+  // The write without the columns it lost and got no value back for.
+  static #withoutUnanswered(write, dropped, kept) {
+    const unanswered = Object.keys(dropped ?? {}).filter(
+      (field) => !Object.hasOwn(kept ?? {}, field),
+    );
+
+    if (unanswered.length === 0) {
+      return write;
+    }
+
+    const data = Object.fromEntries(
+      Object.entries(write.data ?? {}).filter(
+        ([field]) => !unanswered.includes(field),
+      ),
+    );
+
+    return {...write, data};
   }
 
   // Every pending write naming one row, in the order they were made.

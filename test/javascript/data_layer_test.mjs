@@ -762,6 +762,7 @@ describe("DataLayer", () => {
         globalThis.Elixir_Hologram_Auth.__exports__,
         new Set([
           "can?/3",
+          "can?/4",
           "grant_role/2",
           "grant_role/3",
           "grant_role/4",
