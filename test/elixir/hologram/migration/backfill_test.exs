@@ -1300,7 +1300,7 @@ defmodule Hologram.Migration.BackfillTest do
       route(scratch, fn ->
         assert run([create], first_model, @context) == :ok
 
-        insert_row("my_app_task", code: "a", title: "Kept As Is")
+        insert_row("my_app_task", code: "a", title: "kept")
         insert_row("my_app_task", code: "BAD")
 
         assert_error RuntimeError, ~r/must match .*\(1 row\)/, fn ->
@@ -1308,6 +1308,26 @@ defmodule Hologram.Migration.BackfillTest do
         end
 
         assert nullable?("title")
+      end)
+    end
+
+    test "leaves a retained value the format would refuse", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      op = tighten(:title, copy_of(:code), format: ~r/^[a-z]+$/)
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a", title: "Kept As Is")
+        insert_row("my_app_task", code: "b")
+
+        assert apply_file([op], create, first_model) == :ok
+
+        assert rows_by_code(["title"]) == [["Kept As Is"], ["b"]]
+        refute nullable?("title")
       end)
     end
 
