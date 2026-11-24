@@ -64,17 +64,21 @@ defmodule HologramFeatureTests.IdentityChangeTest do
     value
   end
 
-  # Records every time the page shows another user, or rows other than the given ones.
+  # Records every time the page shows another user, or rows other than the given ones. Once the
+  # page has shown the user with their rows, a page without either counts too.
   defp watch_for_other_rows(session, email, memos) do
     script = """
     const [email, memos] = arguments;
     globalThis.__otherRows = [];
+    let shown = false;
 
     const check = () => {
       const shownEmail = document.querySelector("#session_user")?.textContent.trim();
       const shownMemos = document.querySelector("#memos")?.textContent.trim();
 
-      if ((shownEmail ?? email) !== email || (shownMemos ?? memos) !== memos) {
+      if (shownEmail === email && shownMemos === memos) {
+        shown = true;
+      } else if (shown || (shownEmail ?? email) !== email || (shownMemos ?? memos) !== memos) {
         globalThis.__otherRows.push([shownEmail, shownMemos]);
       }
     };
