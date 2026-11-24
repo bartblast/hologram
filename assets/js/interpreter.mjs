@@ -2773,7 +2773,7 @@ export default class Interpreter {
     }
 
     if (Interpreter.#STRUCT_FUNCTIONS.has(key)) {
-      return "The browser loads a struct type's __struct__ functions when a struct of the type or the type's module reaches it from the server, or when the page's client code names the type. It loads none for a module that client code builds from a string.";
+      return "The browser has an entity type's __struct__ functions from the data model, and loads another struct type's when a struct of the type or the type's module reaches it from the server, or when the page's client code names the type. It loads none for a module that client code builds from a string.";
     }
 
     return null;
