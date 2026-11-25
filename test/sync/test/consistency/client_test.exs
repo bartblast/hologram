@@ -712,8 +712,9 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     |> DB.update!()
 
     # A save left running elsewhere would hold the client's place below these writes, and the
-    # catch-up would then replay them and restate the tag's set.
-    edge = Oplog.last_serial()
+    # catch-up would then replay them and restate the tag's set. The newest committed entry, as a
+    # serial handed out to a save that rolled back is never read.
+    {%{seq: edge}, _run} = Oplog.last_entry_through(Oplog.last_serial())
     assert await(fn -> read_seq() >= edge end)
 
     client = start_client(user.id)
