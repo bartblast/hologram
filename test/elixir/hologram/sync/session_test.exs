@@ -3339,9 +3339,10 @@ defmodule Hologram.Sync.SessionTest do
         seq
       )
 
-      assert_receive {:sync_deltas, first_cursor, [_first], _first_applied, first_final}
-      assert_receive {:sync_deltas, cursor, [_second], nil, final_seq}
+      assert_receive {:sync_deltas, first_cursor, [%{id: first_id}], _first_applied, first_final}
+      assert_receive {:sync_deltas, cursor, [%{id: second_id}], nil, final_seq}
 
+      assert Enum.sort([first_id, second_id]) == Enum.sort([first.id, second.id])
       assert {first_cursor, first_final} == {nil, nil}
       assert {cursor, final_seq} == {cursor_at(seq), seq}
     end
