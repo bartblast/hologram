@@ -80,7 +80,8 @@ defmodule Hologram.Migration.Value.FillCheckTest do
         Connection.transaction(fn ->
           create_filled_ids!()
 
-          assert_raise Postgrex.Error, ~r/already exists/, fn -> create_filled_ids!() end
+          error = assert_raise Postgrex.Error, fn -> create_filled_ids!() end
+          assert error.postgres.code == :duplicate_table
 
           Connection.rollback(:done)
         end)
