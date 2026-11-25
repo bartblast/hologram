@@ -6124,7 +6124,7 @@ describe("Hologram", () => {
         Hologram.navigationCount += 1;
 
         answer("overtaken-digest");
-        await restoring.catch(() => {});
+        await restoring;
 
         sinon.assert.notCalled(fetchPageStub);
         assert.equal(Hologram.historyId, historyId);
