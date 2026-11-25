@@ -468,15 +468,15 @@ defmodule HologramFeatureTests.Helpers do
   @spec await_log_settled() :: :ok
   def await_log_settled do
     statement = """
-    SELECT "tx"
+    SELECT "seq"
     FROM "#{Mapper.system_schema()}"."oplog"
-    ORDER BY "tx" DESC
+    ORDER BY "seq" DESC
     LIMIT 1
     """
 
     case Connection.query(statement, []) do
-      {:ok, %{rows: [[newest_tx]]}} ->
-        do_await_log_settled(newest_tx, current_time())
+      {:ok, %{rows: [[newest_seq]]}} ->
+        do_await_log_settled(newest_seq, current_time())
 
       {:ok, %{rows: []}} ->
         raise ArgumentError,
@@ -1753,22 +1753,24 @@ defmodule HologramFeatureTests.Helpers do
 
   # The newest change is read once, by the caller: read again on every round, the wait would chase
   # whatever is written meanwhile. The edge is nil until the server's first read.
-  defp do_await_log_settled(newest_tx, start_time) do
+  # The edge is the place of the last entry the server read, which it reads only once every save
+  # holding a lower serial has ended.
+  defp do_await_log_settled(newest_seq, start_time) do
     read_edge = ReadEdge.get(ReadEdge)
 
     cond do
-      is_integer(read_edge) and read_edge > newest_tx ->
+      match?({{seq, _tx, _inserted_at}, _log_id} when seq >= newest_seq, read_edge) ->
         :ok
 
       timed_out?(start_time) ->
         raise Wallaby.ExpectationNotMetError,
-              "Timed out waiting for the server to read the operations log past transaction " <>
-                "#{newest_tx}, it has read up to #{inspect(read_edge)} - an older transaction " <>
+              "Timed out waiting for the server to read the operations log through entry " <>
+                "#{newest_seq}, it has read up to #{inspect(read_edge)} - an older transaction " <>
                 "is still running on the database server, or the server's reads are failing"
 
       true ->
         :timer.sleep(50)
-        do_await_log_settled(newest_tx, start_time)
+        do_await_log_settled(newest_seq, start_time)
     end
   end
 
