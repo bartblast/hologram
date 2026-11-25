@@ -424,11 +424,20 @@ defmodule Hologram.Migration.Value.ResolverTest do
                resolved({:coalesce, [{:name, [:budget]}, {:value, 0}]}, attribute_target(:float))
     end
 
-    test "refuses an integer a float can't hold exactly" do
-      term = {:coalesce, [{:name, [:budget]}, {:value, 9_007_199_254_740_993}]}
+    test "widens an integer above 2^53 a float holds exactly" do
+      term = {:coalesce, [{:name, [:budget]}, {:value, 9_007_199_254_740_994}]}
 
-      assert refusal(term, attribute_target(:float)) ==
-               "holds 9007199254740993, which isn't a value of type :float"
+      assert %{term: {:coalesce, [_budget, {:value, 9_007_199_254_740_994.0, :float}]}} =
+               resolved(term, attribute_target(:float))
+    end
+
+    test "refuses an integer a float can't hold exactly" do
+      for value <- [9_007_199_254_740_993, 10 ** 400] do
+        term = {:coalesce, [{:name, [:budget]}, {:value, value}]}
+
+        assert refusal(term, attribute_target(:float)) ==
+                 "holds #{value}, which isn't a value of type :float"
+      end
     end
 
     test "refuses a value of another type" do

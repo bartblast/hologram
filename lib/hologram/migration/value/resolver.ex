@@ -54,8 +54,8 @@ defmodule Hologram.Migration.Value.Resolver do
 
   @time_types [:date, :datetime, :time]
 
-  # The largest integer a float holds exactly, so a literal widened to a float keeps its value.
-  @max_exact_float_integer 9_007_199_254_740_992
+  # The largest integer of the largest float, above which the conversion raises.
+  @max_float_integer trunc(1.7976931348623157e308)
 
   @doc """
   Resolves the given backfill against the given model, the one standing right before the op, for
@@ -98,6 +98,18 @@ defmodule Hologram.Migration.Value.Resolver do
   def codec_type({:reference, _target}), do: :uuid
 
   def codec_type(type), do: type
+
+  @doc """
+  Returns the float holding exactly the given integer, or nil when none does.
+  """
+  @spec exact_float(integer) :: float | nil
+  def exact_float(integer) when is_integer(integer) and abs(integer) <= @max_float_integer do
+    float = integer * 1.0
+
+    if trunc(float) == integer, do: float
+  end
+
+  def exact_float(integer) when is_integer(integer), do: nil
 
   @doc """
   Returns whether PostgreSQL can store the given value, which `of_type?/2` accepted, in a column of
@@ -249,9 +261,8 @@ defmodule Hologram.Migration.Value.Resolver do
     refuse!(context, "holds nil - nil is the absence a backfill exists to fill")
   end
 
-  defp fit_value!(value, :float, _context)
-       when is_integer(value) and abs(value) <= @max_exact_float_integer do
-    value * 1.0
+  defp fit_value!(value, :float, context) when is_integer(value) do
+    exact_float(value) || refuse_value!(value, :float, context)
   end
 
   defp fit_value!(value, :string, context) when is_binary(value) do

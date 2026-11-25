@@ -17,9 +17,6 @@ defmodule Hologram.Migration.Value do
   alias Hologram.Migration.Value.Resolver
   alias Hologram.Query.Expression
 
-  # The largest integer a float holds exactly, as Resolver widens a literal.
-  @max_exact_float_integer 9_007_199_254_740_992
-
   @enforce_keys [:term]
   defstruct [:term, args: []]
 
@@ -160,9 +157,8 @@ defmodule Hologram.Migration.Value do
   isn't of the type stays as it is, for the check to refuse.
   """
   @spec normalize_constant(any, atom) :: any
-  def normalize_constant(value, :float)
-      when is_integer(value) and abs(value) <= @max_exact_float_integer,
-      do: value * 1.0
+  def normalize_constant(value, :float) when is_integer(value),
+    do: Resolver.exact_float(value) || value
 
   def normalize_constant(value, :uuid) when is_binary(value), do: String.downcase(value)
 
