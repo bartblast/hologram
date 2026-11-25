@@ -1187,13 +1187,16 @@ defmodule Hologram.Template.RendererDerivedTest do
 
     # The render for the new user starts from the struct the first one began with, and the child
     # signs nobody in then.
-    test "keeps the session, cookies and headers the init/3 that signed in set", %{user: user} do
+    test "keeps the session, cookies, headers and status the init/3 that signed in set", %{
+      user: user
+    } do
       %{server_struct: server_struct} =
         render_page(Module179, %{user_id: user.id}, %Server{}, @page_opts)
 
       assert server_struct.session["signed_in_by"] == "module_180"
       assert server_struct.cookies["welcome"] == "module_180"
       assert server_struct.response_headers["x-signed-in-by"] == "module_180"
+      assert server_struct.status == 302
       assert server_struct.__meta__.session_ops["signed_in_by"] == {:put, "module_180"}
       assert %{value: "module_180"} = server_struct.__meta__.cookie_ops["welcome"]
     end

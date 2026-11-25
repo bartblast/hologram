@@ -1518,7 +1518,8 @@ defmodule Hologram.Template.Renderer do
   end
 
   # The session entries, cookies and response headers one init/3 set or deleted, each as the key
-  # and what the returned struct holds under it, :error for a deleted one. Only that init/3's: the
+  # and what the returned struct holds under it, :error for a deleted one, and the status and body
+  # it set, like a redirect's 302. Only that init/3's: the
   # ones before it run again, and a change carried over would then be made twice. Named by the
   # component and its cid, which the render for the new user gives it again.
   #
@@ -1536,11 +1537,20 @@ defmodule Hologram.Template.Renderer do
       component: {module, server_struct.cid},
       cookie_ops: cookie_ops,
       cookies: value_changes(server_struct.cookies, returned_server_struct.cookies, cookie_ops),
+      response_fields:
+        field_changes(server_struct, returned_server_struct, [:response_body, :status]),
       response_headers:
         map_changes(server_struct.response_headers, returned_server_struct.response_headers),
       session: value_changes(server_struct.session, returned_server_struct.session, session_ops),
       session_ops: session_ops
     }
+  end
+
+  defp field_changes(before, returned, fields) do
+    for field <- fields,
+        value = Map.fetch!(returned, field),
+        value != Map.fetch!(before, field),
+        do: {field, value}
   end
 
   defp value_changes(before, returned, op_changes) do
@@ -1587,7 +1597,7 @@ defmodule Hologram.Template.Renderer do
         session_ops: put_map_changes(server_struct.__meta__.session_ops, changes.session_ops)
     }
 
-    %{
+    server_struct = %{
       server_struct
       | __meta__: meta,
         cookies: put_map_changes(server_struct.cookies, changes.cookies),
@@ -1595,6 +1605,8 @@ defmodule Hologram.Template.Renderer do
           put_map_changes(server_struct.response_headers, changes.response_headers),
         session: put_map_changes(server_struct.session, changes.session)
     }
+
+    struct!(server_struct, changes.response_fields)
   end
 
   defp put_map_changes(map, changes) do

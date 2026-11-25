@@ -26,6 +26,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module180 do
     |> put_session(:signed_in_by, "module_180")
     |> put_cookie("welcome", "module_180")
     |> put_response_header("x-signed-in-by", "module_180")
+    |> put_status(302)
   end
 
   defp sign_in(server), do: server
