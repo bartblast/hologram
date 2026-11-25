@@ -328,14 +328,25 @@ defmodule Hologram.Migration.ValueTest do
       end
     end
 
-    test "refuses a function of another module" do
-      assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
-        Value.validate_ops!(
-          [function_op(System)],
-          "app/migrations/20260813091522.ex",
-          MyApp.Migration
-        )
+    test "refuses a function of another migration exporting the same backfill function" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> String.upcase(title) end
       end
+      """
+
+      other = compile_migration("20260813091522", body)
+      owner = compile_migration("20260813091523", body)
+
+      assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
+        Value.validate_ops!([function_op(other)], "app/migrations/20260813091523.ex", owner)
+      end
+
+      assert Value.validate_ops!(
+               [function_op(owner)],
+               "app/migrations/20260813091523.ex",
+               owner
+             ) == :ok
     end
 
     test "refuses a function nested inside another word" do
