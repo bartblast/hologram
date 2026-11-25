@@ -655,9 +655,13 @@ defmodule Hologram.Migration do
       {expand_quote_code(code, env, runs, code_splicing), nil}
     end
 
-    case Value.map_reduce_quote(node, env, splicing, nil, expand_code) do
+    # A pipe on a pipe's right side is the stages after its left side, which can quote it.
+    with ^node <- Value.regroup_pipe(node, env),
+         :error <- Value.map_reduce_quote(node, env, splicing, nil, expand_code) do
+      expand_call_aliases(node, env, splicing)
+    else
       {:ok, node, nil} -> mark_aliases(node, env)
-      :error -> expand_call_aliases(node, env, splicing)
+      regrouped -> expand_code_aliases(regrouped, env, splicing)
     end
   end
 
@@ -1210,9 +1214,13 @@ defmodule Hologram.Migration do
        when form in [:quote, :|>] or is_tuple(form) do
     snapshot_code = &snapshot_quote_code(&1, caller, &2, &3, &4)
 
-    case Value.map_reduce_quote(node, caller, splicing, snapshots, snapshot_code) do
+    # A pipe on a pipe's right side is the stages after its left side, which can quote it.
+    with ^node <- Value.regroup_pipe(node, caller),
+         :error <- Value.map_reduce_quote(node, caller, splicing, snapshots, snapshot_code) do
+      snapshot_call_attribute_reads(node, caller, splicing, snapshots)
+    else
       {:ok, node, all_snapshots} -> {node, all_snapshots}
-      :error -> snapshot_call_attribute_reads(node, caller, splicing, snapshots)
+      regrouped -> snapshot_attribute_reads(regrouped, caller, splicing, snapshots)
     end
   end
 

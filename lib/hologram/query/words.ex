@@ -58,6 +58,16 @@ defmodule Hologram.Query.Words do
         {:|>, _meta, [left, {:quote, _quote_meta, args}]}, word when is_list(args) ->
           {quote_code([left | args]), word}
 
+        # Kernel's pipe takes a pipe on its right side as the stages after its left side, the
+        # first of which can be a quote.
+        {:|>, meta, [left, {:|>, _right_meta, [middle, last]}]}, word ->
+          {{:|>, meta, [{:|>, meta, [left, middle]}, last]}, word}
+
+        {{:., _dot_meta, [{:__aliases__, _alias_meta, [:Kernel]}, :|>]} = form, meta,
+         [left, {:|>, _right_meta, [middle, last]}]},
+        word ->
+          {{form, meta, [{form, meta, [left, middle]}, last]}, word}
+
         {{:., _dot_meta, [{:__aliases__, _alias_meta, [:Kernel]}, :|>]}, _meta,
          [left, {:quote, _quote_meta, args}]},
         word

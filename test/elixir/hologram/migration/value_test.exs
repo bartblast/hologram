@@ -269,6 +269,31 @@ defmodule Hologram.Migration.ValueTest do
     end
   end
 
+  describe "regroup_pipe/2" do
+    test "gives both stages the outer pipe's meta, whose imports decide which pipe runs" do
+      inner_meta = [line: 2, context: Elsewhere, imports: [{2, Elsewhere}]]
+      pipe = {:|>, [line: 1], [:a, {:|>, inner_meta, [:b, :c]}]}
+
+      assert Value.regroup_pipe(pipe, __ENV__) ==
+               {:|>, [line: 1], [{:|>, [line: 1], [:a, :b]}, :c]}
+    end
+
+    test "regroups a dotted Kernel pipe and a pipe nested on the right side" do
+      pipe = Code.string_to_quoted!("Kernel.|>(a, b |> (c |> d))", columns: false)
+
+      regrouped = Value.regroup_pipe(pipe, __ENV__)
+
+      assert Macro.to_string(regrouped) == "Kernel.|>(Kernel.|>(Kernel.|>(a, b), c), d)"
+    end
+
+    test "leaves a pipe that isn't Kernel's" do
+      pipe = Code.string_to_quoted!("a |> (b |> c)")
+      env = %{__ENV__ | functions: [], macros: []}
+
+      assert Value.regroup_pipe(pipe, env) == pipe
+    end
+  end
+
   describe "resolve!/4" do
     test "delegates to the resolver" do
       model = %{

@@ -96,6 +96,21 @@ defmodule Hologram.Migration.FieldAccessTest do
       assert unchanged?("row.a.b |> Elixir.Kernel.put_in(1)")
     end
 
+    test "takes a pipe on a pipe's right side as the stages after its left side" do
+      assert rewritten("row.a.b |> (put_in(1) |> f())") == "row.a.b |> put_in(1) |> f()"
+
+      assert rewritten("row.a.b |> ((put_in(1) |> f()) |> g())") ==
+               "row.a.b |> put_in(1) |> f() |> g()"
+
+      assert rewritten("row.a.b |> (put_in(1) |> (f() |> g()))") ==
+               "row.a.b |> put_in(1) |> f() |> g()"
+
+      assert rewritten("Kernel.|>(row.a.b, put_in(1) |> f())") ==
+               "Kernel.|>(Kernel.|>(row.a.b, put_in(1)), f())"
+
+      assert rewritten("row.a |> (f() |> g())") == ":erlang.map_get(:a, row) |> f() |> g()"
+    end
+
     test "takes an alias of Kernel as Kernel, expanding only a module name" do
       aliased = %{env() | aliases: [{K, Kernel}]}
       ast = Code.string_to_quoted!("K.|>(row.a.b, put_in(1))")

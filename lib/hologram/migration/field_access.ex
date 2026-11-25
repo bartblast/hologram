@@ -138,15 +138,13 @@ defmodule Hologram.Migration.FieldAccess do
 
   # A pipe passes the first argument, so a path macro at its end takes the left side as
   # its path, and the migration's own macro takes it as written.
-  def rewrite({:|>, meta, [left, right]} = ast, env, splicing) do
-    if own_macro?(env, meta, :|>, 2),
-      do: ast,
-      else: {:|>, meta, rewrite_pipe(left, right, env, splicing)}
+  def rewrite({:|>, meta, [_left, _right]} = ast, env, splicing) do
+    if own_macro?(env, meta, :|>, 2), do: ast, else: rewrite_kernel_pipe(ast, env, splicing)
   end
 
-  def rewrite({{:., _dot_meta, [receiver, :|>]} = form, meta, [left, right]} = ast, env, splicing) do
+  def rewrite({{:., _dot_meta, [receiver, :|>]}, _meta, [_left, _right]} = ast, env, splicing) do
     if kernel?(receiver, env),
-      do: {form, meta, rewrite_pipe(left, right, env, splicing)},
+      do: rewrite_kernel_pipe(ast, env, splicing),
       else: rewrite_args(ast, env, splicing)
   end
 
@@ -304,6 +302,14 @@ defmodule Hologram.Migration.FieldAccess do
 
   defp rewrite_args({form, meta, args}, env, splicing),
     do: {rewrite(form, env, splicing), meta, rewrite(args, env, splicing)}
+
+  # A pipe on the right side is the stages after the left side, the first of which takes it.
+  defp rewrite_kernel_pipe({form, meta, [left, right]} = pipe, env, splicing) do
+    case Value.regroup_pipe(pipe, env) do
+      ^pipe -> {form, meta, rewrite_pipe(left, right, env, splicing)}
+      regrouped -> rewrite(regrouped, env, splicing)
+    end
+  end
 
   # The left side and the call a pipe passes it to, which takes no parentheses when it takes
   # nothing else.

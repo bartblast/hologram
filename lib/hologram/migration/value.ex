@@ -308,6 +308,23 @@ defmodule Hologram.Migration.Value do
   def map_reduce_quote(_node, _env, _splicing, _acc, _fun), do: :error
 
   @doc """
+  Returns the given pipe with a pipe on its right side moved to its left, as Kernel's pipe reads
+  it: `a |> (b |> c)` becomes `(a |> b) |> c`, so that the left side goes into the right side's
+  first stage, and any pipe still on the right is moved the same way. Returns a node that isn't
+  Kernel's pipe, or has no pipe on its right, as is.
+  """
+  @spec regroup_pipe(Macro.t(), Macro.Env.t()) :: Macro.t()
+  def regroup_pipe({form, meta, [left, {:|>, _right_meta, [middle, last]}]} = node, env) do
+    # Kernel's pipe unpipes its right side by shape, whatever |> means there, so the meta of that
+    # pipe, which can name another import, decides nothing.
+    if kernel_pipe?(node, env),
+      do: regroup_pipe({form, meta, [{form, meta, [left, middle]}, last]}, env),
+      else: node
+  end
+
+  def regroup_pipe(node, _env), do: node
+
+  @doc """
   Lowers the given `backfill:` value of a migration op to the AST the op carries.
 
   A literal stays as written, and a pinned expression becomes that expression: both are constants.
@@ -1483,29 +1500,31 @@ defmodule Hologram.Migration.Value do
 
   defp unpipe(ast, _scope), do: ast
 
-  # A pipe is the call Elixir expands it to, however it's spelled, but only Kernel's pipe expands:
-  # a migration's own |> is a call whose right side is a value, and any other receiver stays read.
-  defp unpiped_call({{:., _dot_meta, [receiver, :|>]}, meta, [left, right]} = node, env) do
-    if FieldAccess.kernel?(receiver, env) do
-      expanded_pipe({:|>, meta, [left, right]}, env)
-    else
-      node
-    end
-  end
+  defp kernel_pipe?({{:., _dot_meta, [receiver, :|>]}, _meta, [_left, _right]}, env),
+    do: FieldAccess.kernel?(receiver, env)
 
   # A quote's call names the import it was written with, which Elixir takes over the env it
   # expands in.
-  defp unpiped_call({:|>, meta, [_left, _right]} = pipe, env) do
+  defp kernel_pipe?({:|>, meta, [_left, _right]}, env) do
     quoted_import =
       if Keyword.has_key?(meta, :context), do: List.keyfind(meta[:imports] || [], 2, 0)
 
-    kernel? =
-      case quoted_import do
-        {2, module} -> module == Kernel
-        nil -> Macro.Env.lookup_import(env, {:|>, 2}) == [macro: Kernel]
-      end
+    case quoted_import do
+      {2, module} -> module == Kernel
+      nil -> Macro.Env.lookup_import(env, {:|>, 2}) == [macro: Kernel]
+    end
+  end
 
-    if kernel?, do: expanded_pipe(pipe, env), else: pipe
+  defp kernel_pipe?(_node, _env), do: false
+
+  # A pipe is the call Elixir expands it to, however it's spelled, but only Kernel's pipe expands:
+  # a migration's own |> is a call whose right side is a value, and any other receiver stays read.
+  defp unpiped_call({{:., _dot_meta, [_receiver, :|>]}, meta, [left, right]} = node, env) do
+    if kernel_pipe?(node, env), do: expanded_pipe({:|>, meta, [left, right]}, env), else: node
+  end
+
+  defp unpiped_call({:|>, _meta, [_left, _right]} = pipe, env) do
+    if kernel_pipe?(pipe, env), do: expanded_pipe(pipe, env), else: pipe
   end
 
   defp unpiped_call(node, _env), do: node

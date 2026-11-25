@@ -94,7 +94,11 @@ defmodule Hologram.Query.WordsTest do
             ~s{foo([do: split(a, " ")] |> quote())},
             ~s{foo([] |> quote(do: split(a, " ")))},
             ~s{foo(Kernel.|>([do: split(a, " ")], quote()))},
-            ~s{foo(Kernel.|>([], quote(do: split(a, " "))))}
+            ~s{foo(Kernel.|>([], quote(do: split(a, " "))))},
+            # A pipe on the right side is the stages after the left side, the first a quote.
+            ~s{foo([do: split(a, " ")] |> (quote() |> inspect()))},
+            ~s{foo([do: split(a, " ")] |> ((quote() |> inspect()) |> bar()))},
+            ~s{foo(Kernel.|>([do: split(a, " ")], quote() |> inspect()))}
           ] do
         assert backfill_only_hint(Code.string_to_quoted!(source)) == ""
       end
@@ -103,7 +107,8 @@ defmodule Hologram.Query.WordsTest do
     test "finds a word in the options piped into a quote" do
       for source <- [
             ~s{foo([bind_quoted: [x: at(a, 0)]] |> quote(do: x))},
-            ~s{foo(Kernel.|>([bind_quoted: [x: at(a, 0)]], quote(do: x)))}
+            ~s{foo(Kernel.|>([bind_quoted: [x: at(a, 0)]], quote(do: x)))},
+            ~s{foo([bind_quoted: [x: at(a, 0)]] |> (quote(do: x) |> inspect()))}
           ] do
         assert backfill_only_hint(Code.string_to_quoted!(source)) ==
                  " - if you meant the query word at, it works only in a migration's backfill: for now"
