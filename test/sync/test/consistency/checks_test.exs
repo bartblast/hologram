@@ -244,6 +244,17 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
                Checks.below_final([view], entries, @member, 9)
     end
 
+    # A refill takes the limit an earlier fill's marker gave the type, but not the numbers it filed.
+    test "passes a number an earlier fill's marker filed", %{entries: entries} do
+      view = %{
+        view(5, 20, %{"t" => {5, 5}})
+        | proven: %{Space => 9},
+          rows: %{Space => %{"s" => {5, 9}}, Tag => %{"t" => {5, 5}}}
+      }
+
+      assert Checks.below_final([view], entries, @member, 9) == []
+    end
+
     test "judges only the types a view holds a limit for", %{entries: entries} do
       view = %{view(5, 20, %{}) | finals: %{Space => 5}, rows: %{}}
 
@@ -642,7 +653,7 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
   end
 
   defp view(final_seq, at, rows) do
-    %{at: at, finals: %{Tag => final_seq}, rows: %{Tag => rows}}
+    %{at: at, finals: %{Tag => final_seq}, proven: %{}, rows: %{Tag => rows}}
   end
 
   defp record(carried, opts) do

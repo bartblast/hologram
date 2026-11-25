@@ -59,12 +59,14 @@ defmodule HologramSyncTests.Consistency.Client do
   What the client showed once a frame was in, when it held a final limit for a type: the time the
   chunk completing the frame arrived, the limit each type's numbers are final to - the one every
   type has, or the higher one a type's marker gave it in the fill running then - for every type
-  holding one, and the numbers each row of every type shows, `{server_created_seq,
+  holding one, the highest limit an earlier fill's marker gave each type, which the numbers it
+  filed are final to, and the numbers each row of every type shows, `{server_created_seq,
   server_updated_seq}` by type and id, nil for one held back.
   """
   @type view :: %{
           at: integer,
           finals: %{module => non_neg_integer},
+          proven: %{module => non_neg_integer},
           rows: %{module => %{String.t() => {integer | nil, integer | nil}}}
         }
 
@@ -211,6 +213,7 @@ defmodule HologramSyncTests.Consistency.Client do
        facts: %{},
        final_seq: nil,
        opened_at: nil,
+       proven: %{},
        reconnect: nil,
        records: [],
        stored_final: nil,
@@ -440,7 +443,7 @@ defmodule HologramSyncTests.Consistency.Client do
 
     marked =
       case frame["scope"] do
-        "all" -> %{mark_all_synced(raised) | complete?: true, type_finals: %{}}
+        "all" -> %{mark_all_synced(prove_type_finals(raised)) | complete?: true, type_finals: %{}}
         "types" -> mark_types_synced(raised, frame["types"])
         _unknown_scope -> raised
       end
@@ -725,7 +728,7 @@ defmodule HologramSyncTests.Consistency.Client do
         {type, Map.new(rows, fn {id, row} -> {id, unnumbered(row)} end)}
       end)
 
-    %{state | final_seq: nil, tables: tables, type_finals: %{}, waiting: %{}}
+    %{state | final_seq: nil, proven: %{}, tables: tables, type_finals: %{}, waiting: %{}}
   end
 
   defp unnumbered(row) do
@@ -735,17 +738,23 @@ defmodule HologramSyncTests.Consistency.Client do
   end
 
   # Every held row goes back to awaiting the server's word, and the completeness marks go, so the
-  # marker ending the fill sweeps whatever it never delivered - `LocalDatabase.beginRefill`.
+  # marker ending the fill sweeps whatever it never delivered - `LocalDatabase.beginRefill`. The
+  # type limits go too, but not the numbers they filed.
   defp begin_refill(state) do
     held = for {type, rows} <- state.tables, id <- Map.keys(rows), do: {type, id}
 
     %{
-      state
+      prove_type_finals(state)
       | awaiting: MapSet.union(state.awaiting, MapSet.new(held)),
         synced_all: false,
         synced_types: MapSet.new(),
         type_finals: %{}
     }
+  end
+
+  # The type limits about to go stay as the proof the numbers they filed were final when filed.
+  defp prove_type_finals(state) do
+    %{state | proven: Map.merge(state.proven, state.type_finals, fn _type, a, b -> max(a, b) end)}
   end
 
   # Swept only the first time after a refill - `LocalDatabase.markAllSynced`.
@@ -799,6 +808,7 @@ defmodule HologramSyncTests.Consistency.Client do
       | awaiting: MapSet.new(),
         facts: %{},
         final_seq: nil,
+        proven: %{},
         synced_all: false,
         synced_types: MapSet.new(),
         stored_final: nil,
@@ -815,8 +825,9 @@ defmodule HologramSyncTests.Consistency.Client do
   defp restore(%{cursor: nil} = state), do: event(reset(state), :reload, %{from: :nothing})
 
   defp restore(state) do
-    # The page starts again, and has been told of no type's marker yet.
-    started = %{state | final_seq: state.stored_final, type_finals: %{}}
+    # The page starts again, and has been told of no type's marker yet. A number a type's marker
+    # filed above the stored limit waits again, so no proof of it is left to keep.
+    started = %{state | final_seq: state.stored_final, proven: %{}, type_finals: %{}}
 
     restored =
       Enum.reduce(state.tables, started, fn {type, rows}, acc ->
@@ -843,12 +854,19 @@ defmodule HologramSyncTests.Consistency.Client do
 
   # Kept only when the client holds a limit for some type or shows a number anyway, and only when it
   # differs from the last one kept: the checks judge each by the rows readable when its frame
-  # arrived.
+  # arrived. The proof is how far an earlier fill's type markers filed numbers, which no shown
+  # number at or below is above.
   defp keep_view(state, received_at) do
-    view = %{at: received_at, finals: finals(state), rows: shown_numbers(state)}
+    view = %{
+      at: received_at,
+      finals: finals(state),
+      proven: proven(state),
+      rows: shown_numbers(state)
+    }
 
     case state.views do
-      [last | _views] when last.finals == view.finals and last.rows == view.rows ->
+      [last | _views]
+      when last.finals == view.finals and last.proven == view.proven and last.rows == view.rows ->
         state
 
       _changed ->
@@ -867,6 +885,13 @@ defmodule HologramSyncTests.Consistency.Client do
   defp finals(state) do
     for module <- Model.types(),
         point = type_final(state, wire_type(module)),
+        into: %{},
+        do: {module, point}
+  end
+
+  defp proven(state) do
+    for module <- Model.types(),
+        point = Map.get(state.proven, wire_type(module)),
         into: %{},
         do: {module, point}
   end

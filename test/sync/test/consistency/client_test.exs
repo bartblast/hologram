@@ -478,6 +478,14 @@ defmodule HologramSyncTests.Consistency.ClientTest do
 
     assert shown_numbers(client, "t") == {above, above}
     assert last_view(client).finals[Tag] == above
+
+    # The next fill takes the marker's limit, but not the numbers it filed.
+    send_frame(client, request_id, "sync_resync", %{reason: "gap_too_large"})
+    send_frame(client, request_id, "sync_deltas", %{cursor: nil, deltas: %{}})
+
+    assert shown_numbers(client, "t") == {above, above}
+    assert last_view(client).finals[Tag] == kept
+    assert last_view(client).proven[Tag] == above
   end
 
   # The numbers came from a log that's gone, so none of them orders anything against the new one's.

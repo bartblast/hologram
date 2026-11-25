@@ -168,9 +168,11 @@ defmodule HologramSyncTests.Consistency.Checks do
     above_final(view) ++ missing_or_misnumbered(view, indexed, user_id)
   end
 
+  # A number an earlier fill's type marker filed stays after a refill takes the marker's limit, so
+  # it's judged by the higher of the two.
   defp above_final(view) do
     for {type, rows} <- view.rows,
-        final_seq <- [Map.get(view.finals, type)],
+        final_seq <- [proven_final(view, type)],
         {id, shown} <- rows,
         {created_seq, updated_seq} = shown,
         above?(created_seq, final_seq) or above?(updated_seq, final_seq),
@@ -182,6 +184,13 @@ defmodule HologramSyncTests.Consistency.Checks do
           shown: shown,
           type: type
         }
+  end
+
+  defp proven_final(view, type) do
+    case Enum.reject([Map.get(view.finals, type), get_in(view, [:proven, type])], &is_nil/1) do
+      [] -> nil
+      points -> Enum.max(points)
+    end
   end
 
   defp above?(nil, _final_seq), do: false
