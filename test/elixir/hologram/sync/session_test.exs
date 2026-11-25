@@ -489,15 +489,17 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(gap: gap)
 
-      assert_receive {:sync_deltas, first_cursor, [%{id: first_id}], _seq, 301}
+      assert [
+               {:sync_deltas, first_cursor, [%{id: first_id}], _first_seq, 301},
+               {:sync_deltas, second_cursor, [%{id: second_id}], _second_seq, 302},
+               {:sync_synced, :all, all_cursor, 303}
+             ] = frames_through_all()
+
       assert first_id == first.id
       assert first_cursor == cursor_at(301)
-
-      assert_receive {:sync_deltas, second_cursor, [%{id: second_id}], _seq, 302}
       assert second_id == second.id
       assert second_cursor == cursor_at(302)
 
-      assert_receive {:sync_synced, :all, all_cursor, 303}
       assert all_cursor == cursor_at(303)
       refute_received {:sync_deltas, _cursor, _deltas, _seq, _final_seq}
     end
@@ -3304,8 +3306,11 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([gap: gap] ++ ordered_reads(300, 309))
 
       assert_receive {:final_read, true, true}
-      assert_receive {:sync_deltas, _cursor, [%{id: _id}], _seq, 300}
-      assert_receive {:sync_synced, :all, _all_cursor, 309}
+
+      assert [
+               {:sync_deltas, _cursor, [%{id: _id}], _seq, 300},
+               {:sync_synced, :all, _all_cursor, 309}
+             ] = frames_through_all()
 
       assert_told_from_edge(300, 309)
     end
