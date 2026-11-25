@@ -4,10 +4,6 @@ reviews:
     base_branches: [".*"]
     drafts: true
   path_filters:
-    - "!test/elixir/hologram/sync/session_test.exs"
-    - "!test/elixir/hologram/sync/dispatcher_test.exs"
-    - "!test/elixir/hologram/db/oplog_test.exs"
-    - "!test/elixir/hologram/sync/final_limit_contention_test.exs"
     - "!**/mix.lock"
     - "!test/*/mix.exs"
     - "!test/umbrella/apps/*/mix.exs"
