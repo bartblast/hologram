@@ -2984,6 +2984,44 @@ defmodule Hologram.Migration.RendererTest do
       assert alter_column.after.type == "int8"
     end
 
+    test "keeps a change restating the type of an attribute added with a backfill beside the add" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :seats,
+          type: :integer,
+          opts: [backfill: 7],
+          line: 3
+        },
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          type: MyApp.Owner,
+          opts: [optional: true],
+          line: 4
+        },
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :seats,
+          changes: [type: :integer],
+          line: 5
+        },
+        %{op: :create_entity, entity: MyApp.Owner, line: 6}
+      ]
+
+      result = render(ops, pre)
+
+      assert %{op: :add_column, column: "seats", backfill: 7} =
+               Enum.find(result.transactional, &(&1[:column] == "seats"))
+
+      refute Enum.any?(result.transactional, &(&1.op == :alter_column))
+    end
+
     test "renders an optional flip as its column nullability" do
       pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 

@@ -637,12 +637,14 @@ defmodule Hologram.Migration.Renderer do
   defp recreates_entity?(_op, _ops), do: false
 
   # A backfill holds a value of the type its add declares, so a type change of the attribute after
-  # it applies to the filled rows on its own, as a cast, rather than merging into the add.
+  # it applies to the filled rows on its own, as a cast, rather than merging into the add. A change
+  # restating the add's type casts nothing, so it merges.
   defp retypes_filled_add?(%{op: :change_attribute, changes: changes} = op, ops) do
     Keyword.has_key?(changes, :type) and
       Enum.any?(ops, fn earlier ->
         earlier.op == :add_attribute and earlier.entity == op.entity and
-          earlier.name == op.name and Keyword.has_key?(earlier.opts, :backfill)
+          earlier.name == op.name and Keyword.has_key?(earlier.opts, :backfill) and
+          earlier.type != changes[:type]
       end)
   end
 
