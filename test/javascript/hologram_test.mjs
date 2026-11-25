@@ -6453,7 +6453,12 @@ describe("Hologram", () => {
 
       const carriedCounts = [["App.Page/total/", 3, ["App.Task"]]];
 
-      const seedSnapshot = (historyId) =>
+      // A snapshot of this document's by default. One a previous document took names a period of
+      // that document's, and the tag it was stamped with.
+      const seedSnapshot = (
+        historyId,
+        {identityPeriod = IdentityTracker.period, identityTag} = {},
+      ) =>
         sessionStorage.setItem(
           `hologram_page_snapshot_${historyId}`,
           Serializer.serialize(
@@ -6461,7 +6466,8 @@ describe("Hologram", () => {
               carriedCounts,
               chunkDigests: [],
               componentRegistryEntries: Type.map(),
-              identityPeriod: IdentityTracker.period,
+              identityPeriod,
+              ...(identityTag === undefined ? {} : {identityTag}),
               instanceId: "restored-instance",
               pageModule,
               pageParams: Type.map(),
@@ -6571,6 +6577,27 @@ describe("Hologram", () => {
           syncCounts: {},
           syncRows,
         });
+      });
+
+      // The entries before a reload hold the snapshots the previous document took.
+      it("takes in who it was rendered for when restoring a previous document's snapshot", async () => {
+        seedSnapshot("history-unmounted-13", {
+          identityPeriod: "a-period-of-another-document",
+          identityTag: IdentityTracker.tag,
+        });
+
+        await Hologram.handlePopstateEvent({state: "history-unmounted-13"});
+
+        sinon.assert.notCalled(fetchPageStub);
+
+        sinon.assert.calledOnceWithMatch(dataLayer.ingestMountData, {
+          identityPeriod: IdentityTracker.documentPeriod,
+        });
+
+        sinon.assert.calledOnceWithExactly(
+          dataLayer.restoreCounts,
+          carriedCounts,
+        );
       });
 
       // The ingest lets go of the counts the page held, so the snapshot's have to come after it.
