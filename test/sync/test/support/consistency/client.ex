@@ -813,7 +813,7 @@ defmodule HologramSyncTests.Consistency.Client do
         Enum.reduce(rows, acc, fn {id, row}, row_acc -> unfile(row_acc, type, id, row) end)
       end)
 
-    event(restored, :reload, %{from: :store, final_seq: state.stored_final})
+    event(restored, :reload, %{from: :store, final_seq: restored.final_seq})
   end
 
   # A number already waiting for the same field is the newer one, so it stays.

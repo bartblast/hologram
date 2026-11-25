@@ -523,10 +523,12 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     cursors = connect_cursors(client)
 
     assert List.last(cursors) == cursor
-    assert await(fn -> Client.final_seq(client) >= final_seq end)
     events = Client.events(client)
 
-    assert Enum.any?(events, &(&1.kind == :reload and &1.from == :store))
+    assert Enum.any?(
+             events,
+             &(&1.kind == :reload and &1.from == :store and &1.final_seq == final_seq)
+           )
 
     after_reload = last_view(client)
 
