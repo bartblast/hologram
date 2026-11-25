@@ -176,12 +176,19 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
 
     {:ok, %{rows: rows}} = Connection.query(statement, params)
 
+    # The joins must keep each trip once: a row they drop or repeat would hide in the map.
+    {:ok, %{rows: id_rows}} =
+      Connection.query(~s|SELECT "id" FROM "hologram_data"."my_app_trip" ORDER BY "id"|)
+
+    ids = Enum.map(id_rows, fn [id] -> Codec.decode(id, :uuid) end)
+
+    assert Enum.map(rows, fn [id, _value] -> Codec.decode(id, :uuid) end) == ids
+
     from_sql =
       Map.new(rows, fn [id, value] ->
         {Codec.decode(id, :uuid), decode(value, resolved.type)}
       end)
 
-    ids = Map.keys(from_sql)
     reads = Evaluator.reads(resolved.term)
     loaded = Loader.load(reads, MyApp.Trip, ids, mapping)
 
