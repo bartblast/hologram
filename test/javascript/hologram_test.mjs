@@ -7333,12 +7333,16 @@ describe("Hologram", () => {
 
           assert.isNotNull(frame);
 
+          // The seeded record goes, so the record read below is the one the unload writes.
+          const snapshotKey =
+            "hologram_page_snapshot_history-scrolled-from-snapshot";
+
+          sessionStorage.removeItem(snapshotKey);
+
           Hologram.handleBeforeunloadEvent();
 
           const savedSnapshot = Deserializer.deserialize(
-            sessionStorage.getItem(
-              "hologram_page_snapshot_history-scrolled-from-snapshot",
-            ),
+            sessionStorage.getItem(snapshotKey),
           );
 
           assert.deepStrictEqual(savedSnapshot.scrollPosition, [0, 640]);
