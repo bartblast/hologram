@@ -152,7 +152,7 @@ defmodule Hologram.Sync.Frame do
       applied_seq: applied_seq,
       cursor: cursor,
       deltas: group(deltas),
-      final_seq: final_seq,
+      final_seq: Codec.encode_wire(final_seq, :integer),
       model_hash: Model.hash(),
       protocol_version: @protocol_version
     }
@@ -187,7 +187,8 @@ defmodule Hologram.Sync.Frame do
   client caught up with nothing to be told receives no deltas frame.
 
   The final sequence number says how far the numbers the rows of the scope carry are final, as a
-  deltas frame's does. A fill has one for all of it, read before its first type, so a marker for
+  deltas frame's does. Past what a JavaScript number holds exactly it travels as its decimal
+  text, as the rows' numbers do (see `Hologram.DB.Codec.encode_wire/2`). A fill has one for all of it, read before its first type, so a marker for
   some types says it of those, and the rows a fill sends carry none until their type's marker.
 
   Whether the marker names a place is about the CLIENT, not the scope. A first arrival holds a
@@ -206,7 +207,7 @@ defmodule Hologram.Sync.Frame do
       |> scope_payload()
       |> Map.merge(%{
         cursor: cursor,
-        final_seq: final_seq,
+        final_seq: Codec.encode_wire(final_seq, :integer),
         model_hash: Model.hash(),
         protocol_version: @protocol_version
       })

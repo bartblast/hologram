@@ -1186,6 +1186,36 @@ describe("SyncStream", () => {
       assert.equal(persisting.firstCall.args[3], 12);
     });
 
+    // Past what a JavaScript number holds exactly, the frame spells both as their decimal text.
+    it("files a big number the frame's big final point reaches", () => {
+      sinon.stub(Durability, "persistFrame");
+
+      LocalDatabase.raiseFinal(10);
+
+      eventSource.listeners.sync_deltas({
+        data: frame({
+          deltas: {
+            put_entity: {
+              [TASK]: [
+                {
+                  id: "t1",
+                  server_created_seq: "9007199254740993",
+                  server_updated_seq: "9007199254740993",
+                  title: "Draft copy",
+                },
+              ],
+            },
+          },
+          final_seq: "9007199254740993",
+        }),
+      });
+
+      assert.equal(
+        LocalDatabase.baseRow(TASK, "t1").server_created_seq,
+        9007199254740993n,
+      );
+    });
+
     it("holds a number back when the frame moves the point short of it", () => {
       LocalDatabase.raiseFinal(10);
 

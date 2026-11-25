@@ -540,6 +540,12 @@ defmodule Hologram.Sync.FrameTest do
       assert envelope_data(envelope)["final_seq"] == 9
     end
 
+    test "carries a final number past what a JavaScript number holds exactly as its text" do
+      envelope = encode_deltas_envelope(42, @cursor, [], nil, 9_007_199_254_740_993)
+
+      assert envelope_data(envelope)["final_seq"] == "9007199254740993"
+    end
+
     test "carries no final number in a frame that leaves the batch unfinished" do
       envelope = encode_deltas_envelope(42, nil, [], nil, nil)
 
@@ -687,6 +693,14 @@ defmodule Hologram.Sync.FrameTest do
 
       assert envelope_data(types)["final_seq"] == 9
       assert envelope_data(all)["final_seq"] == 9
+    end
+
+    test "carries a final number past what a JavaScript number holds exactly as its text" do
+      types = encode_synced_envelope(42, {:types, [Module2], nil}, nil, 9_007_199_254_740_993)
+      all = encode_synced_envelope(42, :all, "Nzc4LjA", 9_007_199_254_740_993)
+
+      assert envelope_data(types)["final_seq"] == "9007199254740993"
+      assert envelope_data(all)["final_seq"] == "9007199254740993"
     end
 
     test "hands over the place the client may come back from" do
