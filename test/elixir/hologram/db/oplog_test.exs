@@ -652,7 +652,9 @@ defmodule Hologram.DB.OplogTest do
 
       seed(201, "put_entity", "Hologram.Test.Fixtures.Entity.Module14", @target_id, %{c: "other"})
       seed(202, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id, %{c: "after"})
-      seed(203, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "gone"})
+
+      # A smaller transaction id than the put's, so an order by transaction would swap the two.
+      seed(199, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "gone"})
 
       assert [put, delete] = read_type_after(Module2, first_seq, %{})
 
