@@ -156,7 +156,9 @@ defmodule Hologram.DB.OplogTest do
     end
 
     test "numbers an effect appended without one" do
-      serial = next_seq()
+      serial = last_serial()
+
+      refute holds_serial_lock?()
 
       :ok = append([%{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{}}])
 
