@@ -3265,6 +3265,13 @@ defmodule Hologram.Sync.SessionTest do
              |> Enum.take(marker)
              |> Enum.all?(&match?({:sync_deltas, _cursor, _deltas, _applied_seq, nil}, &1))
 
+      type_finals =
+        for {:sync_synced, {:types, _types, _applied_seq}, _cursor, final_seq} <- frames,
+            do: final_seq
+
+      assert type_finals != []
+      assert Enum.all?(type_finals, &(&1 == 200))
+
       assert {:sync_synced, :all, _cursor, 200} = List.last(frames)
     end
 
