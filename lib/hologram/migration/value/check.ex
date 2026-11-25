@@ -434,8 +434,8 @@ defmodule Hologram.Migration.Value.Check do
         refuse!(
           %{entity: op.entity, line: op.line, name: op.member},
           "uses the enum value #{inspect(value)}, which this file adds to its type - PostgreSQL " <>
-            "can't use a value in the transaction adding it (#1687), so move the backfill to " <>
-            "the next migration file, under the names things have there"
+            "can't use a value in the transaction adding it (#1687), so move #{filling_op(op)}, " <>
+            "with its backfill, to the next migration file, under the names things have there"
         )
 
       nil ->
@@ -465,6 +465,11 @@ defmodule Hologram.Migration.Value.Check do
   end
 
   defp track_enum_values(_op, added), do: added
+
+  # A backfill can't stand on its own, so the op carrying it moves.
+  defp filling_op(%{nulls_only: true}), do: "the op making the member required"
+
+  defp filling_op(_fill), do: "the op adding the member"
 
   # The values of each enum type the file creates or rebuilds, as the ops so far leave them.
   defp track_held_values(%{op: kind, enum_type: type, values: values}, held)

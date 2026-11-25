@@ -1139,7 +1139,8 @@ defmodule Hologram.Migration.RendererTest do
 
       error = assert_raise Hologram.CompileError, @refusal, fn -> render(ops, pre_model) end
 
-      assert error.message =~ @moved_with_names
+      assert error.message =~
+               "so move the op adding the member, with its backfill, to " <> @moved_with_names
     end
 
     test "follows a value renamed after its add", %{pre_model: pre_model} do
@@ -1261,7 +1262,11 @@ defmodule Hologram.Migration.RendererTest do
         }
       ]
 
-      assert_raise Hologram.CompileError, @refusal, fn -> render(ops, pre_model) end
+      error = assert_raise Hologram.CompileError, @refusal, fn -> render(ops, pre_model) end
+
+      assert error.message =~
+               "so move the op making the member required, with its backfill, to " <>
+                 @moved_with_names
     end
 
     test "accepts a value a rebuild has carried into a new type", %{pre_model: pre_model} do
