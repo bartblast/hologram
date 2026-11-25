@@ -28,7 +28,8 @@ defmodule Hologram.Migration.Value.ResolverTest do
           {:code, :integer, []},
           {:currency, :string, []},
           {:price, :float, []},
-          {:state, :enum, [values: [:draft, :live]]}
+          # Not in alphabetical order, so a test can tell the source's order from a sort.
+          {:state, :enum, [values: [:live, :draft]]}
         ],
         relationships: [{:guide, MyApp.User, []}, {:trip, MyApp.Trip, []}],
         roles: [],
@@ -935,10 +936,10 @@ defmodule Hologram.Migration.Value.ResolverTest do
                }
     end
 
-    test "embeds an enum's declared values as ranks" do
+    test "embeds the declared values of the source's enum as ranks" do
       target = attribute_target(:enum, values: [:draft, :live])
 
-      assert %{term: {:most_common, _set, :state, _type, [:draft, :live]}} =
+      assert %{term: {:most_common, _set, :state, _type, [:live, :draft]}} =
                resolved({:most_common, {:relationship, [:stops]}, :state}, target)
     end
 
