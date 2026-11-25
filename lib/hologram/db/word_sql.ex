@@ -8,16 +8,14 @@ defmodule Hologram.DB.WordSQL do
   Returns the SQL picking the given position, counting from 0, of the given text split by the given
   separator, nil past the end, as `String.split/2` then `Enum.at/2` do.
 
-  PostgreSQL splits an empty string into no parts where Elixir gives one empty part, so an empty
-  text is answered on its own. The position goes in as a literal, since PostgreSQL's arrays count
-  from 1.
+  PostgreSQL splits an empty string into no parts where Elixir gives one empty part, so the text
+  is split with the separator put before it, which always gives a first, empty part to skip, and
+  the text goes into the SQL only once. The separator is a non-empty string, and the position goes
+  in as a literal, since PostgreSQL's arrays count from 1.
   """
   @spec at_split(String.t(), String.t(), non_neg_integer) :: String.t()
   def at_split(text, separator, position) do
-    empty_text_part = if position == 0, do: "''::text", else: "NULL::text"
-
-    "(CASE WHEN #{text} = '' THEN #{empty_text_part} " <>
-      "ELSE (string_to_array(#{text}, #{separator}))[#{position + 1}] END)"
+    "(string_to_array(#{separator} || (#{text}), #{separator}))[#{position + 2}]"
   end
 
   @doc """

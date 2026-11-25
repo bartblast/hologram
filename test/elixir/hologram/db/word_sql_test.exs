@@ -4,14 +4,9 @@ defmodule Hologram.DB.WordSQLTest do
   import Hologram.DB.WordSQL
 
   describe "at_split/3" do
-    test "reads the position from 1 and answers an empty text as one empty part" do
-      assert at_split("t", "$1", 0) ==
-               "(CASE WHEN t = '' THEN ''::text ELSE (string_to_array(t, $1))[1] END)"
-    end
-
-    test "gives NULL past the one part of an empty text" do
-      assert at_split("t", "$1", 2) ==
-               "(CASE WHEN t = '' THEN NULL::text ELSE (string_to_array(t, $1))[3] END)"
+    test "skips the empty part the separator put before the text gives" do
+      assert at_split("t", "$1", 0) == "(string_to_array($1 || (t), $1))[2]"
+      assert at_split("t", "$1", 2) == "(string_to_array($1 || (t), $1))[4]"
     end
   end
 

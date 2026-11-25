@@ -146,8 +146,7 @@ defmodule Hologram.Migration.Value.SQLTest do
          {:value, 1, :integer}}
 
       assert rendered(term, :string) ==
-               {~s|(CASE WHEN "$r0"."title" = '' THEN NULL::text | <>
-                  ~s|ELSE (string_to_array("$r0"."title", $1::text))[2] END)|, [", "]}
+               {~s|(string_to_array($1::text \|\| ("$r0"."title"), $1::text))[3]|, [", "]}
     end
 
     test "counts a stored to-many through its join table" do
