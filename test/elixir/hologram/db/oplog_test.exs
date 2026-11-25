@@ -246,6 +246,26 @@ defmodule Hologram.DB.OplogTest do
 
       assert log_id() == log_id
     end
+
+    # Two nodes starting together would otherwise both find the view empty, and the second filling
+    # would name a new copy under the first's cursors. The lock is held for the transaction, which
+    # here is the test's own.
+    test "checks the view under a lock nodes take turns on" do
+      assert populate_database_copy() == :ok
+
+      statement = """
+      SELECT EXISTS (
+        SELECT 1 FROM pg_locks
+        WHERE locktype = 'advisory' AND classid = $1 AND objid = $2 AND objsubid = 1
+          AND mode = 'ExclusiveLock' AND granted AND pid = pg_backend_pid()
+      )
+      """
+
+      <<class_id::32, object_id::32>> = <<4_596_668_662_837_798_245::signed-64>>
+
+      assert {:ok, %Postgrex.Result{rows: [[true]]}} =
+               Connection.query(statement, [class_id, object_id])
+    end
   end
 
   describe "rotate_log_id/1" do

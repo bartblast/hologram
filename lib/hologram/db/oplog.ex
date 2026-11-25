@@ -56,6 +56,11 @@ defmodule Hologram.DB.Oplog do
   # md5("hologram_oplog_serial") as a signed 64-bit integer.
   @serial_lock_key -7_797_217_468_688_855_007
 
+  # Fixed application-defined key a node holds, for its transaction, while it checks whether the
+  # view naming this copy of the database is filled and fills it. Provenance (for uniqueness, not
+  # for re-derivation): first 8 bytes of md5("hologram_database_copy") as a signed 64-bit integer.
+  @database_copy_lock_key 4_596_668_662_837_798_245
+
   @doc """
   Appends the given effects to the log in the caller's transaction, and wakes the dispatchers
   listening for them. Appending nothing does nothing. A large append goes in as several statements,
@@ -145,6 +150,9 @@ defmodule Hologram.DB.Oplog do
   Fills the view naming this copy of the database (see `log_id/0`) when it's empty, as a
   schema-only restore leaves it, or one that died before its last step. Reading the log id raises
   until it's filled. A view already filled is left alone, since filling it again names a new copy.
+
+  Nodes starting together take turns, so one that finds the view empty fills it before the next
+  looks, and the next finds it filled.
   """
   @spec populate_database_copy() :: :ok
   def populate_database_copy do
@@ -153,6 +161,8 @@ defmodule Hologram.DB.Oplog do
     statement = """
     DO $body$
     BEGIN
+      PERFORM pg_catalog.pg_advisory_xact_lock(#{@database_copy_lock_key});
+
       IF NOT (SELECT "relispopulated" FROM pg_catalog.pg_class
               WHERE "oid" = '"#{schema}"."database_copy"'::pg_catalog.regclass) THEN
         REFRESH MATERIALIZED VIEW "#{schema}"."database_copy";
