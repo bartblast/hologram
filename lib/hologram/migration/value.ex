@@ -744,14 +744,21 @@ defmodule Hologram.Migration.Value do
     end)
   end
 
-  # With separate options, Elixir ignores any beside the do. The block is in a quote, so the
-  # function splices nothing in it.
+  # With separate options, Elixir takes the first do and ignores the rest. The block is in a quote,
+  # so the function splices nothing in it.
   defp map_reduce_quote_block(block, unquotes, acc, fun) do
     if Keyword.keyword?(block) do
-      Enum.map_reduce(block, acc, fn
-        {:do, _body} = option, acc -> map_reduce_quote_option(option, unquotes, false, acc, fun)
-        ignored, acc -> {ignored, acc}
-      end)
+      {block, {all_acc, _taken?}} =
+        Enum.map_reduce(block, {acc, false}, fn
+          {:do, _body} = option, {acc, false} ->
+            {option, option_acc} = map_reduce_quote_option(option, unquotes, false, acc, fun)
+            {option, {option_acc, true}}
+
+          ignored, state ->
+            {ignored, state}
+        end)
+
+      {block, all_acc}
     else
       fun.(block, acc, true, false)
     end

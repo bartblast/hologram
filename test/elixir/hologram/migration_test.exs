@@ -515,6 +515,20 @@ defmodule Hologram.MigrationTest do
       assert length(ops) == 5
     end
 
+    test "keeps an alias in a do that a quote with separate options ignores" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :first, :string,
+          default: Macro.to_string(quote([], [do: :standard, do: unquote((alias String, as: Lib))]))
+      end
+      """
+
+      module = compile_migration("20260813091522", body)
+
+      assert [%{op: :add_attribute, opts: opts}] = module.__hologram_migration__().ops
+      assert opts[:default] == ":standard"
+    end
+
     test "refuses a call to the migration's macro in an op" do
       macros = """
       defmacrop same(x), do: quote(do: unquote(x) == @o)
