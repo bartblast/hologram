@@ -293,8 +293,12 @@ defmodule Hologram.DB.EntityOperationsTest do
       {:ok, first} = create(Module2.new(a: true, c: "first"))
       {:ok, second} = create(Module2.new(a: true, c: "second"))
 
-      assert get(Module2, second.id).server_created_seq >
-               get(Module2, first.id).server_created_seq
+      first_seq = get(Module2, first.id).server_created_seq
+      second_seq = get(Module2, second.id).server_created_seq
+
+      assert is_integer(first_seq)
+      assert is_integer(second_seq)
+      assert second_seq > first_seq
     end
 
     test "answers with no sequence numbers, since they aren't final yet" do
@@ -312,7 +316,11 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       {:ok, created_copy} = create(copy)
 
-      assert get(Module2, created_copy.id).server_created_seq > stored.server_created_seq
+      copy_seq = get(Module2, created_copy.id).server_created_seq
+
+      assert is_integer(stored.server_created_seq)
+      assert is_integer(copy_seq)
+      assert copy_seq > stored.server_created_seq
     end
 
     test "leaves the sequence numbers out of the effect's data" do
