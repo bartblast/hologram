@@ -441,22 +441,21 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Blocks until the server has read the operations log past its newest change, which it can only
-  once no transaction older than that change is still running on the database server.
+  Blocks until the server has read the operations log through its newest change, which it can only
+  once every Hologram save holding a lower serial has ended.
 
   For a test that leans on what the server tells a browser or a client about the rows the test
   wrote before it connected: called after those writes and before the first visit or connect.
 
-  The server reads the log only up to the oldest transaction still running, and PostgreSQL counts
-  transactions per server, so one open anywhere on it holds the reading back - in another
-  database, like another test run's, as much as in this one. Such a test then fails in one of two
-  ways.
+  The server's read edge stays below a Hologram save that holds a serial until that save ends, so a
+  save left open on the app's database, like one a test holds, holds the edge back. Such a test
+  then fails in one of two ways.
 
-  The place a session starts from is the oldest transaction still running when it starts, so it
-  can be below the test's changes. Below the log's oldest change it reads as one from before the
-  log, and a returning client is sent everything again instead of being caught up (#1763). Above
-  it, the changes after the place are replayed from the rows as they stand, so a row the test took
-  away since is told as gone.
+  The place a session starts from is the dispatcher's read edge when it starts, so it can be below
+  the test's changes. Below the log's oldest change it reads as one from before the log, and a
+  returning client is sent everything again instead of being caught up (#1763). Above it, the
+  changes after the place are replayed from the rows as they stand, so a row the test took away
+  since is told as gone.
 
   A change the server hasn't read yet goes out live with whatever the test writes next: a row's
   create read together with its update is sent as the whole row, not as a patch.
@@ -1753,8 +1752,8 @@ defmodule HologramFeatureTests.Helpers do
 
   # The newest change is read once, by the caller: read again on every round, the wait would chase
   # whatever is written meanwhile. The edge is nil until the server's first read.
-  # The edge is the place of the last entry the server read, which it reads only once every save
-  # holding a lower serial has ended.
+  # The edge is the place of the last entry the server read up to, which moves past an entry only
+  # once every save holding a lower serial has ended.
   defp do_await_log_settled(newest_seq, start_time) do
     read_edge = ReadEdge.get(ReadEdge)
 
@@ -1765,8 +1764,8 @@ defmodule HologramFeatureTests.Helpers do
       timed_out?(start_time) ->
         raise Wallaby.ExpectationNotMetError,
               "Timed out waiting for the server to read the operations log through entry " <>
-                "#{newest_seq}, it has read up to #{inspect(read_edge)} - an older transaction " <>
-                "is still running on the database server, or the server's reads are failing"
+                "#{newest_seq}, it has read up to #{inspect(read_edge)} - a Hologram save " <>
+                "holding a lower serial is still open, or the server's reads are failing"
 
       true ->
         :timer.sleep(50)
