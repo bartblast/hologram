@@ -320,8 +320,11 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(publish: publishing())
 
-      assert_receive {:published, 0}, 1_000
-      assert_receive {:published, ^seq}, 1_000
+      assert_receive {:published, first}, 1_000
+      assert first == 0
+
+      assert_receive {:published, second}, 1_000
+      assert second == seq
 
       settle(dispatcher)
     end
