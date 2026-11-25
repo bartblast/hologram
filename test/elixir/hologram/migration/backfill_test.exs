@@ -1388,7 +1388,7 @@ defmodule Hologram.Migration.BackfillTest do
       end)
     end
 
-    test "names a type stated without changing the column as a separate op too", %{
+    test "takes a type the attribute has already as no type change", %{
       create: create,
       first_model: first_model,
       scratch: scratch
@@ -1408,9 +1408,9 @@ defmodule Hologram.Migration.BackfillTest do
 
         assert_error RuntimeError,
                      ~s(cannot make column "title" on table "my_app_task" required - ) <>
-                       "found 1 row with NULL - change the type in an op of its own, then add " <>
-                       "backfill: <value or expression> to the op making it required, declare " <>
-                       "default: <value>, keep the attribute optional: true, or fix the data",
+                       "found 1 row with NULL - add backfill: <value or expression> to the op, " <>
+                       "declare default: <value>, keep the attribute optional: true, or fix the " <>
+                       "data",
                      fn -> apply_file([op], create, first_model) end
       end)
     end

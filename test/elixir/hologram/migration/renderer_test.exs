@@ -1363,6 +1363,41 @@ defmodule Hologram.Migration.RendererTest do
       refute Map.has_key?(alter, :fill)
     end
 
+    test "fills a relationship whose op states the target it has" do
+      pre_model =
+        model(%{
+          MyApp.Task => %{
+            relationships: [
+              {:creator, MyApp.User, []},
+              {:owner, MyApp.User, [optional: true]}
+            ]
+          },
+          MyApp.User => %{}
+        })
+
+      tighten = fn backfill ->
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          changes: [type: MyApp.User, optional: false, backfill: backfill],
+          line: 3
+        }
+      end
+
+      uuid = "018f0000-0000-7000-8000-000000000000"
+
+      assert %{transactional: [%{op: :alter_column, fill: <<_id::128>>, fill_source: :backfill}]} =
+               render([tighten.(uuid)], pre_model)
+
+      computed = tighten.(%Value{term: {:name, [:creator_id]}})
+
+      assert %{transactional: [%{op: :fill_column, column: "owner_id"}, alter]} =
+               render([computed], pre_model)
+
+      assert %{op: :alter_column, column: "owner_id", filled: true} = alter
+    end
+
     test "renders a required retarget widened by the next op, which drops the column" do
       pre_model =
         model(%{
@@ -1647,11 +1682,12 @@ defmodule Hologram.Migration.RendererTest do
           changes: [optional: false],
           line: 7
         },
+        # The type the attribute has already, which changes nothing.
         %{
           op: :change_attribute,
           entity: MyApp.Task,
           name: :serial,
-          changes: [optional: false],
+          changes: [type: :integer, optional: false],
           line: 8
         }
       ]

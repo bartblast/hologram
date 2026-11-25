@@ -361,6 +361,18 @@ defmodule Hologram.Migration.Value.CheckTest do
       assert refusal(op) =~ "sits beside a type change - change the type in an op of its own"
     end
 
+    test "takes one beside a type the member already has" do
+      assert check(
+               change(:change_attribute, :code, type: :string, optional: false, backfill: "x")
+             ) ==
+               :ok
+
+      op =
+        change(:change_relationship, :owner, type: MyApp.User, optional: false, backfill: @uuid)
+
+      assert check(op) == :ok
+    end
+
     test "refuses one on a change that doesn't turn the member required" do
       assert refusal(change(:change_attribute, :code, max_length: 3, backfill: "x")) =~
                "add optional: false to the op"

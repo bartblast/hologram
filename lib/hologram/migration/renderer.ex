@@ -714,7 +714,9 @@ defmodule Hologram.Migration.Renderer do
 
   defp render_chunk([%{op: :change_relationship} = first | _rest] = chunk, model) do
     cond do
-      retarget?(first) ->
+      # An op can state the target a relationship has, which retargets nothing. A backfill sits in
+      # a chunk of its own, so it fills even when its op states one.
+      retargets?(chunk, model) ->
         Enum.reduce(chunk, {[], model}, fn op, {acc, current_model} ->
           next_model = Model.fold(current_model, [op])
 
@@ -766,19 +768,21 @@ defmodule Hologram.Migration.Renderer do
       # The chunk's start, where a column being altered stands: a later op of the chunk can drop it.
       mapping = Mapper.derive_from_model!(model)
 
-      Enum.map(ops, &mark_tightening(&1, chunk, mapping, next_model))
+      type_changes = type_changes(chunk, model)
+
+      Enum.map(ops, &mark_tightening(&1, type_changes, mapping, next_model))
     else
       ops
     end
   end
 
-  defp mark_tightening(op, chunk, mapping, next_model) do
+  defp mark_tightening(op, type_changes, mapping, next_model) do
     if unfilled_tightening?(op),
-      do: Map.put(op, :tightening, tightening(op, chunk, mapping, next_model)),
+      do: Map.put(op, :tightening, tightening(op, type_changes, mapping, next_model)),
       else: op
   end
 
-  defp tightening(op, chunk, mapping, next_model) do
+  defp tightening(op, type_changes, mapping, next_model) do
     {entity_type, kind, name} = column_member(mapping, op.table, op.column)
 
     # A declared default fills a tightening only when the column keeps its type.
@@ -789,20 +793,41 @@ defmodule Hologram.Migration.Renderer do
     %{
       kind: kind,
       takes_default: takes_default,
-      type_stated: Enum.any?(chunk, &states_type?(&1, entity_type, name))
+      type_stated: MapSet.member?(type_changes, {entity_type, name})
     }
   end
 
-  defp states_type?(
-         %{op: kind, entity: entity_type, name: name, changes: changes},
-         entity_type,
-         name
-       )
-       when kind in [:change_attribute, :change_relationship] do
-    Keyword.has_key?(changes, :type)
+  # The members an op of the given chunk changes the type of, folded op by op from the given
+  # model. An op can state the type a member has, which changes nothing.
+  defp type_changes(chunk, model) do
+    {changed, _model} =
+      Enum.reduce(chunk, {MapSet.new(), model}, fn op, {changed, current} ->
+        next = Model.fold_op(current, op)
+
+        if changes_type?(op, current, next),
+          do: {MapSet.put(changed, {op.entity, op.name}), next},
+          else: {changed, next}
+      end)
+
+    changed
   end
 
-  defp states_type?(_op, _entity_type, _name), do: false
+  defp changes_type?(%{op: kind, changes: changes} = op, model, next_model)
+       when kind in [:change_attribute, :change_relationship] do
+    Keyword.has_key?(changes, :type) and
+      member_type(model, op) != member_type(next_model, op)
+  end
+
+  defp changes_type?(_op, _model, _next_model), do: false
+
+  defp member_type(model, %{op: kind, entity: entity_type, name: name}) do
+    list_key = if kind == :change_attribute, do: :attributes, else: :relationships
+
+    case List.keyfind(model.entities[entity_type][list_key], name, 0) do
+      {^name, type, _opts} -> type
+      nil -> nil
+    end
+  end
 
   defp unique_attribute?(model, entity_type, name) do
     case List.keyfind(model.entities[entity_type][:attributes] || [], name, 0) do
@@ -815,7 +840,7 @@ defmodule Hologram.Migration.Renderer do
   # member can take. A declared default fills an add whatever type the chunk gives it.
   defp mark_unfilled_add(
          %{op: :add_column, definition: %{null: false}} = op,
-         chunk,
+         type_changes,
          mapping,
          model
        )
@@ -825,13 +850,13 @@ defmodule Hologram.Migration.Renderer do
     unfilled = %{
       kind: kind,
       takes_default: kind == :attribute and not unique_attribute?(model, entity_type, name),
-      type_stated: Enum.any?(chunk, &states_type?(&1, entity_type, name))
+      type_stated: MapSet.member?(type_changes, {entity_type, name})
     }
 
     Map.put(op, :unfilled, unfilled)
   end
 
-  defp mark_unfilled_add(op, _chunk, _mapping, _model), do: op
+  defp mark_unfilled_add(op, _type_changes, _mapping, _model), do: op
 
   # The entity type, kind and name of the member the given table's column stores.
   defp column_member(mapping, table, column) do
@@ -1007,6 +1032,7 @@ defmodule Hologram.Migration.Renderer do
     pre_mapping = Mapper.derive_from_model!(model)
     pre_term = Schema.from_mapping(pre_mapping)
     cleared_term = without_recreated(pre_term, chunk, pre_mapping, next_mapping)
+    type_changes = type_changes(chunk, model)
 
     physical_ops =
       pre_term
@@ -1014,7 +1040,7 @@ defmodule Hologram.Migration.Renderer do
       |> Enum.concat(Schema.diff(cleared_term, Schema.from_mapping(next_mapping), renames: false))
       |> attach_backfills(chunk, next_model, next_mapping)
       |> Enum.map(&put_declared_default(&1, next_mapping))
-      |> Enum.map(&mark_unfilled_add(&1, chunk, next_mapping, next_model))
+      |> Enum.map(&mark_unfilled_add(&1, type_changes, next_mapping, next_model))
       |> prepend_grant_deletes(chunk)
 
     {physical_ops, next_model}
@@ -1056,6 +1082,12 @@ defmodule Hologram.Migration.Renderer do
   defp retarget?(%{op: :change_relationship} = op), do: Keyword.has_key?(op.changes, :type)
 
   defp retarget?(_op), do: false
+
+  defp retargets?(chunk, model) do
+    chunk
+    |> type_changes(model)
+    |> Enum.any?()
+  end
 
   defp relationship_type(model, entity_type, name) do
     model.entities

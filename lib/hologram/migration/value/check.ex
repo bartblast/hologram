@@ -341,12 +341,23 @@ defmodule Hologram.Migration.Value.Check do
     end
   end
 
-  defp optional?(%{entity: entity, name: name, op: op}, model) do
-    list_key = if op == :change_attribute, do: :attributes, else: :relationships
-
-    case List.keyfind(model.entities[entity][list_key], name, 0) do
+  defp optional?(op, model) do
+    case member(op, model) do
       {_name, _type, opts} -> Keyword.get(opts, :optional, false) == true
       nil -> false
+    end
+  end
+
+  defp member(%{entity: entity, name: name, op: op}, model) do
+    list_key = if op == :change_attribute, do: :attributes, else: :relationships
+
+    List.keyfind(model.entities[entity][list_key], name, 0)
+  end
+
+  defp member_type(op, model) do
+    case member(op, model) do
+      {_name, type, _opts} -> type
+      nil -> nil
     end
   end
 
@@ -591,7 +602,8 @@ defmodule Hologram.Migration.Value.Check do
 
   defp validate_tightening!(%{op: kind, changes: changes} = op, model, next_model)
        when kind in [:change_attribute, :change_relationship] do
-    if Keyword.has_key?(changes, :type) do
+    # An op can state the type the member has.
+    if Keyword.has_key?(changes, :type) and member_type(op, model) != member_type(op, next_model) do
       refuse!(
         op,
         "sits beside a type change - change the type in an op of its own, since the fill would " <>
