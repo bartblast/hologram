@@ -63,12 +63,15 @@ defmodule Hologram.Migration.Value.FillCheckTest do
 
             drop_filled_ids!()
 
+            {:ok, %{rows: dropped}} =
+              Connection.query(~s|SELECT to_regclass('pg_temp."$fill_ids"')|)
+
             {:ok, %{rows: other}} = Connection.query(~s|SELECT count(*) FROM public."$fill_ids"|)
 
-            Connection.rollback({kept, other})
+            Connection.rollback({kept, dropped, other})
           end)
 
-        assert result == {:error, {[[1]], [[0]]}}
+        assert result == {:error, {[[1]], [[nil]], [[0]]}}
       end)
     end
   end
