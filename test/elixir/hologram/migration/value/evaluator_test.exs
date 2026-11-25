@@ -103,7 +103,10 @@ defmodule Hologram.Migration.Value.EvaluatorTest do
 
     test "gives the most common value of a set" do
       term = {:most_common, {:relationship, [:tags]}, :name, :string, nil}
-      row = %{tags: [%{name: "a"}, %{name: "b"}, %{name: "b"}, %{name: nil}]}
+      # More nils than "b"s, so counting nil would give nil.
+      row = %{
+        tags: [%{name: "a"}, %{name: "b"}, %{name: "b"}, %{name: nil}, %{name: nil}, %{name: nil}]
+      }
 
       assert evaluate(term, row) == "b"
     end
