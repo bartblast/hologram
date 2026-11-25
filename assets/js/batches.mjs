@@ -1043,8 +1043,13 @@ export default class Batches {
   static #putAside(batches) {
     for (const batch of batches) {
       // The retry that would end its wait reaches only the batches the tab sends, and its owner is
-      // back in another session, which the newest pair can cure.
+      // back in another session, which the newest pair can cure. A retry set for its switch is no
+      // longer its wait: one refused again once it is back waits out a retry of its own.
       batch.switchedPair = false;
+
+      if (Batches.#retryFor === batch) {
+        Batches.#retryFor = null;
+      }
 
       if (batch.filed !== true && !Batches.#asideOrder.has(batch)) {
         Batches.#asideOrder.set(batch, Batches.#asideCount++);
@@ -1254,11 +1259,12 @@ export default class Batches {
 
     Batches.#retryTimer = setTimeout(() => {
       Batches.#retryTimer = null;
-      Batches.#retryFor = null;
 
-      // The wait a refused switch was held to is over (see flush).
-      for (const batch of Batches.pending) {
-        batch.switchedPair = false;
+      // The wait the refused switch was held to is over (see flush). Only that batch's: another one
+      // switched while this was set, its send still out, waits out the retry its refusal sets.
+      if (Batches.#retryFor !== null) {
+        Batches.#retryFor.switchedPair = false;
+        Batches.#retryFor = null;
       }
 
       Batches.flush();

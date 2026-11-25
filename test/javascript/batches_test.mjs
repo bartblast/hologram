@@ -2288,6 +2288,66 @@ describe("Batches", () => {
         assert.isTrue(reconnecting.calledOnce);
       });
 
+      // Its send under the new pair is still out when the earlier batch's retry fires.
+      it("keeps its switch through a retry an earlier batch left", async () => {
+        sendStub.resolves({httpStatus: 503, status: "failed"});
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(50_000);
+
+        let answer;
+
+        sendStub.reset();
+        sendStub.onFirstCall().resolves(confirmed());
+        sendStub.onSecondCall().resolves({httpStatus: 403, status: "failed"});
+
+        sendStub.onThirdCall().returns(
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+        );
+
+        sendStub.resolves({httpStatus: 403, status: "failed"});
+        sealed(creating("t2", "second"));
+
+        const flushing = Batches.flush();
+
+        await timers.tickAsync(10_000);
+
+        answer({httpStatus: 403, status: "failed"});
+        await flushing;
+
+        assert.equal(Replica.id, "r-fresh");
+        assert.isTrue(reconnecting.calledOnce);
+      });
+
+      // Back from being put aside, a refusal under the pair it switched to again starts a new wait.
+      it("waits out a new backoff once it comes back from being put aside", async () => {
+        let minted = 0;
+
+        reconnecting.callsFake(() => {
+          minted++;
+          Replica.offer({id: `r-${minted}`, token: `statement-${minted}`});
+        });
+
+        const batch = sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(30_000);
+
+        Batches.releaseForeign("u2");
+        Batches.releaseForeign(batch.actorUserId);
+
+        await Batches.flush();
+
+        assert.isTrue(reconnecting.calledTwice);
+
+        await timers.tickAsync(30_000);
+
+        assert.isTrue(reconnecting.calledTwice);
+      });
+
       // Its owner signs in again in another session, which the newest pair can cure.
       it("may switch again once it comes back from being put aside", async () => {
         const batch = sealed(creating("t1", "first"));
