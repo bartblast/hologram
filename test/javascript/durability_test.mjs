@@ -1568,6 +1568,7 @@ describe("Durability", () => {
       it("answers not when the write failed", async () => {
         await Durability.open();
         await Durability.load();
+        await writeMeta({seq: 41});
 
         const opening = sinon.spy(FDBDatabase.prototype, "transaction");
         const filing = Durability.fileBatch(unfiledBatch());
@@ -1576,6 +1577,7 @@ describe("Durability", () => {
 
         assert.isFalse(await filing);
         assert.deepStrictEqual(await readAll("queue"), []);
+        assert.equal(await readMeta("seq"), 41);
       });
 
       // The tab joined another group while the write ran.
