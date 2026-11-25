@@ -6963,7 +6963,12 @@ describe("Hologram", () => {
         const originalState = history.state;
         const originalUrl = window.location.href;
         Hologram.documentUrl = ownUrl();
-        history.pushState(null, "", `${ownUrl()}#section`);
+        replaceStateStub.wrappedMethod.call(
+          history,
+          null,
+          "",
+          `${ownUrl()}#section`,
+        );
 
         try {
           await Hologram.handlePopstateEvent({state: null});
@@ -7990,7 +7995,12 @@ describe("Hologram", () => {
       it("takes the id of the page on screen when it is under the page's path, whatever its query string", async () => {
         const originalState = history.state;
         const originalUrl = window.location.href;
-        history.pushState(null, "", `${window.location.pathname}?tab=reviews`);
+        replaceStateStub.wrappedMethod.call(
+          history,
+          null,
+          "",
+          `${window.location.pathname}?tab=reviews`,
+        );
 
         try {
           await Hologram.handlePopstateEvent({state: null});
@@ -9002,7 +9012,7 @@ describe("Hologram", () => {
     it("still mounts after a jump to a #fragment", async () => {
       const originalState = history.state;
       const originalUrl = window.location.href;
-      history.pushState(null, "", `${window.location.pathname}#section`);
+      history.replaceState(null, "", `${window.location.pathname}#section`);
 
       const replaceStateStub = sinon.stub(history, "replaceState");
       Hologram.pagePath = window.location.pathname;
