@@ -1652,6 +1652,43 @@ describe("Sse", () => {
 
         assert.equal(Sse.handshakePeriod, IdentityTracker.period);
       });
+
+      // The receipts are the page's, and a page mounted for the new identity holds them before
+      // any handshake under it answers.
+      describe("with a page mounted for the new identity", () => {
+        beforeEach(() => {
+          Hologram.pageIdentityPeriod = IdentityTracker.period;
+        });
+
+        afterEach(() => {
+          Hologram.pageIdentityPeriod = null;
+        });
+
+        it("reloads when every receipt it presented was rejected", async () => {
+          stubHandshakeResponse({refreshedReceipts: Type.list()});
+
+          await Sse.connect();
+
+          sinon.assert.calledOnce(globalThis.window.location.reload);
+          sinon.assert.notCalled(globalThis.EventSource);
+        });
+      });
+
+      it("drops the receipts of a page of the identity it left", async () => {
+        Hologram.pageIdentityPeriod = Sse.handshakePeriod;
+        Sse.handshakePeriod = IdentityTracker.period;
+
+        try {
+          stubHandshakeResponse({refreshedReceipts: Type.list()});
+
+          await Sse.connect();
+
+          sinon.assert.notCalled(globalThis.window.location.reload);
+          assert.equal(SubscriptionReceiptRegistry.entries.size, 0);
+        } finally {
+          Hologram.pageIdentityPeriod = null;
+        }
+      });
     });
 
     // What it says of the session: who the cookie signs in, and a pair minted for it.

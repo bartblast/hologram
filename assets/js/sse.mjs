@@ -242,6 +242,8 @@ export default class Sse {
         App.subscriptionReceiptRegistry.entries,
       );
 
+      const receiptsPeriod = $.#receiptsPeriod();
+
       const response = await fetch($.HANDSHAKE_PATH, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
@@ -298,7 +300,7 @@ export default class Sse {
         presented?.id,
       );
 
-      if ($.#hasIdentityMoved()) {
+      if (IdentityTracker.period !== receiptsPeriod) {
         $.#dropRefusedReceipts(presentedReceipts, refreshed);
       } else if (presentedReceipts.size > 0 && refreshed.data.length === 0) {
         // A write held for that identity exists only in this tab's memory, so it goes out before
@@ -596,10 +598,14 @@ export default class Sse {
     }
   }
 
-  static #hasIdentityMoved() {
+  // The identity the receipts were issued for. They are the page's, and a page mounted for a new
+  // identity holds them before any handshake under it answers. A page that came with no period
+  // leaves it to the last handshake, or to the document.
+  static #receiptsPeriod() {
     return (
-      IdentityTracker.period !==
-      ($.handshakePeriod ?? IdentityTracker.documentPeriod)
+      Hologram.pageIdentityPeriod ??
+      $.handshakePeriod ??
+      IdentityTracker.documentPeriod
     );
   }
 }
