@@ -2069,7 +2069,8 @@ defmodule Hologram.Migration.BackfillTest do
 
       assert %{sql: {fragment, joins, []}} = Enum.find(ops, &(&1.op == :fill_column))
       refute fragment =~ "SELECT"
-      assert joins =~ "GROUP BY"
+      assert length(String.split(joins, "GROUP BY")) == 2
+      assert length(String.split(joins, "JOIN")) == 2
 
       route(scratch, fn ->
         assert run([create], first_model, @context) == :ok
