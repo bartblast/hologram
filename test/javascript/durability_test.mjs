@@ -1660,7 +1660,7 @@ describe("Durability", () => {
     // An action that started under the user of the left visit closes in the new one, and may name a
     // row the batch that aborted created. A batch of another user in between doesn't break the line.
     it("stores no batch of the same user filed in the new visit behind one that aborted", async () => {
-      sinon.stub(Tabs, "storeLost");
+      const losing = sinon.stub(Tabs, "storeLost");
 
       await Durability.open();
       await Durability.load();
@@ -1678,19 +1678,131 @@ describe("Durability", () => {
       const other = unfiledBatch("u2");
       const second = Durability.fileBatch(other);
       const third = Durability.fileBatch(unfiledBatch("u1"));
+      const next = unfiledBatch("u2");
+      const fourth = Durability.fileBatch(next);
 
       starting.firstCall.returnValue.abort();
 
-      assert.deepStrictEqual(await Promise.all([first, second, third]), [
-        false,
-        true,
-        false,
-      ]);
+      assert.deepStrictEqual(
+        await Promise.all([first, second, third, fourth]),
+        [false, true, false, true],
+      );
 
       assert.deepStrictEqual(
         (await readAll("queue")).map((record) => record.seq),
-        [other.seq],
+        [other.seq, next.seq],
       );
+
+      assert.equal(Durability.mode, "indexeddb");
+      sinon.assert.notCalled(losing);
+    });
+
+    // Every batch of that user would be held back for good otherwise, with nothing saying why.
+    it("lets the store go over a batch of the user the tab is back to behind one that aborted", async () => {
+      const losing = sinon.stub(Tabs, "storeLost");
+
+      await Durability.open();
+      await Durability.load();
+
+      let visit = "visit-left";
+
+      sinon.stub(Tabs, "visit").get(() => visit);
+      sinon.stub(Tabs, "isVisit").callsFake((given) => given === visit);
+
+      const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+      const first = Durability.fileBatch(unfiledBatch("u1"));
+
+      visit = "visit-back";
+      LocalDatabase.actorUserId = "u1";
+
+      const second = Durability.fileBatch(unfiledBatch("u1"));
+
+      starting.firstCall.returnValue.abort();
+
+      assert.deepStrictEqual(await Promise.all([first, second]), [
+        false,
+        false,
+      ]);
+      assert.equal(Durability.mode, "memory");
+      sinon.assert.calledOnce(losing);
+    });
+
+    // The filing in between waited in line until the tab was back to its user, while its own visit
+    // was already over.
+    it("stores the next user's batch behind one held back when the tab got back to its user", async () => {
+      const losing = sinon.stub(Tabs, "storeLost");
+
+      await Durability.open();
+      await Durability.load();
+
+      let visit = "visit-1";
+
+      sinon.stub(Tabs, "visit").get(() => visit);
+      sinon.stub(Tabs, "isVisit").callsFake((given) => given === visit);
+
+      const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+      const first = Durability.fileBatch(unfiledBatch("u1"));
+
+      visit = "visit-2";
+      LocalDatabase.actorUserId = "u2";
+
+      const held = Durability.fileBatch(unfiledBatch("u1"));
+      const next = unfiledBatch("u2");
+      const filing = Durability.fileBatch(next);
+
+      visit = "visit-3";
+      LocalDatabase.actorUserId = "u1";
+
+      starting.firstCall.returnValue.abort();
+
+      assert.deepStrictEqual(await Promise.all([first, held, filing]), [
+        false,
+        false,
+        true,
+      ]);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((batch) => batch.seq),
+        [next.seq],
+      );
+
+      assert.equal(Durability.mode, "indexeddb");
+      sinon.assert.notCalled(losing);
+    });
+
+    // The one in between aborted before it read the counter, and never took the line in.
+    it("stores no batch of the same user behind one that aborted two filings back", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await Durability.open();
+      await Durability.load();
+
+      let visit = "visit-1";
+
+      sinon.stub(Tabs, "visit").get(() => visit);
+      sinon.stub(Tabs, "isVisit").callsFake((given) => given === visit);
+
+      const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+      const first = Durability.fileBatch(unfiledBatch("u1"));
+
+      visit = "visit-2";
+
+      const second = Durability.fileBatch(unfiledBatch("u2"));
+
+      visit = "visit-3";
+
+      const third = Durability.fileBatch(unfiledBatch("u1"));
+
+      starting.firstCall.returnValue.abort();
+      starting.secondCall.returnValue.abort();
+
+      assert.deepStrictEqual(await Promise.all([first, second, third]), [
+        false,
+        false,
+        false,
+      ]);
+
+      assert.deepStrictEqual(await readAll("queue"), []);
     });
 
     // Waiting for the first to settle before starting the next would leave the next one out of the

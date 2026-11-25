@@ -127,6 +127,10 @@ export default class Durability {
   // How this tab's latest filing ended, once it has (see fileBatch).
   static #lastFiling = null;
 
+  // Filings aborted on purpose, behind a failed one of the same user (see fileBatch). The store
+  // didn't fail them.
+  static #heldBack = new WeakSet();
+
   // The last identity write started, for a send to wait on (see replicaWritten).
   static #replicaWrite = Promise.resolve();
 
@@ -350,7 +354,9 @@ export default class Durability {
     //
     // Unless it's a batch of the same user: an action can close in the new visit with a batch for
     // the user it started under, and name a row the failed batch created. Carried down the line,
-    // since filings of another user can come in between.
+    // since filings of another user can come in between. Held back like that, it is no failure of
+    // the store, and the filings of the new visit's user behind it still go in. Unless the tab is
+    // back with the user it held back.
     const owner = batch.actorUserId ?? null;
 
     const stored = await Durability.#write([META, QUEUE], (transaction) => {
@@ -359,7 +365,9 @@ export default class Durability {
       const filing = {
         aborted: false,
         done: false,
+        earlier,
         failedOwners: null,
+        heldBack: false,
         owner,
         visit: Tabs.visit,
       };
@@ -388,16 +396,25 @@ export default class Durability {
             return;
           }
 
-          filing.failedOwners = new Set(earlier?.failedOwners);
+          const followsFailure =
+            earlier?.aborted &&
+            !earlier.heldBack &&
+            earlier.visit === filing.visit;
 
-          if (earlier?.aborted) {
-            filing.failedOwners.add(earlier.owner);
-          }
+          if (followsFailure || Durability.#failedBefore(filing).has(owner)) {
+            // A batch of the user the tab is back to fails the store, as a filing behind a failure
+            // of the same visit does: every batch of that user would be held back for good, and
+            // none would say why. One of a visit already over can't, and a later filing of its
+            // user does it instead.
+            if (
+              !followsFailure &&
+              ((filing.visit !== null && !Tabs.isVisit(filing.visit)) ||
+                owner !== (LocalDatabase.actorUserId ?? null))
+            ) {
+              filing.heldBack = true;
+              Durability.#heldBack.add(transaction);
+            }
 
-          if (
-            (earlier?.aborted && earlier.visit === filing.visit) ||
-            filing.failedOwners.has(owner)
-          ) {
             transaction.abort();
 
             return;
@@ -431,6 +448,28 @@ export default class Durability {
     }
 
     return stored;
+  }
+
+  // The users whose filing aborted anywhere before this one in line. Worked out once the filing
+  // needs it, or a later one does: a filing that aborted before reading the counter never did, and
+  // still passes on what it inherited.
+  static #failedBefore(filing) {
+    if (filing.failedOwners === null) {
+      const earlier = filing.earlier;
+
+      filing.failedOwners =
+        earlier === null
+          ? new Set()
+          : new Set(Durability.#failedBefore(earlier));
+
+      if (earlier?.aborted) {
+        filing.failedOwners.add(earlier.owner);
+      }
+
+      filing.earlier = null;
+    }
+
+    return filing.failedOwners;
   }
 
   // A batch the server has ruled on, gone from the queue. Confirmed or refused alike: either way
@@ -1538,9 +1577,10 @@ export default class Durability {
     Durability.inFlight += 1;
 
     const visit = Tabs.visit;
+    let transaction = null;
 
     try {
-      const transaction = Durability.#db.transaction(storeNames, "readwrite", {
+      transaction = Durability.#db.transaction(storeNames, "readwrite", {
         durability: "relaxed",
       });
 
@@ -1552,7 +1592,10 @@ export default class Durability {
     } catch (error) {
       // Made on a visit to a group this tab has since left. Its failure is no reason to end the
       // group the tab is in now: a store that really failed fails that group's own next write.
-      if (visit !== null && !Tabs.isVisit(visit)) {
+      if (
+        (visit !== null && !Tabs.isVisit(visit)) ||
+        Durability.#heldBack.has(transaction)
+      ) {
         return false;
       }
 
