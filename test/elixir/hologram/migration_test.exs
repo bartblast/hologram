@@ -582,8 +582,25 @@ defmodule Hologram.MigrationTest do
 
       module = compile_migration("20260813091523", body)
 
-      assert [%{op: :add_attribute} | _rest] = ops = module.__hologram_migration__().ops
-      assert length(ops) == 5
+      assert [first, second, third, fourth, fifth] = module.__hologram_migration__().ops
+
+      assert %{name: :first, opts: [backfill: %Value{term: {:coalesce, [_title, value: "true"]}}]} =
+               first
+
+      assert %{
+               name: :second,
+               opts: [backfill: %Value{term: {:coalesce, [_title, value: quoted]}}]
+             } =
+               second
+
+      assert quoted =~
+               ~s({:alias, [context: #{inspect(module)}], [{:__aliases__, [alias: false], [:String]})
+
+      assert %{name: :third, opts: [default: "a"]} = third
+      assert %{name: :fourth, opts: [default: "1"]} = fourth
+
+      assert %{name: :fifth, opts: [backfill: %Value{term: {:coalesce, [_title, value: "a"]}}]} =
+               fifth
     end
 
     test "keeps an alias in a do that a quote with separate options ignores" do
