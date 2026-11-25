@@ -1301,9 +1301,10 @@ defmodule Hologram.Migration.Renderer do
       chunks
       |> Enum.with_index()
       |> Enum.reduce(pre_model, fn {{_cut, chunk}, index}, model ->
-        next_model = fold_apart(model, chunk, cuts)
+        created_later = created_after(chunks, index)
+        next_model = fold_apart(model, chunk, cuts, created_later)
 
-        validate_targets_standing!(next_model, created_after(chunks, index), cuts)
+        validate_targets_standing!(next_model, created_later, cuts)
 
         next_model
       end)
@@ -1318,14 +1319,16 @@ defmodule Hologram.Migration.Renderer do
 
   defp cut?(chunks), do: Enum.any?(chunks, fn {cut, _chunk} -> cut end)
 
-  defp fold_apart(model, chunk, cuts) do
+  defp fold_apart(model, chunk, cuts, created_later) do
     next_model = Model.fold(model, chunk, validate_filled_adds: false)
 
     _mapping = Mapper.derive_from_model!(next_model)
 
     next_model
   rescue
-    error in Hologram.CompileError -> raise_apart!(cuts, Exception.message(error))
+    error in Hologram.CompileError ->
+      validate_recreated_targets_free!(model, chunk, created_later)
+      raise_apart!(cuts, Exception.message(error))
   end
 
   defp validate_targets_standing!(model, created_later, cuts) do
@@ -1346,6 +1349,54 @@ defmodule Hologram.Migration.Renderer do
 
       raise_apart!(cuts, reason)
     end
+  end
+
+  # A recreate is a cut of its own, so the delete before it applies while the type is gone, and a
+  # relationship still pointing at the type can't stand there wherever the ops around it move.
+  defp validate_recreated_targets_free!(model, chunk, created_later) do
+    recreated =
+      for %{op: :delete_entity, entity: entity} <- chunk, entity in created_later, do: entity
+
+    inbound = if recreated == [], do: [], else: recreated_inbound(model, chunk, recreated)
+
+    if inbound != [] do
+      message =
+        inbound
+        |> Enum.sort()
+        |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+        |> Enum.sort()
+        |> Enum.map_join("; ", &recreated_target_refusal/1)
+
+      raise Hologram.CompileError, message: message
+    end
+  end
+
+  # Folded op by op, leaving out the checks over the whole chunk, one of which refused it. An op
+  # refusing on its own is left to the refusal of the chunk.
+  defp recreated_inbound(model, chunk, recreated) do
+    folded = Enum.reduce(chunk, model, &Model.fold_op(&2, &1))
+
+    for {entity_type, entry} <- folded.entities,
+        {name, type, _opts} <- entry.relationships,
+        target <- [relationship_target(type)],
+        target in recreated,
+        not Map.has_key?(folded.entities, target) do
+      {target, "#{inspect(name)} on #{inspect(entity_type)}"}
+    end
+  rescue
+    Hologram.CompileError -> []
+  end
+
+  defp recreated_target_refusal({target, relationships}) do
+    {verb, noun, pronoun} =
+      if length(relationships) == 1,
+        do: {"targets", "relationship", "it"},
+        else: {"target", "relationships", "them"}
+
+    "#{inspect(target)} is deleted and created again in this file while " <>
+      "#{Enum.join(relationships, ", ")} still #{verb} it - the delete applies apart from the " <>
+      "create, so delete the #{noun} before deleting #{inspect(target)}, and add #{pronoun} " <>
+      "again after creating #{inspect(target)}"
   end
 
   defp relationship_target([target]), do: target

@@ -283,6 +283,99 @@ defmodule Hologram.Migration.RendererTest do
                    fn -> render(ops, pre_model) end
     end
 
+    test "refuses recreating a target an inbound relationship still points to", %{
+      pre_model: pre_model
+    } do
+      ops = [
+        %{op: :delete_entity, entity: MyApp.Place, line: 5},
+        %{op: :create_entity, entity: MyApp.Place, line: 6}
+      ]
+
+      expected_msg =
+        "MyApp.Place is deleted and created again in this file while :place on MyApp.Task " <>
+          "still targets it - the delete applies apart from the create, so delete the " <>
+          "relationship before deleting MyApp.Place, and add it again after creating MyApp.Place"
+
+      assert_raise Hologram.CompileError, expected_msg, fn -> render(ops, pre_model) end
+    end
+
+    test "names every recreated target an inbound relationship still points to" do
+      pre_model =
+        model(%{
+          MyApp.Place => %{},
+          MyApp.Tag => %{},
+          MyApp.Task => %{
+            relationships: [
+              {:place, MyApp.Place, [optional: true]},
+              {:tags, [MyApp.Tag], []}
+            ]
+          }
+        })
+
+      ops = [
+        %{op: :delete_entity, entity: MyApp.Place, line: 5},
+        %{op: :delete_entity, entity: MyApp.Tag, line: 6},
+        %{op: :create_entity, entity: MyApp.Place, line: 7},
+        %{op: :create_entity, entity: MyApp.Tag, line: 8}
+      ]
+
+      expected_msg =
+        "MyApp.Place is deleted and created again in this file while :place on MyApp.Task " <>
+          "still targets it - the delete applies apart from the create, so delete the " <>
+          "relationship before deleting MyApp.Place, and add it again after creating " <>
+          "MyApp.Place; MyApp.Tag is deleted and created again in this file while :tags on " <>
+          "MyApp.Task still targets it - the delete applies apart from the create, so delete " <>
+          "the relationship before deleting MyApp.Tag, and add it again after creating MyApp.Tag"
+
+      assert_raise Hologram.CompileError, expected_msg, fn -> render(ops, pre_model) end
+    end
+
+    test "names each inbound relationship of a recreated target" do
+      pre_model =
+        model(%{
+          MyApp.Place => %{},
+          MyApp.Task => %{
+            relationships: [
+              {:home, MyApp.Place, [optional: true]},
+              {:place, MyApp.Place, [optional: true]}
+            ]
+          }
+        })
+
+      ops = [
+        %{op: :delete_entity, entity: MyApp.Place, line: 5},
+        %{op: :create_entity, entity: MyApp.Place, line: 6}
+      ]
+
+      expected_msg =
+        "MyApp.Place is deleted and created again in this file while :home on MyApp.Task, " <>
+          ":place on MyApp.Task still target it - the delete applies apart from the create, " <>
+          "so delete the relationships before deleting MyApp.Place, and add them again after " <>
+          "creating MyApp.Place"
+
+      assert_raise Hologram.CompileError, expected_msg, fn -> render(ops, pre_model) end
+    end
+
+    test "accepts the recreate with the inbound relationship deleted and added again", %{
+      pre_model: pre_model
+    } do
+      ops = [
+        %{op: :delete_relationship, entity: MyApp.Task, name: :place, line: 5},
+        %{op: :delete_entity, entity: MyApp.Place, line: 6},
+        %{op: :create_entity, entity: MyApp.Place, line: 7},
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :place,
+          type: MyApp.Place,
+          opts: [optional: true],
+          line: 8
+        }
+      ]
+
+      assert %{transactional: _transactional} = render(ops, pre_model)
+    end
+
     test "accepts the same file with the cleanup moved above the cut", %{pre_model: pre_model} do
       ops = [
         %{op: :delete_relationship, entity: MyApp.Task, name: :place, line: 5},
