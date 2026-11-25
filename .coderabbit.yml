@@ -3,4 +3,7 @@ reviews:
   auto_review:
     base_branches: [".*"]
     drafts: true
+  path_filters:
+    - "!test/*/mix.exs"
+    - "!test/umbrella/apps/*/mix.exs"
   poem: false
