@@ -2188,6 +2188,29 @@ describe("Batches", () => {
         assert.equal(Replica.id, "r-next");
         assert.isTrue(reconnecting.calledTwice);
       });
+
+      // A retry an earlier batch left ends sooner than the backoff the switch is held to.
+      it("waits out its own backoff, not one an earlier batch left", async () => {
+        sendStub.resolves({httpStatus: 503, status: "failed"});
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(50_000);
+
+        sendStub.resetBehavior();
+        sendStub.onFirstCall().resolves(confirmed());
+        sendStub.resolves({httpStatus: 403, status: "failed"});
+        sealed(creating("t2", "second"));
+
+        await Batches.flush();
+
+        assert.equal(Replica.id, "r-fresh");
+
+        await timers.tickAsync(10_000);
+
+        assert.equal(Replica.id, "r-fresh");
+        assert.isTrue(reconnecting.calledOnce);
+      });
     });
 
     // The pair's twin: a dropped connection says nothing about who this client is, so what it is

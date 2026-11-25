@@ -63,6 +63,10 @@ export default class Batches {
   // that make it harmless, and a clear on every entry would be a line nothing could ever observe.
   static #retryTimer = null;
 
+  // The batch whose refused switch the retry was set for, which waits out that retry and no other
+  // (see flush).
+  static #retryFor = null;
+
   static #running = null;
 
   // Batches of another user still on their way into the store. They have left the queue, and a page
@@ -641,13 +645,13 @@ export default class Batches {
           );
 
           // Before the retry is set: one firing during this read would find the sender busy and
-          // be lost. A batch waiting out a switch waits for the retry already set. Pushed back by
-          // every flush the user's actions start, it would never get to switch to the pair the
-          // next handshake hands.
+          // be lost. A batch waiting out a switch waits for the retry set for it, and not for one
+          // an earlier batch left, which ends sooner. Pushed back by every flush the user's actions
+          // start, it would never get to switch to the pair the next handshake hands.
           await Batches.#takeUpWhileHeld();
 
-          if (!batch.switchedPair || Batches.#retryTimer === null) {
-            Batches.#scheduleRetry();
+          if (!batch.switchedPair || Batches.#retryFor !== batch) {
+            Batches.#scheduleRetry(batch.switchedPair ? batch : null);
           }
 
           return;
@@ -1156,6 +1160,8 @@ export default class Batches {
       clearTimeout(Batches.#retryTimer);
       Batches.#retryTimer = null;
     }
+
+    Batches.#retryFor = null;
   }
 
   // The rows the given batches create of the given types that the base doesn't hold, each keyed
@@ -1220,11 +1226,14 @@ export default class Batches {
   // The DELAY IS THE STREAM'S, not one of this module's own. How eagerly this client retries a
   // server that is not answering is one policy, already argued and bounded where the stream
   // defines it, and a second set of numbers here would be a second answer to the same question.
-  static #scheduleRetry() {
+  static #scheduleRetry(switched = null) {
     Batches.#clearRetry();
+
+    Batches.#retryFor = switched;
 
     Batches.#retryTimer = setTimeout(() => {
       Batches.#retryTimer = null;
+      Batches.#retryFor = null;
 
       // The wait a refused switch was held to is over (see flush).
       for (const batch of Batches.pending) {
