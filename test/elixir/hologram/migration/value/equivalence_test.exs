@@ -198,6 +198,8 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
       assert {inspect(term), row.id, Evaluator.evaluate(resolved.term, row)} ===
                {inspect(term), row.id, from_sql[row.id]}
     end
+
+    from_sql
   end
 
   defp attribute_target(type, opts \\ []) do
@@ -567,15 +569,19 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
       route(scratch, fn ->
         prepare()
 
-        for levels <- [["abc", "zed"], ["zed", "abc"], ["mid", "abc", "mid"], []] do
-          insert_trip_pointed_at(Enum.map(levels, &%{"level" => &1}))
-        end
+        trips =
+          for levels <- [["abc", "zed"], ["zed", "abc"], ["mid", "abc", "mid"], []] do
+            insert_trip_pointed_at(Enum.map(levels, &%{"level" => &1}))
+          end
 
         # Copied into an enum declaring the same values in another order, so the copy can't lean
         # on the target's order.
         target = %{attribute_target(:enum, values: [:abc, :mid, :zed]) | name: :tier}
 
-        assert_same(pointing_common(:level), target)
+        common = assert_same(pointing_common(:level), target)
+
+        # A tie goes to the value the source declares first.
+        assert Enum.map(trips, &common[&1]) == [:zed, :zed, :mid, nil]
       end)
     end
 
@@ -695,15 +701,25 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
       route(scratch, fn ->
         prepare()
 
-        for levels <- [["abc", "zed"], ["zed", "abc"], ["mid", "abc"], ["abc", "abc", "zed"], []] do
-          insert_trip_with_tags(Enum.map(levels, &%{"level" => &1}))
-        end
+        trips =
+          for levels <- [
+                ["abc", "zed"],
+                ["zed", "abc"],
+                ["mid", "abc"],
+                ["abc", "abc", "zed"],
+                []
+              ] do
+            insert_trip_with_tags(Enum.map(levels, &%{"level" => &1}))
+          end
 
         # Copied into an enum declaring the same values in another order, so the copy can't lean
         # on the target's order.
         target = %{attribute_target(:enum, values: [:abc, :mid, :zed]) | name: :tier}
 
-        assert_same(most_common(:level), target)
+        common = assert_same(most_common(:level), target)
+
+        # A tie goes to the value the source declares first.
+        assert Enum.map(trips, &common[&1]) == [:zed, :zed, :mid, :abc, nil]
       end)
     end
 
