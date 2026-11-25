@@ -3428,10 +3428,24 @@ describe("Durability", () => {
     // Transactions run in the order they were created, so the frame started before the claim is
     // refused and the one after it lands.
     it("takes a frame started right after this tab's claim", async () => {
+      const {db} = await rawOpen();
+
       const refused = Durability.persistFrame(
         [taskRecord("t2", "Before the claim")],
         "place-2",
       );
+
+      // What the store holds between the two, since the claim wipes it.
+      const between = new Promise((resolve, reject) => {
+        const transaction = db.transaction(["entities", "meta"]);
+        const entities = transaction.objectStore("entities").getAll();
+        const cursor = transaction.objectStore("meta").get("cursor");
+
+        transaction.onerror = () => reject(transaction.error);
+
+        transaction.oncomplete = () =>
+          resolve({cursor: cursor.result, entities: entities.result});
+      });
 
       const claimed = Durability.claim("u2", replica);
 
@@ -3441,6 +3455,11 @@ describe("Durability", () => {
       );
 
       await Promise.all([refused, claimed, taken]);
+
+      assert.deepStrictEqual(await between, {
+        cursor: "place-1",
+        entities: [taskRecord("t1", "Draft copy")],
+      });
 
       assert.equal(await readMeta("cursor"), "place-3");
 
