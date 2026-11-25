@@ -1252,6 +1252,29 @@ describe("Sse", () => {
         }
       });
 
+      // The tab still holds the previous user's pair, and no stream is left to tell it to ask again.
+      it("sets a deadline on the handshake of a tab catching up with a change of user", () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        DataLayer.caughtUpTag = "2.tag-2";
+
+        fetchStub.returns(new Promise(() => {}));
+
+        try {
+          Sse.connect();
+
+          const {signal} = fetchStub.firstCall.args[1];
+
+          timers.tick(Config.mutationTimeoutMs);
+
+          assert.isTrue(signal.aborted);
+        } finally {
+          DataLayer.caughtUpTag = null;
+        }
+      });
+
       it("sets no deadline on a handshake while no identity is wanted", async () => {
         const timers = sinon.useFakeTimers({
           toFake: ["setTimeout", "clearTimeout"],

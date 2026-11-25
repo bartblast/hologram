@@ -1114,6 +1114,12 @@ export default class DataLayer {
     }
   }
 
+  // Whether a new stream was opened to hear who the session serves (see catchUpIdentity). Nothing
+  // else asks again if its handshake never answers.
+  static catchesUp() {
+    return $.caughtUpTag !== null;
+  }
+
   // Whether this tab followed a change of user and waits for a handshake to bring the new user's
   // pair: it dropped the previous user's, so it has none to show (see replicaToReplace).
   static awaitsPair() {
