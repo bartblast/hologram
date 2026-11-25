@@ -404,7 +404,7 @@ defmodule Hologram.Migration.Value.Check do
             ~s("#{op.table}" is ) <>
             "an enum value this file adds to its type - PostgreSQL can't use a value in the " <>
             "transaction adding it (#1687), so move the change making the column required to " <>
-            "the next migration file"
+            "the next migration file, under the names things have there"
     end
 
     added
@@ -417,7 +417,7 @@ defmodule Hologram.Migration.Value.Check do
           %{entity: op.entity, line: op.line, name: op.member},
           "uses the enum value #{inspect(value)}, which this file adds to its type - PostgreSQL " <>
             "can't use a value in the transaction adding it (#1687), so move the backfill to " <>
-            "the next migration file"
+            "the next migration file, under the names things have there"
         )
 
       nil ->

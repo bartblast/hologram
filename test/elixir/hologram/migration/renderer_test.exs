@@ -9,6 +9,8 @@ defmodule Hologram.Migration.RendererTest do
   alias Hologram.Migration.Value
   alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
 
+  @moved_with_names "the next migration file, under the names things have there"
+
   # A term holding the user entity type designates it - the grant store derives from the
   # designation, so the tests that include it are the ones exercising the store.
   defp model(entities) do
@@ -495,9 +497,14 @@ defmodule Hologram.Migration.RendererTest do
         }
       ]
 
-      assert_raise Hologram.CompileError, ~r/the default "fresh" of column "grade".*#1687/, fn ->
-        render(ops, pre_model)
-      end
+      error =
+        assert_raise Hologram.CompileError,
+                     ~r/the default "fresh" of column "grade".*#1687/,
+                     fn ->
+                       render(ops, pre_model)
+                     end
+
+      assert String.ends_with?(error.message, @moved_with_names)
     end
 
     test "marks a tightening filling a value the file adds below a cut" do
@@ -975,7 +982,9 @@ defmodule Hologram.Migration.RendererTest do
         )
       ]
 
-      assert_raise Hologram.CompileError, @refusal, fn -> render(ops, pre_model) end
+      error = assert_raise Hologram.CompileError, @refusal, fn -> render(ops, pre_model) end
+
+      assert error.message =~ @moved_with_names
     end
 
     test "follows a value renamed after its add", %{pre_model: pre_model} do
@@ -1067,9 +1076,12 @@ defmodule Hologram.Migration.RendererTest do
         }
       ]
 
-      assert_raise Hologram.CompileError,
-                   ~r/the backfill "fresh" of column "kind".*#1687/,
-                   fn -> render(ops, pre_model) end
+      error =
+        assert_raise Hologram.CompileError,
+                     ~r/the backfill "fresh" of column "kind".*#1687/,
+                     fn -> render(ops, pre_model) end
+
+      assert String.ends_with?(error.message, @moved_with_names)
     end
 
     test "refuses a copy into a standing type that the file added a value to" do

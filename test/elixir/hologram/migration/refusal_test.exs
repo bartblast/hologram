@@ -360,7 +360,7 @@ defmodule Hologram.Migration.RefusalTest do
         expected_msg =
           ~s(the default "fresh" of column "grade" on table "my_app_task" is an enum value ) <>
             "its type doesn't hold yet when the column fills - move the change filling the " <>
-            "column to the next migration file"
+            "column to the next migration file, under the names things have there"
 
         assert_error RuntimeError, expected_msg, fn ->
           run([create, add_grade, tighten], full_model, @context)

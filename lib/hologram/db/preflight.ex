@@ -754,7 +754,8 @@ defmodule Hologram.DB.Preflight do
   end
 
   defp unheld_default_remedy(:tighten) do
-    "move the change filling the column to the next migration file"
+    "move the change filling the column to the next migration file, under the names things " <>
+      "have there"
   end
 
   defp unique_indexes(mapping, table) do
