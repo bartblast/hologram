@@ -692,6 +692,42 @@ defmodule Hologram.Migration.Value.CheckTest do
       end
     end
 
+    test "has no file-end bound once a later op changes the member's type" do
+      ops = [
+        add_attribute(:string, optional: true, backfill: String.duplicate("0", 3000)),
+        change(:change_attribute, :value, type: :integer),
+        %{op: :rename_attribute, entity: MyApp.Task, from: :value, to: :canonical, line: 9},
+        change(:change_attribute, :canonical, type: :string, unique: true)
+      ]
+
+      assert validate_ops!(ops, @model) == :ok
+    end
+
+    test "keeps the bound of a unique index the fill writes into when a later op retypes it" do
+      model =
+        put_in(@model.entities[MyApp.Task].attributes, [
+          {:code, :string, [optional: true, unique: true]}
+        ])
+
+      ops = [
+        change(:change_attribute, :code, optional: false, backfill: String.duplicate("0", 2693)),
+        change(:change_attribute, :code, type: :integer)
+      ]
+
+      error = assert_raise Hologram.CompileError, fn -> validate_ops!(ops, model) end
+
+      assert error.message =~ "must hold at most 2692 bytes"
+    end
+
+    test "has no bound from a unique index the op adds when a later op changes the type" do
+      ops = [
+        add_attribute(:string, unique: true, backfill: String.duplicate("0", 3000)),
+        change(:change_attribute, :value, type: :integer)
+      ]
+
+      assert validate_ops!(ops, @model) == :ok
+    end
+
     test "has no bound once a later op deletes the member" do
       ops = [
         add_attribute(:string, optional: true, backfill: String.duplicate("a", 3000)),
@@ -858,6 +894,282 @@ defmodule Hologram.Migration.Value.CheckTest do
 
     test "judges a widened integer by the rules" do
       assert refusal(add_attribute(:float, min: 2.0, backfill: 1)) =~ "must be at least 2.0"
+    end
+  end
+
+  describe "put_byte_bounds/2" do
+    test "bounds a computed fill by a unique index a later op adds" do
+      ops = [
+        add_attribute(:string, optional: true, backfill: %Value{term: {:name, [:code]}}),
+        change(:change_attribute, :value, unique: true)
+      ]
+
+      assert [%{max_bytes: 2692}, _unique] = put_byte_bounds(ops, @model)
+    end
+
+    test "doesn't bound a computed fill by an index the file adds before a later op converts it" do
+      ops = [
+        add_attribute(:string, optional: true),
+        %{op: :add_unique, entity: MyApp.Task, fields: [:value, :title], line: 8},
+        change(:change_attribute, :value,
+          optional: false,
+          backfill: %Value{term: {:name, [:code]}}
+        ),
+        change(:change_attribute, :value, type: :integer)
+      ]
+
+      assert [_add, _unique, %{max_bytes: nil}, _cast] = put_byte_bounds(ops, @model)
+    end
+
+    test "bounds a computed fill by a key standing before the file when a later op converts it" do
+      model =
+        put_in(@model.entities[MyApp.Task].uniques, [[:code, :title]])
+
+      ops = [
+        change(:change_attribute, :code,
+          optional: false,
+          backfill: %Value{term: {:name, [:title]}}
+        ),
+        change(:change_attribute, :code, type: :integer)
+      ]
+
+      assert [%{max_bytes: max_bytes}, _cast] = put_byte_bounds(ops, model)
+      assert is_integer(max_bytes) and max_bytes < 2692
+    end
+
+    test "follows a key the file adds and deletes again before the fill" do
+      ops = [
+        %{op: :add_unique, entity: MyApp.Task, fields: [:code, :title], line: 7},
+        %{op: :delete_unique, entity: MyApp.Task, fields: [:code, :title], line: 8},
+        change(:change_attribute, :code,
+          optional: false,
+          backfill: %Value{term: {:name, [:title]}}
+        )
+      ]
+
+      assert [_add, _delete, %{max_bytes: nil}] = put_byte_bounds(ops, @model)
+    end
+
+    test "doesn't bound a computed fill by an index over what a later op converts it to" do
+      ops = [
+        add_attribute(:string, optional: true, backfill: %Value{term: {:name, [:code]}}),
+        change(:change_attribute, :value, type: :integer),
+        change(:change_attribute, :value, type: :string, unique: true)
+      ]
+
+      assert [%{max_bytes: nil}, _cast, _cast_back] = put_byte_bounds(ops, @model)
+    end
+
+    test "bounds a computed fill by a unique attribute standing before the file that it turns off and on" do
+      model =
+        put_in(@model.entities[MyApp.Task].attributes, [
+          {:code, :string, [optional: true, unique: true]},
+          {:title, :string, []}
+        ])
+
+      ops = [
+        change(:change_attribute, :code, unique: false),
+        change(:change_attribute, :code, unique: true),
+        change(:change_attribute, :code,
+          optional: false,
+          backfill: %Value{term: {:name, [:title]}}
+        ),
+        change(:change_attribute, :code, type: :integer)
+      ]
+
+      assert [_off, _on, %{max_bytes: 2692}, _cast] = put_byte_bounds(ops, model)
+    end
+
+    test "bounds a computed fill by a key standing before the file that it deletes and adds back" do
+      model = put_in(@model.entities[MyApp.Task].uniques, [[:code, :title]])
+
+      ops = [
+        %{op: :delete_unique, entity: MyApp.Task, fields: [:code, :title], line: 7},
+        %{op: :add_unique, entity: MyApp.Task, fields: [:code, :title], line: 8},
+        change(:change_attribute, :code,
+          optional: false,
+          backfill: %Value{term: {:name, [:title]}}
+        ),
+        change(:change_attribute, :code, type: :integer)
+      ]
+
+      assert [_delete, _add, %{max_bytes: max_bytes}, _cast] = put_byte_bounds(ops, model)
+      assert is_integer(max_bytes) and max_bytes < 2692
+    end
+
+    test "bounds a computed fill by a key standing before the file with its fields out of order" do
+      model = put_in(@model.entities[MyApp.Task].uniques, [[:title, :code]])
+
+      ops = [
+        change(:change_attribute, :code,
+          optional: false,
+          backfill: %Value{term: {:name, [:title]}}
+        ),
+        change(:change_attribute, :code, type: :integer)
+      ]
+
+      assert [%{max_bytes: max_bytes}, _cast] = put_byte_bounds(ops, model)
+      assert is_integer(max_bytes) and max_bytes < 2692
+    end
+
+    test "follows a key standing before the file through a rename that puts its fields out of order" do
+      model = put_in(@model.entities[MyApp.Task].uniques, [[:code, :title]])
+
+      ops = [
+        %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :alpha, line: 7},
+        change(:change_attribute, :code,
+          optional: false,
+          backfill: %Value{term: {:name, [:alpha]}}
+        ),
+        change(:change_attribute, :code, type: :integer)
+      ]
+
+      assert [_rename, %{max_bytes: max_bytes}, _cast] = put_byte_bounds(ops, model)
+      assert is_integer(max_bytes) and max_bytes < 2692
+    end
+
+    test "follows a key standing before the file through a rename of its relationship" do
+      model = put_in(@model.entities[MyApp.Task].uniques, [[:code, :owner]])
+
+      ops = [
+        %{op: :rename_relationship, entity: MyApp.Task, from: :owner, to: :lead, line: 7},
+        change(:change_attribute, :code,
+          optional: false,
+          backfill: %Value{term: {:name, [:title]}}
+        ),
+        change(:change_attribute, :code, type: :integer)
+      ]
+
+      assert [_rename, %{max_bytes: max_bytes}, _cast] = put_byte_bounds(ops, model)
+      assert is_integer(max_bytes) and max_bytes < 2692
+    end
+
+    test "doesn't bound a computed fill by a key over a relationship the file deleted and added back" do
+      model = put_in(@model.entities[MyApp.Task].uniques, [[:code, :owner]])
+
+      ops = [
+        %{op: :delete_unique, entity: MyApp.Task, fields: [:code, :owner], line: 7},
+        %{op: :delete_relationship, entity: MyApp.Task, name: :owner, line: 8},
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          type: MyApp.User,
+          opts: [optional: true],
+          line: 9
+        },
+        %{op: :add_unique, entity: MyApp.Task, fields: [:code, :owner], line: 10},
+        change(:change_attribute, :code,
+          optional: false,
+          backfill: %Value{term: {:name, [:title]}}
+        ),
+        change(:change_attribute, :code, type: :integer)
+      ]
+
+      assert [_delete_key, _delete, _add, _add_key, %{max_bytes: nil}, _cast] =
+               put_byte_bounds(ops, model)
+    end
+
+    test "follows a key standing before the file through a rename of its entity type" do
+      model =
+        put_in(@model.entities[MyApp.Task].attributes, [
+          {:code, :string, [optional: true, unique: true]},
+          {:title, :string, []}
+        ])
+
+      ops = [
+        %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 7},
+        %{
+          op: :change_attribute,
+          entity: MyApp.Job,
+          name: :code,
+          changes: [optional: false, backfill: %Value{term: {:name, [:title]}}],
+          line: 8
+        },
+        %{
+          op: :change_attribute,
+          entity: MyApp.Job,
+          name: :code,
+          changes: [type: :integer],
+          line: 9
+        }
+      ]
+
+      assert [_rename, %{max_bytes: 2692}, _cast] = put_byte_bounds(ops, model)
+    end
+
+    test "follows a key standing before the file through a rename of its attribute" do
+      model =
+        put_in(@model.entities[MyApp.Task].attributes, [
+          {:code, :string, [optional: true, unique: true]},
+          {:title, :string, []}
+        ])
+
+      ops = [
+        %{op: :rename_attribute, entity: MyApp.Task, from: :code, to: :canonical, line: 7},
+        change(:change_attribute, :canonical,
+          optional: false,
+          backfill: %Value{term: {:name, [:title]}}
+        ),
+        change(:change_attribute, :canonical, type: :integer)
+      ]
+
+      assert [_rename, %{max_bytes: 2692}, _cast] = put_byte_bounds(ops, model)
+    end
+
+    test "doesn't bound a computed fill by a key of an attribute the file deleted and added back" do
+      model =
+        put_in(@model.entities[MyApp.Task].attributes, [
+          {:code, :string, [optional: true, unique: true]},
+          {:title, :string, []}
+        ])
+
+      ops = [
+        %{op: :delete_attribute, entity: MyApp.Task, name: :code, line: 7},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :code,
+          type: :string,
+          opts: [optional: true, unique: true, backfill: %Value{term: {:name, [:title]}}],
+          line: 8
+        },
+        change(:change_attribute, :code, type: :integer)
+      ]
+
+      assert [_delete, %{max_bytes: nil}, _cast] = put_byte_bounds(ops, model)
+    end
+
+    test "doesn't bound a computed fill by a unique flag the file sets on a column before it" do
+      model =
+        put_in(@model.entities[MyApp.Task].attributes, [
+          {:code, :string, [optional: true]},
+          {:title, :string, []}
+        ])
+
+      ops = [
+        change(:change_attribute, :code, unique: true),
+        change(:change_attribute, :code,
+          optional: false,
+          backfill: %Value{term: {:name, [:title]}}
+        ),
+        change(:change_attribute, :code, type: :integer)
+      ]
+
+      assert [_unique, %{max_bytes: nil}, _cast] = put_byte_bounds(ops, model)
+    end
+
+    test "follows a key the file adds before the fill and deletes after it" do
+      ops = [
+        %{op: :add_unique, entity: MyApp.Task, fields: [:code, :title], line: 7},
+        change(:change_attribute, :code,
+          optional: false,
+          backfill: %Value{term: {:name, [:title]}}
+        ),
+        %{op: :delete_unique, entity: MyApp.Task, fields: [:code, :title], line: 9}
+      ]
+
+      assert [_add, %{max_bytes: nil}, _delete] = put_byte_bounds(ops, @model)
     end
   end
 
