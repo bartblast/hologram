@@ -39,13 +39,17 @@ defmodule Hologram.Query.Words do
   @doc """
   Returns what to add to a refusal of the given query expression when it calls something named
   like a word that works only in a migration's `backfill:` for now, or an empty string when it
-  doesn't. A pinned expression is the surrounding code's, so its calls aren't words.
+  doesn't. A pinned expression and a module attribute are the surrounding code's, so their calls
+  aren't words.
   """
   @spec backfill_only_hint(Macro.t()) :: String.t()
   def backfill_only_hint(ast) do
     {_ast, word} =
       Macro.prewalk(ast, nil, fn
         {:^, _meta, _args}, word ->
+          {nil, word}
+
+        {:@, _meta, _args}, word ->
           {nil, word}
 
         {name, _meta, args} = node, nil when name in @backfill_only_words and is_list(args) ->

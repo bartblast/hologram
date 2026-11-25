@@ -31,6 +31,10 @@ defmodule Hologram.Query.WordsTest do
     test "is empty for a word inside a pin, which is the surrounding code's" do
       assert backfill_only_hint(quote(do: foo(^split(a, " ")))) == ""
     end
+
+    test "is empty for a module attribute named like a word, which is the surrounding code's" do
+      assert backfill_only_hint(Code.string_to_quoted!("foo(@split(a))")) == ""
+    end
   end
 
   describe "add_backfill_only_hint/2" do
