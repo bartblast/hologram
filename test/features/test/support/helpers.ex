@@ -489,7 +489,7 @@ defmodule HologramFeatureTests.Helpers do
   """
   @spec await_memory_mode(Wallaby.Session.t()) :: Wallaby.Session.t()
   def await_memory_mode(session) do
-    await_script_result(session, "return globalThis.Hologram.durability.mode() === 'memory';")
+    await_script(session, "return globalThis.Hologram.durability.mode() === 'memory';")
   end
 
   @doc """
@@ -522,20 +522,20 @@ defmodule HologramFeatureTests.Helpers do
   Blocks until the given JavaScript returns true, then returns the `session`. For a value a page
   sets at a time the test can't wait for in any other way.
   """
-  @spec await_script(Wallaby.Session.t(), String.t(), non_neg_integer) :: Wallaby.Session.t()
-  def await_script(session, script, attempts_left \\ 100)
+  @spec await_script(Wallaby.Session.t(), String.t(), integer | nil) :: Wallaby.Session.t()
+  def await_script(session, script, start_time \\ nil) do
+    start_time = start_time || current_time()
 
-  def await_script(_session, script, 0) do
-    raise Wallaby.ExpectationNotMetError,
-          "Timed out waiting for the script to return true: #{script}"
-  end
+    cond do
+      script_result(session, script) == true ->
+        session
 
-  def await_script(session, script, attempts_left) do
-    if script_result(session, script) == true do
-      session
-    else
-      Process.sleep(50)
-      await_script(session, script, attempts_left - 1)
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError, "Timed out waiting for #{script} to answer true"
+
+      true ->
+        Process.sleep(50)
+        await_script(session, script, start_time)
     end
   end
 
@@ -682,7 +682,7 @@ defmodule HologramFeatureTests.Helpers do
 
     Browser.execute_script(session, script)
 
-    await_script_result(session, "return globalThis.__hologramStoreBlock.readWaiting === true;")
+    await_script(session, "return globalThis.__hologramStoreBlock.readWaiting === true;")
   end
 
   @doc """
@@ -749,7 +749,7 @@ defmodule HologramFeatureTests.Helpers do
 
     Browser.execute_script(session, script)
 
-    await_script_result(session, "return globalThis.__hologramStoreBlock?.active === true;")
+    await_script(session, "return globalThis.__hologramStoreBlock?.active === true;")
   end
 
   @doc """
@@ -1132,7 +1132,7 @@ defmodule HologramFeatureTests.Helpers do
 
     session
     |> Browser.focus_window(await_new_tab(session, known))
-    |> await_script_result(
+    |> await_script(
       # The tab starts on about:blank, whose document is complete too.
       "return location.pathname === #{Jason.encode!(path)} && document.readyState === 'complete';"
     )
@@ -1733,22 +1733,6 @@ defmodule HologramFeatureTests.Helpers do
       true ->
         Process.sleep(50)
         await_new_tab(session, known, start_time)
-    end
-  end
-
-  defp await_script_result(session, script, start_time \\ nil) do
-    start_time = start_time || current_time()
-
-    cond do
-      script_result(session, script) ->
-        session
-
-      timed_out?(start_time) ->
-        raise Wallaby.ExpectationNotMetError, "Timed out waiting for #{script} to answer true"
-
-      true ->
-        Process.sleep(50)
-        await_script_result(session, script, start_time)
     end
   end
 
