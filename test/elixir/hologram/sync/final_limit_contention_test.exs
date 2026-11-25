@@ -140,6 +140,39 @@ defmodule Hologram.Sync.FinalLimitContentionTest do
     refute FinalLimit.waiting?(finished)
   end
 
+  # Serials commit out of order, so a later save that committed proves nothing about an earlier one.
+  test "stays below an earlier save still running when a later one commits", %{
+    scratch: scratch,
+    scratch_opts: scratch_opts
+  } do
+    before = committed_serial(scratch)
+    state = advance(scratch, FinalLimit.new())
+
+    earlier = start_save(scratch_opts)
+    {earlier_serial, _backend} = await_save()
+
+    later = start_save(scratch_opts)
+    {later_serial, _backend} = await_save()
+
+    assert later_serial > earlier_serial
+
+    send(later.pid, :commit)
+    assert {:ok, :committed} = Task.await(later)
+
+    waiting = advance(scratch, state)
+
+    assert FinalLimit.limit(waiting) == before
+    assert FinalLimit.waiting?(waiting)
+
+    send(earlier.pid, :commit)
+    assert {:ok, :committed} = Task.await(earlier)
+
+    finished = advance(scratch, waiting)
+
+    assert FinalLimit.limit(finished) == later_serial
+    refute FinalLimit.waiting?(finished)
+  end
+
   test "doesn't wait for a save that rolled back, and stays at the last entry", %{
     scratch: scratch,
     scratch_opts: scratch_opts
