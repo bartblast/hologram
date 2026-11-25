@@ -550,6 +550,71 @@ defmodule Hologram.Migration.GeneratorTest do
       assert generate(history, current, @timestamp, opts) == :nothing_to_do
     end
 
+    # A block asking no fill comes before the fill blocks, so a retarget there can close a cycle
+    # that a relaxation from a fill block ends.
+    @tag :database
+    test "writes a relaxation ending a required cycle above a retarget closing it" do
+      opts = opts!("retargeted_cycle_relaxation")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Zeta
+           create_entity MyApp.Gamma
+           create_entity MyApp.Other
+
+           change_entity MyApp.Zeta do
+             add_attribute :title, :string, optional: true
+             add_relationship :e, MyApp.Gamma
+           end
+
+           change_entity MyApp.Gamma do
+             add_relationship :g, MyApp.Other
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Zeta => %{
+            attributes: [{:title, :string, []}],
+            relationships: [{:e, MyApp.Gamma, [optional: true]}]
+          },
+          MyApp.Gamma => %{relationships: [{:g, MyApp.Zeta, []}]},
+          MyApp.Other => %{}
+        })
+
+      assert {:ok, path, 1} = generate(migrations, current, @timestamp, opts)
+
+      written = File.read!(path)
+
+      assert written =~
+               "  change_entity MyApp.Zeta do\n" <>
+                 "    change_relationship :e, optional: true\n" <>
+                 "  end\n\n" <>
+                 "  change_entity MyApp.Gamma do\n" <>
+                 "    change_relationship :g, type: MyApp.Zeta\n" <>
+                 "  end\n"
+
+      answered =
+        String.replace(
+          written,
+          ~r/^( *)resolve! :fill, attributes: \[:title\]$/m,
+          "\\1change_attribute :title, optional: false, backfill: \"untitled\""
+        )
+
+      refute answered =~ ~r/^ *resolve!/m
+
+      File.write!(path, answered)
+      Code.compile_file(path)
+
+      [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+      history = Enum.concat(migrations, [migration])
+
+      assert generate(history, current, @timestamp, opts) == :nothing_to_do
+    end
+
     @tag :database
     test "formats the file with the given formatter" do
       opts =

@@ -331,11 +331,12 @@ defmodule Hologram.Migration.Generator do
       end)
       |> Enum.unzip()
 
+    # The relaxations go above the other blocks too, where a retarget can close a cycle one ends.
+    # They change members of types that exist, so they need nothing those blocks write.
     Enum.map(flat_questions, &{:question, &1}) ++
       Enum.map(renames, &{:flat, &1}) ++
-      other_blocks ++
       Enum.reject(edge_blocks, &match?({:block, _entity_type, [], _questions}, &1)) ++
-      answered_blocks ++ Enum.map(other_flat_ops, &{:flat, &1})
+      other_blocks ++ answered_blocks ++ Enum.map(other_flat_ops, &{:flat, &1})
   end
 
   # The lines left below the block's own fill that can still end a required to-one, written in the
