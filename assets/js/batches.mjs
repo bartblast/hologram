@@ -693,9 +693,15 @@ export default class Batches {
         // answer reaches them as it arrived, undecoded, because a client term is not something a
         // browser can carry from one tab to another. Told first: a delete that fails on the spot
         // ends the group, and a tab that never heard would send the batch again.
-        Tabs.post({answer, kind: "answered", seq: batch.seq});
+        //
+        // Not for a batch an open store never got, though: no tab heard of it, and its number was
+        // never recorded, so what the store holds under it can be another tab's batch. A tab with
+        // no store files nothing, and its forget checks whose the number is (see forgetBatch).
+        if (batch.filed !== false || Durability.mode === "memory") {
+          Tabs.post({answer, kind: "answered", seq: batch.seq});
 
-        Durability.forgetBatch(batch.seq, sentUnder);
+          Durability.forgetBatch(batch.seq, sentUnder);
+        }
 
         Batches.settle(batch.seq, answer);
       }

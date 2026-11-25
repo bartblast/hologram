@@ -1814,6 +1814,30 @@ describe("Batches", () => {
       sinon.assert.calledOnceWithExactly(forgetting, 1, sentUnder);
     });
 
+    // Its number was never recorded, so a batch the store holds under it can be another tab's.
+    it("forgets and tells nothing of a batch the store never got", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+      const posting = sinon.stub(Tabs, "post");
+
+      const originalMode = Durability.mode;
+
+      const batch = sealed(creating("t1", "first"));
+      batch.filed = false;
+      sendStub.resolves(confirmed());
+
+      try {
+        Durability.mode = "indexeddb";
+
+        await Batches.flush();
+      } finally {
+        Durability.mode = originalMode;
+      }
+
+      assert.deepStrictEqual(Batches.pending, []);
+      sinon.assert.notCalled(forgetting);
+      sinon.assert.neverCalledWithMatch(posting, {kind: "answered"});
+    });
+
     // Refused for the writes or refused for the build, it is answered either way - and a batch
     // kept for a resend would come back on a later page load as a write the user watched fail.
     it("forgets a refused batch", async () => {
