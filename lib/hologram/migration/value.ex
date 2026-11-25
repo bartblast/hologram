@@ -931,6 +931,8 @@ defmodule Hologram.Migration.Value do
 
   defp options_splicing(_args, _splicing), do: false
 
+  defp pair?(item), do: match?({key, _value} when is_atom(key), item)
+
   # The names of a bare name or a dot chain on one, nil for anything else. A call with
   # parentheses is no path.
   defp path(ast), do: path(ast, [])
@@ -1078,7 +1080,9 @@ defmodule Hologram.Migration.Value do
 
   # Whether a quote with the given args unquotes its body: true or false as its options spell it,
   # or :unknown when only the compiler can read them, like an attribute. With separate options,
-  # Elixir ignores any beside the do, and in any list it ignores what isn't a pair.
+  # Elixir ignores any beside the do. In a list it takes the first unquote once the list expands
+  # and ignores what isn't a pair, so an item that may expand to one, like an attribute, may set
+  # unquote or bind_quoted unless an unquote written as a pair comes before it.
   defp quote_unquotes(args) do
     written =
       case args do
@@ -1087,12 +1091,16 @@ defmodule Hologram.Migration.Value do
         _other -> []
       end
 
-    settings =
+    {written_out, rest} =
       if is_list(written),
-        do: Enum.filter(written, &match?({key, _value} when is_atom(key), &1)),
-        else: [unquote: written]
+        do: Enum.split_while(written, &(pair?(&1) or Macro.quoted_literal?(&1))),
+        else: {[unquote: written], []}
 
-    case Keyword.get(settings, :unquote, not Keyword.has_key?(settings, :bind_quoted)) do
+    settings = Enum.filter(written_out, &pair?/1)
+
+    default = if rest == [], do: not Keyword.has_key?(settings, :bind_quoted), else: :unknown
+
+    case Keyword.get(settings, :unquote, default) do
       setting when is_boolean(setting) -> setting
       _compiler_read -> :unknown
     end

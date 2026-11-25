@@ -498,6 +498,57 @@ defmodule Hologram.MigrationTest do
       end
     end
 
+    test "refuses an attribute a quote unquotes under an option an attribute in its list sets" do
+      for {opts, quoted} <- [
+            {"{:unquote, true}", "quote([@opts, bind_quoted: [x: 1], do: unquote(@o)])"},
+            {"{:unquote, false}", "quote([@opts, do: unquote(@o)])"}
+          ] do
+        body = """
+        @opts #{opts}
+        @o "1"
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string,
+            backfill: fn title -> coalesce(title, ^inspect(#{quoted})) end
+        end
+        """
+
+        error =
+          assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+        assert error.message ==
+                 "an op can't unquote @o in a quote whose options only the compiler can read, " <>
+                   "like an attribute (line 9) - write the options out, or don't unquote the " <>
+                   "attribute"
+      end
+    end
+
+    test "reads an attribute a quote unquotes under an unquote written before an attribute in its list" do
+      module =
+        compile_migration("20260813091522", """
+        @opts {:unquote, false}
+        @o "early"
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string,
+            backfill: fn title ->
+              coalesce(title, ^inspect(quote([{:unquote, true}, @opts, {:do, unquote(@o)}])))
+            end
+        end
+
+        @o "late"
+
+        change_entity MyApp.Task do
+          add_attribute :second, :string, default: @o
+        end
+        """)
+
+      assert [%{opts: [backfill: %{term: {:coalesce, [_title, {:value, result}]}}]}, _second] =
+               module.__hologram_migration__().ops
+
+      assert result == inspect("early")
+    end
+
     test "refuses an unquote the function an op is compiled into splices in" do
       pins = [
         "unquote(quote(do: @o))",
