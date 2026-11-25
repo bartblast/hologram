@@ -283,6 +283,22 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
                Checks.below_final([view], entries, @member, 9)
     end
 
+    # The limit went out before the commit holding 9 locked, so the save was still running then.
+    test "flags a commit below the limit that locked after the frame arrived", %{
+      entries: entries
+    } do
+      assert [%{commit: 1, final_seq: 9, min_seq: 9, problem: :ended_after, type: Tag}] =
+               Checks.below_final([view(9, 5, %{"t" => {5, 5}})], entries, @member, 9)
+    end
+
+    test "passes a commit below the limit that locked as the frame arrived", %{entries: entries} do
+      view = view(9, 10, %{"t" => {5, 5}, "u" => {9, 9}})
+
+      problems = Checks.below_final([view], entries, @member, 9)
+
+      refute Enum.any?(problems, &(&1.problem == :ended_after))
+    end
+
     # A commit that got the lock before the frame arrived can take a row away, so a row has to be
     # readable in every state from the floor on.
     test "passes a row a commit locked before the frame took away", %{entries: [created, both]} do
@@ -521,8 +537,10 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
           state: tags_state(%{})
       }
 
-      assert [%{id: "t-1", problem: :missing}] =
-               Checks.below_final([view(10, 20, %{})], [created, deleted], @member, 20)
+      assert [
+               %{commit: 1, min_seq: 8, problem: :ended_after},
+               %{id: "t-1", problem: :missing}
+             ] = Checks.below_final([view(10, 20, %{})], [created, deleted], @member, 20)
     end
 
     # The card is on b-1 when the frame arrives, so a commit above the limit naming b-2 can't keep

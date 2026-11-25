@@ -91,9 +91,12 @@ defmodule HologramSyncTests.Consistency.Checks do
   A number a view shows is one a reader finds, so it is always at or below its type's limit, and
   a type with none shows no number.
 
+  A commit holding a serial at or below a view's limit for a type ended before the limit was
+  published, so it got the commit lock before the frame arrived.
+
   Answers each row missing or showing other numbers, or showing one above its type's limit, by the
-  view's time and the type's limit, and a limit held at the end that stops short of the last
-  commit's serials.
+  view's time and the type's limit, each commit below a view's limit that got the commit lock after
+  the frame arrived, and a limit held at the end that stops short of the last commit's serials.
   """
   @spec below_final(list(map), list(map), String.t() | nil, non_neg_integer | nil) :: list(map)
   def below_final(views, entries, user_id, final_seq) do
@@ -165,7 +168,26 @@ defmodule HologramSyncTests.Consistency.Checks do
   end
 
   defp view_problems(view, indexed, user_id) do
-    above_final(view) ++ missing_or_misnumbered(view, indexed, user_id)
+    above_final(view) ++
+      ended_after(view, indexed) ++ missing_or_misnumbered(view, indexed, user_id)
+  end
+
+  # A limit is published once every save holding a serial at or below it has ended, so a commit
+  # holding one that got the commit lock after the frame arrived ended after the limit went out.
+  # Equal readings prove nothing, since two processes can read the same time.
+  defp ended_after(view, indexed) do
+    for {type, final_seq} <- view.finals,
+        final_seq != nil,
+        {entry, index} <- indexed,
+        entry.min_seq != nil and entry.min_seq <= final_seq and entry.after_lock_at > view.at,
+        do: %{
+          at: view.at,
+          commit: index,
+          final_seq: final_seq,
+          min_seq: entry.min_seq,
+          problem: :ended_after,
+          type: type
+        }
   end
 
   # A number an earlier fill's type marker filed stays after a refill takes the marker's limit, so
