@@ -15,6 +15,10 @@ defmodule Hologram.Sync.ReadEdge do
   # Node-local and node-lifetime, deliberately. It matters only while the sessions whose own places
   # move with it are alive, and those belong to connections this node holds: a node that goes down
   # takes them with it, and the clients come back naming places of their own to be caught up from.
+  #
+  # Beside the edge it keeps a recovery under way: a loss found clears the edge, and the log takes a
+  # new id and the sessions are stopped after. A dispatcher dying in between would come back to no
+  # edge and nothing telling it the rest is owed, so it finds the recovery here and finishes it.
 
   use GenServer
 
@@ -24,6 +28,12 @@ defmodule Hologram.Sync.ReadEdge do
   A place read up to, and the id of the log it is in.
   """
   @type edge :: {Oplog.place(), String.t()}
+
+  @typedoc """
+  A recovery from a loss not finished yet, with the id the log was found to have lost commits
+  under, or nil when the id had moved already (see `Hologram.Sync.Dispatcher`).
+  """
+  @type recovery :: {:recovering, String.t() | nil}
 
   @doc """
   Returns how far the log has been read, or nil before the first round.
@@ -43,6 +53,31 @@ defmodule Hologram.Sync.ReadEdge do
   end
 
   @doc """
+  Forgets the place, as `put/2` with nil does, and records in the same step a recovery under way
+  from the loss found under the given log id, or nil when the id had moved already.
+  """
+  @spec lose(GenServer.server(), String.t() | nil) :: :ok
+  def lose(server, log_id) do
+    GenServer.call(server, {:lose, log_id})
+  end
+
+  @doc """
+  Records that the recovery under way, if any, is finished.
+  """
+  @spec recovered(GenServer.server()) :: :ok
+  def recovered(server) do
+    GenServer.call(server, :recovered)
+  end
+
+  @doc """
+  Returns the recovery from a loss not finished yet, or nil.
+  """
+  @spec recovery(GenServer.server()) :: recovery | nil
+  def recovery(server) do
+    GenServer.call(server, :recovery)
+  end
+
+  @doc """
   Starts the holder, remembering nothing.
   """
   @spec start_link(keyword) :: GenServer.on_start()
@@ -51,18 +86,30 @@ defmodule Hologram.Sync.ReadEdge do
   end
 
   @impl GenServer
-  def init(edge) do
-    {:ok, edge}
+  def init(nil) do
+    {:ok, %{edge: nil, recovery: nil}}
   end
 
   @impl GenServer
-  def handle_call(:get, _from, edge) do
-    {:reply, edge, edge}
+  def handle_call(:get, _from, state) do
+    {:reply, state.edge, state}
+  end
+
+  def handle_call(:recovery, _from, state) do
+    {:reply, state.recovery, state}
   end
 
   # Answered rather than cast: the dispatcher reads what it wrote only after dying, so the write
   # has to have landed before the round that made it is called done.
-  def handle_call({:put, edge}, _from, _previous) do
-    {:reply, :ok, edge}
+  def handle_call({:put, edge}, _from, state) do
+    {:reply, :ok, %{state | edge: edge}}
+  end
+
+  def handle_call({:lose, log_id}, _from, _state) do
+    {:reply, :ok, %{edge: nil, recovery: {:recovering, log_id}}}
+  end
+
+  def handle_call(:recovered, _from, state) do
+    {:reply, :ok, %{state | recovery: nil}}
   end
 end

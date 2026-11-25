@@ -175,7 +175,7 @@ defmodule Hologram.Sync.Dispatcher do
     # to resume from leaves no number final until the first round's limit.
     resumed = publish_resumed(state, cursor)
 
-    {:noreply, dispatch(%{resumed | cursor: cursor, log_id: log_id})}
+    {:noreply, resume(%{resumed | cursor: cursor, log_id: log_id})}
   end
 
   @impl GenServer
@@ -295,6 +295,7 @@ defmodule Hologram.Sync.Dispatcher do
   defp finish_recovery(%{pending_rotation: nil} = state) do
     send(self(), :wake)
     state.on_loss.()
+    if state.read_edge, do: ReadEdge.recovered(state.read_edge)
 
     %{state | cursor: nil, limit: FinalLimit.new(), log_id: nil, sent_through: nil, unsent: []}
   end
@@ -421,14 +422,29 @@ defmodule Hologram.Sync.Dispatcher do
 
   # The edge is cleared first, so a session joining from here on finds none and stops (see
   # `Hologram.Sync.Session`), and the sessions stopped are every one that may have read it.
+  #
+  # The recovery is noted with the edge cleared, and only finishing it takes the note away: one this
+  # process dies in the middle of is finished by the dispatcher replacing it (see `resume/1`).
   defp recover_from_loss(state, rotated_log_id) do
-    if state.read_edge, do: ReadEdge.put(state.read_edge, nil)
+    if state.read_edge, do: ReadEdge.lose(state.read_edge, rotated_log_id)
 
     # Whatever was read may be lost, so no number reads as final until a new limit is worked out.
     cleared = publish_none(state)
 
     finish_recovery(%{cleared | pending_rotation: rotated_log_id})
   end
+
+  # A dispatcher that died recovering from a loss left the edge cleared and the rest owed: the log
+  # may still need its new id, and the sessions still run under places the server may have lost.
+  # Nothing is read until that is done, as in the process that found the loss.
+  defp resume(%{cursor: nil, read_edge: read_edge} = state) when read_edge != nil do
+    case ReadEdge.recovery(read_edge) do
+      {:recovering, log_id} -> finish_recovery(%{state | pending_rotation: log_id})
+      nil -> dispatch(state)
+    end
+  end
+
+  defp resume(state), do: dispatch(state)
 
   # A seq at or below the one last published is final already, so only a higher one is published:
   # a round without a limit yet, as one resumed has, keeps its place, which can be below the limit

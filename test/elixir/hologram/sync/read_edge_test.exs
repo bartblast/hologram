@@ -49,6 +49,45 @@ defmodule Hologram.Sync.ReadEdgeTest do
     end
   end
 
+  describe "lose/2" do
+    test "forgets the place and notes the recovery under the log id the loss was found under" do
+      read_edge = start_read_edge!()
+
+      :ok = put(read_edge, {{4_216, 801, 1_700_000_000_000_000}, @log_id})
+      :ok = lose(read_edge, @log_id)
+
+      assert get(read_edge) == nil
+      assert recovery(read_edge) == {:recovering, @log_id}
+    end
+
+    test "notes a recovery with no id to move when the id had moved already" do
+      read_edge = start_read_edge!()
+
+      :ok = lose(read_edge, nil)
+
+      assert recovery(read_edge) == {:recovering, nil}
+    end
+  end
+
+  describe "recovered/1" do
+    test "takes the recovery away and keeps the place put since" do
+      read_edge = start_read_edge!()
+
+      :ok = lose(read_edge, @log_id)
+      :ok = put(read_edge, {{4_217, 802, 1_700_000_000_000_001}, @log_id})
+      :ok = recovered(read_edge)
+
+      assert recovery(read_edge) == nil
+      assert get(read_edge) == {{4_217, 802, 1_700_000_000_000_001}, @log_id}
+    end
+  end
+
+  describe "recovery/1" do
+    test "has no recovery under way before the first loss" do
+      assert recovery(start_read_edge!()) == nil
+    end
+  end
+
   # The name a dispatcher is handed to resume from is the module's own, so registering under it is
   # what makes the holder findable rather than a convenience.
   describe "start_link/1" do

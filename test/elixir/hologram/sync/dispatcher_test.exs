@@ -790,6 +790,41 @@ defmodule Hologram.Sync.DispatcherTest do
       settle(dispatcher)
     end
 
+    # One that died between clearing the edge and stopping the sessions left the rest owed.
+    test "finishes a recovery the dispatcher before it died in the middle of" do
+      seed(200, @entity_id)
+      log_id = Oplog.log_id()
+      read_edge = start_read_edge!()
+      :ok = ReadEdge.lose(read_edge, log_id)
+
+      dispatcher = start_dispatcher!(read_edge: read_edge)
+
+      assert_receive :lost, 1_000
+      refute Oplog.log_id() == log_id
+
+      :sys.get_state(dispatcher)
+      assert ReadEdge.recovery(read_edge) == nil
+
+      settle(dispatcher)
+    end
+
+    test "stops the sessions of a recovery left owed whose log id had moved already" do
+      seed(200, @entity_id)
+      log_id = Oplog.log_id()
+      read_edge = start_read_edge!()
+      :ok = ReadEdge.lose(read_edge, nil)
+
+      dispatcher = start_dispatcher!(read_edge: read_edge)
+
+      assert_receive :lost, 1_000
+      assert Oplog.log_id() == log_id
+
+      :sys.get_state(dispatcher)
+      assert ReadEdge.recovery(read_edge) == nil
+
+      settle(dispatcher)
+    end
+
     # The first round after a crash finds no run, and one can find the run moved while it reads:
     # either leaves the limit as it was, and the log may be of a run that lost what was sent.
     test "sends nothing in a round that couldn't date the log" do
