@@ -408,14 +408,29 @@ defmodule Hologram.Sync.DispatcherTest do
       settle(dispatcher)
     end
 
+    # Both callbacks run in the dispatcher's process, so the loss signal reads the limit it last
+    # published there.
     test "publishes nothing final once a loss is found" do
       {seq, tx, inserted_at} = seed(200, @entity_id)
+      test_pid = self()
+      published = publishing()
+
+      publish = fn value ->
+        Process.put(:last_published, value)
+        published.(value)
+      end
+
+      on_loss = fn -> send(test_pid, {:lost, Process.get(:last_published)}) end
 
       dispatcher =
-        start_dispatcher!(cursor: {seq + 5, tx, inserted_at}, publish: publishing())
+        start_dispatcher!(
+          cursor: {seq + 5, tx, inserted_at},
+          on_loss: on_loss,
+          publish: publish
+        )
 
-      assert_receive :lost, 1_000
-      assert_received {:published, 0}
+      assert_receive {:lost, published_at_loss}, 1_000
+      assert published_at_loss == 0
 
       # The limit worked out after the loss is below the place resumed, and still goes out.
       assert_receive {:published, ^seq}, 1_000
