@@ -2221,13 +2221,17 @@ describe("Batches", () => {
         await Batches.flush();
         await timers.tickAsync(50_000);
 
-        sendStub.resetBehavior();
+        // The call history goes too, so the first call configured is the next one.
+        sendStub.reset();
         sendStub.onFirstCall().resolves(confirmed());
         sendStub.resolves({httpStatus: 403, status: "failed"});
-        sealed(creating("t2", "second"));
+        const second = sealed(creating("t2", "second"));
 
         await Batches.flush();
 
+        // The first one's retry, then the second one under each pair. The first is settled.
+        assert.equal(sendStub.callCount, 3);
+        assert.deepStrictEqual(Batches.pending, [second]);
         assert.equal(Replica.id, "r-fresh");
 
         await timers.tickAsync(10_000);
