@@ -112,9 +112,7 @@ defmodule Hologram.UI.RuntimeTest do
 
                  globalThis.Hologram._popstateShim = (function(state, url) {
                    return function(event) {
-                     if (location.pathname + location.search !== url || (typeof event.state === "string" && event.state !== state)) {
-                       globalThis.Hologram._missedPopstate = true;
-                     }
+                     globalThis.Hologram._missedPopstate = location.pathname + location.search !== url || (typeof event.state === "string" && event.state !== state);
                    };
                  })(history.state, location.pathname + location.search);
 
@@ -149,9 +147,7 @@ defmodule Hologram.UI.RuntimeTest do
 
                  globalThis.Hologram._popstateShim = (function(state, url) {
                    return function(event) {
-                     if (location.pathname + location.search !== url || (typeof event.state === "string" && event.state !== state)) {
-                       globalThis.Hologram._missedPopstate = true;
-                     }
+                     globalThis.Hologram._missedPopstate = location.pathname + location.search !== url || (typeof event.state === "string" && event.state !== state);
                    };
                  })(history.state, location.pathname + location.search);
 
