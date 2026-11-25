@@ -1557,11 +1557,15 @@ describe("Durability", () => {
         await Durability.open();
         await Durability.load();
 
-        sinon.stub(Tabs, "visit").get(() => "visit-left");
+        let visit = "visit-left";
+
+        sinon.stub(Tabs, "visit").get(() => visit);
+        sinon.stub(Tabs, "isVisit").callsFake((given) => given === visit);
 
         const opening = sinon.spy(FDBDatabase.prototype, "transaction");
         const filing = Durability.fileBatch(unfiledBatch());
 
+        visit = "visit-joined";
         opening.lastCall.returnValue.abort();
 
         assert.isFalse(await filing);
