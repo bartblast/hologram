@@ -49,6 +49,7 @@ defmodule HologramSyncTests.Consistency.WriterTest do
     assert [%{writer: :second} = earlier, %{writer: :first} = later] = History.entries(history)
     assert tag_names(earlier.state) == ["second"]
     assert tag_names(later.state) == ["first", "second"]
+    assert is_integer(earlier.min_seq) and is_integer(later.min_seq)
     assert later.min_seq < earlier.min_seq
   end
 
