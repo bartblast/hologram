@@ -37,7 +37,7 @@ defmodule Hologram.Migration.Value.Loader do
     # statements that have to agree.
     {:ok, rows} =
       Connection.snapshot(fn ->
-        load_rows(Map.fetch!(mapping, entity_type), ids, reads, mapping)
+        load_rows(Map.fetch!(mapping, entity_type), "id", ids, reads, mapping)
       end)
 
     ids
@@ -64,21 +64,11 @@ defmodule Hologram.Migration.Value.Loader do
     entry = Map.fetch!(mapping, type)
     column = Enum.find(entry.columns, &(&1.source == {:relationship, ref}))
 
-    statement = """
-    SELECT "id"
-    FROM #{qualified(entry.table)}
-    WHERE #{Mapper.quote_identifier(column.name)} = ANY($1::uuid[])
-    ORDER BY "id"
-    """
-
-    {:ok, %{rows: id_rows}} = Connection.query(statement, [encode_ids(Map.keys(rows))])
-
-    ids = Enum.map(id_rows, fn [id] -> Codec.decode(id, :uuid) end)
     reference = reference_key(ref)
 
     grouped =
       entry
-      |> load_rows(ids, subtree, mapping)
+      |> load_rows(column.name, Map.keys(rows), subtree, mapping)
       |> Map.values()
       |> Enum.group_by(&Map.get(&1, reference))
 
@@ -106,7 +96,7 @@ defmodule Hologram.Migration.Value.Loader do
       |> Enum.uniq()
 
     targets =
-      load_rows(entry_for!(mapping, join_table.target_table), target_ids, subtree, mapping)
+      load_rows(entry_for!(mapping, join_table.target_table), "id", target_ids, subtree, mapping)
 
     # Inside a caller's transaction each statement reads the database as it stands, so a target
     # deleted since the edges were read is simply no longer in the set.
@@ -129,7 +119,8 @@ defmodule Hologram.Migration.Value.Loader do
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
 
-    targets = load_rows(entry_for!(mapping, column.references), target_ids, subtree, mapping)
+    targets =
+      load_rows(entry_for!(mapping, column.references), "id", target_ids, subtree, mapping)
 
     Map.new(rows, fn {id, row} ->
       {id, Map.put(row, name, Map.get(targets, Map.get(row, reference)))}
@@ -161,16 +152,17 @@ defmodule Hologram.Migration.Value.Loader do
 
   defp join_table(entry, name), do: Enum.find(entry.join_tables, &(&1.relationship == name))
 
-  defp load_rows(_entry, [], _reads, _mapping), do: %{}
+  # The rows of the entry whose given uuid column holds one of the given ids, by their own id.
+  defp load_rows(_entry, _column, [], _reads, _mapping), do: %{}
 
-  defp load_rows(entry, ids, reads, mapping) do
+  defp load_rows(entry, column, ids, reads, mapping) do
     columns = Enum.filter(entry.columns, &(field_key(&1) != nil))
     selected = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
 
     statement = """
     SELECT #{selected}
     FROM #{qualified(entry.table)}
-    WHERE "id" = ANY($1::uuid[])
+    WHERE #{Mapper.quote_identifier(column)} = ANY($1::uuid[])
     """
 
     {:ok, %{rows: rows}} = Connection.query(statement, [encode_ids(ids)])
