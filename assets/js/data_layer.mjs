@@ -1100,6 +1100,12 @@ export default class DataLayer {
     }
   }
 
+  // Whether this tab followed a change of user and waits for a handshake to bring the new user's
+  // pair: it dropped the previous user's, so it has none to show (see replicaToReplace).
+  static awaitsPair() {
+    return SyncStream.awaitingPair && Replica.id === null;
+  }
+
   // The pair a stream handshake shows the server when this tab needs a new one, which it mints for
   // the same owner (see Replica.requestMint). A tab that followed a change of user holds none to
   // show, and takes the handshake's pair for the session as it stands (see takeHandshake).

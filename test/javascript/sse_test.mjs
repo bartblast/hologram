@@ -1227,6 +1227,31 @@ describe("Sse", () => {
         assert.isTrue(signal.aborted);
       });
 
+      // It dropped the previous user's pair, and only this handshake brings the next user's. No
+      // stream is left to tell it to ask again.
+      it("sets a deadline on the handshake of a tab waiting for its new user's pair", () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        Replica.id = null;
+        SyncStream.awaitingPair = true;
+
+        fetchStub.returns(new Promise(() => {}));
+
+        try {
+          Sse.connect();
+
+          const {signal} = fetchStub.firstCall.args[1];
+
+          timers.tick(Config.mutationTimeoutMs);
+
+          assert.isTrue(signal.aborted);
+        } finally {
+          SyncStream.awaitingPair = false;
+        }
+      });
+
       it("sets no deadline on a handshake while no identity is wanted", async () => {
         const timers = sinon.useFakeTimers({
           toFake: ["setTimeout", "clearTimeout"],

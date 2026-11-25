@@ -218,8 +218,9 @@ export default class Sse {
     const runId = $.runId;
     const isStale = () => runId !== $.runId;
 
-    // A tab with no identity to send under, waiting for one or refused one, holds its writes until
-    // a handshake brings it. One holding unsent writes may have to put off a reload over this
+    // A tab with no identity to send under, waiting for one or refused one, or one that followed a
+    // change of user and dropped the previous user's, holds its writes until a handshake brings
+    // it. One holding unsent writes may have to put off a reload over this
     // answer, and one that already has needs the answer to decide it. For those, a handshake that
     // never answers is given up on and tried again.
     const controller = new AbortController();
@@ -228,6 +229,7 @@ export default class Sse {
 
     const deadline =
       presented ||
+      Hologram.dataLayer?.awaitsPair() ||
       Hologram.dataLayer?.holdsUnsentWrites() ||
       $.reloadDeferrals > 0
         ? setTimeout(() => controller.abort(), Config.mutationTimeoutMs)
