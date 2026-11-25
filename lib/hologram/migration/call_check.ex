@@ -279,8 +279,8 @@ defmodule Hologram.Migration.CallCheck do
       :tuple_size,
       :update_in
     ],
-    # raise/1 with a message held in a variable.
-    Kernel.Utils => [:raise],
+    # raise/1 with a message held in a variable, and destructure/2 padding the list it's given.
+    Kernel.Utils => [:destructure, :raise],
     Keyword => :all,
     List => [
       :ascii_printable?,

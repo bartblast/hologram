@@ -1106,6 +1106,17 @@ defmodule Hologram.Migration.CallCheckTest do
       assert compile_migration("20260813091522", body).check(2) == 4
     end
 
+    test "passes destructure" do
+      body = ~S"""
+      def first_two(list) do
+        destructure([first, second], list)
+        {first, second}
+      end
+      """
+
+      assert compile_migration("20260813091522", body).first_two([1]) == {1, nil}
+    end
+
     test "passes the other value modules and field access" do
       body = ~S"""
       def values(rows, row) do

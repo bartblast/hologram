@@ -1172,17 +1172,18 @@ defmodule Hologram.Migration.ValueTest do
       end
     end
 
-    test "leaves a pin binding an argument's name with destructure to the call check" do
+    test "accepts a destructure inside a pin binding an argument's name" do
       for call <- ["destructure", "Kernel.destructure"] do
         body = ~s|fn title -> coalesce(title, ^(#{call}([title], ["a"]); title)) end|
 
-        # The call check lists every refused call with its line, so the error carries none.
-        error = assert_raise Hologram.CompileError, fn -> backfill(body) end
+        module = compile_migration("20260813091522", op_with(body, ""))
 
-        assert error.message =~
-                 "app/migrations/20260813091522.ex:5 - calls Kernel.Utils.destructure/2"
-
-        refute error.message =~ "reads its argument title by name"
+        assert [
+                 %{
+                   opts: [backfill: %Value{term: {:coalesce, [{:name, [:title]}, {:value, "a"}]}}]
+                 }
+               ] =
+                 module.__hologram_migration__().ops
       end
     end
 
@@ -1777,7 +1778,7 @@ defmodule Hologram.Migration.ValueTest do
       end
     end
 
-    test "leaves a pin in destructure's pattern to the call check, however it's spelled" do
+    test "keeps a pin inside destructure, however it's spelled" do
       for {call, extra} <- [
             {"destructure([^b, rest], a)", ""},
             {"Kernel.destructure([^b, rest], a)", ""},
@@ -1785,13 +1786,10 @@ defmodule Hologram.Migration.ValueTest do
             {"K.destructure([^b, rest], a)", "alias Kernel, as: K"},
             {"[^b, rest] |> destructure(a)", ""}
           ] do
-        # The call check lists every refused call with its line, so the error carries none.
-        error =
-          assert_raise Hologram.CompileError, fn ->
-            elixir_op(~s(fn a, b -> #{call}; rest end), extra)
-          end
+        {module, _value} = elixir_op(~s(fn a, b -> #{call}; rest end), extra)
 
-        assert error.message =~ "calls Kernel.Utils.destructure/2"
+        assert module.__backfill_0__(["x", "y"], "x") == "y"
+        assert_raise MatchError, fn -> module.__backfill_0__(["x", "y"], "z") end
       end
     end
 

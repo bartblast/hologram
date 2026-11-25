@@ -1779,8 +1779,7 @@ defmodule Hologram.Migration.Value do
     end
   end
 
-  # Kernel.destructure/2 matches its first argument against the list it pads, so a pin there is a
-  # pattern's - and the call check refuses the call, naming the real reason.
+  # Kernel.destructure/2 matches its first argument against the list it pads, so that's a pattern.
   defp without_pattern({op, meta, [pattern, right]}, _env)
        when op in [:=, :<-, :match?, :destructure] do
     {op, meta, [guard_of(pattern), right]}
