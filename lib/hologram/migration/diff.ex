@@ -1,6 +1,7 @@
 defmodule Hologram.Migration.Diff do
   @moduledoc false
 
+  alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
 
   @doc """
@@ -10,8 +11,9 @@ defmodule Hologram.Migration.Diff do
 
   A question carries the detected facts (:kind plus the deleted/created member lists),
   :hints (resolutions that look likely, never auto-selected), and :withheld_ops (the
-  no-intent interpretation, emitted only if the human confirms it). Ops carry no lines -
-  the generator assigns them at render.
+  no-intent interpretation, emitted only if the human confirms it). A :fill question also
+  carries :freeing_ops, the ops taking away a member whose column a fill of the same entity
+  type takes. Ops carry no lines - the generator assigns them at render.
   """
   @spec diff(%{atom => any}, %{atom => any}) :: %{atom => any}
   def diff(replayed, current) do
@@ -30,6 +32,13 @@ defmodule Hologram.Migration.Diff do
   defp add_role_opts(%{extends: []}), do: []
 
   defp add_role_opts(%{extends: extends}), do: [extends: extends]
+
+  # The column a fill's op adds, or nil for a tightening, whose column is already there.
+  defp added_column(%{op: :add_attribute, name: name}), do: Atom.to_string(name)
+
+  defp added_column(%{op: :add_relationship, name: name}), do: Mapper.reference_column_name(name)
+
+  defp added_column(_op), do: nil
 
   defp attribute_changes(old_type, new_type, old_opts, new_opts) do
     type_changes = if old_type == new_type, do: [], else: [type: new_type]
@@ -204,6 +213,7 @@ defmodule Hologram.Migration.Diff do
     plans
     |> merge_plans()
     |> put_key_ops(entity_type, old_entry, new_entry)
+    |> put_freeing_ops(old_entry)
   end
 
   defp diff_entity_roles(entity_type, old_members, new_members) do
@@ -472,6 +482,14 @@ defmodule Hologram.Migration.Diff do
 
   defp fill_member(op), do: {op.op, op.name, op.type, op.opts}
 
+  defp frees_column?(%{op: op}) when op in [:delete_attribute, :delete_relationship], do: true
+
+  # A to-one turning into a to-many leaves its column for a join table.
+  defp frees_column?(%{op: :change_relationship, changes: changes}),
+    do: is_list(Keyword.get(changes, :type))
+
+  defp frees_column?(_op), do: false
+
   defp key_ops(kind, entity_type, keys) do
     Enum.map(keys, &%{op: kind, entity: entity_type, fields: &1})
   end
@@ -535,6 +553,40 @@ defmodule Hologram.Migration.Diff do
       true ->
         List.insert_at(placed, -1, value)
     end
+  end
+
+  # A backfill answering a fill applies apart from the ops around it, so a member a fill adds
+  # can't take the column of one the ops below it take away. Every fill question of the entity
+  # type names the ops freeing such a column, since moving them above the fills changes what each
+  # fill can read.
+  defp put_freeing_ops({ops, questions}, old_entry) do
+    attribute_columns =
+      for {name, _type, _opts} <- old_entry.attributes, do: {name, Atom.to_string(name)}
+
+    to_one_columns =
+      for {name, type, _opts} <- old_entry.relationships,
+          not is_list(type),
+          do: {name, Mapper.reference_column_name(name)}
+
+    old_columns = Map.new(attribute_columns ++ to_one_columns)
+
+    taken =
+      questions
+      |> Enum.filter(&(&1.kind == :fill))
+      |> Enum.flat_map(& &1.withheld_ops)
+      |> Enum.map(&added_column/1)
+      |> Enum.reject(&is_nil/1)
+
+    freeing_ops =
+      Enum.filter(ops, &(frees_column?(&1) and Map.get(old_columns, &1.name) in taken))
+
+    questions =
+      Enum.map(questions, fn
+        %{kind: :fill} = question -> %{question | freeing_ops: freeing_ops}
+        question -> question
+      end)
+
+    {ops, questions}
   end
 
   # A key leaves before the members it names and arrives after them: the replay refuses a
@@ -654,7 +706,8 @@ defmodule Hologram.Migration.Diff do
         entity: entity_type,
         attributes: Enum.map(unfilled, & &1.name),
         members: Enum.map(unfilled, &fill_member/1),
-        withheld_ops: unfilled
+        withheld_ops: unfilled,
+        freeing_ops: []
       }
 
       {filled, Enum.concat(questions, [question])}

@@ -182,6 +182,10 @@ defmodule Hologram.Migration.Generator do
 
   defp entity_of(op), do: Map.get(op, :entity)
 
+  defp freeing_ops(questions) do
+    for %{kind: :fill} = question <- questions, op <- question.freeing_ops, uniq: true, do: op
+  end
+
   # A change making a to-one optional, whatever else it changes but its type. It only ever takes a
   # required edge away, so it can't close a cycle wherever it goes. A retarget stays below, an
   # optional one too: it can add an edge, and the block's own backfill can read through the old
@@ -339,8 +343,8 @@ defmodule Hologram.Migration.Generator do
       other_blocks ++ answered_blocks ++ Enum.map(other_flat_ops, &{:flat, &1})
   end
 
-  # The lines left below the block's own fill that can still end a required to-one, written in the
-  # fill question as a note to move one above the line closing a cycle with it.
+  # The block's lines that can still end a required to-one, written in the fill question as a note
+  # to move one above the line closing a cycle with it.
   defp note_cycle_lines({:block, entity_type, ops, questions}) do
     cycle_lines =
       ops
@@ -678,7 +682,14 @@ defmodule Hologram.Migration.Generator do
       |> fill_entries()
       |> Enum.map(&"  #{&1}")
 
-    render_comment_block(fact_lines ++ api_lines ++ cycle_note(question), question)
+    render_comment_block(
+      fact_lines ++
+        api_lines ++
+        freeing_note(question) ++
+        answers_note(question) ++
+        cycle_note(question),
+      question
+    )
   end
 
   defp render_question(%{kind: :user_entity} = question, _ops) do
@@ -727,6 +738,27 @@ defmodule Hologram.Migration.Generator do
 
   defp cycle_note(_question), do: []
 
+  defp freeing_note(%{freeing_ops: []}), do: []
+
+  defp freeing_note(%{freeing_ops: ops}) do
+    [
+      "The lines above free a column a fill in this block takes. To fill from what one of " <>
+        "them takes away, rename that member there instead, fill from the new name, then " <>
+        "write the line below for the new name, renaming the member back after it if it stays:"
+      | Enum.map(ops, &"  #{render_op(&1)}")
+    ]
+  end
+
+  defp answers_note(%{answers_above: true}) do
+    [
+      "The answers above come first, since one can free a column a fill takes - one taking " <>
+        "away what a backfill reads goes below the fills, or renames the member there and " <>
+        "takes it away below."
+    ]
+  end
+
+  defp answers_note(_question), do: []
+
   defp render_comment_block(lines, question) do
     lines
     |> Enum.map(&"# #{&1}")
@@ -760,16 +792,34 @@ defmodule Hologram.Migration.Generator do
   # creation itself is the header, never a member line. Questions come first inside the
   # block, so what needs a human is what a reader meets - after the keys that leave, though:
   # an answer is written where its question sits, and one that brings a member under a name
-  # a leaving key still holds would be refused with the key's delete two lines below it.
+  # a leaving key still holds would be refused with the key's delete two lines below it. A
+  # backfill applies apart from the ops below it, so the fills come last among the questions,
+  # below the answers that can take away a member whose column one takes, with the ops freeing
+  # such a column right above them.
   defp render_section({:block, entity_type, ops, questions}) do
     {creations, member_ops} = Enum.split_with(ops, &(&1.op == :create_entity))
-    {key_deletes, later_ops} = Enum.split_with(member_ops, &(&1.op == :delete_unique))
+    {key_deletes, other_ops} = Enum.split_with(member_ops, &(&1.op == :delete_unique))
+    freed = freeing_ops(questions)
+    {freeing_ops, later_ops} = Enum.split_with(other_ops, &(&1 in freed))
+    {fills, other_questions} = Enum.split_with(questions, &(&1.kind == :fill))
+    answers_above? = Enum.any?(other_questions, &(&1.kind in [:attributes, :relationships]))
     verb = if creations == [], do: "change_entity", else: "create_entity"
 
-    key_delete_lines = Enum.map(key_deletes, &"#{@indent}#{render_op(&1)}")
-    question_lines = Enum.map(questions, &indent(render_question(&1, later_ops)))
-    op_lines = Enum.map(later_ops, &"#{@indent}#{render_op(&1)}")
-    body = Enum.join(key_delete_lines ++ question_lines ++ op_lines, "\n")
+    body =
+      [
+        Enum.map(key_deletes, &"#{@indent}#{render_op(&1)}"),
+        Enum.map(other_questions, &indent(render_question(&1, freeing_ops ++ later_ops))),
+        Enum.map(freeing_ops, &"#{@indent}#{render_op(&1)}"),
+        Enum.map(fills, fn fill ->
+          fill
+          |> Map.put(:answers_above, answers_above?)
+          |> render_question(later_ops)
+          |> indent()
+        end),
+        Enum.map(later_ops, &"#{@indent}#{render_op(&1)}")
+      ]
+      |> Enum.concat()
+      |> Enum.join("\n")
 
     "#{verb} #{inspect(entity_type)} do\n#{body}\nend"
   end

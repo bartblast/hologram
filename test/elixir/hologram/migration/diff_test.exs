@@ -297,7 +297,8 @@ defmodule Hologram.Migration.DiffTest do
                        type: :string,
                        opts: []
                      }
-                   ]
+                   ],
+                   freeing_ops: []
                  }
                ]
              }
@@ -436,10 +437,76 @@ defmodule Hologram.Migration.DiffTest do
                    entity: MyApp.Task,
                    attributes: [:owner],
                    members: [{:add_relationship, :owner, MyApp.User, []}],
-                   withheld_ops: [op]
+                   withheld_ops: [op],
+                   freeing_ops: []
                  }
                ]
              }
+    end
+
+    # A backfill applies apart from the ops around it, so the added member couldn't take the
+    # column while the deleted one still holds it.
+    test "names in every fill question of an entity type the ops freeing a column one takes" do
+      replayed =
+        model(%{
+          MyApp.Item => %{relationships: [{:place, MyApp.Place, []}]},
+          MyApp.Note => %{attributes: [{:place_id, :uuid, [optional: true]}]},
+          MyApp.Place => %{},
+          MyApp.Task => %{
+            relationships: [
+              {:owner, MyApp.Place, [optional: true]},
+              {:place, MyApp.Place, [optional: true]},
+              {:tags, [MyApp.Place], []}
+            ]
+          }
+        })
+
+      current =
+        model(%{
+          MyApp.Item => %{
+            attributes: [{:place_id, :uuid, []}],
+            relationships: [{:place, [MyApp.Place], []}]
+          },
+          MyApp.Note => %{relationships: [{:place, MyApp.Place, []}]},
+          MyApp.Place => %{},
+          MyApp.Task => %{
+            attributes: [{:place_id, :uuid, []}, {:tags_id, :uuid, []}],
+            relationships: [{:owner, MyApp.Place, []}]
+          }
+        })
+
+      assert %{ops: ops, questions: questions} = diff(replayed, current)
+
+      to_many = %{
+        op: :change_relationship,
+        entity: MyApp.Item,
+        name: :place,
+        changes: [type: [MyApp.Place]]
+      }
+
+      delete_attribute = %{op: :delete_attribute, entity: MyApp.Note, name: :place_id}
+      delete_to_one = %{op: :delete_relationship, entity: MyApp.Task, name: :place}
+
+      assert to_many in ops
+      assert delete_attribute in ops
+      assert delete_to_one in ops
+      assert %{op: :delete_relationship, entity: MyApp.Task, name: :tags} in ops
+
+      # A to-many holds no column, so deleting one frees none.
+      assert [
+               %{entity: MyApp.Item, freeing_ops: [^to_many]},
+               %{entity: MyApp.Note, freeing_ops: [^delete_attribute]},
+               %{
+                 entity: MyApp.Task,
+                 attributes: [:place_id, :tags_id],
+                 freeing_ops: [^delete_to_one]
+               },
+               %{entity: MyApp.Task, attributes: [:owner], freeing_ops: [^delete_to_one]}
+             ] =
+               Enum.sort_by(
+                 questions,
+                 &{inspect(&1.entity), &1.attributes != [:place_id, :tags_id]}
+               )
     end
 
     test "withholds an attribute turning required with no default into a question" do
@@ -456,7 +523,8 @@ defmodule Hologram.Migration.DiffTest do
                    entity: MyApp.Task,
                    attributes: [:title],
                    members: [{:change_attribute, :title, [optional: false]}],
-                   withheld_ops: [op]
+                   withheld_ops: [op],
+                   freeing_ops: []
                  }
                ]
              }

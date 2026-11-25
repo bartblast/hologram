@@ -236,6 +236,118 @@ defmodule Hologram.Migration.GeneratorTest do
       assert written =~ "delete_relationship :place"
     end
 
+    # A backfill applies apart from the ops around it, so the answer can't take the column while
+    # the to-one below it still holds it. Each case gives the lines freeing the column and the
+    # edits answering the draft.
+    fill = "resolve! :fill, attributes: [:place_id]"
+    delete = "delete_relationship :place"
+    to_many = "change_relationship :place, type: [MyApp.Place]"
+
+    for {label, current_extra, freeing_lines, edits} <- [
+          {"a deleted to-one, answered from a value", %{}, [delete],
+           [{fill, "add_attribute :place_id, :uuid, backfill: backup_id"}]},
+          {"a deleted to-one, answered from it renamed", %{}, [delete],
+           [
+             {"#{delete}\n    # RESOLVE",
+              "rename_relationship :place, :old_place\n    # RESOLVE"},
+             {fill,
+              "add_attribute :place_id, :uuid, backfill: old_place.id\n" <>
+                "    delete_relationship :old_place"}
+           ]},
+          {"a to-one turning to-many, answered from a value",
+           %{relationships: [{:place, [MyApp.Place], [optional: true]}]}, [to_many],
+           [{fill, "add_attribute :place_id, :uuid, backfill: backup_id"}]},
+          {"a to-one turning to-many, answered from it renamed",
+           %{relationships: [{:place, [MyApp.Place], [optional: true]}]}, [to_many],
+           [
+             {"#{to_many}\n    # RESOLVE",
+              "rename_relationship :place, :old_place\n    # RESOLVE"},
+             {fill,
+              "add_attribute :place_id, :uuid, backfill: old_place.id\n" <>
+                "    change_relationship :old_place, type: [MyApp.Place]\n" <>
+                "    rename_relationship :old_place, :place"}
+           ]},
+          {"a to-one an answer deletes, answered from a value",
+           %{relationships: [{:venue, MyApp.Place, [optional: true]}]}, [],
+           [
+             {"resolve! :relationships, deleted: [:place], added: [:venue]",
+              "delete_relationship :place\n" <>
+                "    add_relationship :venue, MyApp.Place, optional: true"},
+             {fill, "add_attribute :place_id, :uuid, backfill: backup_id"}
+           ]},
+          {"a to-one an answer deletes, answered from it renamed",
+           %{relationships: [{:venue, MyApp.Place, [optional: true]}]}, [],
+           [
+             {"resolve! :relationships, deleted: [:place], added: [:venue]",
+              "rename_relationship :place, :old_place\n" <>
+                "    add_relationship :venue, MyApp.Place, optional: true"},
+             {fill,
+              "add_attribute :place_id, :uuid, backfill: old_place.id\n" <>
+                "    delete_relationship :old_place"}
+           ]}
+        ] do
+      @tag :database
+      test "lets a fill take a column a to-one frees: #{label}" do
+        opts = opts!("takes_column_required")
+
+        migrations =
+          history([
+            {"20260813091521",
+             """
+             create_entity MyApp.Place
+
+             create_entity MyApp.Task do
+               add_relationship :place, MyApp.Place, optional: true
+               add_attribute :backup_id, :uuid, default: "00000000-0000-0000-0000-000000000001"
+             end
+             """}
+          ])
+
+        task =
+          Map.merge(
+            %{attributes: [], relationships: []},
+            unquote(Macro.escape(current_extra)),
+            fn _key, left, right -> left ++ right end
+          )
+
+        current =
+          model(%{
+            MyApp.Place => %{},
+            MyApp.Task => %{
+              task
+              | attributes:
+                  Enum.sort([
+                    {:backup_id, :uuid, [default: "00000000-0000-0000-0000-000000000001"]},
+                    {:place_id, :uuid, []} | task.attributes
+                  ])
+            }
+          })
+
+        assert {:ok, path, _question_count} = generate(migrations, current, @timestamp, opts)
+
+        draft = File.read!(path)
+
+        for line <- unquote(freeing_lines) do
+          assert draft =~ ~r/#{Regex.escape(line)}\n *# RESOLVE: :place_id is required/
+          assert draft =~ "#   #{line}\n"
+        end
+
+        answered =
+          Enum.reduce(unquote(edits), draft, fn {from, to}, text ->
+            assert [_before, _after] = String.split(text, from)
+            String.replace(text, from, to)
+          end)
+
+        File.write!(path, answered)
+        Code.compile_file(path)
+
+        [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+        history = Enum.concat(migrations, [migration])
+
+        assert generate(history, current, @timestamp, opts) == :nothing_to_do
+      end
+    end
+
     # Only the final model is free of a required cycle, so the swap must not split the file into
     # parts that each have to stand.
     @tag :database
@@ -999,7 +1111,8 @@ defmodule Hologram.Migration.GeneratorTest do
             entity: MyApp.Task,
             attributes: [:owner],
             members: [{:add_relationship, :owner, MyApp.User, []}],
-            withheld_ops: []
+            withheld_ops: [],
+            freeing_ops: []
           }
         ]
       }
@@ -1020,7 +1133,8 @@ defmodule Hologram.Migration.GeneratorTest do
             entity: MyApp.Task,
             attributes: [:title],
             members: [{:change_attribute, :title, [optional: false]}],
-            withheld_ops: []
+            withheld_ops: [],
+            freeing_ops: []
           }
         ]
       }
@@ -1048,7 +1162,8 @@ defmodule Hologram.Migration.GeneratorTest do
           entity: entity,
           attributes: [name],
           members: [{:change_attribute, name, [optional: false]}],
-          withheld_ops: []
+          withheld_ops: [],
+          freeing_ops: []
         }
       end
 
@@ -1081,7 +1196,8 @@ defmodule Hologram.Migration.GeneratorTest do
           entity: entity,
           attributes: [name],
           members: [{:change_attribute, name, [optional: false]}],
-          withheld_ops: []
+          withheld_ops: [],
+          freeing_ops: []
         }
       end
 
@@ -1128,7 +1244,8 @@ defmodule Hologram.Migration.GeneratorTest do
           entity: entity,
           attributes: [name],
           members: [{:change_attribute, name, [optional: false]}],
-          withheld_ops: []
+          withheld_ops: [],
+          freeing_ops: []
         }
       end
 
@@ -1160,7 +1277,7 @@ defmodule Hologram.Migration.GeneratorTest do
         ]
       }
 
-      [_before_questions, alpha_question, beta_question, _rename_question] =
+      [_before_questions, alpha_question, _rename_question, beta_question] =
         plan
         |> render(@module)
         |> String.split("# RESOLVE:")
@@ -1230,13 +1347,122 @@ defmodule Hologram.Migration.GeneratorTest do
               entity: MyApp.Alpha,
               attributes: [:title],
               members: [{:change_attribute, :title, [optional: false]}],
-              withheld_ops: []
+              withheld_ops: [],
+              freeing_ops: []
             }
             | Enum.map(unquote(Macro.escape(gamma_questions)), in_gamma)
           ]
         }
 
         assert render(plan, @module) =~ "#   delete_relationship :e\n" == unquote(noted?)
+      end
+    end
+
+    # An answer can take away a member whose column a fill takes, so the fills come below it.
+    test "writes the fills last, with the ops freeing a column one takes above them" do
+      to_many = %{
+        op: :change_relationship,
+        entity: MyApp.Beta,
+        name: :place,
+        changes: [type: [MyApp.Alpha]]
+      }
+
+      fill = %{kind: :fill, withheld_ops: [], freeing_ops: []}
+
+      plan = %{
+        ops: [%{op: :delete_attribute, entity: MyApp.Beta, name: :note}, to_many],
+        questions: [
+          Map.merge(fill, %{
+            entity: MyApp.Alpha,
+            attributes: [:title],
+            members: [{:change_attribute, :title, [optional: false]}]
+          }),
+          Map.merge(fill, %{
+            entity: MyApp.Beta,
+            attributes: [:place_id],
+            members: [{:add_attribute, :place_id, :uuid, []}],
+            freeing_ops: [to_many]
+          }),
+          %{
+            kind: :relationships,
+            entity: MyApp.Beta,
+            deleted: [:foo],
+            added: [:bar],
+            hints: [],
+            withheld_ops: [%{op: :delete_unique, entity: MyApp.Beta, fields: [:foo, :place]}]
+          },
+          Map.merge(fill, %{
+            entity: MyApp.Beta,
+            attributes: [:rank],
+            members: [{:change_attribute, :rank, [optional: false]}],
+            freeing_ops: [to_many]
+          })
+        ]
+      }
+
+      [_alpha_block, beta_block] =
+        plan
+        |> render(@module)
+        |> String.split("change_entity MyApp.Beta do\n")
+
+      [_header, rename_question, place_question, rank_question] =
+        String.split(beta_block, "# RESOLVE:")
+
+      # The to-many change still takes :place from under the key the answer can respell.
+      assert rename_question =~ "the ops below take :place from it"
+
+      assert [_question, "\n    change_relationship :place, type: [MyApp.Alpha]\n    "] =
+               String.split(rename_question, ~r/resolve! :relationships, .*/)
+
+      notes =
+        "    # The lines above free a column a fill in this block takes. To fill from what one " <>
+          "of them takes away, rename that member there instead, fill from the new name, then " <>
+          "write the line below for the new name, renaming the member back after it if it " <>
+          "stays:\n" <>
+          "    #   change_relationship :place, type: [MyApp.Alpha]\n" <>
+          "    # The answers above come first, since one can free a column a fill takes - one " <>
+          "taking away what a backfill reads goes below the fills, or renames the member there " <>
+          "and takes it away below.\n"
+
+      assert place_question =~ notes
+      assert rank_question =~ notes
+
+      # Above the fills it can still end a cycle a line in an earlier block closes.
+      assert place_question =~
+               ~r/ends a cycle of required to-ones.*\n    #   change_relationship :place, type: /
+
+      assert rank_question =~
+               "resolve! :fill, attributes: [:rank]\n    delete_attribute :note\n  end\nend"
+    end
+
+    # A roles answer frees no column.
+    for {label, other_questions} <- [
+          {"nothing else", []},
+          {"only roles",
+           [
+             %{
+               kind: :roles,
+               entity: MyApp.Task,
+               deleted: [MyApp.Roles.Legacy],
+               added: [MyApp.Roles.Maintainer],
+               hints: [],
+               withheld_ops: []
+             }
+           ]}
+        ] do
+      test "notes no answers above a fill whose block asks #{label} besides" do
+        fill = %{
+          kind: :fill,
+          entity: MyApp.Task,
+          attributes: [:rank],
+          members: [{:change_attribute, :rank, [optional: false]}],
+          withheld_ops: [],
+          freeing_ops: []
+        }
+
+        plan = %{ops: [], questions: [fill | unquote(Macro.escape(other_questions))]}
+
+        refute render(plan, @module) =~ "The answers above"
       end
     end
 
@@ -1249,7 +1475,8 @@ defmodule Hologram.Migration.GeneratorTest do
             entity: MyApp.Task,
             attributes: [:rank],
             members: [{:change_attribute, :rank, [optional: false, type: :string]}],
-            withheld_ops: []
+            withheld_ops: [],
+            freeing_ops: []
           }
         ]
       }
@@ -1274,7 +1501,8 @@ defmodule Hologram.Migration.GeneratorTest do
             entity: MyApp.Task,
             attributes: [:rank],
             members: [{:change_attribute, :rank, [max: 10, optional: false]}],
-            withheld_ops: []
+            withheld_ops: [],
+            freeing_ops: []
           }
         ]
       }
@@ -1316,7 +1544,8 @@ defmodule Hologram.Migration.GeneratorTest do
             entity: MyApp.Task,
             attributes: [:title],
             members: [{:add_attribute, :title, :string, []}],
-            withheld_ops: []
+            withheld_ops: [],
+            freeing_ops: []
           }
         ]
       }
@@ -1346,7 +1575,8 @@ defmodule Hologram.Migration.GeneratorTest do
             entity: MyApp.Task,
             attributes: [:slug],
             members: [{:add_attribute, :slug, :string, [unique: true]}],
-            withheld_ops: []
+            withheld_ops: [],
+            freeing_ops: []
           }
         ]
       }
@@ -1632,7 +1862,8 @@ defmodule Hologram.Migration.GeneratorTest do
             entity: MyApp.Task,
             attributes: [:owner],
             members: [{:add_attribute, :owner, :string, []}],
-            withheld_ops: []
+            withheld_ops: [],
+            freeing_ops: []
           }
         ]
       }
