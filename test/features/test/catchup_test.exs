@@ -11,6 +11,8 @@ defmodule HologramFeatureTests.CatchupTest do
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.SyncPage
 
+  @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
+
   # The browser end of a returning client's catch-up, which `sync_test.exs` checks on the wire.
   #
   # The lever is a stream killed while its next attach is held back by a cookie: the change written
@@ -67,7 +69,9 @@ defmodule HologramFeatureTests.CatchupTest do
   #
   # After the reload the stream is held back for longer than the test reads, so what the page
   # reads - its place, the folder that stays readable, and no document - can only have come out
-  # of the browser's own store.
+  # of the browser's own store. The hold outlasts the fill wait, and the test checks that the reads
+  # ended before the hold did: a browser that lost its place would otherwise have it handed back by
+  # a fill from the server, and pass.
   feature "drops a row its folder going private hid while away, for good", %{session: session} do
     folder =
       %{name: "shut_folder", public: true}
@@ -82,6 +86,10 @@ defmodule HologramFeatureTests.CatchupTest do
     |> Document.new()
     |> DB.create!()
 
+    await_log_settled()
+
+    hold_ms = 2 * @max_wait_time
+
     session
     |> visit(SyncPage)
     |> await_local_fill()
@@ -90,8 +98,13 @@ defmodule HologramFeatureTests.CatchupTest do
     |> await_local_read("Read the document's folder locally", "local_document_folder", "missing")
     |> assert_caught_up()
     |> await_durable_writes()
-    |> hold_attach(30_000)
+    |> hold_attach(hold_ms)
     |> mark_document()
+
+    # Taken before the reload, so before the stream's request and the start of its hold.
+    reloaded_at = System.monotonic_time(:millisecond)
+
+    session
     |> reload()
     |> wait_for_unmarked_document()
     |> await_local_fill()
@@ -99,6 +112,9 @@ defmodule HologramFeatureTests.CatchupTest do
     |> assert_text(css("#local_folder"), "kept_folder")
     |> click(button("Read the document's folder locally"))
     |> assert_text(css("#local_document_folder"), "missing")
+
+    assert System.monotonic_time(:millisecond) - reloaded_at < hold_ms,
+           "the reads outlasted the stream's hold, so a server fill could have answered them"
   end
 
   feature "hands over a row its folder going public opened while away", %{session: session} do
@@ -110,6 +126,8 @@ defmodule HologramFeatureTests.CatchupTest do
     %{folder_id: folder.id, public: false, title: "points_at_the_folder"}
     |> Document.new()
     |> DB.create!()
+
+    await_log_settled()
 
     session
     |> visit(SyncPage)

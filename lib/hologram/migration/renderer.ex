@@ -583,7 +583,7 @@ defmodule Hologram.Migration.Renderer do
   # database holding the right values in the wrong order, which the drift check refuses on the
   # next boot - after the file has committed, so nothing revisits it and no generated migration
   # can repair it. Such a rename is rendered as a type REBUILD instead, carrying the rows over
-  # with an unscoped remap: the value is a table name or a global role's module name, which
+  # with an unscoped remap: the value is an entity type's or a global role's module name, which
   # nothing else holds, so every row holding it is a row that follows the rename.
   #
   # The cheap in-place rename is kept for the case it is correct for - a new label that sorts

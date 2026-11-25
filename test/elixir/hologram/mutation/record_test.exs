@@ -204,6 +204,30 @@ defmodule Hologram.Mutation.RecordTest do
       assert %DateTime{} = row.answered_at
     end
 
+    test "spells a NUL as U+FFFD in every string of the kept batch, keys included" do
+      envelope = %{
+        "seq" => 1,
+        "writes" => [%{"data" => %{"a\0b" => "c\0d\0", "n" => 1, "x" => nil}}]
+      }
+
+      assert refuse!(@replica_id, 1, Entity.generate_id(), "h", envelope, @answer) == :ok
+
+      assert [%{envelope: kept}] = rows()
+
+      assert kept == %{
+               "seq" => 1,
+               "writes" => [%{"data" => %{"a�b" => "c�d�", "n" => 1, "x" => nil}}]
+             }
+    end
+
+    test "keeps a struct the host app's JSON decoder put in the batch" do
+      envelope = %{"seq" => 1, "writes" => [%{"data" => %{"on" => ~D[2026-01-02]}}]}
+
+      assert refuse!(@replica_id, 1, Entity.generate_id(), "h", envelope, @answer) == :ok
+
+      assert [%{envelope: %{"writes" => [%{"data" => %{"on" => "2026-01-02"}}]}}] = rows()
+    end
+
     test "keeps the first of two refusals of one batch" do
       user_id = Entity.generate_id()
 

@@ -72,6 +72,11 @@ excluded_tags = ExUnit.configuration()[:exclude]
 
 ExUnit.start(exclude: exclude_opts)
 
+# The library's own project declares no application callback, so nothing else starts the spawn
+# mark for the run, and a session marks the processes it starts whether or not a run has a
+# database.
+{:ok, _spawn_mark_pid} = Hologram.Auth.SpawnMark.start_link([])
+
 # A run that excludes the database tests (the modules of DatabaseCase and ScratchDatabaseCase,
 # and the tests tagged :database by hand) needs no server. It still needs the mapping and the
 # clock, which code that never touches a server reads. Every other run boots the database
@@ -102,6 +107,34 @@ else
     Hologram.DB.SchemaReconciler.reconcile(Hologram.DB.reconciliation_context())
   after
     :ok = DBConnection.Ownership.ownership_checkin(pool_name, [])
+  end
+
+  # The suite needs a role that can create databases. A test that revokes a catalog grant needs a
+  # superuser, so it's left out for a role that isn't one - but never on CI, where leaving it out
+  # would mean nothing runs it.
+  {:ok, role_session} =
+    []
+    |> Hologram.DB.Config.connection_opts()
+    |> Postgrex.start_link()
+
+  %{rows: [[superuser?]]} =
+    Postgrex.query!(
+      role_session,
+      "SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user",
+      []
+    )
+
+  GenServer.stop(role_session)
+
+  cond do
+    superuser? ->
+      :ok
+
+    System.get_env("CI") ->
+      raise "the CI database role has to be a superuser, or the :requires_superuser tests don't run"
+
+    true ->
+      ExUnit.configure(exclude: [:requires_superuser | ExUnit.configuration()[:exclude]])
   end
 end
 

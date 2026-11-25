@@ -56,7 +56,7 @@ defmodule Hologram.DB.Schema do
   dropped tables emit their :drop_foreign_key ops, and
   nothing else (their columns and indexes die with them, and block nothing meanwhile,
   but a foreign key outlives its table long enough to refuse the drop of the table it
-  references, which another drop in the same diff may be). Raises ArgumentError when
+  references, which another drop in the same diff may be). Raises RuntimeError when
   primary key columns mismatch - no derivable schema can produce that, so it means a
   hand-edited database.
 
@@ -648,8 +648,7 @@ defmodule Hologram.DB.Schema do
   defp pk_rename_ops(table, actual_pk, target_pk) do
     cond do
       actual_pk.columns != target_pk.columns ->
-        raise ArgumentError,
-              "primary key columns mismatch on table \"#{table}\" " <>
+        raise "primary key columns mismatch on table \"#{table}\" " <>
                 "(actual: #{inspect(actual_pk.columns)}, target: #{inspect(target_pk.columns)}) - " <>
                 "no derivable schema can produce this, the database was edited by hand"
 

@@ -386,8 +386,27 @@ defmodule Hologram.Realtime.SSETest do
                policy_hash: nil,
                protocol_version: 1,
                replica_id: nil,
-               replica_token: nil
+               replica_token: nil,
+               synced_types: nil
              }
+    end
+
+    test "reads the entity types a bundle names" do
+      conn = Plug.Test.conn(:get, sync_query_string("&synced_types=MyApp.Card,MyApp.List"))
+
+      assert greeting(conn).synced_types == ["MyApp.Card", "MyApp.List"]
+    end
+
+    test "reads entity types sent as anything but one string as not said" do
+      conn = Plug.Test.conn(:get, sync_query_string("&synced_types[]=MyApp.Card"))
+
+      assert greeting(conn).synced_types == nil
+    end
+
+    test "reads an empty list of entity types as a bundle reading rows of no type" do
+      conn = Plug.Test.conn(:get, sync_query_string("&synced_types="))
+
+      assert greeting(conn).synced_types == []
     end
 
     test "reads the rules a bundle checking permissions was built with" do
@@ -507,6 +526,25 @@ defmodule Hologram.Realtime.SSETest do
       assert opts[:applied_seq] == 3
       assert opts[:fill_place] == {200, 0}
       assert opts[:replica_id] == nil
+    end
+
+    test "hands the session how an old client is served" do
+      start =
+        nil
+        |> sync_start()
+        |> Map.merge(%{lens: :a_lens, synced_types: [MyApp.Card]})
+
+      opts = sync_session_opts(nil, MyApp.Page, @policy_hash, start, connection())
+
+      assert opts[:lens] == :a_lens
+      assert opts[:synced_types] == [MyApp.Card]
+    end
+
+    test "hands a client of this model no lens and the build's types" do
+      opts = sync_session_opts(nil, MyApp.Page, @policy_hash, sync_start(nil), connection())
+
+      assert opts[:lens] == nil
+      assert opts[:synced_types] == nil
     end
   end
 
@@ -1147,7 +1185,7 @@ defmodule Hologram.Realtime.SSETest do
     test "halts when the sync session ended" do
       conn = prepared_test_conn()
       session = spawn(fn -> :ok end)
-      send(self(), {:EXIT, session, :behind_the_ring})
+      send(self(), {:EXIT, session, :client_stalled})
 
       assert {:halt, ^conn} = process_message(conn, nil, nil, sync_session: session)
     end

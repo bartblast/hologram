@@ -21,6 +21,11 @@ defmodule Hologram.Entity.ValidatorTest do
   # Where a declaration on the given line of this file is, as a whole-model refusal spells it.
   defp location(line), do: "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: "
 
+  defmodule AnyDayCalendar do
+    @spec valid_date?(integer, integer, integer) :: boolean
+    def valid_date?(_year, _month, _day), do: true
+  end
+
   describe "attribute_value_valid?/3" do
     test "validates :boolean values" do
       assert attribute_value_valid?(true, :boolean)
@@ -47,6 +52,39 @@ defmodule Hologram.Entity.ValidatorTest do
       refute attribute_value_valid?(%Date{year: 2026, month: 6, day: 15.5}, :date)
       refute attribute_value_valid?(%Date{year: "2026", month: 6, day: 15}, :date)
       refute attribute_value_valid?(%Date{year: 2026, month: :june, day: 15}, :date)
+    end
+
+    test "accepts a :date only within what a date column holds" do
+      assert attribute_value_valid?(Date.new!(-4713, 11, 24), :date)
+      assert attribute_value_valid?(Date.new!(5_874_897, 12, 31), :date)
+      refute attribute_value_valid?(Date.new!(-4713, 11, 23), :date)
+      refute attribute_value_valid?(Date.new!(-5000, 1, 1), :date)
+      refute attribute_value_valid?(Date.new!(5_874_898, 1, 1), :date)
+    end
+
+    test "refuses a :date in a calendar the driver can't encode" do
+      refute attribute_value_valid?(%{~D[2026-01-01] | calendar: AnyDayCalendar}, :date)
+    end
+
+    test "accepts a :datetime only within what can be stored" do
+      assert attribute_value_valid?(~U[-4713-11-24 00:00:00.000000Z], :datetime)
+      assert attribute_value_valid?(~U[9999-12-31 23:59:59.999999Z], :datetime)
+      refute attribute_value_valid?(~U[-4713-11-23 23:59:59.999999Z], :datetime)
+      refute attribute_value_valid?(%{~U[0000-01-01 00:00:00.000000Z] | year: 10_000}, :datetime)
+    end
+
+    test "judges a :datetime by its instant, so an offset can move it past either end" do
+      assert attribute_value_valid?(%{~U[9999-12-31 23:59:59Z] | utc_offset: 3600}, :datetime)
+      refute attribute_value_valid?(%{~U[9999-12-31 23:59:59Z] | utc_offset: -3600}, :datetime)
+
+      assert attribute_value_valid?(
+               %{~U[-4713-11-24 00:00:00Z] | utc_offset: -3600},
+               :datetime
+             )
+
+      refute attribute_value_valid?(%{~U[-4713-11-24 00:00:00Z] | utc_offset: 3600}, :datetime)
+      refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | std_offset: 3600.5}, :datetime)
+      refute attribute_value_valid?(%{~U[2026-07-17 12:00:00Z] | utc_offset: "0"}, :datetime)
     end
 
     test "validates :datetime values" do
@@ -119,6 +157,11 @@ defmodule Hologram.Entity.ValidatorTest do
       refute attribute_value_valid?(:abc, :string)
     end
 
+    test "refuses a :string holding a NUL, which a text column can't store" do
+      refute attribute_value_valid?("a\0b", :string)
+      refute attribute_value_valid?("\0", :string)
+    end
+
     test "validates :time values" do
       assert attribute_value_valid?(~T[11:00:00], :time)
       assert attribute_value_valid?(~T[11:00:00.123456], :time)
@@ -157,6 +200,10 @@ defmodule Hologram.Entity.ValidatorTest do
                %Time{hour: 0, minute: 0, second: 0, microsecond: {0, 7}, calendar: Calendar.ISO},
                :time
              )
+    end
+
+    test "refuses a :time in a calendar the driver can't encode" do
+      refute attribute_value_valid?(%{~T[01:00:00] | calendar: AnyDayCalendar}, :time)
     end
 
     test "refuses a :time whose fields are not integers" do
@@ -1373,6 +1420,45 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           attribute :count, :integer, min: 1.5
+        end
+      end
+    end
+
+    test "rejects a default no column can store" do
+      expected_msg =
+        ~s(invalid default value <<97, 0>> for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture201 - the default value must match the attribute type :string)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture201 do
+          use Hologram.Entity
+
+          attribute :title, :string, default: "a\0"
+        end
+      end
+    end
+
+    test "rejects a min option no column can store" do
+      expected_msg =
+        "invalid min option ~D[-5000-01-01] for attribute :held_on in Hologram.Entity.ValidatorTest.InlineEntityFixture202 - the min option must match the attribute type :date"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture202 do
+          use Hologram.Entity
+
+          attribute :held_on, :date, min: ~D[-5000-01-01]
+        end
+      end
+    end
+
+    test "rejects a max option no column can store" do
+      expected_msg =
+        "invalid max option ~U[-5000-01-01 00:00:00Z] for attribute :starts_at in Hologram.Entity.ValidatorTest.InlineEntityFixture203 - the max option must match the attribute type :datetime"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture203 do
+          use Hologram.Entity
+
+          attribute :starts_at, :datetime, max: ~U[-5000-01-01 00:00:00Z]
         end
       end
     end

@@ -31,7 +31,7 @@ defmodule Hologram.Policy.Expression do
   in a list or alone. `via:` lowers a bare name to an atom and a path to the list of its names,
   alone or as the relationship of an `{operation, relationship}` tuple (`{:update, project}` to
   `{:update, :project}`, `trip.user` to `[:trip, :user]`). `when:`
-  lowers through `Hologram.Query.Expression.condition/2`. A pinned `as:`, `except:`, `only:`, `to:`, `via:` or `when:` value, a pinned
+  lowers through `Hologram.Query.Expression.condition/3`. A pinned `as:`, `except:`, `only:`, `to:`, `via:` or `when:` value, a pinned
   element of a `to:` list, a pinned role or scope of a grant reference and a pinned operation or
   relationship of a delegation lower to the expression.
   `__MODULE__` names a module wherever a module goes. A nil `to:` or `via:` value and a list
@@ -46,7 +46,7 @@ defmodule Hologram.Policy.Expression do
   a bare name, on a delegation written as an atom, on a delegation with the relationship first or
   with an operation that is not an atom, on a pinned bare name no variable of the surrounding code
   holds where `via:` names a relationship (naming the bare spelling), on what
-  `Hologram.Query.Expression.condition/2` refuses in a `when:`, and on anything else.
+  `Hologram.Query.Expression.condition/3` refuses in a `when:`, and on anything else.
   """
   @spec spec(Macro.t(), Macro.t(), Macro.Env.t()) :: Macro.t()
   def spec(operation, spec, env) when is_list(spec) do
@@ -195,6 +195,14 @@ defmodule Hologram.Policy.Expression do
 
   defp grant_references!(ast, env), do: grant_reference!(ast, env)
 
+  # A role or an operation as a hint can repeat it, or the given example for a pin no variable holds,
+  # which the hint would be refused for.
+  defp hinted_name(ast, example, env) do
+    if pinned?(ast) and not QueryExpression.pin_holds_value?(ast, env),
+      do: example,
+      else: Macro.to_string(ast)
+  end
+
   # An atom (nil, true and false included), a number, a string, a module name, or a number with a
   # sign.
   defp literal?(value) when is_atom(value) or is_number(value) or is_binary(value), do: true
@@ -240,12 +248,24 @@ defmodule Hologram.Policy.Expression do
 
   defp option!({:only, value}, _operation, env), do: {:only, field_names!(value, :only, env)}
 
-  defp option!({:to, value}, _operation, env), do: {:to, grant_references!(value, env)}
+  defp option!({:to, value}, operation, env) do
+    references = List.wrap(value)
+    alone? = match?([_reference], references)
 
-  defp option!({:via, value}, _operation, env), do: {:via, delegation!(value, env)}
+    Enum.each(references, &refuse_new_reference!(&1, alone?, operation, env))
 
-  defp option!({:when, value}, _operation, env),
-    do: {:when, QueryExpression.condition(value, env)}
+    {:to, grant_references!(value, env)}
+  end
+
+  defp option!({:via, value}, operation, env) do
+    refuse_new_delegation!(value, operation, env)
+
+    {:via, delegation!(value, env)}
+  end
+
+  # Only an update has a row after the change for new() to read.
+  defp option!({:when, value}, operation, env),
+    do: {:when, QueryExpression.condition(value, env, operation == :update)}
 
   defp option!({key, value}, operation, env) when is_atom(key),
     do: unknown_option!(key, value, operation, env)
@@ -309,6 +329,77 @@ defmodule Hologram.Policy.Expression do
   defp relationship_first?({first, second}) do
     ((bare_name?(first) or path?(first)) and name_atom?(second)) or
       (path?(first) and pinned?(second))
+  end
+
+  # to: and via: read the stored row, and each has a condition word for the row a change leads to.
+  # A new() the word couldn't be written with is left to the option's own refusal.
+  defp refuse_new_delegation!({first, second} = ast, operation, env) do
+    cond do
+      QueryExpression.new_path?(second) and atom_or_pin?(first) ->
+        new_delegation_error!(ast, hinted_name(first, ":update", env), second, operation, env)
+
+      QueryExpression.new_path?(first) and atom_or_pin?(second) ->
+        new_delegation_error!(ast, hinted_name(second, ":update", env), first, operation, env)
+
+      true ->
+        :ok
+    end
+  end
+
+  defp refuse_new_delegation!(ast, operation, env) do
+    if QueryExpression.new_path?(ast),
+      do: new_delegation_error!(ast, Macro.to_string(operation), ast, operation, env)
+  end
+
+  @spec new_delegation_error!(Macro.t(), String.t(), Macro.t(), Macro.t(), Macro.Env.t()) ::
+          no_return
+  defp new_delegation_error!(ast, asked, target, operation, env) do
+    if operation != :update, do: QueryExpression.new_row_error!(target, env)
+
+    QueryExpression.compile_error!(
+      "via reads the stored row, got: #{Macro.to_string(ast)} - the row a change leads to goes in when: can(#{asked}, #{Macro.to_string(target)})",
+      target,
+      env
+    )
+  end
+
+  # A reference listed next to others is one of the roles any of which grants, so its condition
+  # goes on a copy of the line with no to:, which keeps its fields and conditions: in the when: of
+  # the same line, or next to the other roles, they would have to hold as well.
+  defp refuse_new_reference!({role, scope} = ast, alone?, operation, env) do
+    if QueryExpression.new_path?(scope) and atom_or_pin?(role) do
+      role = hinted_name(role, ":role", env)
+      new_reference_error!(ast, role, scope, alone?, operation, env)
+    end
+  end
+
+  defp refuse_new_reference!(ast, alone?, operation, env) do
+    if QueryExpression.new_path?(ast),
+      do: new_reference_error!(ast, ":role", ast, alone?, operation, env)
+  end
+
+  @spec new_reference_error!(
+          Macro.t(),
+          String.t(),
+          Macro.t(),
+          boolean,
+          Macro.t(),
+          Macro.Env.t()
+        ) :: no_return
+  defp new_reference_error!(ast, role, target, alone?, operation, env) do
+    if operation != :update, do: QueryExpression.new_row_error!(target, env)
+
+    own_line =
+      if alone?,
+        do: "",
+        else:
+          " on a copy of this line with no to:, while this line keeps the other roles in to:, since to: holds on any one of its roles"
+
+    QueryExpression.compile_error!(
+      "to reads the stored row, got: #{Macro.to_string(ast)} - a role on the row a change leads to goes in when: has_role(#{role}, #{Macro.to_string(target)})#{own_line}",
+      target,
+      env
+    )
   end
 
   @spec repeated_option!(atom, Macro.t(), Macro.t(), Macro.Env.t()) :: no_return

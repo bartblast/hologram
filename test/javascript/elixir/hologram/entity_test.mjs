@@ -8,7 +8,10 @@ import {
 } from "../../support/helpers.mjs";
 
 import Bitstring from "../../../../assets/js/bitstring.mjs";
-import Elixir_Hologram_Entity from "../../../../assets/js/elixir/hologram/entity.mjs";
+import Elixir_Hologram_Entity, {
+  defineStructFunctions,
+  typeValid,
+} from "../../../../assets/js/elixir/hologram/entity.mjs";
 import HologramRuntimeError from "../../../../assets/js/errors/runtime_error.mjs";
 import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
@@ -90,7 +93,7 @@ describe("Elixir_Hologram_Entity", () => {
 
   // One entry per shape the mirrored cases need: a type declaring nothing, one declaring a
   // default and an optional attribute, one declaring relationships of both cardinalities, one
-  // declaring an inverse, and a job, whose three framework-owned attributes no caller may set.
+  // declaring an inverse, and a job, whose framework-owned attributes no caller may set.
   beforeEach(() => {
     globalThis.Hologram.sync = {
       model: {
@@ -168,13 +171,22 @@ describe("Elixir_Hologram_Entity", () => {
           attributes: {
             ...systemAttributes,
             actor_id: "uuid",
+            attempt: "integer",
             error: "string",
+            scheduled_at: "datetime",
             status: "enum",
           },
           constraints: {},
-          defaults: {status: Type.atom("queued")},
+          defaults: {attempt: Type.integer(0), status: Type.atom("queued")},
           enumValues: {status: ["queued", "running", "done", "failed"]},
-          frameworkAttributes: ["actor_id", "error", "status"],
+          frameworkAttributes: [
+            "actor_id",
+            "attempt",
+            "error",
+            "run_as_server",
+            "scheduled_at",
+            "status",
+          ],
           relationships: {},
           serverOnly: ["error"],
         },
@@ -270,6 +282,233 @@ describe("Elixir_Hologram_Entity", () => {
     });
   });
 
+  describe("defineStructFunctions()", () => {
+    const moduleJsName = (type) => `Elixir_${type.replaceAll(".", "_")}`;
+
+    const MODEL_MODULES = [
+      ACCOUNT,
+      CHANNEL,
+      DOC,
+      EMPTY,
+      ITEM,
+      NOTIFY,
+      POST,
+    ].map(moduleJsName);
+
+    let originalEnum;
+    let originals;
+
+    beforeEach(() => {
+      originals = Object.fromEntries(
+        MODEL_MODULES.map((name) => [name, globalThis[name]]),
+      );
+
+      MODEL_MODULES.forEach((name) => delete globalThis[name]);
+      defineStructFunctions();
+
+      originalEnum = globalThis.Elixir_Enum;
+
+      globalThis.Elixir_Enum = {
+        "to_list/1": (term) =>
+          Type.isMap(term)
+            ? Type.list(
+                Object.values(term.data).map((pair) => Type.tuple(pair)),
+              )
+            : term,
+      };
+    });
+
+    afterEach(() => {
+      globalThis.Elixir_Enum = originalEnum;
+
+      MODEL_MODULES.forEach((name) => {
+        if (originals[name] === undefined) {
+          delete globalThis[name];
+        } else {
+          globalThis[name] = originals[name];
+        }
+      });
+    });
+
+    const struct0 = (type) => globalThis[moduleJsName(type)]["__struct__/0"]();
+
+    const struct1 = (type, values) =>
+      globalThis[moduleJsName(type)]["__struct__/1"](values);
+
+    const assertClauseError = (error, module, functionName, arity) => {
+      assert.deepEqual(
+        field(error.struct, "__struct__"),
+        Type.alias("FunctionClauseError"),
+      );
+
+      assert.deepEqual(field(error.struct, "module"), module);
+      assert.deepEqual(
+        field(error.struct, "function"),
+        Type.atom(functionName),
+      );
+      assert.deepEqual(field(error.struct, "arity"), Type.integer(arity));
+    };
+
+    const capturedError = (fun) => {
+      try {
+        fun();
+      } catch (error) {
+        return error;
+      }
+
+      return null;
+    };
+
+    describe("__struct__/0", () => {
+      it("returns a struct of the type", () => {
+        assert.deepEqual(
+          field(struct0(ACCOUNT), "__struct__"),
+          Type.alias(ACCOUNT),
+        );
+      });
+
+      it("leaves the id nil, as the Elixir struct default does", () => {
+        assert.deepEqual(field(struct0(ACCOUNT), "id"), Type.nil());
+      });
+
+      it("applies the declared defaults", () => {
+        assert.deepEqual(
+          field(struct0(ACCOUNT), "public"),
+          Type.boolean(false),
+        );
+      });
+
+      it("holds the empty metadata", () => {
+        assert.deepEqual(
+          field(struct0(ACCOUNT), "__meta__"),
+          Model.emptyMetadata(),
+        );
+      });
+
+      it("holds the sentinel for a relationship", () => {
+        const [name] = Object.keys(Model.entry(POST).relationships);
+
+        assert.deepEqual(field(struct0(POST), name), Model.notIncluded(name));
+      });
+
+      it("holds the sentinel for an inverse", () => {
+        assert.deepEqual(
+          field(struct0(CHANNEL), "messages"),
+          Model.notIncluded("messages"),
+        );
+      });
+
+      it("holds the sentinel for a derived field", () => {
+        assert.deepEqual(
+          field(struct0(CHANNEL), "message_count"),
+          Model.notIncluded("message_count"),
+        );
+      });
+    });
+
+    describe("__struct__/1", () => {
+      it("replaces the keys of a keyword list", () => {
+        const values = Type.keywordList([
+          [Type.atom("id"), Type.bitstring("abc")],
+        ]);
+
+        assert.deepEqual(
+          field(struct1(ACCOUNT, values), "id"),
+          Type.bitstring("abc"),
+        );
+      });
+
+      it("replaces the keys of a map", () => {
+        const values = Type.map([[Type.atom("public"), Type.boolean(true)]]);
+
+        assert.deepEqual(
+          field(struct1(ACCOUNT, values), "public"),
+          Type.boolean(true),
+        );
+      });
+
+      it("leaves the other fields at their defaults", () => {
+        const values = Type.map([[Type.atom("public"), Type.boolean(true)]]);
+
+        assert.deepEqual(field(struct1(ACCOUNT, values), "id"), Type.nil());
+      });
+
+      it("raises KeyError on an unknown key", () => {
+        const values = Type.keywordList([
+          [Type.atom("no_such_field"), Type.integer(1)],
+        ]);
+
+        const error = capturedError(() => struct1(ACCOUNT, values));
+
+        assert.deepEqual(
+          field(error.struct, "__struct__"),
+          Type.alias("KeyError"),
+        );
+        assert.deepEqual(
+          field(error.struct, "key"),
+          Type.atom("no_such_field"),
+        );
+        assert.deepEqual(field(error.struct, "term"), Type.nil());
+      });
+
+      it("raises FunctionClauseError on an element that isn't a pair", () => {
+        const values = Type.list([
+          Type.tuple([Type.atom("id"), Type.integer(1), Type.integer(2)]),
+        ]);
+
+        const error = capturedError(() => struct1(ACCOUNT, values));
+
+        assertClauseError(
+          error,
+          Type.alias(ACCOUNT),
+          "-__struct__/1-inlined-0-",
+          2,
+        );
+      });
+
+      it("raises FunctionClauseError on an improper list's tail", () => {
+        const values = Type.improperList([
+          Type.tuple([Type.atom("id"), Type.integer(1)]),
+          Type.integer(2),
+        ]);
+
+        const error = capturedError(() => struct1(ACCOUNT, values));
+
+        assertClauseError(
+          error,
+          Type.alias("Enum"),
+          "-reduce/3-lists^foldl/2-0-",
+          3,
+        );
+      });
+
+      it("raises what's wrong with an element before an improper tail", () => {
+        const values = Type.improperList([
+          Type.tuple([Type.atom("no_such_field"), Type.integer(1)]),
+          Type.integer(2),
+        ]);
+
+        const error = capturedError(() => struct1(ACCOUNT, values));
+
+        assert.deepEqual(
+          field(error.struct, "__struct__"),
+          Type.alias("KeyError"),
+        );
+      });
+    });
+
+    it("keeps a function the type already has", () => {
+      const existing = globalThis[moduleJsName(ACCOUNT)]["__struct__/0"];
+
+      defineStructFunctions();
+
+      assert.strictEqual(
+        globalThis[moduleJsName(ACCOUNT)]["__struct__/0"],
+        existing,
+      );
+    });
+  });
+
   describe("new/2", () => {
     it("returns a struct of the given entity type with a generated id and nil system timestamps", () => {
       const entity = newEntity(Type.alias(EMPTY));
@@ -355,7 +594,9 @@ describe("Elixir_Hologram_Entity", () => {
 
       assert.deepEqual(field(job, "status"), Type.atom("queued"));
       assert.deepEqual(field(job, "actor_id"), Type.nil());
+      assert.deepEqual(field(job, "attempt"), Type.integer(0));
       assert.deepEqual(field(job, "error"), Type.nil());
+      assert.deepEqual(field(job, "scheduled_at"), Type.nil());
     });
 
     // What Model.box leaves in place of a relationship, so a row built here reads like one that
@@ -463,6 +704,28 @@ describe("Elixir_Hologram_Entity", () => {
       );
     });
 
+    it("raises on an assigned job attempt count", () => {
+      const values = Type.map([[Type.atom("attempt"), Type.integer(5)]]);
+
+      assertBoxedError(
+        () => newEntityWithValues(Type.alias(NOTIFY), values),
+        "Hologram.MisuseError",
+        `:attempt of ${NOTIFY} is set by the framework - a job is enqueued as queued, and the worker records the rest`,
+      );
+    });
+
+    it("raises on an assigned job due time", () => {
+      const values = Type.map([
+        [Type.atom("scheduled_at"), Type.bitstring("2000-01-01T00:00:00Z")],
+      ]);
+
+      assertBoxedError(
+        () => newEntityWithValues(Type.alias(NOTIFY), values),
+        "Hologram.MisuseError",
+        `:scheduled_at of ${NOTIFY} is set by the framework - a job is enqueued as queued, and the worker records the rest`,
+      );
+    });
+
     // The model lists them in the order the server's own search walks, so a construction naming
     // two of them is refused for the same one on both tiers.
     it("raises for the framework attribute the model lists first", () => {
@@ -514,6 +777,182 @@ describe("Elixir_Hologram_Entity", () => {
   // The constraint checks are NOT here. The cases needing them - a value outside a bound, a
   // string of the wrong length, several reasons accumulating on one field - land with the next
   // commit, which is what turns valueErrors from a type check into the full fold.
+  describe("typeValid() - what the server can store", () => {
+    const withField = (struct, name, value) => {
+      const key = Type.encodeMapKey(Type.atom(name));
+
+      return {
+        ...struct,
+        data: {...struct.data, [key]: [Type.atom(name), value]},
+      };
+    };
+
+    it("refuses a string holding a NUL", () => {
+      assert.isTrue(typeValid(Type.bitstring("ab"), "string"));
+      assert.isFalse(typeValid(Type.bitstring("a\u0000b"), "string"));
+      assert.isFalse(typeValid(Bitstring.fromBytes([97, 0, 98]), "string"));
+    });
+
+    it("accepts a date only within what a date column holds", () => {
+      assert.isTrue(typeValid(boxedDate(-4713, 11, 24), "date"));
+      assert.isTrue(typeValid(boxedDate(5874897, 12, 31), "date"));
+      assert.isFalse(typeValid(boxedDate(-4713, 11, 23), "date"));
+      assert.isFalse(typeValid(boxedDate(-5000, 1, 1), "date"));
+      assert.isFalse(typeValid(boxedDate(5874898, 1, 1), "date"));
+    });
+
+    it("refuses a date in a calendar the server's driver can't encode", () => {
+      const date = withField(
+        boxedDate(2026, 1, 1),
+        "calendar",
+        Type.alias("MyApp.OtherCalendar"),
+      );
+
+      assert.isFalse(typeValid(date, "date"));
+    });
+
+    it("accepts a datetime only within what can be stored", () => {
+      assert.isTrue(typeValid(boxedDateTime(-4713, 11, 24), "datetime"));
+      assert.isTrue(typeValid(boxedDateTime(9999, 12, 31, 23), "datetime"));
+      assert.isFalse(typeValid(boxedDateTime(-4713, 11, 23, 23), "datetime"));
+      assert.isFalse(typeValid(boxedDateTime(10000, 1, 1), "datetime"));
+      assert.isFalse(typeValid(boxedDateTime(300000, 1, 1), "datetime"));
+    });
+
+    it("judges a datetime by its instant, so an offset can move it past either end", () => {
+      assert.isTrue(typeValid(boxedDateTime(10000, 1, 1, 0, 3600), "datetime"));
+
+      assert.isFalse(
+        typeValid(boxedDateTime(9999, 12, 31, 23, -3600), "datetime"),
+      );
+
+      assert.isFalse(
+        typeValid(boxedDateTime(-4713, 11, 24, 0, 3600), "datetime"),
+      );
+    });
+
+    it("adds the standard offset to the UTC offset", () => {
+      const datetime = withField(
+        boxedDateTime(9999, 12, 31, 23),
+        "std_offset",
+        Type.integer(-3600),
+      );
+
+      assert.isFalse(typeValid(datetime, "datetime"));
+    });
+
+    it("refuses a datetime whose offsets aren't integers", () => {
+      const datetime = boxedDateTime(2026, 7, 17);
+
+      for (const name of ["std_offset", "utc_offset"]) {
+        assert.isFalse(
+          typeValid(withField(datetime, name, Type.float(0.5)), "datetime"),
+        );
+
+        assert.isFalse(
+          typeValid(withField(datetime, name, Type.bitstring("0")), "datetime"),
+        );
+      }
+    });
+
+    it("refuses a datetime in another calendar, whose fields it would send as ISO", () => {
+      const datetime = withField(
+        boxedDateTime(2569, 1, 1),
+        "calendar",
+        Type.alias("MyApp.OtherCalendar"),
+      );
+
+      assert.isFalse(typeValid(datetime, "datetime"));
+    });
+
+    it("refuses a time in another calendar, whose fields it would send as ISO", () => {
+      const time = withField(
+        boxedTime(5),
+        "calendar",
+        Type.alias("MyApp.OtherCalendar"),
+      );
+
+      assert.isFalse(typeValid(time, "time"));
+    });
+
+    it("takes offsets only within what adds up exactly", () => {
+      const withOffsets = (utcOffset, stdOffset) =>
+        withField(
+          withField(
+            boxedDateTime(2026, 1, 1),
+            "utc_offset",
+            Type.integer(utcOffset),
+          ),
+          "std_offset",
+          Type.integer(stdOffset),
+        );
+
+      const safe = 2n ** 53n - 1n;
+      const unsafe = 2n ** 53n + 1n;
+
+      assert.isTrue(typeValid(withOffsets(safe, -safe), "datetime"));
+
+      for (const [utcOffset, stdOffset] of [
+        [unsafe, -safe],
+        [safe, -unsafe],
+        [-unsafe, safe],
+        [-safe, unsafe],
+      ]) {
+        assert.isFalse(
+          typeValid(withOffsets(utcOffset, stdOffset), "datetime"),
+        );
+      }
+    });
+
+    it("answers false for a struct with a field dropped, rather than throwing", () => {
+      const without = (struct, name) => {
+        const data = {...struct.data};
+
+        delete data[Type.encodeMapKey(Type.atom(name))];
+
+        return {...struct, data};
+      };
+
+      for (const name of ["calendar", "day", "month", "year"]) {
+        assert.isFalse(typeValid(without(boxedDate(2026, 1, 1), name), "date"));
+      }
+
+      for (const name of [
+        "calendar",
+        "day",
+        "hour",
+        "microsecond",
+        "minute",
+        "month",
+        "second",
+        "std_offset",
+        "utc_offset",
+        "year",
+      ]) {
+        assert.isFalse(
+          typeValid(without(boxedDateTime(2026, 1, 1), name), "datetime"),
+        );
+      }
+
+      for (const name of [
+        "calendar",
+        "hour",
+        "microsecond",
+        "minute",
+        "second",
+      ]) {
+        assert.isFalse(typeValid(without(boxedTime(1), name), "time"));
+      }
+    });
+
+    it("refuses a float that isn't finite", () => {
+      assert.isTrue(typeValid(Type.float(1.5), "float"));
+      assert.isFalse(typeValid(Type.float(Infinity), "float"));
+      assert.isFalse(typeValid(Type.float(-Infinity), "float"));
+      assert.isFalse(typeValid(Type.float(NaN), "float"));
+    });
+  });
+
   describe("validate/1", () => {
     const doc = (overrides = {}) =>
       newEntityWithValues(
@@ -1048,8 +1487,8 @@ describe("Elixir_Hologram_Entity", () => {
       );
     });
 
-    // A zone is not a calendar question, so the four zone fields are never read - an instant an
-    // hour east of UTC is a real instant and reaches the constraint pass like any other.
+    // A zone is not a calendar question - an instant an hour east of UTC is a real instant and
+    // reaches the constraint pass like any other.
     it("accepts an instant carrying a time zone offset", () => {
       assert.deepEqual(
         item({held_at: boxedDateTime(2026, 6, 1, 12, 3600)}),

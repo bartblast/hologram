@@ -22,6 +22,10 @@ defmodule Hologram.Entity.Validator do
   # refused where it is written, as no condition.
   @policy_option_names [:as, :except, :only, :to, :via]
 
+  # The longest time limit a job type can set, about 49 days. A chosen bound, well inside what an
+  # Erlang timer can hold, since a limit past that would crash the worker when the first run starts.
+  @max_job_timeout_ms 4_294_967_295
+
   @reserved_names [:created_at, :id, :server_created_at, :server_updated_at, :updated_at]
 
   # The two operations that may name the role they cover
@@ -114,21 +118,24 @@ defmodule Hologram.Entity.Validator do
   # carrying a float or a string (%Date{month: 6.5}) would raise FunctionClauseError out of a
   # function that owes a boolean. Falling through to the clause below answers false instead, which
   # is what Date.new/3 refusing to answer at all means here.
+  #
+  # A day the calendar has can still be one no date column holds, and a write of it would fail in
+  # the database, where a browser's batch has no way past it.
   def attribute_value_valid?(
-        %Date{calendar: calendar, year: year, month: month, day: day},
+        %Date{calendar: calendar, year: year, month: month, day: day} = value,
         :date,
         _opts
       )
       when is_integer(year) and is_integer(month) and is_integer(day) do
-    calendar.valid_date?(year, month, day)
+    calendar.valid_date?(year, month, day) and Codec.storable_date?(value)
   end
 
   def attribute_value_valid?(_value, :date, _opts), do: false
 
   # Both halves, asked of the struct's own calendar and guarded the same way, for the reasons the
   # :date clause above gives.
-  # The zone fields are deliberately not read: the codec normalizes every instant to UTC through a
-  # unix round trip, and a zone question is not a calendar question.
+  # The zone name is deliberately not read: the codec normalizes every instant to UTC through a unix
+  # round trip, using the offsets, and the storable check judges the instant they give.
   def attribute_value_valid?(
         %DateTime{
           calendar: calendar,
@@ -139,15 +146,15 @@ defmodule Hologram.Entity.Validator do
           minute: minute,
           second: second,
           microsecond: {microsecond_amount, microsecond_precision} = microsecond
-        },
+        } = value,
         :datetime,
         _opts
       )
       when is_integer(year) and is_integer(month) and is_integer(day) and is_integer(hour) and
              is_integer(minute) and is_integer(second) and is_integer(microsecond_amount) and
              is_integer(microsecond_precision) do
-    calendar.valid_date?(year, month, day) and
-      calendar.valid_time?(hour, minute, second, microsecond)
+    on_calendar?(calendar, {year, month, day}, {hour, minute, second, microsecond}) and
+      Codec.storable_datetime?(value)
   end
 
   def attribute_value_valid?(_value, :datetime, _opts), do: false
@@ -161,12 +168,15 @@ defmodule Hologram.Entity.Validator do
     is_integer(value) and value >= @min_integer and value <= @max_integer
   end
 
-  def attribute_value_valid?(value, :string, _opts), do: is_binary(value) and String.valid?(value)
+  # A NUL is valid UTF-8, and a PostgreSQL text column can't hold it.
+  def attribute_value_valid?(value, :string, _opts) do
+    is_binary(value) and String.valid?(value) and :binary.match(value, <<0>>) == :nomatch
+  end
 
   # Asked of the struct's own calendar, and guarded, for the reasons the :date clause gives.
   # valid_time?/4
   # judges the microsecond PRECISION beside the amount, so {0, 7} is refused as firmly as
-  # {1_000_000, 6}.
+  # {1_000_000, 6}. Only ISO, since the driver encodes no other calendar's Time.
   def attribute_value_valid?(
         %Time{
           calendar: calendar,
@@ -180,7 +190,7 @@ defmodule Hologram.Entity.Validator do
       )
       when is_integer(hour) and is_integer(minute) and is_integer(second) and
              is_integer(microsecond_amount) and is_integer(microsecond_precision) do
-    calendar.valid_time?(hour, minute, second, microsecond)
+    calendar == Calendar.ISO and calendar.valid_time?(hour, minute, second, microsecond)
   end
 
   def attribute_value_valid?(_value, :time, _opts), do: false
@@ -635,7 +645,8 @@ defmodule Hologram.Entity.Validator do
   Validates the options given to the use Hologram.Job directive at compile time.
 
   Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys,
-  a :max_concurrency that is not a positive integer literal).
+  a :max_attempts or :max_concurrency that is not a positive integer literal, a :timeout that is
+  not a positive integer literal within the longest limit).
   """
   @spec validate_use_job_opts!(module, T.opts()) :: :ok
   def validate_use_job_opts!(module, opts) do
@@ -648,18 +659,27 @@ defmodule Hologram.Entity.Validator do
     # The options are the use line's code, unevaluated: an integer literal is an integer here, and a
     # negative one is a call to -, so the guard refuses it with every other non-integer.
     Enum.each(opts, fn
-      {:max_concurrency, value} when is_integer(value) and value > 0 ->
+      {key, value}
+      when key in [:max_attempts, :max_concurrency] and is_integer(value) and value > 0 ->
         :ok
 
-      {:max_concurrency, value} ->
+      {key, value} when key in [:max_attempts, :max_concurrency] ->
         raise Hologram.CompileError,
           message:
-            "invalid max_concurrency #{Macro.to_string(value)} for use Hologram.Job in #{inspect(module)} - it must be a positive integer, written as a literal"
+            "invalid #{key} #{Macro.to_string(value)} for use Hologram.Job in #{inspect(module)} - it must be a positive integer, written as a literal"
+
+      {:timeout, value} when is_integer(value) and value > 0 and value <= @max_job_timeout_ms ->
+        :ok
+
+      {:timeout, value} ->
+        raise Hologram.CompileError,
+          message:
+            "invalid timeout #{Macro.to_string(value)} for use Hologram.Job in #{inspect(module)} - it must be a positive integer of milliseconds, at most #{@max_job_timeout_ms}, written as a literal"
 
       {key, _value} ->
         raise Hologram.CompileError,
           message:
-            "unknown option #{inspect(key)} for use Hologram.Job in #{inspect(module)} - use Hologram.Job takes only :max_concurrency"
+            "unknown option #{inspect(key)} for use Hologram.Job in #{inspect(module)} - use Hologram.Job takes only :max_attempts, :max_concurrency and :timeout"
     end)
 
     :ok
@@ -1250,9 +1270,9 @@ defmodule Hologram.Entity.Validator do
   defp unique_field_refusal(module, field, :unknown),
     do: "#{inspect(field)} is not an attribute or a to-one relationship of #{inspect(module)}"
 
-  # The system attributes, and a job's actor, failure record and status - declared like any
-  # attribute, and set by the framework alone: construction refuses them by name, so no write of
-  # the app's could ever choose the value a key over one would compare.
+  # The system attributes, and a job's actor, attempt count, failure record, server mark, due time
+  # and status - declared like any attribute, and set by the framework alone: construction refuses
+  # them by name, so no write of the app's could ever choose the value a key over one would compare.
   defp unique_framework_field?(module, field) do
     field in @reserved_names or
       (Module.defines?(module, {:__is_hologram_job__, 0}) and
@@ -2031,6 +2051,11 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
+  defp on_calendar?(calendar, {year, month, day}, {hour, minute, second, microsecond}) do
+    calendar.valid_date?(year, month, day) and
+      calendar.valid_time?(hour, minute, second, microsecond)
+  end
+
   defp plain_name?(name) do
     name
     |> Atom.to_string()
@@ -2376,7 +2401,7 @@ defmodule Hologram.Entity.Validator do
   defp validate_when_opt_shape!(module, operation, spec) do
     case Keyword.fetch(spec, :when) do
       {:ok, condition} ->
-        if not when_value_valid?(condition) do
+        if not when_value_valid?(condition, operation) do
           raise Hologram.CompileError,
             message:
               "invalid when option #{inspect(condition)} for #{describe_allow(operation, spec)} in #{inspect(module)} - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
@@ -2413,14 +2438,32 @@ defmodule Hologram.Entity.Validator do
   end
 
   # A predicate names an attribute with an atom, or a related row's attribute with a path of two or
-  # more atoms.
-  defp when_value_valid?(condition) when is_list(condition) do
+  # more atoms. On an update line either can be wrapped to read the row after the change.
+  defp when_value_valid?(condition, operation) when is_list(condition) do
     Enum.all?(condition, fn
-      {name, _value} when is_atom(name) -> true
-      {[_hop, _name | _rest] = path, _value} -> Enum.all?(path, &is_atom/1)
-      _entry -> false
+      {{:outer, 1, name}, _value} when operation == :update ->
+        when_name_valid?(name)
+
+      {{check, _asked}, chain} when check in [:can, :has_role] and operation == :update ->
+        when_chain_valid?(chain)
+
+      {name, _value} ->
+        when_name_valid?(name)
+
+      _entry ->
+        false
     end)
   end
 
-  defp when_value_valid?(_condition), do: false
+  defp when_value_valid?(_condition, _operation), do: false
+
+  defp when_chain_valid?(chain) do
+    is_list(chain) and chain != [] and not List.improper?(chain) and Enum.all?(chain, &is_atom/1)
+  end
+
+  defp when_name_valid?(name) when is_atom(name), do: true
+
+  defp when_name_valid?([_hop, _name | _rest] = path), do: Enum.all?(path, &is_atom/1)
+
+  defp when_name_valid?(_name), do: false
 end

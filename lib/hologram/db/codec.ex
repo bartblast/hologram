@@ -48,8 +48,18 @@ defmodule Hologram.DB.Codec do
 
   def decode_enum_label(label), do: String.to_existing_atom(label)
 
-  # The last day a Postgres date column holds.
-  @last_column_date Date.new!(5_874_897, 12, 31)
+  # The first and last day a Postgres date column holds, as {year, month, day}.
+  @first_column_day {-4713, 11, 24}
+  @last_column_day {5_874_897, 12, 31}
+
+  # The first and last instant a datetime can be stored at, in Unix microseconds. A timestamptz
+  # column starts on the date column's first day. It ends far past 9999, but encode/2 goes through
+  # DateTime.from_unix!/2, which stops there.
+  @first_storable_datetime DateTime.to_unix(~U[-4713-11-24 00:00:00.000000Z], :microsecond)
+  @last_storable_datetime DateTime.to_unix(~U[9999-12-31 23:59:59.999999Z], :microsecond)
+
+  # The largest integer a JavaScript number holds exactly.
+  @max_safe_integer 9_007_199_254_740_991
 
   @doc """
   Translates a value from its JSON form into the Elixir term held by entity structs, per attribute type - the inverse of encode_json/2, and the way a value written elsewhere is read back.
@@ -115,6 +125,34 @@ defmodule Hologram.DB.Codec do
   def decode_json(value, :uuid) when is_binary(value), do: {:ok, value}
 
   def decode_json(_value, _type), do: :error
+
+  @doc """
+  Translates a value a browser sent into the Elixir term held by entity structs, per attribute type.
+  Returns {:ok, value}, or :error for a value that is not the given type's form on the wire.
+
+  A JavaScript number holds an integer exactly only within 2^53 - 1 either way, so an :integer past that travels as its decimal text, in the one spelling Integer.to_string/1 writes. A JSON number past it is refused, since a browser can't have sent it exactly, and so is text spelling an integer a number would have carried. Every other value reads as decode_json/2 reads it.
+  """
+  @spec decode_wire(any, atom) :: {:ok, any} | :error
+  def decode_wire(value, type)
+
+  def decode_wire(value, :integer) when is_integer(value) do
+    if abs(value) <= @max_safe_integer, do: {:ok, value}, else: :error
+  end
+
+  # No integer a column holds takes more bytes than this, so longer text isn't worth parsing.
+  def decode_wire(value, :integer) when is_binary(value) and byte_size(value) <= 20 do
+    case Integer.parse(value) do
+      {integer, ""} when abs(integer) > @max_safe_integer ->
+        if Integer.to_string(integer) == value, do: {:ok, integer}, else: :error
+
+      _other ->
+        :error
+    end
+  end
+
+  def decode_wire(value, :integer) when is_binary(value), do: :error
+
+  def decode_wire(value, type), do: decode_json(value, type)
 
   @doc """
   Translates an Elixir term held by entity structs into the value the Postgres driver exchanges, per attribute type.
@@ -206,6 +244,20 @@ defmodule Hologram.DB.Codec do
   def encode_json(value, :uuid), do: value
 
   @doc """
+  Translates an Elixir term held by entity structs into the JSON form a browser reads it from, per attribute type.
+
+  A JavaScript number holds an integer exactly only within 2^53 - 1 either way, so an :integer past that travels as its decimal text. Every other value is spelled as encode_json/2 spells it. The oplog stays on encode_json/2, since it matches stored values as JSON numbers.
+  """
+  @spec encode_wire(any, atom) :: boolean | map | number | String.t() | nil
+  def encode_wire(value, type)
+
+  def encode_wire(value, :integer) when is_integer(value) and abs(value) > @max_safe_integer do
+    Integer.to_string(value)
+  end
+
+  def encode_wire(value, type), do: encode_json(value, type)
+
+  @doc """
   Translates an atom into its Postgres enum label - a module without its "Elixir." prefix, a plain atom as it is spelled.
   """
   @spec encode_enum_value(atom) :: String.t()
@@ -214,6 +266,31 @@ defmodule Hologram.DB.Codec do
     |> Atom.to_string()
     |> String.replace_prefix("Elixir.", "")
   end
+
+  @doc """
+  Returns true if a date column can hold the given date, which runs from -4713-11-24 to 5874897-12-31.
+  A date in another calendar is never storable, since the driver encodes only Calendar.ISO.
+  """
+  @spec storable_date?(Date.t()) :: boolean
+  def storable_date?(%Date{calendar: Calendar.ISO, year: year, month: month, day: day}) do
+    {year, month, day} >= @first_column_day and {year, month, day} <= @last_column_day
+  end
+
+  def storable_date?(%Date{}), do: false
+
+  @doc """
+  Returns true if the given datetime can be stored, which takes an instant from -4713-11-24T00:00:00Z to 9999-12-31T23:59:59.999999Z.
+  The instant is what's judged, so the offsets a datetime carries can move it across either end. A struct literal can hold anything in them, and one that isn't an integer names no instant.
+  """
+  @spec storable_datetime?(DateTime.t()) :: boolean
+  def storable_datetime?(%DateTime{std_offset: std_offset, utc_offset: utc_offset} = value)
+      when is_integer(std_offset) and is_integer(utc_offset) do
+    microseconds = DateTime.to_unix(value, :microsecond)
+
+    microseconds >= @first_storable_datetime and microseconds <= @last_storable_datetime
+  end
+
+  def storable_datetime?(%DateTime{}), do: false
 
   # Date.to_iso8601/1 spells a year past 9999 with all its digits, and Date.from_iso8601/1 reads no
   # more than four - so encode_json/2 writes dates its own inverse can't read, and a browser writing
@@ -225,7 +302,7 @@ defmodule Hologram.DB.Codec do
     with [_value | fields] <- Regex.run(~r/\A([1-9]\d{4,6})-(\d{2})-(\d{2})\z/, value),
          [year, month, day] = Enum.map(fields, &String.to_integer/1),
          {:ok, date} <- Date.new(year, month, day),
-         true <- Date.compare(date, @last_column_date) != :gt do
+         true <- storable_date?(date) do
       {:ok, date}
     else
       _no_date -> :error

@@ -7,6 +7,7 @@ defmodule Hologram.Auth.RoleGrantTest do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.Validator
   alias Hologram.MisuseError
+  alias Hologram.Test.Fixtures.Compiler.ImplReach
   alias Hologram.Test.Fixtures.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -27,6 +28,20 @@ defmodule Hologram.Auth.RoleGrantTest do
                {:entity_type, :enum,
                 [
                   values: [
+                    ImplReach.Entity1,
+                    ImplReach.Entity10,
+                    ImplReach.Entity11,
+                    ImplReach.Entity12,
+                    ImplReach.Entity13,
+                    ImplReach.Entity15,
+                    ImplReach.Entity2,
+                    ImplReach.Entity3,
+                    ImplReach.Entity4,
+                    ImplReach.Entity5,
+                    ImplReach.Entity6,
+                    ImplReach.Entity7,
+                    ImplReach.Entity8,
+                    ImplReach.Entity9,
                     Entity.Module1,
                     Entity.Module10,
                     Entity.Module11,
@@ -93,6 +108,8 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Mutation.Module4,
                     Mutation.Module5,
                     Mutation.Module6,
+                    Mutation.Module7,
+                    Mutation.Module8,
                     Policy.Module1,
                     Policy.Module10,
                     Policy.Module11,
@@ -146,7 +163,13 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Policy.Module55,
                     Policy.Module56,
                     Policy.Module57,
+                    Policy.Module58,
+                    Policy.Module59,
                     Policy.Module6,
+                    Policy.Module60,
+                    Policy.Module61,
+                    Policy.Module62,
+                    Policy.Module63,
                     Policy.Module7,
                     Policy.Module8,
                     Policy.Module9,

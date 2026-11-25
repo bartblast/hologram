@@ -4,6 +4,7 @@ import Bitstring from "../../../bitstring.mjs";
 import Interpreter from "../../../interpreter.mjs";
 import Model from "../../../model.mjs";
 import Type from "../../../type.mjs";
+import Utils from "../../../utils.mjs";
 import {typeValid} from "../entity.mjs";
 
 // The query stages, hand-written for the client the way the low-level Erlang functions are.
@@ -42,12 +43,13 @@ const SEARCH_OPERATORS = [
 // What a value of each type is, as the refusal of a value that doesn't fit it says.
 const TYPE_VALUES = {
   boolean: "true or false",
-  date: "a Date",
-  datetime: "a DateTime",
+  date: "an ISO Date from -4713-11-24 to 5874897-12-31",
+  datetime:
+    "an ISO DateTime from -4713-11-24T00:00:00Z to 9999-12-31T23:59:59.999999Z",
   float: "a float, or an integer that fits in 64 bits",
   integer: "an integer that fits in 64 bits",
-  string: "a UTF-8 string",
-  time: "a Time",
+  string: "a UTF-8 string with no NUL byte",
+  time: "an ISO Time",
   uuid: 'a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001"',
 };
 
@@ -147,7 +149,7 @@ function clauseKey(clause) {
   if ("quantifier" in clause) {
     return [
       clause.quantifier,
-      JSON.stringify([clause.source, clause.filter]),
+      Utils.stringify([clause.source, clause.filter]),
     ].join("\u0000");
   }
 
@@ -155,12 +157,12 @@ function clauseKey(clause) {
     const [name, operator, operand] = clause;
     const spelledName = typeof name === "string" ? name : JSON.stringify(name);
 
-    return [spelledName, operator, JSON.stringify(operand ?? null)].join(
+    return [spelledName, operator, Utils.stringify(operand ?? null)].join(
       "\u0000",
     );
   }
 
-  return ["or", JSON.stringify(clause.or)].join("\u0000");
+  return ["or", Utils.stringify(clause.or)].join("\u0000");
 }
 
 // A counter is an integer attribute that always holds a number: an optional one can be nil, and
@@ -1008,8 +1010,8 @@ function rangeTriples(name, range, entityType) {
   validateMembershipRange(range, name, entityType);
 
   return [
-    [nameValue(name), ">=", Number(field(range, "first").value)],
-    [nameValue(name), "<=", Number(field(range, "last").value)],
+    [nameValue(name), ">=", Model.unbox(field(range, "first"), "integer")],
+    [nameValue(name), "<=", Model.unbox(field(range, "last"), "integer")],
   ];
 }
 
@@ -1140,6 +1142,14 @@ function searchTriple(name, operator, operand, entityType) {
     );
   }
 
+  // The database refuses a NUL in any text it's handed, so the server can't simply match nothing,
+  // and the browser answers the same.
+  if (Bitstring.toText(operand).includes("\u0000")) {
+    Interpreter.raiseMisuseError(
+      `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${inspectName(name)} - a search term can't hold a NUL byte`,
+    );
+  }
+
   return [nameValue(name), operator, Model.unbox(operand, "string")];
 }
 
@@ -1165,7 +1175,7 @@ function setViewBound(query, field, value) {
     );
   }
 
-  return {...term, [field]: Number(value.value)};
+  return {...term, [field]: Model.unbox(value, "integer")};
 }
 
 function sortHint(hints, name) {
@@ -1199,7 +1209,7 @@ function sortedClause(clause) {
   return {
     or: clause.or
       .map(sortedFilter)
-      .sort(byKey((alternative) => JSON.stringify(alternative))),
+      .sort(byKey((alternative) => Utils.stringify(alternative))),
   };
 }
 
@@ -1850,7 +1860,7 @@ function validateOperandValue(name, value, entityType) {
 
   const fits =
     type === "float"
-      ? Type.isFloat(value) || typeValid(value, "integer")
+      ? typeValid(value, "float") || typeValid(value, "integer")
       : typeValid(value, type);
 
   if (!fits) {

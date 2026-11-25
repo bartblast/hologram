@@ -136,6 +136,48 @@ describe("Utils", () => {
     assert.deepStrictEqual(clone, {a: 10, b: {c: 30, d: 4}});
   });
 
+  describe("stringify()", () => {
+    it("writes a BigInt as its digits", () => {
+      assert.equal(
+        Utils.stringify({a: [9007199254740993n], b: 1}),
+        '{"a":["9007199254740993"],"b":1}',
+      );
+    });
+
+    it("answers undefined for what JSON can't write", () => {
+      assert.isUndefined(Utils.stringify(undefined));
+    });
+
+    it("leaves a lone surrogate as JSON escapes it", () => {
+      assert.equal(Utils.stringify("a\uD800b"), '"a\\ud800b"');
+    });
+  });
+
+  describe("stringifyWellFormed()", () => {
+    it("writes a BigInt as its digits", () => {
+      assert.equal(
+        Utils.stringifyWellFormed({a: [9007199254740993n], b: 1}),
+        '{"a":["9007199254740993"],"b":1}',
+      );
+    });
+
+    it("writes a lone surrogate as U+FFFD, at any depth", () => {
+      assert.deepStrictEqual(
+        JSON.parse(
+          Utils.stringifyWellFormed({a: ["x\uD800"], b: {c: "\uDC00y"}}),
+        ),
+        {a: ["x\uFFFD"], b: {c: "\uFFFDy"}},
+      );
+    });
+
+    it("keeps a whole surrogate pair", () => {
+      assert.equal(
+        JSON.parse(Utils.stringifyWellFormed("a\u{1F600}b")),
+        "a\u{1F600}b",
+      );
+    });
+  });
+
   // IMPORTANT!
   // Each test in this describe block has a related Elixir test in test/elixir/hologram/entity_test.exs (describe "generate_id/0")
   // Always update both together.

@@ -1,5 +1,3 @@
-Hologram.Test.setup()
-
 # One case at a time on CI, for the same reason as the feature tests app: every test
 # drives a real browser, and more than one per runner made the suite flaky.
 if System.get_env("GITHUB_ACTIONS") == "true" do
@@ -7,6 +5,9 @@ if System.get_env("GITHUB_ACTIONS") == "true" do
 end
 
 ExUnit.start()
+
+# After ExUnit.start, so the env is recognized as test even when MIX_ENV is unset.
+Hologram.Test.setup()
 
 # The endpoint listens on port 0, so the OS gave it a free port, and runs that overlap on one
 # machine never share one. Its URL still says port 0, so the port the listener got is put into

@@ -285,8 +285,9 @@ defmodule Hologram.Sync.Pot do
     end)
   end
 
-  # The pairs filed under the rows the client still holds that name a row it drops: dropping a row
-  # takes only the pairs filed under it.
+  # The pairs filed under the rows the client still holds that name a row it drops. A current
+  # browser takes those out itself too, but a tab on an older bundle takes only the pairs filed
+  # under the row.
   defp departure_edges(unsynced, lookup, held, put_keys) do
     Enum.flat_map(unsynced, fn {id, entity_type} ->
       entity_type

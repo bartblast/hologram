@@ -17,6 +17,7 @@ import FDBKeyRange from "../../assets/node_modules/fake-indexeddb/build/esm/FDBK
 
 // Its prototype is where a test makes a read fail: the module's own connection is private.
 import FDBDatabase from "../../assets/node_modules/fake-indexeddb/build/esm/FDBDatabase.js";
+import FDBObjectStore from "../../assets/node_modules/fake-indexeddb/build/esm/FDBObjectStore.js";
 
 import {
   assert,
@@ -28,11 +29,14 @@ import {
 
 import Batch from "../../assets/js/batch.mjs";
 import Clock from "../../assets/js/clock.mjs";
+import Deltas from "../../assets/js/deltas.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
+import Model from "../../assets/js/model.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
+import Type from "../../assets/js/type.mjs";
 
 // registerWebApis puts sessionStorage on the global, which is where Logger writes - and every path
 // through this module that gives up on storage says so through Logger.
@@ -162,6 +166,19 @@ describe("Durability", () => {
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve(request.result);
     });
+  };
+
+  // Whether a promise has settled, without waiting on it: a settled one runs its callback in the
+  // next microtask, and a store write does not complete before the next task.
+  const isSettled = async (promise) => {
+    let settled = false;
+
+    promise.then(() => (settled = true));
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    return settled;
   };
 
   const readMeta = async (key) => {
@@ -299,28 +316,40 @@ describe("Durability", () => {
     Replica.offer({id: "r-fresh", token: "statement-fresh"});
   };
 
-  describe("batchesAbove()", () => {
-    it("answers the records above the number, oldest first", async () => {
+  describe("queuedBatches()", () => {
+    it("answers the whole queue, oldest first", async () => {
       await Durability.open();
       await Durability.load();
       await writeBatches([batchRecord(9), batchRecord(2), batchRecord(5)]);
 
-      assert.deepStrictEqual(await Durability.batchesAbove(2), [
+      assert.deepStrictEqual(await Durability.queuedBatches(), [
+        batchRecord(2),
         batchRecord(5),
         batchRecord(9),
       ]);
     });
 
-    it("answers nothing for a number nothing was filed above", async () => {
+    it("answers only the records below a number, oldest first", async () => {
+      await Durability.open();
+      await Durability.load();
+      await writeBatches([batchRecord(9), batchRecord(2), batchRecord(5)]);
+
+      assert.deepStrictEqual(await Durability.queuedBatches(9), [
+        batchRecord(2),
+        batchRecord(5),
+      ]);
+    });
+
+    it("answers nothing for a number nothing was filed below", async () => {
       await Durability.open();
       await Durability.load();
       await writeBatches([batchRecord(2), batchRecord(5)]);
 
-      assert.deepStrictEqual(await Durability.batchesAbove(5), []);
+      assert.deepStrictEqual(await Durability.queuedBatches(2), []);
     });
 
     it("answers nothing in memory mode", async () => {
-      assert.deepStrictEqual(await Durability.batchesAbove(0), []);
+      assert.deepStrictEqual(await Durability.queuedBatches(), []);
       assert.equal(Durability.mode, "memory");
     });
 
@@ -331,16 +360,9 @@ describe("Durability", () => {
       await Durability.load();
       await writeBatches([batchRecord(2)]);
 
-      const range = globalThis.IDBKeyRange;
+      sinon.stub(FDBObjectStore.prototype, "getAll").throws(new Error("read"));
 
-      try {
-        globalThis.IDBKeyRange = undefined;
-
-        assert.deepStrictEqual(await Durability.batchesAbove(0), []);
-      } finally {
-        globalThis.IDBKeyRange = range;
-      }
-
+      assert.deepStrictEqual(await Durability.queuedBatches(), []);
       assert.equal(Durability.mode, "indexeddb");
     });
   });
@@ -417,25 +439,132 @@ describe("Durability", () => {
       assert.isUndefined(await readMeta("cursor"));
     });
 
-    // A stored counter exists only so that a later load does not reuse a number. Once storing has
-    // stopped, this page goes on spending numbers that nothing records - so the stored one is
-    // stale, and a load resuming from it would hand out numbers the server answers from the record
-    // of the batch that first carried them, dropping the new writes in silence. Absent is safe
-    // where stale is not: a load finding no identity takes its own page's fresh pair and counts
-    // from nothing.
     // The rows and the place are gone for the whole browser, not for this tab - so a tab that goes
     // on writing frames into it would be dating rows the store no longer holds.
     it("tells the group it has stopped storing", async () => {
-      const posting = sinon.stub(Tabs, "post");
+      const losing = sinon.stub(Tabs, "storeLost");
 
       await Durability.open();
       await Durability.load();
       await Durability.persistFrame([unstorableRecord()], "place-2");
 
-      sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
+      sinon.assert.calledOnce(losing);
     });
 
-    it("drops the identity and the counter, which have stopped being true", async () => {
+    // The tab has left the group by then, so a second message would end a group it isn't in.
+    it("does nothing more for a write that fails after the store was let go", async () => {
+      const losing = sinon.stub(Tabs, "storeLost");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+      const writing = Durability.persistFrame(
+        [taskRecord("t2", "second")],
+        "place-2",
+      );
+
+      const transaction = starting.lastCall.returnValue;
+
+      Durability.detach();
+      transaction.abort();
+
+      await writing;
+
+      sinon.assert.notCalled(losing);
+      assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+      assert.equal(await readMeta("cursor"), "place-1");
+    });
+
+    // The log line goes to session storage, whose own quota the log can fill. Thrown, it would
+    // reject the identity write every send waits on, and leave the store open and unwiped.
+    it("stops storing even when the failure cannot be logged", async () => {
+      const losing = sinon.stub(Tabs, "storeLost");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(Object.getPrototypeOf(sessionStorage), "setItem")
+        .throws(new DOMException("full", "QuotaExceededError"));
+
+      // A pair the store cannot hold, so the write fails.
+      Durability.persistReplica({id: () => {}, token: "statement"});
+
+      await Durability.replicaWritten();
+
+      assert.equal(Durability.mode, "memory");
+      sinon.assert.calledOnce(losing);
+
+      assert.isUndefined(await readMeta("cursor"));
+      assert.equal(await readMeta("replica").then(({id}) => id), "r-stored");
+    });
+
+    // Only the tab that leads writes rows and a place, so a follower's failed write leaves them
+    // true. A wipe from it could land ahead of a frame the leader has already started, and the
+    // store would then name a place holding that frame's rows alone.
+    it("leaves the rows and the place alone in a tab that follows", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const batch = unfiledBatch();
+
+      batch.append({
+        held: () => {},
+        id: "t2",
+        op: "delete",
+        type: "MyApp.Task",
+      });
+
+      Tabs.leader = false;
+
+      try {
+        await Durability.fileBatch(batch);
+      } finally {
+        Tabs.leader = true;
+      }
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal(await readMeta("cursor"), "place-1");
+      assert.equal((await readAll("entities")).length, 1);
+    });
+
+    it("keeps the identity and the counter in a tab that follows", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const batch = unfiledBatch();
+
+      batch.append({
+        held: () => {},
+        id: "t2",
+        op: "delete",
+        type: "MyApp.Task",
+      });
+
+      Tabs.leader = false;
+
+      try {
+        await Durability.fileBatch(batch);
+      } finally {
+        Tabs.leader = true;
+      }
+
+      assert.equal(await readMeta("replica").then(({id}) => id), "r-stored");
+      assert.equal(await readMeta("seq"), 41);
+    });
+
+    // The stored queue goes out again under them, which is what lets the server answer a batch it
+    // has already applied from its record. Nothing spends a number under them without the store.
+    it("keeps the identity and the counter", async () => {
       await Durability.open();
       await Durability.load();
       await storeBatch(41);
@@ -444,8 +573,12 @@ describe("Durability", () => {
       await Durability.persistFrame([unstorableRecord()], "place-1");
 
       assert.equal(Durability.mode, "memory");
-      assert.isUndefined(await readMeta("seq"));
-      assert.isUndefined(await readMeta("replica"));
+      assert.equal(await readMeta("seq"), 41);
+
+      assert.deepStrictEqual(await readMeta("replica"), {
+        id: "r1",
+        token: "statement",
+      });
     });
 
     // It only ever moves forward, so it cannot go stale the way the counter does - and a clock
@@ -504,6 +637,83 @@ describe("Durability", () => {
       assert.equal(await readMeta("seq"), 41);
       assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
     });
+
+    // A tab that leads and hears of another tab's failure: the frame it already started goes down
+    // whole, with its rows and its place together.
+    it("lets a frame still being written finish", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const writing = Durability.persistFrame(
+        [taskRecord("t2", "second")],
+        "place-2",
+      );
+
+      Durability.detach();
+
+      await writing;
+
+      assert.equal(await readMeta("cursor"), "place-2");
+      assert.equal((await readAll("entities")).length, 2);
+    });
+  });
+
+  describe("holdsIdentity()", () => {
+    it("is true for the identity the load read", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+
+      assert.isTrue(Durability.holdsIdentity());
+    });
+
+    it("is true once an identity it wrote has committed", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      Replica.adopt({id: "r1", token: "statement"});
+
+      const writing = Durability.persistReplica(Replica.current());
+
+      assert.isFalse(Durability.holdsIdentity());
+
+      await writing;
+
+      assert.isTrue(Durability.holdsIdentity());
+    });
+
+    it("is false after a write of the identity that failed", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const refused = {id: () => {}, token: "statement"};
+
+      Replica.adopt(refused);
+
+      await Durability.persistReplica(refused);
+
+      assert.isFalse(Durability.holdsIdentity());
+    });
+
+    it("is true for an identity its group named", () => {
+      Replica.adopt({id: "r-group", token: "statement"});
+
+      Durability.noteStoredReplica(Replica.current());
+
+      assert.isTrue(Durability.holdsIdentity());
+    });
+
+    it("is false with no identity in use", () => {
+      Durability.noteStoredReplica({id: null});
+
+      assert.isFalse(Durability.holdsIdentity());
+    });
   });
 
   describe("forgetBatch()", () => {
@@ -528,9 +738,197 @@ describe("Durability", () => {
       assert.equal(Durability.inFlight, 0);
       assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
     });
+
+    describe("when the delete itself fails", () => {
+      const failingDelete = async () => {
+        sinon.stub(Tabs, "storeLost");
+
+        await seedPreviousLoad();
+        await writeBatches([batchRecord(7), batchRecord(8)]);
+        await Durability.open();
+        await Durability.load();
+
+        Durability.restore(true);
+
+        raw.forEach((connection) => connection.close());
+        raw = [];
+
+        const start = FDBDatabase.prototype.transaction;
+        let failed = false;
+
+        sinon.stub(FDBDatabase.prototype, "transaction").callsFake(function (
+          names,
+          ...rest
+        ) {
+          if (!failed && names.length === 1 && names[0] === "queue") {
+            failed = true;
+
+            throw new Error("disk full");
+          }
+
+          return start.call(this, names, ...rest);
+        });
+      };
+
+      const queued = async () =>
+        (await readAll("queue")).map((record) => record.seq);
+
+      // Not every verdict is on the server's record, so one left here could apply on the next load.
+      it("takes the answered batch out over a connection of its own", async () => {
+        await failingDelete();
+
+        await Durability.forgetBatch(7);
+
+        assert.equal(Durability.mode, "memory");
+        assert.deepStrictEqual(await queued(), [8]);
+      });
+
+      // An answer to the next batch can move the tab to another identity during the delete.
+      it("goes by the identity the tab held when the batch was answered", async () => {
+        sinon.stub(Tabs, "storeLost");
+
+        await seedPreviousLoad();
+        await writeBatches([batchRecord(7), batchRecord(8)]);
+        await Durability.open();
+        await Durability.load();
+
+        Durability.restore(true);
+
+        raw.forEach((connection) => connection.close());
+        raw = [];
+
+        const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+        const forgetting = Durability.forgetBatch(7);
+        const deleting = starting.lastCall.returnValue;
+
+        Replica.adopt({id: "r-next", token: "statement-next"});
+        deleting.abort();
+
+        await forgetting;
+
+        assert.deepStrictEqual(await queued(), [8]);
+      });
+    });
+
+    describe("in a tab that has let go of the store", () => {
+      const letGo = async () => {
+        await seedPreviousLoad();
+        await writeBatches([batchRecord(7), batchRecord(8)]);
+        await Durability.open();
+        await Durability.load();
+
+        Durability.restore(true);
+        Durability.detach();
+
+        raw.forEach((connection) => connection.close());
+        raw = [];
+      };
+
+      const queued = async () =>
+        (await readAll("queue")).map((record) => record.seq);
+
+      // Not every verdict is on the server's record, so one left here could apply on the next load.
+      it("takes the answered batch out of the store", async () => {
+        await letGo();
+
+        await Durability.forgetBatch(7);
+
+        assert.equal(Durability.mode, "memory");
+        assert.deepStrictEqual(await queued(), [8]);
+      });
+
+      it("leaves the batch when the tab no longer presents the stored identity", async () => {
+        await letGo();
+
+        Replica.adopt({id: "r-minted", token: "statement-minted"});
+
+        const opening = sinon.spy(globalThis.indexedDB, "open");
+
+        await Durability.forgetBatch(7);
+
+        sinon.assert.notCalled(opening);
+        opening.restore();
+
+        assert.deepStrictEqual(await queued(), [7, 8]);
+      });
+
+      // Under another identity, the same number can be a different batch.
+      it("leaves the batch when the store has moved to another identity", async () => {
+        await letGo();
+        await writeMeta({replica: {id: "r-other", token: "statement-other"}});
+
+        await Durability.forgetBatch(7);
+
+        assert.deepStrictEqual(await queued(), [7, 8]);
+      });
+
+      // Opened with nothing there, it would come back with no stores in it.
+      it("doesn't bring back a database deleted meanwhile", async () => {
+        await letGo();
+
+        await new Promise((resolve) => {
+          globalThis.indexedDB.deleteDatabase(DATABASE_NAME).onsuccess =
+            resolve;
+        });
+
+        await Durability.forgetBatch(7);
+
+        const names = (await globalThis.indexedDB.databases()).map(
+          ({name}) => name,
+        );
+
+        assert.notInclude(names, DATABASE_NAME);
+      });
+
+      it("closes the connection it opened", async () => {
+        await letGo();
+
+        const closing = sinon.spy(FDBDatabase.prototype, "close");
+
+        await Durability.forgetBatch(7);
+
+        sinon.assert.calledOnce(closing);
+      });
+
+      it("never throws when the store can't be reached", async () => {
+        await letGo();
+
+        const indexedDB = globalThis.indexedDB;
+
+        globalThis.indexedDB = undefined;
+
+        try {
+          await Durability.forgetBatch(7);
+        } finally {
+          globalThis.indexedDB = indexedDB;
+        }
+      });
+    });
   });
 
   describe("open()", () => {
+    // Its count lives in memory, and a browser can hand the page's pair to another tab.
+    it("asks the server for an identity when the browser has no store", async () => {
+      const indexedDB = globalThis.indexedDB;
+
+      globalThis.indexedDB = undefined;
+
+      try {
+        await Durability.open();
+      } finally {
+        globalThis.indexedDB = indexedDB;
+      }
+
+      assert.equal(Durability.mode, "memory");
+      assert.isTrue(Replica.awaitingMint);
+    });
+
+    it("asks for no identity when the store opens", async () => {
+      await Durability.open();
+
+      assert.isFalse(Replica.awaitingMint);
+    });
+
     // A bundle carrying another store layout, speaking another protocol or on another model, must
     // open a database of its own - which is what stops two tabs on different versions from ever
     // sharing one, or a group.
@@ -680,9 +1078,12 @@ describe("Durability", () => {
         "place-1",
       );
 
+      const dissolving = sinon.stub(Tabs, "dissolve");
+
       const {db} = await rawOpen(2);
 
       assert.equal(Durability.mode, "memory");
+      sinon.assert.calledOnce(dissolving);
 
       db.close();
 
@@ -698,6 +1099,98 @@ describe("Durability", () => {
   });
 
   describe("load()", () => {
+    it("asks for an identity when the group's store fails while it is being read", async () => {
+      await Durability.open();
+
+      const loading = Durability.load();
+
+      Durability.detach();
+      await loading;
+
+      assert.isTrue(Replica.awaitingMint);
+    });
+
+    it("asks for an identity when the store is taken for a new version while it is being read", async () => {
+      await Durability.open();
+
+      const loading = Durability.load();
+
+      const {db} = await rawOpen(2);
+
+      db.close();
+
+      await loading;
+
+      assert.equal(Durability.mode, "memory");
+      assert.isTrue(Replica.awaitingMint);
+    });
+
+    it("asks for an identity when the store is taken for a new version after the read", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      // The seed's own connections would block the upgrade.
+      raw.forEach((connection) => connection.close());
+
+      const {db} = await rawOpen(2);
+
+      db.close();
+
+      assert.equal(Durability.mode, "memory");
+      assert.isTrue(Replica.awaitingMint);
+    });
+
+    it("asks for no identity when a write fails after a read that found one", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([unstorableRecord()], "place-2");
+
+      Durability.restore(true);
+
+      assert.equal(Durability.mode, "memory");
+      assert.isFalse(Replica.awaitingMint);
+    });
+
+    it("asks for an identity when a write fails after a read that found none", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([unstorableRecord()], "place-2");
+
+      Durability.restore(true);
+
+      assert.equal(Durability.mode, "memory");
+      assert.isTrue(Replica.awaitingMint);
+    });
+
+    it("asks for no identity when the store goes after the restore", async () => {
+      await Durability.open();
+      await Durability.load();
+      Durability.restore(true);
+
+      Durability.detach();
+
+      assert.isFalse(Replica.awaitingMint);
+    });
+
+    it("asks the server for an identity when the store can't be read", async () => {
+      await Durability.open();
+
+      sinon
+        .stub(FDBDatabase.prototype, "transaction")
+        .throws(new DOMException("broken", "UnknownError"));
+
+      await Durability.load();
+
+      assert.equal(Durability.mode, "memory");
+      assert.isTrue(Replica.awaitingMint);
+    });
+
     it("counts the stored batches", async () => {
       await createSchema();
       await writeBatches([batchRecord(1), batchRecord(2)]);
@@ -764,9 +1257,9 @@ describe("Durability", () => {
       assert.isNull(Durability.restore(true));
     });
 
-    // Another tab moving the database on makes nothing stored untrue, and this tab stays in its
-    // group - so what it read is taken up as it would have been.
-    it("keeps what it read when the database closes for a new version before the restore", async () => {
+    // Another tab moving the database on ends this tab's group, and the stored identity and queue
+    // are for whichever tab leads after the upgrade.
+    it("keeps nothing it read when the database closes for a new version before the restore", async () => {
       await seedPreviousLoad();
       await Durability.open();
       await Durability.load();
@@ -779,7 +1272,7 @@ describe("Durability", () => {
       db.close();
 
       assert.equal(Durability.mode, "memory");
-      assert.equal(Durability.restore(true).cursor, "place-1");
+      assert.isNull(Durability.restore(true));
     });
 
     // The group ends with a store failure another tab reported, and a follower that took a fresh
@@ -937,6 +1430,50 @@ describe("Durability", () => {
       assert.deepStrictEqual(await readAll("queue"), [batch.record()]);
     });
 
+    // The later batch may name a row the earlier one created, so it can't go out ahead of it.
+    it("stores no batch behind one whose transaction aborted", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await Durability.open();
+      await Durability.load();
+
+      const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+      const first = unfiledBatch();
+      const second = unfiledBatch();
+      const filings = [
+        Durability.fileBatch(first),
+        Durability.fileBatch(second),
+      ];
+
+      starting.firstCall.returnValue.abort();
+
+      assert.deepStrictEqual(await Promise.all(filings), [false, false]);
+      assert.isNull(first.seq);
+      assert.isNull(second.seq);
+      assert.deepStrictEqual(await readAll("queue"), []);
+    });
+
+    // Waiting for the first to settle before starting the next would leave the next one out of the
+    // store, and it would go out alone while the first waits there for a later page load.
+    it("stores every filing in line when the tab lets go of the store", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const first = unfiledBatch();
+      const second = unfiledBatch();
+      const filings = [
+        Durability.fileBatch(first),
+        Durability.fileBatch(second),
+      ];
+
+      Durability.detach();
+
+      assert.deepStrictEqual(await Promise.all(filings), [true, true]);
+      assert.equal(first.seq, 1);
+      assert.equal(second.seq, 2);
+      assert.equal((await readAll("queue")).length, 2);
+    });
+
     it("numbers the batch above the stored counter", async () => {
       await Durability.open();
       await Durability.load();
@@ -968,9 +1505,9 @@ describe("Durability", () => {
       assert.equal(batch.seq, 10);
     });
 
-    // The two part after a storage failure, which drops the counter and keeps the queue - and
-    // counting from below a stored batch would hand its number to something else, whose record
-    // would then overwrite it.
+    // The two part in a store an earlier build failed on, which dropped the counter and kept the
+    // queue - and counting from below a stored batch would hand its number to something else, whose
+    // record would then overwrite it.
     it("numbers the batch above every stored batch when the counter was dropped", async () => {
       await Durability.open();
       await Durability.load();
@@ -1009,11 +1546,62 @@ describe("Durability", () => {
     it("leaves the batch unnumbered in memory mode", async () => {
       const batch = unfiledBatch();
 
-      await Durability.fileBatch(batch);
+      assert.isFalse(await Durability.fileBatch(batch));
 
       assert.isNull(batch.seq);
       assert.equal(Durability.mode, "memory");
       assert.equal(Durability.inFlight, 0);
+    });
+
+    it("answers that the batch is stored", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      assert.isTrue(await Durability.fileBatch(unfiledBatch()));
+    });
+
+    // The number was read and put on the batch inside a transaction that then failed, so nothing
+    // records it and another tab can file under it.
+    it("leaves the caller's number on a batch when the store failed on the spot", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(FDBDatabase.prototype, "transaction")
+        .throws(new DOMException("broken", "UnknownError"));
+
+      const batch = unfiledBatch();
+      const filing = Durability.fileBatch(batch);
+
+      assert.equal(Durability.mode, "memory");
+
+      batch.seal(7);
+
+      assert.isFalse(await filing);
+      assert.equal(batch.seq, 7);
+    });
+
+    it("takes the number back when the batch can't be stored", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = unfiledBatch();
+
+      batch.append({
+        id: "t2",
+        op: "delete",
+        type: "MyApp.Task",
+        held: () => {},
+      });
+
+      const sealing = sinon.spy(batch, "seal");
+
+      assert.isFalse(await Durability.fileBatch(batch));
+
+      sinon.assert.calledOnceWithExactly(sealing, 1);
+      assert.isNull(batch.seq);
+      assert.equal(Durability.mode, "memory");
+      assert.deepStrictEqual(await readAll("queue"), []);
     });
   });
 
@@ -1034,6 +1622,86 @@ describe("Durability", () => {
       assert.deepStrictEqual(await readAll("entities"), [
         taskRecord("t2", "Ship it"),
       ]);
+    });
+
+    // The row held in memory can be older than the stored one, so only the pair goes.
+    it("takes a pair out of a stored set, leaving the rest of the record", async () => {
+      const stored = {
+        facts: {labels: ["l1"], tags: ["g1", "g2"]},
+        id: "t1",
+        row: {id: "t1", title: "Stored title"},
+        type: "MyApp.Task",
+      };
+
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([stored], "place-1");
+
+      await Durability.persistFrame([], "place-2", [
+        {id: "t1", relationship: "tags", targetIds: ["g2"], type: "MyApp.Task"},
+      ]);
+
+      assert.deepStrictEqual(await readAll("entities"), [
+        {...stored, facts: {labels: ["l1"], tags: ["g1"]}},
+      ]);
+    });
+
+    it("takes pairs out of two sets of one record", async () => {
+      const stored = {
+        facts: {labels: ["l1", "x"], tags: ["g1", "x"]},
+        id: "t1",
+        row: {id: "t1", title: "Stored title"},
+        type: "MyApp.Task",
+      };
+
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([stored], "place-1");
+
+      await Durability.persistFrame([], "place-2", [
+        {
+          id: "t1",
+          relationship: "labels",
+          targetIds: ["x"],
+          type: "MyApp.Task",
+        },
+        {id: "t1", relationship: "tags", targetIds: ["x"], type: "MyApp.Task"},
+      ]);
+
+      assert.deepStrictEqual(await readAll("entities"), [
+        {...stored, facts: {labels: ["l1"], tags: ["g1"]}},
+      ]);
+    });
+
+    it("judges a pair to take out against a record the same frame wrote", async () => {
+      const written = {
+        facts: {tags: ["g1", "g2"]},
+        id: "t1",
+        row: {id: "t1", title: "Written"},
+        type: "MyApp.Task",
+      };
+
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.persistFrame([written], "place-1", [
+        {id: "t1", relationship: "tags", targetIds: ["g2"], type: "MyApp.Task"},
+      ]);
+
+      assert.deepStrictEqual(await readAll("entities"), [
+        {...written, facts: {tags: ["g1"]}},
+      ]);
+    });
+
+    it("passes over a pair to take out of a record it doesn't hold", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.persistFrame([], "place-1", [
+        {id: "t9", relationship: "tags", targetIds: ["g1"], type: "MyApp.Task"},
+      ]);
+
+      assert.deepStrictEqual(await readAll("entities"), []);
     });
 
     // The rows and the place go together, which is what stops a client naming a place it does not
@@ -1104,6 +1772,75 @@ describe("Durability", () => {
     });
   });
 
+  describe("big integers", () => {
+    const COUNTED = "MyApp.Counted";
+
+    beforeEach(() => {
+      globalThis.Hologram.sync.model = {
+        [COUNTED]: {
+          attributes: {id: "uuid", n: "integer"},
+          relationships: {},
+          serverOnly: [],
+        },
+      };
+
+      Model.reset();
+    });
+
+    afterEach(() => {
+      Model.reset();
+    });
+
+    it("brings a row's big integer back as the BigInt it was filed as", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      Deltas.apply({
+        put_entity: {[COUNTED]: [{id: "c1", n: "9007199254740993"}]},
+      });
+
+      await Durability.persistFrame(
+        [
+          {
+            facts: {},
+            id: "c1",
+            row: LocalDatabase.baseRow(COUNTED, "c1"),
+            type: COUNTED,
+          },
+        ],
+        "place-1",
+      );
+
+      LocalDatabase.reset();
+
+      await Durability.load();
+      Durability.restore(true);
+
+      assert.strictEqual(
+        LocalDatabase.baseRow(COUNTED, "c1").n,
+        9007199254740993n,
+      );
+    });
+
+    it("brings a queued write's big integer back as a BigInt", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = unfiledBatch();
+
+      batch.writes[0] = {
+        ...batch.writes[0],
+        deltas: {n: Model.unbox(Type.integer(9007199254740993n), "integer")},
+      };
+
+      await Durability.fileBatch(batch);
+
+      const [record] = await Durability.queuedBatches();
+
+      assert.strictEqual(record.writes[0].deltas.n, 9007199254740993n);
+    });
+  });
+
   describe("persistLanded()", () => {
     it("rewrites the record with the marks", async () => {
       await Durability.open();
@@ -1136,6 +1873,106 @@ describe("Durability", () => {
 
       assert.equal(await readMeta("seq"), 8);
     });
+
+    // Another tab heard more frames and stored more marks: a mark lost is a move a later read of
+    // the store promotes a second time.
+    it("keeps the marks the record already holds", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = new Batch(null);
+
+      batch.actorUserId = "u1";
+      batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+      batch.append({id: "t2", op: "delete", type: "MyApp.Task"});
+      batch.seal(7);
+
+      await writeBatches([{...batch.record(), landed: [1]}]);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistLanded(batch);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.landed),
+        [[0, 1]],
+      );
+    });
+
+    // The record's shape is frozen: a record an older bundle wrote has no marks at all.
+    it("takes a record with no marks as one with none landed", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = new Batch(null);
+
+      batch.actorUserId = "u1";
+      batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+      batch.seal(7);
+
+      const {landed: _landed, ...older} = batch.record();
+
+      await writeBatches([older]);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistLanded(batch);
+
+      assert.equal(Durability.mode, "indexeddb");
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.landed),
+        [[0]],
+      );
+    });
+
+    // A later frame's mark has its own write coming, behind that frame's rows: written here, it
+    // would go down ahead of them.
+    it("writes the marks as they stood when asked, not when the record answers", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = new Batch(null);
+
+      batch.actorUserId = "u1";
+      batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+      batch.append({id: "t2", op: "delete", type: "MyApp.Task"});
+      batch.seal(7);
+
+      await writeBatches([batch.record()]);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      const writing = Durability.persistLanded(batch);
+
+      batch.land(new Set(["MyApp.Task t2"]));
+
+      await writing;
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.landed),
+        [[0]],
+      );
+    });
+
+    // The tab that sent it was answered and let go of it: written back, the next page load would
+    // send an answered batch again.
+    it("writes nothing for a batch the queue no longer holds", async () => {
+      await Durability.open();
+      await Durability.load();
+      await storeBatch(8);
+
+      const batch = sealedBatch(7);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistLanded(batch);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [8],
+      );
+    });
   });
 
   describe("persistReplica()", () => {
@@ -1148,6 +1985,214 @@ describe("Durability", () => {
         id: "r1",
         token: "statement",
       });
+    });
+
+    // Writes to the store commit in the order they were made, so the last one settled is all of
+    // them settled.
+    it("answers the write for replicaWritten() to wait on", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      Durability.persistReplica({id: "r1", token: "statement"});
+
+      const writing = Durability.persistReplica({
+        id: "r2",
+        token: "statement-2",
+      });
+
+      assert.strictEqual(Durability.replicaWritten(), writing);
+      assert.isFalse(await isSettled(Durability.replicaWritten()));
+
+      await writing;
+
+      assert.isTrue(await isSettled(Durability.replicaWritten()));
+    });
+
+    it("leaves nothing for replicaWritten() to wait on in memory mode", async () => {
+      Durability.persistReplica({id: "r1", token: "statement"});
+
+      assert.isTrue(await isSettled(Durability.replicaWritten()));
+    });
+  });
+
+  describe("readBase()", () => {
+    it("answers the stored place and every row, when the place differs", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase("place-0"), {
+        cursor: "place-1",
+        landed: [],
+        owner: "u1",
+        records: [taskRecord("t1", "Draft copy")],
+      });
+    });
+
+    // The same place is the same rows: every write of a place writes its rows with it.
+    it("answers the stored place and no rows, when the place is the one given", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase("place-1"), {
+        cursor: "place-1",
+        owner: "u1",
+        records: null,
+      });
+    });
+
+    it("answers the stored place and every row, when the tab holds no place", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase(null), {
+        cursor: "place-1",
+        landed: [],
+        owner: "u1",
+        records: [taskRecord("t1", "Draft copy")],
+      });
+    });
+
+    // Rows with no place are a fill that never finished, which nothing takes up.
+    it("answers no place and no rows, when the store holds no place", async () => {
+      await seedPreviousLoad({cursor: undefined});
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase("place-1"), {
+        cursor: null,
+        owner: "u1",
+        records: null,
+      });
+
+      assert.deepStrictEqual(await Durability.readBase(null), {
+        cursor: null,
+        owner: "u1",
+        records: null,
+      });
+    });
+
+    // What the tab that led wrote since this tab loaded.
+    it("reads the store as it is now, not as it was loaded", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([taskRecord("t2", "Later")], "place-2");
+
+      assert.deepStrictEqual(await Durability.readBase("place-1"), {
+        cursor: "place-2",
+        landed: [],
+        owner: "u1",
+        records: [taskRecord("t1", "Draft copy"), taskRecord("t2", "Later")],
+      });
+    });
+
+    // A write made right after the read began lands after the whole read, not between the place
+    // and its rows.
+    it("reads the place and its rows as one", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const reading = Durability.readBase("place-0");
+
+      const writing = Durability.persistFrame(
+        [taskRecord("t2", "Later")],
+        "place-2",
+      );
+
+      assert.equal(Durability.inFlight, 1);
+
+      assert.deepStrictEqual(await reading, {
+        cursor: "place-1",
+        landed: [],
+        owner: "u1",
+        records: [taskRecord("t1", "Draft copy")],
+      });
+
+      await writing;
+    });
+
+    // One store serves every user of the browser, each in a group of their own.
+    it("answers who the store belongs to", async () => {
+      await seedPreviousLoad({actorUserId: "u2"});
+      await Durability.open();
+      await Durability.load();
+
+      assert.equal((await Durability.readBase("place-1")).owner, "u2");
+    });
+
+    it("answers nobody as the owner of a store nobody signed in to", async () => {
+      await seedPreviousLoad({actorUserId: undefined});
+      await Durability.open();
+      await Durability.load();
+
+      assert.isNull((await Durability.readBase("place-1")).owner);
+    });
+
+    // A stored frame can have landed a batch a tab holds unlanded.
+    it("answers what the queue records as landed, with the rows", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const batch = sealedBatch(7);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await writeBatches([batch.record()]);
+
+      assert.deepStrictEqual((await Durability.readBase("place-0")).landed, [
+        {landed: [0], seq: 7},
+      ]);
+    });
+
+    it("answers no marks for a stored batch that predates them", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const {landed: _landed, ...older} = sealedBatch(7).record();
+
+      await writeBatches([older]);
+
+      assert.deepStrictEqual((await Durability.readBase("place-0")).landed, [
+        {landed: [], seq: 7},
+      ]);
+    });
+
+    it("answers nothing in memory mode", async () => {
+      assert.isNull(await Durability.readBase("place-1"));
+      assert.equal(Durability.mode, "memory");
+    });
+
+    // Nothing has been lost, so it does not take the storage down the way a failed WRITE does.
+    it("answers nothing when the store cannot be read, and goes on storing", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(FDBDatabase.prototype, "transaction")
+        .throws(new DOMException("The read was refused.", "UnknownError"));
+
+      assert.isNull(await Durability.readBase("place-0"));
+      assert.equal(Durability.mode, "indexeddb");
+    });
+
+    it("answers nothing when the rows cannot be read", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(FDBObjectStore.prototype, "getAll")
+        .throws(new DOMException("The read was refused.", "UnknownError"));
+
+      assert.isNull(await Durability.readBase("place-0"));
+      assert.equal(Durability.inFlight, 0);
     });
   });
 
@@ -1252,7 +2297,7 @@ describe("Durability", () => {
 
     // Skipped, the repair would leave the store naming another place with nothing to say so.
     it("stops storing when the store cannot be read", async () => {
-      const posting = sinon.stub(Tabs, "post");
+      const losing = sinon.stub(Tabs, "storeLost");
 
       await seedPreviousLoad();
       await Durability.open();
@@ -1267,7 +2312,7 @@ describe("Durability", () => {
       );
 
       assert.equal(Durability.mode, "memory");
-      sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
+      sinon.assert.calledOnce(losing);
     });
 
     it("does nothing in memory mode", async () => {
@@ -1635,7 +2680,10 @@ describe("Durability", () => {
 
       assert.equal(Replica.id, "r-fresh");
 
-      await Durability.persistReplica(Replica.current());
+      // The first send waits for it.
+      assert.isFalse(await isSettled(Durability.replicaWritten()));
+
+      await Durability.replicaWritten();
 
       assert.deepStrictEqual(await readMeta("replica"), {
         id: "r-fresh",
@@ -1674,6 +2722,62 @@ describe("Durability", () => {
       Durability.restore(true);
 
       assert.isNull(Durability.restore(true));
+    });
+  });
+
+  describe("wasAnswered()", () => {
+    const restored = async () => {
+      await seedPreviousLoad();
+      await writeBatches([batchRecord(7), batchRecord(9)]);
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+    };
+
+    it("answers true for a number spent before the read and gone from the queue", async () => {
+      await restored();
+
+      assert.isTrue(Durability.wasAnswered(8));
+      assert.isTrue(Durability.wasAnswered(41));
+    });
+
+    it("answers false for a number still in the queue", async () => {
+      await restored();
+
+      assert.isFalse(Durability.wasAnswered(7));
+      assert.isFalse(Durability.wasAnswered(9));
+    });
+
+    it("answers false for a number above what the read saw", async () => {
+      await restored();
+
+      assert.isFalse(Durability.wasAnswered(42));
+    });
+
+    it("answers false before any restore", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.isFalse(Durability.wasAnswered(8));
+    });
+
+    // The restore runs again on every client-side navigation, and takes up nothing after the first.
+    it("answers the same after a later restore that takes up nothing", async () => {
+      await restored();
+
+      assert.isNull(Durability.restore(true));
+
+      assert.isTrue(Durability.wasAnswered(8));
+      assert.isFalse(Durability.wasAnswered(9));
+    });
+
+    it("forgets what the read saw on reset", async () => {
+      await restored();
+      await Durability.reset();
+
+      assert.isFalse(Durability.wasAnswered(8));
     });
   });
 

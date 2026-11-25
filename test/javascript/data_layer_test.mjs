@@ -7,6 +7,7 @@ import Batches from "../../assets/js/batches.mjs";
 import DataLayer from "../../assets/js/data_layer.mjs";
 import Deltas from "../../assets/js/deltas.mjs";
 import Durability from "../../assets/js/durability.mjs";
+import IdentityTracker from "../../assets/js/identity_tracker.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import ManuallyPortedElixirHologramAuth from "../../assets/js/elixir/hologram/auth.mjs";
 import ManuallyPortedElixirHologramDB from "../../assets/js/elixir/hologram/db.mjs";
@@ -19,6 +20,7 @@ import QueryCheck from "../../assets/js/query_check.mjs";
 import QuerySpelling from "../../assets/js/query_spelling.mjs";
 import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
+import Sse from "../../assets/js/sse.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -102,6 +104,59 @@ describe("DataLayer", () => {
         ),
         Type.integer(42),
       );
+    });
+
+    // Back or Forward reads no mount data, so a page it returns to has only what earlier visits
+    // left.
+    describe("after another page's mount data", () => {
+      const answerTotal = (term) =>
+        DataLayer.answerDerivedQuery(
+          "MyApp.Tasks",
+          Type.atom("total"),
+          [],
+          term,
+        );
+
+      const visitPages = (term) => {
+        const key = `MyApp.Tasks/total/${QuerySpelling.spell(term)}`;
+
+        sinon.stub(Deltas, "apply");
+
+        DataLayer.ingestMountData({
+          actorUserId: null,
+          syncCountTypes: {[key]: [TASK]},
+          syncCounts: {[key]: 42},
+          syncRows: {},
+        });
+
+        DataLayer.ingestMountData({
+          actorUserId: null,
+          syncCountTypes: {},
+          syncCounts: {},
+          syncRows: {},
+        });
+      };
+
+      it("still answers the carried count while the type is filling", () => {
+        const term = DataLayer.normalizeQuery(
+          ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
+        );
+
+        visitPages(term);
+
+        assert.deepStrictEqual(answerTotal(term), Type.integer(42));
+      });
+
+      it("counts locally once the client holds the whole type", () => {
+        const term = DataLayer.normalizeQuery(
+          ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
+        );
+
+        visitPages(term);
+        LocalDatabase.markTypesSynced([TASK]);
+
+        assert.deepStrictEqual(answerTotal(term), Type.integer(2));
+      });
     });
 
     const count = ManuallyPortedElixirHologramQueryStage["count/1"];
@@ -679,6 +734,27 @@ describe("DataLayer", () => {
       });
     });
 
+    it("defines the struct functions of the model's entity types", () => {
+      const sync = globalThis.Hologram.sync;
+
+      globalThis.Hologram.sync = {model: {"MyApp.StructDefined": {}}};
+
+      try {
+        DataLayer.defineManuallyPortedFunctions();
+
+        assert.isTrue(
+          globalThis.Elixir_MyApp_StructDefined.__exports__.has("__struct__/0"),
+        );
+
+        assert.isTrue(
+          globalThis.Elixir_MyApp_StructDefined.__exports__.has("__struct__/1"),
+        );
+      } finally {
+        globalThis.Hologram.sync = sync;
+        delete globalThis.Elixir_MyApp_StructDefined;
+      }
+    });
+
     it("defines the hand-written Auth, DB, Entity, Job and Query.Stage functions as public functions of their modules", () => {
       DataLayer.defineManuallyPortedFunctions();
 
@@ -686,12 +762,15 @@ describe("DataLayer", () => {
         globalThis.Elixir_Hologram_Auth.__exports__,
         new Set([
           "can?/3",
+          "can?/4",
           "grant_role/2",
           "grant_role/3",
+          "grant_role/4",
           "has_role?/2",
           "has_role?/3",
           "revoke_role/2",
           "revoke_role/3",
+          "revoke_role/4",
         ]),
       );
 
@@ -819,23 +898,88 @@ describe("DataLayer", () => {
     });
   });
 
+  describe("holdsUnsentWrites()", () => {
+    let originalMode;
+
+    beforeEach(() => {
+      originalMode = Durability.mode;
+      Durability.mode = "memory";
+
+      sinon.stub(Batches, "pendingCount").returns(1);
+      sinon.stub(Tabs, "sends").returns(true);
+      sinon.stub(SyncStream, "holdsWrites").returns(false);
+    });
+
+    afterEach(() => {
+      Durability.mode = originalMode;
+    });
+
+    it("is true for a tab with no store that can still send a write", () => {
+      assert.isTrue(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false when the store holds the writes", () => {
+      Durability.mode = "indexeddb";
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false with nothing to send", () => {
+      Batches.pendingCount.returns(0);
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false for a tab that doesn't send", () => {
+      Tabs.sends.returns(false);
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false for a tab stopped over its model", () => {
+      SyncStream.holdsWrites.returns(true);
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false for a tab the server refused an identity", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      try {
+        assert.isFalse(DataLayer.holdsUnsentWrites());
+      } finally {
+        Replica.reset();
+      }
+    });
+  });
+
   describe("ingestMountData()", () => {
     let applying;
+
+    let originalPeriod;
 
     beforeEach(() => {
       applying = sinon.stub(Deltas, "apply");
 
+      originalPeriod = IdentityTracker.period;
+      IdentityTracker.period = null;
+
       LocalDatabase.actorUserId = null;
       LocalDatabase.actorEntityId = null;
       LocalDatabase.syncCountTypes = {};
       LocalDatabase.syncCounts = {};
+      LocalDatabase.syncCountsPeriod = null;
     });
 
     afterEach(() => {
+      IdentityTracker.period = originalPeriod;
+
       LocalDatabase.actorUserId = null;
       LocalDatabase.actorEntityId = null;
       LocalDatabase.syncCountTypes = {};
       LocalDatabase.syncCounts = {};
+      LocalDatabase.syncCountsPeriod = null;
     });
 
     it("files the rows the page carried, and the counts beside them with their types", () => {
@@ -875,14 +1019,151 @@ describe("DataLayer", () => {
       assert.equal(LocalDatabase.actorUserId, 7);
     });
 
-    it("takes counts the page did not carry as none", () => {
-      LocalDatabase.syncCounts = {"MyApp.Stale/count/": 9};
-      LocalDatabase.syncCountTypes = {"MyApp.Stale/count/": ["MyApp.Task"]};
+    it("keeps the counts an earlier page carried", () => {
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Earlier/count/": ["MyApp.Task"]};
+
+      DataLayer.ingestMountData({
+        actorUserId: null,
+        syncCountTypes: {"MyApp.Later/count/": ["MyApp.Task"]},
+        syncCounts: {"MyApp.Later/count/": 3},
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Earlier/count/": 9,
+        "MyApp.Later/count/": 3,
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "MyApp.Earlier/count/": ["MyApp.Task"],
+        "MyApp.Later/count/": ["MyApp.Task"],
+      });
+    });
+
+    it("keeps the earlier counts for mount data carrying no counts", () => {
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Earlier/count/": ["MyApp.Task"]};
+
+      DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Earlier/count/": 9,
+      });
+    });
+
+    it("takes a newer number and its types for a count already held", () => {
+      LocalDatabase.syncCounts = {"MyApp.Held/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Held/count/": ["MyApp.Task"]};
+
+      DataLayer.ingestMountData({
+        actorUserId: null,
+        syncCountTypes: {"MyApp.Held/count/": ["MyApp.Note"]},
+        syncCounts: {"MyApp.Held/count/": 10},
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Held/count/": 10,
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "MyApp.Held/count/": ["MyApp.Note"],
+      });
+    });
+
+    it("drops the earlier counts when the page is for another user", () => {
+      LocalDatabase.actorUserId = "u1";
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Earlier/count/": ["MyApp.Task"]};
+
+      DataLayer.ingestMountData({
+        actorUserId: "u2",
+        syncCountTypes: {"MyApp.Later/count/": ["MyApp.Task"]},
+        syncCounts: {"MyApp.Later/count/": 3},
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Later/count/": 3,
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "MyApp.Later/count/": ["MyApp.Task"],
+      });
+    });
+
+    // Two integer ids past 2^53 reach the browser as one number, so only the period tells them
+    // apart.
+    it("drops the earlier counts when the identity period changed under the same id", () => {
+      LocalDatabase.actorUserId = 9007199254740992;
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Earlier/count/": ["MyApp.Task"]};
+
+      IdentityTracker.period = "period-2";
+
+      DataLayer.ingestMountData({
+        actorUserId: 9007199254740992,
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
+      assert.equal(LocalDatabase.syncCountsPeriod, "period-2");
+    });
+
+    // The identity can change between a page arriving and its mount, so a count the old identity's
+    // page carried must not pass for the new one's.
+    it("files a late page's counts under the period it was rendered in", () => {
+      IdentityTracker.period = "period-2";
+
+      DataLayer.ingestMountData({
+        actorUserId: 9007199254740992,
+        identityPeriod: "period-1",
+        syncCountTypes: {"MyApp.Late/count/": ["MyApp.Task"]},
+        syncCounts: {"MyApp.Late/count/": 42},
+        syncRows: {},
+      });
+
+      assert.equal(LocalDatabase.syncCountsPeriod, "period-1");
+
+      DataLayer.ingestMountData({
+        actorUserId: 9007199254740992,
+        identityPeriod: "period-2",
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
+    });
+
+    it("keeps the earlier counts while the identity period lasts", () => {
+      IdentityTracker.period = "period-1";
+      LocalDatabase.syncCountsPeriod = "period-1";
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+
+      DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Earlier/count/": 9,
+      });
+    });
+
+    it("drops the earlier counts when a visitor signs in", () => {
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+
+      DataLayer.ingestMountData({actorUserId: "u1", syncRows: {}});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+    });
+
+    it("drops the earlier counts when the user signs out", () => {
+      LocalDatabase.actorUserId = "u1";
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
 
       DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
 
       assert.deepStrictEqual(LocalDatabase.syncCounts, {});
-      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
     });
 
     it("leaves the database as it was for mount data carrying no rows", () => {
@@ -900,6 +1181,242 @@ describe("DataLayer", () => {
     });
   });
 
+  describe("pageCounts() and restoreCounts()", () => {
+    const TASK = "MyApp.Task";
+
+    let key, term;
+
+    const answer = () =>
+      DataLayer.answerDerivedQuery("MyApp.Tasks", Type.atom("total"), [], term);
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {id: "uuid", title: "string"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+      LocalDatabase.reset();
+      DataLayer.restoreCounts(null);
+      DataLayer.isStoreRestored = true;
+      SyncStream.syncCursor = null;
+
+      term = DataLayer.normalizeQuery(
+        ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
+      );
+
+      key = `MyApp.Tasks/total/${QuerySpelling.spell(term)}`;
+    });
+
+    afterEach(() => {
+      DataLayer.restoreCounts(null);
+      DataLayer.isStoreRestored = false;
+      LocalDatabase.reset();
+      LocalDatabase.identityEndedPeriod = null;
+      SyncStream.syncCursor = null;
+      delete globalThis.Hologram.sync;
+    });
+
+    it("gives the counts the page answered with", () => {
+      LocalDatabase.carryCounts({[key]: 42}, {[key]: [TASK]});
+
+      answer();
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), [[key, 42, [TASK]]]);
+    });
+
+    it("leaves out a held count the page didn't answer with", () => {
+      LocalDatabase.carryCounts({[key]: 42}, {[key]: [TASK]});
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), []);
+    });
+
+    it("starts over for the next page's mount data", () => {
+      LocalDatabase.carryCounts({[key]: 42}, {[key]: [TASK]});
+      answer();
+
+      sinon.stub(Deltas, "apply");
+      DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), []);
+    });
+
+    it("starts over for a page restored from its snapshot", () => {
+      LocalDatabase.carryCounts({[key]: 42}, {[key]: [TASK]});
+      answer();
+
+      DataLayer.restoreCounts(null);
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), []);
+    });
+
+    it("answers with a count restored while the client holds no place", () => {
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      assert.deepStrictEqual(answer(), Type.integer(42));
+    });
+
+    it("gives the counts the page arrived with before its first render", () => {
+      sinon.stub(Deltas, "apply");
+
+      DataLayer.ingestMountData({
+        actorUserId: null,
+        syncCountTypes: {[key]: [TASK]},
+        syncCounts: {[key]: 42},
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), [[key, 42, [TASK]]]);
+    });
+
+    it("gives the counts a restored page saved before its first render", () => {
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), [[key, 42, [TASK]]]);
+    });
+
+    it("gives the held counts of a page this document saved", () => {
+      LocalDatabase.carryCounts({[key]: 42}, {[key]: [TASK]});
+
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), [[key, 42, [TASK]]]);
+    });
+
+    // This document counted for itself since it saved it, so the saved number is behind.
+    it("files nothing for a count the client has counted itself", () => {
+      LocalDatabase.markTypesSynced([TASK]);
+      LocalDatabase.beginRefill();
+
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+    });
+
+    // Held back before the first mount, then saved again under this document's period.
+    it("files a saved count this document never held", () => {
+      DataLayer.isStoreRestored = false;
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      const saved = DataLayer.pageCounts();
+
+      DataLayer.isStoreRestored = true;
+      DataLayer.restoreCounts(saved);
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {[key]: 42});
+    });
+
+    it("clears the page's counts for mount data carrying no rows", () => {
+      DataLayer.isStoreRestored = false;
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      DataLayer.ingestMountData({actorUserId: null});
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), []);
+    });
+
+    describe("after the stream said somebody else signed in", () => {
+      let originalPeriod;
+
+      beforeEach(() => {
+        originalPeriod = IdentityTracker.period;
+        IdentityTracker.period = "period-1";
+        LocalDatabase.reset();
+      });
+
+      afterEach(() => {
+        IdentityTracker.period = originalPeriod;
+      });
+
+      // The tab's tag can still be the previous user's when another tab signed the new one in.
+      it("files nothing while the period lasts", () => {
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      });
+
+      // A page fetched before the change can still mount, and says nothing about who is here now.
+      it("files nothing after a page from before the change mounts", () => {
+        sinon.stub(Deltas, "apply");
+
+        DataLayer.ingestMountData({
+          actorUserId: null,
+          identityPeriod: "period-1",
+          syncRows: {},
+        });
+
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      });
+
+      it("files the counts once a response started a new period", () => {
+        IdentityTracker.period = "period-2";
+
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        assert.deepStrictEqual(LocalDatabase.syncCounts, {[key]: 42});
+      });
+    });
+
+    describe("before this document has read its store", () => {
+      beforeEach(() => {
+        DataLayer.isStoreRestored = false;
+      });
+
+      // A stored place isn't read back yet, so a null one says nothing.
+      it("files nothing", () => {
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      });
+
+      it("keeps the counts for the page's next save", () => {
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        assert.deepStrictEqual(DataLayer.pageCounts(), [[key, 42, [TASK]]]);
+      });
+
+      it("ends once the store is read", () => {
+        sinon.stub(Durability, "restore").returns(null);
+
+        DataLayer.restore();
+
+        assert.isTrue(DataLayer.isStoreRestored);
+      });
+
+      it("lets them go at the next page's mount data", () => {
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        sinon.stub(Deltas, "apply");
+        DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
+
+        assert.deepStrictEqual(DataLayer.pageCounts(), []);
+      });
+    });
+
+    // A place says a fill finished, so the rows are whole and a saved number is only older.
+    it("restores nothing while the client holds a place", () => {
+      SyncStream.syncCursor = "Nzc4LjA";
+
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+    });
+
+    it("restores nothing for no entries", () => {
+      DataLayer.restoreCounts(null);
+      DataLayer.restoreCounts(undefined);
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+    });
+  });
+
   describe("listenToStream()", () => {
     it("hands the stream to the sync stream to listen on", () => {
       const eventSource = {addEventListener: () => {}};
@@ -908,6 +1425,56 @@ describe("DataLayer", () => {
       DataLayer.listenToStream(eventSource);
 
       sinon.assert.calledOnceWithExactly(listening, eventSource);
+    });
+
+    describe("when the stream says sync is starting over", () => {
+      let asking, resync;
+
+      beforeEach(() => {
+        const eventSource = {
+          addEventListener: (kind, listener) => {
+            if (kind === "sync_resync") resync = listener;
+          },
+        };
+
+        Replica.reset();
+
+        sinon.stub(SyncStream, "listen");
+        asking = sinon.stub(Sse, "askForReplica");
+
+        DataLayer.listenToStream(eventSource);
+      });
+
+      afterEach(() => {
+        Replica.reset();
+      });
+
+      const refuse = () => {
+        Replica.requestMint();
+        Replica.refuseMint();
+      };
+
+      it("has a refused tab ask again when the user changed", () => {
+        refuse();
+
+        resync({data: JSON.stringify({reason: "identity"})});
+
+        sinon.assert.calledOnce(asking);
+      });
+
+      it("leaves a refused tab alone for any other reason", () => {
+        refuse();
+
+        resync({data: JSON.stringify({reason: "no place to resume from"})});
+
+        sinon.assert.notCalled(asking);
+      });
+
+      it("leaves a tab that wasn't refused alone", () => {
+        resync({data: JSON.stringify({reason: "identity"})});
+
+        sinon.assert.notCalled(asking);
+      });
     });
   });
 
@@ -1103,7 +1670,25 @@ describe("DataLayer", () => {
 
   describe("rendered()", () => {
     afterEach(() => {
+      SyncStream.servedModelHash = null;
       SyncStream.stopReason = null;
+    });
+
+    // Served across models, it goes on working; only its next page loads afresh.
+    it("leaves the notice down in a tab a server of another model serves", () => {
+      const updating = sinon.stub(ReloadNotice, "update");
+      const sync = globalThis.Hologram.sync;
+      globalThis.Hologram.sync = {...sync, modelHash: "a3f9c2"};
+
+      try {
+        SyncStream.servedModelHash = "b7e1d4";
+
+        DataLayer.rendered();
+
+        sinon.assert.calledOnceWithExactly(updating, false);
+      } finally {
+        globalThis.Hologram.sync = sync;
+      }
     });
 
     it("puts the notice up in a tab the server stopped", () => {
@@ -1382,7 +1967,22 @@ describe("DataLayer", () => {
 
   describe("stopped()", () => {
     afterEach(() => {
+      SyncStream.servedModelHash = null;
       SyncStream.stopReason = null;
+    });
+
+    // Served, but the next page would be the new build's, over this tab's runtime and store.
+    it("is true while a server of another model serves the tab", () => {
+      const sync = globalThis.Hologram.sync;
+      globalThis.Hologram.sync = {...sync, modelHash: "a3f9c2"};
+
+      try {
+        SyncStream.servedModelHash = "b7e1d4";
+
+        assert.isTrue(DataLayer.stopped());
+      } finally {
+        globalThis.Hologram.sync = sync;
+      }
     });
 
     it("is true once the server stopped serving the tab", () => {
@@ -1394,6 +1994,108 @@ describe("DataLayer", () => {
     it("is false while the server serves it", () => {
       assert.isFalse(DataLayer.stopped());
     });
+
+    it("is false while a server of this bundle's model serves it", () => {
+      const sync = globalThis.Hologram.sync;
+      globalThis.Hologram.sync = {...sync, modelHash: "a3f9c2"};
+
+      try {
+        SyncStream.servedModelHash = "a3f9c2";
+
+        assert.isFalse(DataLayer.stopped());
+      } finally {
+        globalThis.Hologram.sync = sync;
+      }
+    });
+  });
+
+  describe("takeReplica()", () => {
+    const minted = {id: "replica-minted", token: "token-minted"};
+
+    afterEach(() => {
+      Replica.reset();
+    });
+
+    it("takes the identity and answers the sender's promise when the tab asked for one", () => {
+      const sending = Promise.resolve();
+      const flush = sinon.stub(Batches, "flush").returns(sending);
+
+      Replica.requestMint();
+
+      assert.strictEqual(DataLayer.takeReplica(minted), sending);
+      assert.equal(Replica.id, "replica-minted");
+      sinon.assert.calledOnce(flush);
+
+      flush.restore();
+    });
+
+    it("ends the asking when the server refused", () => {
+      const flush = sinon.stub(Batches, "flush");
+
+      Replica.requestMint();
+
+      assert.isNull(DataLayer.takeReplica(undefined, true));
+      assert.isFalse(Replica.awaitingMint);
+      assert.isTrue(Replica.mintRefused);
+      sinon.assert.notCalled(flush);
+
+      flush.restore();
+    });
+
+    it("wakes nothing when the tab did not ask", () => {
+      const flush = sinon.stub(Batches, "flush");
+
+      assert.isNull(DataLayer.takeReplica(minted));
+      assert.isNull(Replica.id);
+      sinon.assert.notCalled(flush);
+
+      flush.restore();
+    });
+  });
+
+  describe("replicaToReplace()", () => {
+    afterEach(() => {
+      Replica.reset();
+    });
+
+    it("answers the pair in use while the tab is asking for a new one", () => {
+      Replica.adopt({id: "replica-held", token: "token-held"});
+      Replica.requestMint();
+
+      assert.deepStrictEqual(DataLayer.replicaToReplace(), {
+        id: "replica-held",
+        token: "token-held",
+      });
+    });
+
+    // So a refusal can end when its owner signs back in.
+    it("answers the pair in use after a refusal", () => {
+      Replica.adopt({id: "replica-held", token: "token-held"});
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      assert.equal(DataLayer.replicaToReplace().id, "replica-held");
+    });
+
+    it("answers nothing otherwise", () => {
+      Replica.adopt({id: "replica-held", token: "token-held"});
+
+      assert.isNull(DataLayer.replicaToReplace());
+    });
+  });
+
+  describe("wantsReplica()", () => {
+    afterEach(() => {
+      Replica.reset();
+    });
+
+    it("answers whether the tab is waiting for an identity", () => {
+      assert.isFalse(DataLayer.wantsReplica());
+
+      Replica.requestMint();
+
+      assert.isTrue(DataLayer.wantsReplica());
+    });
   });
 
   describe("streamOpened()", () => {
@@ -1403,6 +2105,30 @@ describe("DataLayer", () => {
       DataLayer.streamOpened();
 
       sinon.assert.calledOnceWithExactly(flushing);
+    });
+  });
+
+  describe("streamBeat()", () => {
+    it("wakes the sender when the queue is empty", () => {
+      const flushing = sinon.stub(Batches, "flush");
+
+      sinon.stub(Batches, "pendingCount").returns(0);
+
+      DataLayer.streamBeat();
+
+      sinon.assert.calledOnceWithExactly(flushing);
+    });
+
+    // A beat must never send a batch again: it would cut a retry's backoff short, and repeat a send
+    // that raised.
+    it("leaves a queue holding batches alone", () => {
+      const flushing = sinon.stub(Batches, "flush");
+
+      sinon.stub(Batches, "pendingCount").returns(1);
+
+      DataLayer.streamBeat();
+
+      sinon.assert.notCalled(flushing);
     });
   });
 });

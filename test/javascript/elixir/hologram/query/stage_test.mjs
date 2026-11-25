@@ -1421,7 +1421,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assertBoxedError(
         () => filter(task, predicates([["title", placeholder]])),
         "Hologram.MisuseError",
-        "%{__struct__: Hologram.Query.Placeholder, name: :chosen} is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+        "%{__struct__: Hologram.Query.Placeholder, name: :chosen} is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
       );
     });
 
@@ -1491,6 +1491,43 @@ describe("Elixir_Hologram_Query_Stage", () => {
         ["position", ">=", 1],
         ["position", "<=", 5],
       ]);
+    });
+
+    it("keeps a range's bounds exact past what a Number holds", () => {
+      const query = filter(
+        task,
+        predicates([["position", range(9007199254740993n, 9007199254740995n)]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["position", ">=", 9007199254740993n],
+        ["position", "<=", 9007199254740995n],
+      ]);
+    });
+
+    it("keeps a big filter value exact, and two neighbours apart", () => {
+      const query = filter(
+        filter(
+          task,
+          predicates([["position", Type.integer(9007199254740993n)]]),
+        ),
+        predicates([["position", Type.integer(9007199254740992n)]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["position", "==", 9007199254740993n],
+        ["position", "==", 9007199254740992n],
+      ]);
+    });
+
+    it("keeps a big view bound exact", () => {
+      const query = skip(
+        take(task, Type.integer(9007199254740993n)),
+        Type.integer(9007199254740995n),
+      );
+
+      assert.strictEqual(query.take, 9007199254740993n);
+      assert.strictEqual(query.skip, 9007199254740995n);
     });
 
     it("reads a range given to the membership operator the same way", () => {
@@ -3454,6 +3491,16 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    it("raises on a search term holding a NUL", () => {
+      const term = Type.bitstring("a\u0000b");
+
+      assertBoxedError(
+        () => filter(task, predicates([["title", search("contains", term)]])),
+        "Hologram.MisuseError",
+        "invalid operand <<97, 0, 98>> for operator :contains on attribute :title - a search term can't hold a NUL byte",
+      );
+    });
+
     it("raises on a search term that isn't valid UTF-8", () => {
       const term = Bitstring.fromBytes([255]);
 
@@ -3496,15 +3543,42 @@ describe("Elixir_Hologram_Query_Stage", () => {
         TASK,
         "title",
         Type.integer(5),
-        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
       ],
       [
         "a binary that isn't valid UTF-8 for a string attribute",
         TASK,
         "title",
         Bitstring.fromBytes([255]),
-        "<<255>> is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+        "<<255>> is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
       ],
+      [
+        "a string holding a NUL for a string attribute",
+        TASK,
+        "title",
+        Type.bitstring("a\u0000b"),
+        "<<97, 0, 98>> is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
+      ],
+      [
+        "a date no date column holds for a date attribute",
+        TASK,
+        "due_on",
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Date")],
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("month"), Type.integer(1)],
+          [Type.atom("year"), Type.integer(-5000)],
+        ]),
+        "%{__struct__: Date, calendar: Calendar.ISO, day: 1, month: 1, year: -5000} is not a value of attribute :due_on in MyApp.Task - the attribute has type :date, which takes an ISO Date from -4713-11-24 to 5874897-12-31",
+      ],
+      ...[Infinity, -Infinity, NaN].map((number) => [
+        `${number} for a float attribute`,
+        BOOKING,
+        "rating",
+        Type.float(number),
+        `${number} is not a value of attribute :rating in MyApp.Booking - the attribute has type :float, which takes a float, or an integer that fits in 64 bits`,
+      ]),
       [
         "a value that isn't a boolean for a boolean attribute",
         TASK,
@@ -3545,7 +3619,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         TASK,
         "due_on",
         Type.bitstring("2026-01-01"),
-        '"2026-01-01" is not a value of attribute :due_on in MyApp.Task - the attribute has type :date, which takes a Date',
+        '"2026-01-01" is not a value of attribute :due_on in MyApp.Task - the attribute has type :date, which takes an ISO Date from -4713-11-24 to 5874897-12-31',
       ],
       [
         "a value that isn't a datetime for a datetime attribute",
@@ -3553,14 +3627,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
         "created_at",
         date,
         // The browser's inspect spells a struct as a map, where the server's prints ~D[2026-01-01].
-        "%{__struct__: Date, calendar: Calendar.ISO, day: 1, month: 1, year: 2026} is not a value of attribute :created_at in MyApp.Task - the attribute has type :datetime, which takes a DateTime",
+        "%{__struct__: Date, calendar: Calendar.ISO, day: 1, month: 1, year: 2026} is not a value of attribute :created_at in MyApp.Task - the attribute has type :datetime, which takes an ISO DateTime from -4713-11-24T00:00:00Z to 9999-12-31T23:59:59.999999Z",
       ],
       [
         "a value that isn't a time for a time attribute",
         TASK,
         "starts_at",
         Type.bitstring("09:00"),
-        '"09:00" is not a value of attribute :starts_at in MyApp.Task - the attribute has type :time, which takes a Time',
+        '"09:00" is not a value of attribute :starts_at in MyApp.Task - the attribute has type :time, which takes an ISO Time',
       ],
       [
         "a value that isn't a uuid for a reference field",
@@ -3616,14 +3690,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
         BOOKING,
         Type.list([Type.atom("owner"), Type.atom("ends_on")]),
         Type.bitstring("2026-01-01"),
-        '"2026-01-01" is not a value of attribute owner.ends_on in MyApp.Booking - the attribute has type :date, which takes a Date',
+        '"2026-01-01" is not a value of attribute owner.ends_on in MyApp.Booking - the attribute has type :date, which takes an ISO Date from -4713-11-24 to 5874897-12-31',
       ],
       [
         "a mistyped value in an equality operator tuple",
         TASK,
         "title",
         tuple("!=", Type.integer(5)),
-        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
       ],
       [
         "a mistyped value in an ordering operator tuple",
@@ -3637,21 +3711,21 @@ describe("Elixir_Hologram_Query_Stage", () => {
         TASK,
         "title",
         Type.list([Type.bitstring("a"), Type.integer(5)]),
-        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
       ],
       [
         "a mistyped element of an :in operand",
         TASK,
         "title",
         tuple("in", Type.list([Type.bitstring("a"), Type.integer(5)])),
-        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
       ],
       [
         "a mistyped element of a :not_in operand",
         TASK,
         "title",
         tuple("not_in", Type.list([Type.bitstring("a"), Type.integer(5)])),
-        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
       ],
       [
         "an undeclared enum value in a membership list",

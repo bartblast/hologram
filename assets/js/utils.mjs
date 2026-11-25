@@ -67,6 +67,25 @@ export default class Utils {
     return {...obj};
   }
 
+  static stringify(value) {
+    return JSON.stringify(value, (_key, item) =>
+      typeof item === "bigint" ? item.toString() : item,
+    );
+  }
+
+  // For a body the server has to parse. JSON escapes a lone surrogate, half of a pair, and the
+  // server's parser refuses the whole body for it, so each one goes out as U+FFFD, which is what
+  // its bytes already are. Only values are read: a key here is a name from the model.
+  static stringifyWellFormed(value) {
+    return JSON.stringify(value, (_key, item) => {
+      if (typeof item === "bigint") {
+        return item.toString();
+      }
+
+      return typeof item === "string" ? item.toWellFormed() : item;
+    });
+  }
+
   static uuidv7() {
     const bytes = new Uint8Array(16);
     crypto.getRandomValues(bytes);

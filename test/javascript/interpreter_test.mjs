@@ -4896,7 +4896,13 @@ describe("Interpreter", () => {
         cyclic.self = cyclic;
 
         assert.equal(Interpreter.inspect(cyclic), "[object Object]");
-        assert.equal(Interpreter.inspect({count: 1n}), "[object Object]");
+      });
+
+      it("object holding a BigInt", () => {
+        assert.equal(
+          Interpreter.inspect({count: 9007199254740993n}),
+          '{"count":"9007199254740993"}',
+        );
       });
     });
   });
@@ -10983,7 +10989,7 @@ describe("Interpreter", () => {
             0,
           ),
         "UndefinedFunctionError",
-        "function Aaa.Bbb.__struct__/0 is undefined or private. The browser loads a struct type's __struct__ functions when a struct of the type or the type's module reaches it from the server, or when the page's client code names the type. It loads none for a module that client code builds from a string.",
+        "function Aaa.Bbb.__struct__/0 is undefined or private. The browser has an entity type's __struct__ functions from the data model, and loads another struct type's when a struct of the type or the type's module reaches it from the server, or when the page's client code names the type. It loads none for a module that client code builds from a string.",
       );
     });
 
@@ -10997,7 +11003,7 @@ describe("Interpreter", () => {
             false,
           ),
         "UndefinedFunctionError",
-        "function Aaa.Bbb.__struct__/1 is undefined (module Aaa.Bbb is not available). The browser loads a struct type's __struct__ functions when a struct of the type or the type's module reaches it from the server, or when the page's client code names the type. It loads none for a module that client code builds from a string.",
+        "function Aaa.Bbb.__struct__/1 is undefined (module Aaa.Bbb is not available). The browser has an entity type's __struct__ functions from the data model, and loads another struct type's when a struct of the type or the type's module reaches it from the server, or when the page's client code names the type. It loads none for a module that client code builds from a string.",
       );
     });
 

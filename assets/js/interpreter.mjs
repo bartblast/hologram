@@ -2458,14 +2458,14 @@ export default class Interpreter {
 
   // A value no boxed type describes - a query term, which the query stages
   // build as a plain object, passed where something else goes - prints as its
-  // JSON, so a message names what it was handed rather than "undefined". JSON
-  // answers undefined for a function, a symbol or undefined, which print as
-  // String spells them, and throws on a cycle or a BigInt, which print as
-  // their object tag ("[object Object]") - neither may lose the message being
-  // built.
+  // JSON, so a message names what it was handed rather than "undefined", a
+  // BigInt as its digits. JSON answers undefined for a function, a symbol or
+  // undefined, which print as String spells them, and throws on a cycle, which
+  // prints as its object tag ("[object Object]") - neither may lose the message
+  // being built.
   static #inspectUnboxed(term) {
     try {
-      return JSON.stringify(term) ?? String(term);
+      return Utils.stringify(term) ?? String(term);
     } catch {
       return Object.prototype.toString.call(term);
     }
@@ -2773,7 +2773,7 @@ export default class Interpreter {
     }
 
     if (Interpreter.#STRUCT_FUNCTIONS.has(key)) {
-      return "The browser loads a struct type's __struct__ functions when a struct of the type or the type's module reaches it from the server, or when the page's client code names the type. It loads none for a module that client code builds from a string.";
+      return "The browser has an entity type's __struct__ functions from the data model, and loads another struct type's when a struct of the type or the type's module reaches it from the server, or when the page's client code names the type. It loads none for a module that client code builds from a string.";
     }
 
     return null;

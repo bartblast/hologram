@@ -33,8 +33,8 @@ import StringOrder from "./string_order.mjs";
 // its bounds applied, the rows of the branch an `if` takes, or none for null. An included derived
 // field holds its value, or its rows - a list, or one row or null - each row embedding what its
 // definition and the include ask for. A derived enum compares and orders by its value's position
-// among the declared ones. An integer a float field reads needs no widening here, since a number is
-// one type whole or not.
+// among the declared ones. An integer a float field reads is widened, the way the database casts
+// it, and an integer beside a float compares as a float for the same reason.
 //
 // Hologram.Query.Interpreter is the reference it is pinned to, case for case, and that one is
 // pinned to the database executor in turn. What is written twice is this small frozen surface,
@@ -139,11 +139,12 @@ export default class QueryKernel {
   }
 
   static #bound(rows, term) {
-    const skip = term.skip ?? 0;
+    // A bound can be a BigInt, which no array is long enough for it to tell from its Number.
+    const skip = Number(term.skip ?? 0);
 
     return term.take === null || term.take === undefined
       ? rows.slice(skip)
-      : rows.slice(skip, skip + term.take);
+      : rows.slice(skip, skip + Number(term.take));
   }
 
   // The rows a source chain leads to from the row: the last link's rows of every row the links
@@ -172,11 +173,30 @@ export default class QueryKernel {
       return StringOrder.compare(left, right);
     }
 
-    if (left < right) {
+    const leftValue = Model.widened(left, right);
+    const rightValue = Model.widened(right, left);
+
+    if (leftValue < rightValue) {
       return -1;
     }
 
-    return left > right ? 1 : 0;
+    return leftValue > rightValue ? 1 : 0;
+  }
+
+  // A BigInt no column can hold stays exact beside a Number, where === is never true, so that pair
+  // is equal when each is at most the other, which NaN never is. A derived field's literal can be
+  // one.
+  static #equal(left, right) {
+    const leftValue = Model.widened(left, right);
+    const rightValue = Model.widened(right, left);
+
+    const mixed =
+      (typeof leftValue === "bigint" && typeof rightValue === "number") ||
+      (typeof leftValue === "number" && typeof rightValue === "bigint");
+
+    return mixed
+      ? leftValue <= rightValue && leftValue >= rightValue
+      : leftValue === rightValue;
   }
 
   // Missing values are placed the way the database places them - last when ascending, first when
@@ -299,11 +319,11 @@ export default class QueryKernel {
       return values.get(name);
     }
 
-    const value = QueryKernel.#evaluated(
-      Model.derivedField(entityType, name).definition,
-      row,
-      entityType,
-      context,
+    const derived = Model.derivedField(entityType, name);
+
+    const value = Model.widenedTo(
+      QueryKernel.#evaluated(derived.definition, row, entityType, context),
+      derived.type,
     );
 
     if (!values) {
@@ -950,16 +970,16 @@ export default class QueryKernel {
   static #satisfies(operator, value, operand, order, pair = null) {
     switch (operator) {
       case "!=":
-        return value !== operand;
+        return !QueryKernel.#equal(value, operand);
 
       case "==":
-        return value === operand;
+        return QueryKernel.#equal(value, operand);
 
       case "in":
-        return operand.includes(value);
+        return operand.some((element) => QueryKernel.#equal(value, element));
 
       case "not_in":
-        return !operand.includes(value);
+        return !operand.some((element) => QueryKernel.#equal(value, element));
     }
 
     // Only an attribute operand can be missing here - a literal null ordering operand is refused

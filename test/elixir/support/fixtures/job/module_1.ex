@@ -1,6 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Job.Module1 do
-  use Hologram.Job
+  use Hologram.Job, max_attempts: 1
 
   allow :create
   allow :read

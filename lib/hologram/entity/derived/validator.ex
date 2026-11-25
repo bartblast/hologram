@@ -4,8 +4,10 @@ defmodule Hologram.Entity.Derived.Validator do
   # The checks a derived field's definition passes once the build resolved it - the ones its
   # declaration alone can't answer, since they read the declarations of every type it reaches.
 
+  alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.Derived
+  alias Hologram.Entity.Validator, as: EntityValidator
   alias Hologram.Query
   alias Hologram.Reflection
 
@@ -307,6 +309,33 @@ defmodule Hologram.Entity.Derived.Validator do
       Enum.flat_map(operands, &type_violations(&1, {:string, []}, "an operand of its <> is"))
     else
       ["is declared #{spelled_type(declared)}, but #{where} #{computed(definition)}"]
+    end
+  end
+
+  # An integer column holds 64 bits, so a query reading a larger value would fail when it runs.
+  defp type_violations({:value, value}, {:integer, _opts} = declared, where)
+       when is_integer(value) do
+    if EntityValidator.attribute_value_valid?(value, :integer) do
+      []
+    else
+      [
+        "is declared #{spelled_type(declared)}, but #{where} the value #{value}, which doesn't fit in 64 bits"
+      ]
+    end
+  end
+
+  # A float column stops at about 1.8e308, so a query reading a larger integer would fail when it
+  # runs, and a browser would read it as Infinity.
+  defp type_violations({:value, value}, {:float, _opts} = declared, where)
+       when is_integer(value) do
+    case Codec.decode_json(value, :float) do
+      {:ok, _float} ->
+        []
+
+      :error ->
+        [
+          "is declared #{spelled_type(declared)}, but #{where} the value #{value}, which doesn't fit in a float"
+        ]
     end
   end
 

@@ -110,8 +110,8 @@ defmodule Hologram.Entity.Model do
   A to-many's sort option is left out - it orders reads and changes nothing stored.
 
   The role grant store is left out - it is derived from the rest of the model rather than
-  declared (its enum values are the entity table names and role names), so it is computed
-  when the physical mapping is derived, at any point in history.
+  declared (its enum values are the entity type and global role module names and the entity
+  role names), so it is computed when the physical mapping is derived, at any point in history.
   """
   @spec from_modules(list(module), list(module)) :: %{atom => any}
   def from_modules(entity_types, role_modules \\ []) do

@@ -30,21 +30,39 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module16
+  alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module10, as: PolicyModule10
   alias Hologram.Test.Fixtures.Policy.Module11, as: PolicyModule11
   alias Hologram.Test.Fixtures.Policy.Module2
+  alias Hologram.Test.Fixtures.Policy.Module26
   alias Hologram.Test.Fixtures.Policy.Module36
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
   alias Hologram.Test.Fixtures.Policy.Module39, as: ChannelMessage
   alias Hologram.Test.Fixtures.Policy.Module40
+  alias Hologram.Test.Fixtures.Policy.Module58, as: ChangedProject
+  alias Hologram.Test.Fixtures.Policy.Module59, as: ChangedTask
+  alias Hologram.Test.Fixtures.Policy.Module60, as: ChangedLabel
   alias Hologram.Test.Fixtures.Policy.Module9
 
   defp create_user(email) do
     %{email: email}
     |> Module14.new()
     |> DB.create!()
+  end
+
+  defp with_past_updated_at(%entity_type{id: id}) do
+    table = Map.fetch!(DB.mapping(), entity_type).table
+
+    {:ok, _result} =
+      Connection.query(
+        ~s|UPDATE "hologram_data"."#{table}" SET "updated_at" = "updated_at" - interval '1 hour' | <>
+          ~s|WHERE "id" = $1|,
+        [Codec.encode(id, :uuid)]
+      )
+
+    EntityOperations.get(entity_type, id)
   end
 
   defp count_edges(source_entity, target_entity) do
@@ -59,6 +77,17 @@ defmodule Hologram.DB.WriterTest do
       ])
 
     count
+  end
+
+  defp job_framework_values do
+    [
+      actor_id: nil,
+      attempt: 0,
+      error: "failed",
+      run_as_server: false,
+      scheduled_at: DateTime.utc_now(),
+      status: :done
+    ]
   end
 
   defp granted_roles(user_id, entity_id) do
@@ -90,6 +119,153 @@ defmodule Hologram.DB.WriterTest do
     {:ok, %Postgrex.Result{rows: [[old]]}} = Connection.query(statement)
 
     old
+  end
+
+  describe "a signed-out session" do
+    test "is refused a create no rule gives a visitor" do
+      entity = Module2.new(public: true)
+
+      expected_msg =
+        ~s(not allowed to create Hologram.Test.Fixtures.Policy.Module2 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> create(entity) end)
+      end
+
+      assert DB.read(Module2, entity.id) == nil
+    end
+
+    test "creates what a rule gives a visitor" do
+      entity = Module9.new()
+
+      assert {:ok, %Module9{}} = as_user(nil, fn -> create(entity) end)
+      assert DB.read(Module9, entity.id) != nil
+    end
+
+    test "is refused an update of a struct no rule gives a visitor" do
+      entity =
+        %{priority: 5}
+        |> Module1.new()
+        |> DB.create!()
+
+      changed = put_attribute(entity, :priority, 7)
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}" - no allow line that holds covers :priority)
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> update(changed) end)
+      end
+
+      assert DB.read(Module1, entity.id).priority == 5
+    end
+
+    test "is refused an update by type and id no rule gives a visitor" do
+      entity =
+        %{priority: 5}
+        |> Module1.new()
+        |> DB.create!()
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}" - no allow line that holds covers :priority)
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> update(Module1, entity.id, priority: 7) end)
+      end
+
+      assert DB.read(Module1, entity.id).priority == 5
+    end
+
+    test "updates what a rule gives a visitor" do
+      entity = DB.create!(Module9.new())
+
+      assert as_user(nil, fn -> update(Module9, entity.id, archived: true) end) == :ok
+      assert DB.read(Module9, entity.id).archived == true
+    end
+
+    test "updates a struct a rule gives a visitor" do
+      entity = DB.create!(Module9.new())
+      changed = put_attribute(entity, :archived, true)
+
+      assert as_user(nil, fn -> update(changed) end) == :ok
+      assert DB.read(Module9, entity.id).archived == true
+    end
+
+    test "deletes a struct a rule gives a visitor" do
+      entity = DB.create!(Module26.new())
+
+      assert as_user(nil, fn -> delete(entity) end) == :ok
+      assert DB.read(Module26, entity.id) == nil
+    end
+
+    test "deletes by type and id what a rule gives a visitor" do
+      entity = DB.create!(Module26.new())
+
+      assert as_user(nil, fn -> delete(Module26, entity.id) end) == :ok
+      assert DB.read(Module26, entity.id) == nil
+    end
+
+    test "is refused a delete of a struct no rule gives a visitor" do
+      entity = DB.create!(Module1.new())
+
+      expected_msg =
+        ~s(not allowed to delete Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> delete(entity) end)
+      end
+
+      assert DB.read(Module1, entity.id) != nil
+    end
+
+    test "is refused a delete by type and id no rule gives a visitor" do
+      entity = DB.create!(Module1.new())
+
+      expected_msg =
+        ~s(not allowed to delete Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> delete(Module1, entity.id) end)
+      end
+
+      assert DB.read(Module1, entity.id) != nil
+    end
+
+    test "creates past the rules with a trust claim" do
+      entity = Module2.new(public: true)
+
+      trusted_entity = trust(entity)
+
+      assert {:ok, %Module2{}} = as_user(nil, fn -> create(trusted_entity) end)
+      assert DB.read(Module2, entity.id) != nil
+    end
+
+    test "updates past the rules with a trust claim" do
+      entity =
+        %{priority: 5}
+        |> Module1.new()
+        |> DB.create!()
+
+      result =
+        as_user(nil, fn ->
+          entity
+          |> put_attribute(:priority, 7)
+          |> trust()
+          |> update()
+        end)
+
+      assert result == :ok
+      assert DB.read(Module1, entity.id).priority == 7
+    end
+
+    test "deletes past the rules with a trust claim" do
+      entity = DB.create!(Module1.new())
+
+      trusted_entity = trust(entity)
+
+      assert as_user(nil, fn -> delete(trusted_entity) end) == :ok
+      assert DB.read(Module1, entity.id) == nil
+    end
   end
 
   describe "create/1" do
@@ -242,38 +418,50 @@ defmodule Hologram.DB.WriterTest do
       assert count == 0
     end
 
-    test "refuses a job under a user id no user entity can have" do
+    test "creates a job under a user id no user entity can have, to run under the rules" do
       job = JobModule1.new()
 
-      expected_msg =
-        "cannot create Hologram.Test.Fixtures.Job.Module1 as user 7 - the user id isn't a user entity's, so the job would run with no user and skip every rule. Create it with trust: true to run it as the server."
+      assert {:ok, %JobModule1{actor_id: nil, run_as_server: false}} =
+               as_user(7, fn -> create(job) end)
 
-      assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(7, fn -> create(job) end)
-      end
-
-      assert DB.read(JobModule1, job.id) == nil
+      assert %{actor_id: nil, run_as_server: false} = DB.read(JobModule1, job.id)
     end
 
-    test "creates a job claiming trust under a user id no user entity can have, with no actor" do
+    test "creates a job claiming trust under a user id no user entity can have, as the server" do
       job = trust(JobModule1.new())
 
-      assert {:ok, %JobModule1{actor_id: nil}} = as_user(7, fn -> create(job) end)
-      assert DB.read(JobModule1, job.id).actor_id == nil
+      assert {:ok, %JobModule1{actor_id: nil, run_as_server: true}} =
+               as_user(7, fn -> create(job) end)
+
+      assert %{actor_id: nil, run_as_server: true} = DB.read(JobModule1, job.id)
     end
 
-    test "refuses Job.create/3 under a user id no user entity can have" do
-      expected_msg =
-        "cannot create Hologram.Test.Fixtures.Job.Module1 as user 7 - the user id isn't a user entity's, so the job would run with no user and skip every rule. Create it with trust: true to run it as the server."
-
-      assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(7, fn -> Job.create(JobModule1) end)
-      end
+    test "creates a job through Job.create/3 under a user id no user entity can have" do
+      assert {:ok, %JobModule1{actor_id: nil, run_as_server: false}} =
+               as_user(7, fn -> Job.create(JobModule1) end)
     end
 
     test "creates a job through Job.create/3 claiming trust under a user id no user entity can have" do
-      assert {:ok, %JobModule1{actor_id: nil}} =
+      assert {:ok, %JobModule1{actor_id: nil, run_as_server: true}} =
                as_user(7, fn -> Job.create(JobModule1, %{}, trust: true) end)
+    end
+
+    # A browser's write is never the server's, whatever state the process is in.
+    test "leaves a client's job unmarked with no session" do
+      job = JobModule1.new()
+      %Metadata{} = metadata = job.__meta__
+      client_job = %{job | __meta__: %{metadata | claim: :client}}
+
+      assert {:ok, %JobModule1{run_as_server: false}} = create(client_job)
+      assert DB.read(JobModule1, job.id).run_as_server == false
+    end
+
+    # The stamp is the write's own, so a value the struct carries can't choose how the job runs.
+    test "stamps a job's server mark over what the struct carries" do
+      job = %{JobModule1.new() | run_as_server: true}
+
+      assert {:ok, %JobModule1{run_as_server: false}} = as_user(nil, fn -> create(job) end)
+      assert DB.read(JobModule1, job.id).run_as_server == false
     end
 
     test "skips evaluation for a trust claim and still grants creator roles" do
@@ -421,6 +609,24 @@ defmodule Hologram.DB.WriterTest do
   end
 
   describe "update/1" do
+    test "refuses each attribute the framework sets on a job, even with a trust claim" do
+      job = Job.create!(JobModule1)
+
+      for {name, value} <- job_framework_values() do
+        expected_msg =
+          "#{inspect(name)} of Hologram.Test.Fixtures.Job.Module1 is set by the framework - an update can't change it"
+
+        assert_error MisuseError, expected_msg, fn ->
+          job
+          |> put_attribute(name, value)
+          |> trust()
+          |> update()
+        end
+      end
+
+      assert DB.read(JobModule1, job.id).run_as_server == true
+    end
+
     test "a denied write rolls back the writes made before it" do
       user = create_user("roller@example.com")
       earlier_entity = Module1.new()
@@ -661,6 +867,19 @@ defmodule Hologram.DB.WriterTest do
              |> update() == :ok
 
       assert EntityOperations.get(Module10, entity.id).__meta__.revisions.count == stamp
+    end
+
+    test "returns a violation for a move by an amount its column can't hold" do
+      entity =
+        %{count: -5_000_000_000_000_000_000}
+        |> Module20.new()
+        |> DB.create!()
+
+      assert entity
+             |> increment(:count, 10_000_000_000_000_000_000)
+             |> update() == {:error, %{count: [{:type, :integer}]}}
+
+      assert EntityOperations.get(Module20, entity.id).count == -5_000_000_000_000_000_000
     end
 
     test "returns the violation a moved value's declaration refuses" do
@@ -924,7 +1143,310 @@ defmodule Hologram.DB.WriterTest do
     end
   end
 
+  describe "update/1 of rules reading the row after the change" do
+    defp create_changed_task(values \\ %{}) do
+      task =
+        values
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      EntityOperations.get(ChangedTask, task.id)
+    end
+
+    defp create_changed_project(archived \\ false) do
+      %{archived: archived}
+      |> ChangedProject.new()
+      |> DB.create!()
+    end
+
+    defp create_changed_label(blocked) do
+      %{blocked: blocked}
+      |> ChangedLabel.new()
+      |> DB.create!()
+    end
+
+    defp uncovered_message(task, field) do
+      "not allowed to update #{inspect(ChangedTask)} #{inspect(task.id)} - no allow line that holds covers #{inspect(field)}"
+    end
+
+    test "lets a change through to the value the rule allows" do
+      user = create_user("approver@example.com")
+      task = create_changed_task()
+      Auth.grant_role(user, :admin, task)
+
+      assert as_user(user, fn -> update(put_attribute(task, :status, :approved)) end) == :ok
+      assert EntityOperations.get(ChangedTask, task.id).status == :approved
+    end
+
+    test "refuses a change to a value the rule doesn't allow" do
+      user = create_user("rejecter@example.com")
+      task = create_changed_task()
+      Auth.grant_role(user, :admin, task)
+
+      assert_error AccessDeniedError, uncovered_message(task, :status), fn ->
+        as_user(user, fn -> update(put_attribute(task, :status, :rejected)) end)
+      end
+    end
+
+    test "still reads a bare name as the stored value" do
+      user = create_user("reapprover@example.com")
+      task = create_changed_task(%{status: :rejected})
+      Auth.grant_role(user, :admin, task)
+
+      assert_error AccessDeniedError, uncovered_message(task, :status), fn ->
+        as_user(user, fn -> update(put_attribute(task, :status, :approved)) end)
+      end
+    end
+
+    test "moves a row between two projects the user is a member of" do
+      user = create_user("mover@example.com")
+      source = create_changed_project()
+      target = create_changed_project()
+      task = create_changed_task(%{project_id: source.id})
+      Auth.grant_role(user, :member, source)
+      Auth.grant_role(user, :member, target)
+
+      assert as_user(user, fn -> update(put_attribute(task, :project_id, target.id)) end) == :ok
+
+      assert EntityOperations.get(ChangedTask, task.id).project_id == target.id
+    end
+
+    test "refuses a move into a project the user isn't a member of" do
+      user = create_user("intruder@example.com")
+      source = create_changed_project()
+      target = create_changed_project()
+      task = create_changed_task(%{project_id: source.id})
+      Auth.grant_role(user, :member, source)
+
+      assert_error AccessDeniedError, uncovered_message(task, :project), fn ->
+        as_user(user, fn -> update(put_attribute(task, :project_id, target.id)) end)
+      end
+    end
+
+    test "refuses a move out of a project the user isn't a member of" do
+      user = create_user("outsider@example.com")
+      source = create_changed_project()
+      target = create_changed_project()
+      task = create_changed_task(%{project_id: source.id})
+      Auth.grant_role(user, :member, target)
+
+      assert_error AccessDeniedError, uncovered_message(task, :project), fn ->
+        as_user(user, fn -> update(put_attribute(task, :project_id, target.id)) end)
+      end
+    end
+
+    test "judges a counter by the value it moves to" do
+      user = create_user("counter@example.com")
+      task = create_changed_task(%{count: 9})
+
+      assert as_user(user, fn -> update(increment(task, :count, 1)) end) == :ok
+
+      moved = EntityOperations.get(ChangedTask, task.id)
+
+      assert moved.count == 10
+
+      assert_error AccessDeniedError, uncovered_message(task, :count), fn ->
+        as_user(user, fn -> update(increment(moved, :count, 1)) end)
+      end
+    end
+
+    test "moves the timestamp a rule reads for a write that admits a value" do
+      user = create_user("marker@example.com")
+      task = with_past_updated_at(create_changed_task())
+
+      assert as_user(user, fn -> update(put_attribute(task, :mark, "ok")) end) == :ok
+    end
+
+    test "leaves the timestamp a rule reads as stored when no value is admitted" do
+      user = create_user("invalid_marker@example.com")
+      task = with_past_updated_at(create_changed_task())
+
+      expected_msg =
+        uncovered_message(task, :mark) <>
+          " (the value given for :mark is invalid, so its rule read the stored value)"
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> update(put_attribute(task, :mark, "too long")) end)
+      end
+    end
+
+    test "reads a field the change doesn't touch as stored" do
+      user = create_user("noter@example.com")
+      archived = create_changed_project(true)
+      task = create_changed_task(%{project_id: archived.id})
+
+      assert_error AccessDeniedError, uncovered_message(task, :note), fn ->
+        as_user(user, fn -> update(put_attribute(task, :note, "x")) end)
+      end
+    end
+
+    test "judges a to-many by the edges the call adds" do
+      user = create_user("labeler@example.com")
+      task = create_changed_task()
+      plain = create_changed_label(false)
+      blocked = create_changed_label(true)
+
+      assert as_user(user, fn -> update(add_relationship(task, :labels, plain.id)) end) == :ok
+
+      assert_error AccessDeniedError, uncovered_message(task, :labels), fn ->
+        as_user(user, fn -> update(add_relationship(task, :labels, blocked.id)) end)
+      end
+    end
+
+    test "answers an invalid value with its violations when its rule holds" do
+      user = create_user("invalid@example.com")
+      project = create_changed_project()
+      task = create_changed_task(%{project_id: project.id})
+      Auth.grant_role(user, :member, project)
+
+      assert {:error, %{code: [_violation]}} =
+               as_user(user, fn -> update(put_attribute(task, :code, "too long")) end)
+    end
+
+    test "says a refused field's value was invalid" do
+      user = create_user("invalid_status@example.com")
+      task = create_changed_task()
+      Auth.grant_role(user, :admin, task)
+
+      expected_msg =
+        uncovered_message(task, :status) <>
+          " (the value given for :status is invalid, so its rule read the stored value)"
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> update(put_attribute(task, :status, :bogus)) end)
+      end
+    end
+
+    test "says so for each refused field whose value was invalid" do
+      user = create_user("invalid_outsider@example.com")
+      task = create_changed_task()
+
+      expected_msg =
+        "not allowed to update #{inspect(ChangedTask)} #{inspect(task.id)} - no allow line that holds covers :code, :status (the values given for :code, :status are invalid, so their rules read the stored values)"
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn ->
+          task
+          |> put_attribute(:code, "too long")
+          |> put_attribute(:status, :bogus)
+          |> update()
+        end)
+      end
+    end
+
+    test "names a relationship whose reference was malformed" do
+      user = create_user("malformed_reference@example.com")
+      task = create_changed_task()
+
+      expected_msg =
+        uncovered_message(task, :project) <>
+          " (the value given for :project is invalid, so its rule read the stored value)"
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> update(put_attribute(task, :project_id, "not-a-uuid")) end)
+      end
+    end
+
+    test "doesn't say a refused reference names no row" do
+      user = create_user("missing_outsider@example.com")
+      task = create_changed_task()
+      missing_id = Entity.generate_id()
+
+      assert_error AccessDeniedError, uncovered_message(task, :project), fn ->
+        as_user(user, fn -> update(put_attribute(task, :project_id, missing_id)) end)
+      end
+    end
+
+    test "judges a reference naming no row on the stored one" do
+      user = create_user("missing_target@example.com")
+      project = create_changed_project()
+      task = create_changed_task(%{project_id: project.id})
+      Auth.grant_role(user, :member, project)
+      missing_id = Entity.generate_id()
+
+      assert {:error, %{project_id: [:not_found]}} =
+               as_user(user, fn -> update(put_attribute(task, :project_id, missing_id)) end)
+    end
+
+    test "answers a move past what the column holds with its violation when the stored value passes" do
+      user = create_user("overflowing_counter@example.com")
+      task = create_changed_task(%{count: 5})
+
+      assert as_user(user, fn ->
+               update(increment(task, :count, 9_223_372_036_854_775_807))
+             end) == {:error, %{count: [{:type, :integer}]}}
+
+      assert EntityOperations.get(ChangedTask, task.id).count == 5
+    end
+
+    test "answers an amount the column can't take with its violation when the stored value passes" do
+      user = create_user("huge_amount@example.com")
+      task = create_changed_task(%{count: -5_000_000_000_000_000_000})
+
+      assert as_user(user, fn ->
+               update(increment(task, :count, 10_000_000_000_000_000_000))
+             end) == {:error, %{count: [{:type, :integer}]}}
+    end
+
+    test "says a refused move was invalid when the stored value fails too" do
+      user = create_user("overflowing_refused@example.com")
+      task = create_changed_task(%{count: 11})
+
+      expected_msg =
+        uncovered_message(task, :count) <>
+          " (the value given for :count is invalid, so its rule read the stored value)"
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> update(increment(task, :count, 9_223_372_036_854_775_807)) end)
+      end
+    end
+
+    test "judges nothing on the trusted tier" do
+      task = create_changed_task()
+
+      assert update(put_attribute(task, :status, :rejected)) == :ok
+    end
+  end
+
+  describe "update/3 of rules reading the row after the change" do
+    test "judges the values it's given" do
+      user = create_user("indexed@example.com")
+      task = create_changed_task()
+      Auth.grant_role(user, :admin, task)
+
+      assert_error AccessDeniedError, uncovered_message(task, :status), fn ->
+        as_user(user, fn -> update(ChangedTask, task.id, status: :rejected) end)
+      end
+
+      assert as_user(user, fn -> update(ChangedTask, task.id, status: :approved) end) == :ok
+    end
+  end
+
   describe "update/3" do
+    test "refuses each attribute the framework sets on a job, with no session" do
+      job = Job.create!(JobModule1)
+
+      for {name, value} <- job_framework_values() do
+        expected_msg =
+          "#{inspect(name)} of Hologram.Test.Fixtures.Job.Module1 is set by the framework - an update can't change it"
+
+        assert_error MisuseError, expected_msg, fn ->
+          update(JobModule1, job.id, [{name, value}])
+        end
+      end
+    end
+
+    test "refuses a job's actor in a session" do
+      job = Job.create!(JobModule1)
+
+      expected_msg =
+        ":actor_id of Hologram.Test.Fixtures.Job.Module1 is set by the framework - an update can't change it"
+
+      assert_error MisuseError, expected_msg, fn ->
+        as_user(nil, fn -> update(JobModule1, job.id, actor_id: nil) end)
+      end
+    end
+
     test "raises for a role grant without an acting user" do
       expected_msg =
         "cannot update Hologram.Auth.RoleGrant - a role grant is never changed in place, revoke the role and grant the new one instead"

@@ -6,6 +6,7 @@ defmodule Hologram.Controller do
   alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Auth
   alias Hologram.Auth.Context
   alias Hologram.Component.Action
@@ -618,11 +619,14 @@ defmodule Hologram.Controller do
           })
 
         csp_nonce = renderer_opts[:csp_nonce]
+        script_csp_nonce = script_csp_nonce(renderer_opts)
 
         fills = %{
           "boot_data" => Renderer.boot_data_element(boot_data, csp_nonce),
           "chunk_script_tags" =>
-            Renderer.chunk_script_tags(result.chunk_digests, chunk_csp_nonce(renderer_opts))
+            Renderer.chunk_script_tags(result.chunk_digests, script_csp_nonce),
+          "data_model_script_tag" =>
+            Renderer.data_model_script_tag(data_model_bundle_path(), script_csp_nonce)
         }
 
         # Printed here rather than by the renderer, since only now is every value the markers are
@@ -670,10 +674,12 @@ defmodule Hologram.Controller do
       session_id ->
         current_user_id = Session.get_user_id(conn)
 
-        %{instance_id: instance_id, receipts: receipts} =
+        payload =
           conn.body_params
           |> Map.get("_json")
           |> Deserializer.deserialize()
+
+        %{instance_id: instance_id, receipts: receipts} = payload
 
         {validated_bindings, refreshed_receipts} =
           verify_and_refresh_receipts(receipts, instance_id, session_id, current_user_id)
@@ -688,12 +694,20 @@ defmodule Hologram.Controller do
           expires_at
         )
 
+        response =
+          maybe_mint_replica(
+            %{
+              handshakeId: handshake_id,
+              heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
+              refreshedReceipts: serialize_to_fragment(refreshed_receipts)
+            },
+            payload,
+            session_id,
+            current_user_id
+          )
+
         conn
-        |> send_json(%{
-          handshakeId: handshake_id,
-          heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
-          refreshedReceipts: serialize_to_fragment(refreshed_receipts)
-        })
+        |> send_json(response)
         |> Plug.Conn.halt()
     end
   end
@@ -840,11 +854,13 @@ defmodule Hologram.Controller do
     end)
   end
 
-  # The chunk tags are script elements, so they carry the nonce only when scripts are stamped.
-  defp chunk_csp_nonce(renderer_opts) do
-    nonced_elements = renderer_opts[:csp_nonced_elements] || []
-
-    if "script" in nonced_elements, do: renderer_opts[:csp_nonce]
+  # The path the data model bundle is served from, or nil for a build that has none (see
+  # Hologram.Compiler.build_data_model_js/1).
+  defp data_model_bundle_path do
+    case AssetPathRegistry.lookup("hologram/data-model.js") do
+      {:ok, path} -> path
+      :error -> nil
+    end
   end
 
   # A page's policy belongs in the config. The policy Hologram sends names the page's nonce, which
@@ -958,6 +974,37 @@ defmodule Hologram.Controller do
   defp maybe_forbid_storing(conn, _server) do
     Plug.Conn.put_resp_header(conn, "cache-control", "no-store")
   end
+
+  # A tab that counts its batches in memory asks for an identity no other tab can hold. The one in
+  # its page can't be that, since a browser can serve one cached page to two tabs. Nothing is
+  # recorded: the signed statement is the whole of what makes the id usable.
+  #
+  # The tab shows the identity it holds, and the new one belongs to the same owner, so it can do no
+  # more than that one could. Bound to the session alone, the writes the tab has queued would be
+  # applied as whoever has signed in on that session since. An identity that no longer verifies
+  # earns no new one, and the tab's writes wait for a reload, as they do after a 403.
+  defp maybe_mint_replica(
+         response,
+         %{replica_id: presented_id, replica_token: presented_token},
+         session_id,
+         user_id
+       )
+       when is_binary(presented_id) and is_binary(presented_token) do
+    case ReplicaIdentity.verified_subject(presented_token, presented_id, session_id, user_id) do
+      {:ok, subject} ->
+        replica_id = UUID.uuid4()
+
+        Map.put(response, :replica, %{
+          id: replica_id,
+          token: ReplicaIdentity.issue_for(replica_id, subject)
+        })
+
+      {:error, _reason} ->
+        Map.put(response, :replicaRefused, true)
+    end
+  end
+
+  defp maybe_mint_replica(response, _payload, _session_id, _user_id), do: response
 
   # In dev a live reload builds the pages open in tabs first, and the page a tab shows is the page
   # it rendered last. A first page also renders the tab's document, which loads the app's assets, so
@@ -1175,9 +1222,17 @@ defmodule Hologram.Controller do
     |> put_identity_tag_header()
   end
 
+  # The chunk tags and the data model bundle's tag are script elements, so they carry the nonce only
+  # when scripts are stamped.
+  defp script_csp_nonce(renderer_opts) do
+    nonced_elements = renderer_opts[:csp_nonced_elements] || []
+
+    if "script" in nonced_elements, do: renderer_opts[:csp_nonce]
+  end
+
   # Transport only: what a batch becomes is Hologram.Mutation's, the spelling of its answer
-  # included - so that a repeated batch is answered with byte for byte what its first arrival
-  # produced.
+  # included - so that a repeated batch is answered with what its first arrival produced, only the
+  # grants it names read again.
   defp send_mutation_response(conn) do
     response =
       case Mutation.run(conn.body_params, Server.from(conn)) do

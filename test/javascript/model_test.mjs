@@ -7,6 +7,7 @@ import {
   defineRuntimeGlobals,
 } from "./support/helpers.mjs";
 
+import Bitstring from "../../assets/js/bitstring.mjs";
 import Erlang_Re from "../../assets/js/erlang/re.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Model from "../../assets/js/model.mjs";
@@ -135,7 +136,7 @@ describe("Model", () => {
           roles: ["editor", "owner"],
           serverOnly: [],
         },
-        // A job type, whose three framework attributes are the worker's to fill and no client's
+        // A job type, whose framework attributes are the worker's to fill and no client's
         // to write.
         [NOTIFY]: {
           attributes: {
@@ -149,7 +150,14 @@ describe("Model", () => {
           constraints: {},
           defaults: {},
           enumValues: {reason: ["created"], status: ["queued", "running"]},
-          frameworkAttributes: ["actor_id", "error", "status"],
+          frameworkAttributes: [
+            "actor_id",
+            "attempt",
+            "error",
+            "run_as_server",
+            "scheduled_at",
+            "status",
+          ],
           relationships: {},
           serverOnly: ["error"],
         },
@@ -985,6 +993,26 @@ describe("Model", () => {
     });
   });
 
+  describe("addIntegers()", () => {
+    it("adds past what a Number holds exactly, into a BigInt", () => {
+      assert.strictEqual(
+        Model.addIntegers(9007199254740991, 2),
+        9007199254740993n,
+      );
+    });
+
+    it("answers a Number when a Number holds the sum", () => {
+      assert.strictEqual(
+        Model.addIntegers(9007199254740993n, -2),
+        9007199254740991,
+      );
+    });
+
+    it("counts a missing value as zero", () => {
+      assert.strictEqual(Model.addIntegers(null, 2), 2);
+    });
+  });
+
   describe("computeSortKeys()", () => {
     it("computes a null sort key for a server-only string, whose value never arrives", () => {
       const attributes = Model.computeSortKeys(TASK, {
@@ -1064,10 +1092,66 @@ describe("Model", () => {
       assert.equal(Model.unbox(Type.bitstring("t1"), "uuid"), "t1");
     });
 
+    it("unboxes a string holding a lone surrogate the way the server stores it", () => {
+      assert.equal(
+        Model.unbox(Type.bitstring("a\uD800b"), "string"),
+        "a\uFFFDb",
+      );
+    });
+
+    it("keeps a whole surrogate pair in a string", () => {
+      assert.equal(
+        Model.unbox(Type.bitstring("a\u{1F600}b"), "string"),
+        "a\u{1F600}b",
+      );
+    });
+
+    it("unboxes a binary that isn't text without throwing", () => {
+      assert.isFalse(Model.unbox(Bitstring.fromBytes([255]), "string"));
+    });
+
     it("unboxes a boolean, an integer and a float as plain values", () => {
       assert.isFalse(Model.unbox(Type.boolean(false), "boolean"));
       assert.equal(Model.unbox(Type.integer(7), "integer"), 7);
       assert.equal(Model.unbox(Type.float(1.5), "float"), 1.5);
+    });
+
+    it("unboxes an integer a Number can't hold exactly as a BigInt", () => {
+      assert.strictEqual(
+        Model.unbox(Type.integer(9007199254740992n), "integer"),
+        9007199254740992n,
+      );
+
+      assert.strictEqual(
+        Model.unbox(Type.integer(-9007199254740993n), "integer"),
+        -9007199254740993n,
+      );
+    });
+
+    it("unboxes an integer a Number holds exactly as a Number", () => {
+      assert.strictEqual(
+        Model.unbox(Type.integer(9007199254740991n), "integer"),
+        9007199254740991,
+      );
+
+      assert.strictEqual(
+        Model.unbox(Type.integer(-9007199254740991n), "integer"),
+        -9007199254740991,
+      );
+    });
+
+    // A struct edited in an action holds whatever was put there until it's validated, and a
+    // permission check reads it before that.
+    it("doesn't raise on a term that isn't an integer in an integer field", () => {
+      assert.strictEqual(Model.unbox(Type.float(1.5), "integer"), 1.5);
+      assert.isNaN(Model.unbox(Type.atom("x"), "integer"));
+    });
+
+    it("unboxes an integer a float field takes as a Number", () => {
+      assert.strictEqual(
+        Model.unbox(Type.integer(9007199254740993n), "float"),
+        9007199254740992,
+      );
     });
 
     it("unboxes nil as nothing", () => {
@@ -1681,6 +1765,111 @@ describe("Model", () => {
     });
   });
 
+  describe("readIntegers()", () => {
+    const TYPE = "MyApp.Counted";
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TYPE]: {
+            attributes: {id: "uuid", label: "string", n: "integer"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    it("reads an integer attribute's text as a BigInt", () => {
+      assert.strictEqual(
+        Model.readIntegers(TYPE, {n: "-9007199254740993"}).n,
+        -9007199254740993n,
+      );
+    });
+
+    it("leaves a Number, a BigInt and null as they are", () => {
+      assert.strictEqual(Model.readIntegers(TYPE, {n: 42}).n, 42);
+      assert.strictEqual(Model.readIntegers(TYPE, {n: 5n}).n, 5n);
+      assert.isNull(Model.readIntegers(TYPE, {n: null}).n);
+    });
+
+    it("leaves another attribute's text as it is", () => {
+      assert.strictEqual(Model.readIntegers(TYPE, {label: "12"}).label, "12");
+    });
+  });
+
+  describe("integer literals in the rules", () => {
+    const TYPE = "MyApp.Counted";
+
+    const literal = {$integer: "9007199254740993"};
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TYPE]: {
+            attributes: {id: "uuid", n: "integer"},
+            derived: {
+              cap: {
+                definition: {value: literal},
+                kind: "scalar",
+                type: "integer",
+              },
+            },
+            policy: {
+              read: [
+                {predicates: [["n", "in", [1, literal]]], to: null, via: null},
+              ],
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    it("reads a derived field's literal as a BigInt", () => {
+      assert.strictEqual(
+        Model.derivedField(TYPE, "cap").definition.value,
+        9007199254740993n,
+      );
+    });
+
+    it("reads a rule's literal as a BigInt, wherever it sits", () => {
+      assert.deepEqual(Model.entry(TYPE).policy.read[0].predicates, [
+        ["n", "in", [1, 9007199254740993n]],
+      ]);
+    });
+
+    it("leaves the model holding JSON, for another tab to take", () => {
+      Model.entry(TYPE);
+
+      assert.doesNotThrow(() => JSON.stringify(Model.serializedEntries()));
+      assert.deepEqual(
+        Model.serializedEntries()[TYPE].derived.cap.definition.value,
+        literal,
+      );
+    });
+
+    it("reads one policy into one object, however often it is asked for", () => {
+      const policy = globalThis.Hologram.sync.model[TYPE].policy;
+
+      assert.strictEqual(Model.readPolicy(policy), Model.readPolicy(policy));
+    });
+
+    it("hands back rules holding no literal as they are", () => {
+      const policy = {read: [{predicates: [], to: null, via: null}]};
+
+      globalThis.Hologram.sync.model[TYPE].policy = policy;
+      Model.reset();
+
+      assert.strictEqual(Model.entry(TYPE).policy, policy);
+    });
+  });
+
   describe("replaceRules()", () => {
     const DOC = "MyApp.Doc";
     const FOLDER = "MyApp.Folder";
@@ -1722,6 +1911,68 @@ describe("Model", () => {
       };
 
       Model.reset();
+    });
+
+    it("remembers the update names the new rules no longer carry", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["approve", "archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: ["approve"],
+          policy: {},
+          updateNames: ["approve"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("remembers the update names of a held type the entries leave out", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("keeps a removed update name across a later refresh", () => {
+      globalThis.Hologram.sync.model[DOC].formerUpdateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("forgets a removed update name the new rules bring back", () => {
+      globalThis.Hologram.sync.model[DOC].formerUpdateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: ["archive"],
+          policy: {},
+          updateNames: ["archive"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        [],
+      );
     });
 
     it("takes a held type's rules from its entry", () => {
@@ -1768,6 +2019,49 @@ describe("Model", () => {
         globalThis.Hologram.sync.model[DOC].verdicts,
         verdicts,
       );
+    });
+
+    it("takes the update names of a held type's entry", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: [],
+          policy: {},
+          updateNames: ["approve"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(globalThis.Hologram.sync.model[DOC].updateNames, [
+        "approve",
+      ]);
+    });
+
+    it("drops the update names of a held type its entry carries none for", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: [],
+          policy: {},
+          verdicts: {},
+        },
+      });
+
+      assert.equal(globalThis.Hologram.sync.model[DOC].updateNames, undefined);
+    });
+
+    it("drops the update names of a held type the entries leave out", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.equal(globalThis.Hologram.sync.model[DOC].updateNames, undefined);
     });
 
     // The bundle's own code can still ask about an operation the new build dropped, and is denied

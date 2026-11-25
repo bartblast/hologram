@@ -16,10 +16,19 @@ export default class Batch {
   // would become Bob's.
   actorUserId = null;
 
-  // The writes whose effect the base already holds, by their position in `writes`. A frame naming
-  // this batch's number is what puts one here: the server applied it, resolved it against
+  // Whether the store holds this batch: null while the filing is in flight, true once it is stored
+  // and for a batch read back from it, false when it never got there. A batch the store doesn't
+  // hold exists only in this tab, so nothing else will ever send it. Not part of `record()`: what
+  // is kept of a batch is filed by being kept.
+  filed = null;
+
+  // The writes the server has already settled, by their position in `writes`. A frame naming this
+  // batch's number is what usually puts one here: the server applied it, resolved it against
   // whatever else had moved, and sent back the row it left - so folding the write on top again
   // would be applying the same change twice, which for a moved counter means counting it twice.
+  // A fill's marker can put one here too: the fill read this batch and left out the row a write
+  // created, so the row is gone or its user may not read it, and neither the fold nor the answer
+  // may bring it back (see Batches.landUnsent).
   //
   // The wire object itself is untouched, so a batch that has to be sent again ships exactly what
   // it always would. And the batch goes on NAMING the row until the answer arrives: it is still
@@ -81,6 +90,7 @@ export default class Batch {
     const batch = new Batch(null);
 
     batch.actorUserId = record.actorUserId;
+    batch.filed = true;
     batch.landed = new Set(record.landed);
     batch.writes = record.writes;
 
@@ -126,8 +136,9 @@ export default class Batch {
   //
   // Four things, each here because rebuilding without it would be wrong: the writes, which are
   // what gets sent; the number, which identifies the batch and is the order it ships in; who made
-  // it, which decides who may send it; and which of its writes the base already holds, without
-  // which a moved counter is added a second time on the next load.
+  // it, which decides who may send it; and which of its writes the server has settled, without
+  // which a moved counter is added a second time on the next load, and a row its user may not read
+  // is filed.
   record() {
     return {
       actorUserId: this.actorUserId,

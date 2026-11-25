@@ -20,6 +20,16 @@ defmodule Hologram.Migration.ShadowVerifier do
   @advisory_lock_key 2_569_918_074_951_200_709
 
   @doc """
+  Returns the name of the scratch database verification uses for the given configured database.
+  """
+  @spec shadow_database_name(String.t()) :: String.t()
+  # Fitted rather than concatenated: PostgreSQL truncates an over-long identifier to 63 bytes
+  # without saying so, and a configured name already at the limit truncates its own suffix away -
+  # so the drop that clears a stale scratch database would name the configured one and take it.
+  # Fitting also keeps two long configured names apart, which bare truncation does not.
+  def shadow_database_name(database), do: Mapper.fit_identifier([database], [], "shadow")
+
+  @doc """
   Validates that applying the given migrations from the empty model onto a scratch
   database produces exactly the given model's schema.
 
@@ -45,12 +55,7 @@ defmodule Hologram.Migration.ShadowVerifier do
   def verify!(migrations, current_model) do
     {:ok, _apps} = Application.ensure_all_started(:postgrex)
 
-    # Fitted rather than concatenated: PostgreSQL truncates an over-long identifier to 63
-    # bytes without saying so, and a configured name already at the limit truncates its own
-    # suffix away - so the drop that clears a stale scratch database would name the
-    # configured one and take it. Fitting also keeps two long configured names apart, which
-    # bare truncation does not.
-    shadow_database = Mapper.fit_identifier([Config.connection_opts()[:database]], [], "shadow")
+    shadow_database = shadow_database_name(Config.connection_opts()[:database])
 
     maintenance_pid = start_connection("postgres")
 

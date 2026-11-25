@@ -2081,7 +2081,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: 5],
-        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
       )
     end
 
@@ -2089,7 +2089,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: <<0xFF>>],
-        ~s(<<255>> is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string)
+        ~s(<<255>> is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte)
       )
     end
 
@@ -2137,7 +2137,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module4,
         [a: "2026-01-01"],
-        ~s("2026-01-01" is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :date, which takes a Date)
+        ~s("2026-01-01" is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :date, which takes an ISO Date from -4713-11-24 to 5874897-12-31)
       )
     end
 
@@ -2145,7 +2145,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module4,
         [b: ~D[2026-01-01]],
-        "~D[2026-01-01] is not a value of attribute :b in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :datetime, which takes a DateTime"
+        "~D[2026-01-01] is not a value of attribute :b in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :datetime, which takes a DateTime from -4713-11-24T00:00:00Z to 9999-12-31T23:59:59.999999Z"
       )
     end
 
@@ -2153,7 +2153,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module22,
         [opens_at: "09:00"],
-        ~s("09:00" is not a value of attribute :opens_at in Hologram.Test.Fixtures.Entity.Module22 - the attribute has type :time, which takes a Time)
+        ~s("09:00" is not a value of attribute :opens_at in Hologram.Test.Fixtures.Entity.Module22 - the attribute has type :time, which takes an ISO Time)
       )
     end
 
@@ -2211,7 +2211,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module23,
         [{[:a, :opens_at], "09:00"}],
-        ~s("09:00" is not a value of attribute a.opens_at in Hologram.Test.Fixtures.Entity.Module23 - the attribute has type :time, which takes a Time)
+        ~s("09:00" is not a value of attribute a.opens_at in Hologram.Test.Fixtures.Entity.Module23 - the attribute has type :time, which takes an ISO Time)
       )
     end
 
@@ -2219,7 +2219,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: {:!=, 5}],
-        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
       )
     end
 
@@ -2235,7 +2235,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: ["a", 5]],
-        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
       )
     end
 
@@ -2243,7 +2243,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: {:in, ["a", 5]}],
-        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
       )
     end
 
@@ -2251,7 +2251,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: {:not_in, ["a", 5]}],
-        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
       )
     end
 
@@ -2364,6 +2364,33 @@ defmodule Hologram.Query.StageTest do
 
       assert_error MisuseError, expected_msg, fn ->
         filter(Module2, c: {:contains, <<0xFF>>})
+      end
+    end
+
+    test "raises on a search term holding a NUL" do
+      expected_msg =
+        ~s(invalid operand <<97, 0, 98>> for operator :contains on attribute :c - a search term can't hold a NUL byte)
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, c: {:contains, "a\0b"})
+      end
+    end
+
+    test "raises on a filter value holding a NUL" do
+      expected_msg =
+        "<<97, 0, 98>> is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, c: "a\0b")
+      end
+    end
+
+    test "raises on a filter date no date column holds" do
+      expected_msg =
+        "~D[-5000-01-01] is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :date, which takes an ISO Date from -4713-11-24 to 5874897-12-31"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module4, a: ~D[-5000-01-01])
       end
     end
 
@@ -4105,6 +4132,92 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "new_row_triples!/3" do
+    test "builds a triple reading the row one level above" do
+      assert new_row_triples!(Module2, [{{:outer, 1, :c}, {:==, "x"}}], []) ==
+               [{{:outer, 1, :c}, :==, "x"}]
+    end
+
+    test "builds a triple of the row itself" do
+      assert new_row_triples!(Module2, [c: {:==, "x"}], []) == [{:c, :==, "x"}]
+    end
+
+    test "builds a comparison of the row with the row above" do
+      assert new_row_triples!(Module2, [c: {:!=, {:attribute, {:outer, 1, :c}}}], []) ==
+               [{:c, :!=, {:attribute, {:outer, 1, :c}}}]
+    end
+
+    test "refuses a mistyped value for a name of the row above" do
+      assert_error MisuseError,
+                   "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
+                   fn -> new_row_triples!(Module2, [{{:outer, 1, :c}, {:==, 5}}], []) end
+    end
+
+    test "reads a hint at the depth of the clause, leaving the row above out" do
+      hints = [{:key, 0, :nope, "a value from the surrounding code is pinned", []}]
+
+      assert_error MisuseError,
+                   "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned",
+                   fn -> new_row_triples!(Module2, [nope: {:==, {:attribute, :c}}], hints) end
+    end
+
+    test "reads a row field inside a quantifier on the rule's own row, not the new one" do
+      row_field = %RowField{owner: Module32, name: :name}
+
+      assert new_row_triples!(Module32, [any: {[:messages], [body: row_field]}], []) == [
+               {:any, {[:messages], [{:body, :==, {:attribute, {:outer, 1, :name}}}]}}
+             ]
+    end
+
+    test "builds a role and an operation check, alone and in an alternative" do
+      predicates = [
+        {{:has_role, :member}, [:b]},
+        or: [[{{:can, :update}, [:b]}], [c: {:==, "x"}]]
+      ]
+
+      assert new_row_triples!(Module2, predicates, []) == [
+               {:has_role, {:member, [:b]}},
+               {:or, [[{:can, {:update, [:b]}}], [{:c, :==, "x"}]]}
+             ]
+    end
+
+    test "refuses a role check whose chain names no relationships in an alternative" do
+      alternative = [{{:has_role, :member}, [{:a}]}]
+
+      assert_error MisuseError,
+                   "an alternative of a disjunction is a non-empty list of name and value pairs, got: [{{:has_role, :member}, [{:a}]}]",
+                   fn ->
+                     new_row_triples!(Module3, [or: [alternative, [c: {:==, "x"}]]], [])
+                   end
+    end
+
+    test "refuses a role check in an alternative outside an update line" do
+      alternative = [{{:has_role, :member}, [:b]}]
+
+      assert_error MisuseError,
+                   "an alternative of a disjunction is a non-empty list of name and value pairs, got: [{{:has_role, :member}, [:b]}]",
+                   fn ->
+                     predicate_triples!(Module3, or: [alternative, [c: {:==, "x"}]])
+                   end
+    end
+
+    test "refuses a row field at the top of the condition" do
+      row_field = %RowField{owner: Module2, name: :c}
+
+      assert_error MisuseError,
+                   "{:outer, 0, :c} names no row above the condition it stands in, which has no row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
+                   fn -> new_row_triples!(Module2, [c: row_field], []) end
+    end
+
+    test "counts only the written rows when refusing a level past the new row" do
+      assert_error MisuseError,
+                   "{:outer, 2, :c} names no row above the condition it stands in, which has no row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
+                   fn ->
+                     new_row_triples!(Module2, [c: {:==, {:attribute, {:outer, 2, :c}}}], [])
+                   end
+    end
+  end
+
   # Guards rather than bug tests: a policy condition builds its clauses here, and names the acting
   # user with the actor leaf a filter refuses.
   describe "predicate_triples!/2" do
@@ -4112,7 +4225,7 @@ defmodule Hologram.Query.StageTest do
     # filter is.
     test "refuses a mistyped value in a policy condition" do
       assert_error MisuseError,
-                   "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string",
+                   "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
                    fn -> predicate_triples!(Module2, c: 5) end
     end
 

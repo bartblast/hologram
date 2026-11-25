@@ -4,6 +4,7 @@ import App from "./app.mjs";
 import Config from "./config.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Replica from "./replica.mjs";
+import Utils from "./utils.mjs";
 
 // The client side of the mutation endpoint: the envelope a batch of writes ships as, and the
 // request that carries it to the server and reads back its answer.
@@ -58,7 +59,7 @@ export default class Mutations {
         "Content-Type": "application/json",
         "X-Csrf-Token": globalThis.Hologram.csrfToken,
       },
-      body: JSON.stringify($.buildPayload(batch)),
+      body: Utils.stringifyWellFormed($.buildPayload(batch)),
       signal: controller.signal,
     };
 

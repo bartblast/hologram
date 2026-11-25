@@ -9,23 +9,28 @@ defmodule Hologram.Mutation do
   # no second set of rules for a write that arrived over the wire. Its authority is the one
   # difference: a batch carries no claim, and every write in it is judged by the verb's own rules -
   # an update by the fields it changes - under the anonymous semantics when nobody is signed in,
-  # where a server-side verb with no acting user would write raw. One update/1 call reaches here as
+  # as a server-side verb in the same request is. One update/1 call reaches here as
   # a write for its values and amounts, if it has any, and one for each of its edges, the later ones
   # marked as the same call, and they are applied through ONE executor call, as the server verb
   # applies them: every field the call changes is judged against the row the call started from. A
   # refusal at any step rolls the whole batch back and names the write it refused, a call's by the
   # write it starts at - and a refusal the EVALUATOR made is then kept, the batch as it arrived
-  # beside its answer, for the session that sent it.
+  # beside its answer, for the session that sent it. So is a batch holding a date or datetime this
+  # server can't read, which is refused before any transaction.
+
+  require Logger
 
   alias Hologram.Auth
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
+  alias Hologram.DB
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Merge
   alias Hologram.DB.Writer
+  alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Mutation.Envelope
   alias Hologram.Mutation.Record
@@ -46,10 +51,12 @@ defmodule Hologram.Mutation do
   @default_clock_allowance_ms 300_000
 
   @type rejection ::
-          :stale_build
+          :actor_not_found
+          | :stale_build
           | :clock
           | :forged_client
           | :not_found
+          | :unstorable
           | %Hologram.AccessDeniedError{}
           | map
 
@@ -128,7 +135,7 @@ defmodule Hologram.Mutation do
   defp apply_delete(write, row, index) do
     case Merge.resolve_delete(write.based_on, write.stamp, row.__meta__.revisions) do
       :delete -> {run_delete(write, index), nil}
-      :drop -> {lost_values(write, stored_columns(row)), stringify(WireData.row(row))}
+      :drop -> {lost_values(write, stored_columns(row)), :row}
     end
   end
 
@@ -140,7 +147,7 @@ defmodule Hologram.Mutation do
         {%{}, nil}
 
       :drop ->
-        {lost_values(write, stored_columns(row)), stringify(WireData.row(row))}
+        {lost_values(write, stored_columns(row)), :row}
     end
   end
 
@@ -171,8 +178,8 @@ defmodule Hologram.Mutation do
                   "a role grant for this user, entity and role exists under an id that is not " <>
                     "its derivation - every grant row's id is derived from the grant it states"
 
-          row ->
-            {lost_values(write, Map.keys(write.data)), stringify(WireData.row(row))}
+          _row ->
+            {lost_values(write, Map.keys(write.data)), :row}
         end
     end
   end
@@ -221,14 +228,16 @@ defmodule Hologram.Mutation do
   end
 
   # Each clause answers what the write LOST - nothing, or the values a newer edit kept it from
-  # setting. A refusal never returns from here: it rolls the whole batch back.
+  # setting - and what of the row to answer in their place: nothing, the columns it lost, or the
+  # whole row. The answer itself is read off the row once the batch is done, for a user who may
+  # read it (readable_kept/2). A refusal never returns from here: it rolls the whole batch back.
   #
   # A grant is not the writer's to evaluate: it goes to the grant verb's own rules, under the
   # session's actor, and a denial there is the same rejection any denied write answers with. A
   # grant the store already holds is not an error - the verb is idempotent - so the write is
-  # confirmed with every column dropped and the stored row as what was kept, read back by the SAME
-  # id: the id is derived from the grant, which is what makes the row found the row the write
-  # named. Before the generic clause, which would otherwise match.
+  # confirmed with every column dropped and the stored row as what was kept, found by the SAME id:
+  # the id is derived from the grant, which is what makes the row found the row the write named.
+  # Before the generic clause, which would otherwise match.
   #
   # The followers are the writes the rest of the write's call sent, which only an update or an edge
   # has - the envelope admits a same_call write nowhere else.
@@ -263,16 +272,18 @@ defmodule Hologram.Mutation do
   defp apply_write(%Write{op: :update} = write, followers, index, _created_rows) do
     row = lock_row(write, index)
     edges = edge_ops(followers)
-    edge_fields = Enum.map(followers, & &1.relationship)
 
-    Writer.check_update!(row, Map.keys(write.data) ++ Map.keys(write.deltas) ++ edge_fields)
+    unjudged = Writer.check_update!(row, write.data, write.deltas, edges, write.stamp)
+    check_values(write, index)
 
     {changes, lost} =
       Merge.resolve(write.data, write.based_on, write.stamp, row.__meta__.revisions)
 
     apply_changes(write, changes, edges, index)
 
-    {lost_values(write, lost), kept_values(row, lost)}
+    # A column whose stated value no rule could judge doesn't come back: what stands in it was
+    # never shown to be this user's to read.
+    {lost_values(write, lost), kept_columns(lost -- unjudged)}
   end
 
   # A revocation is judged against the grant as the store holds it, locked for the batch: the
@@ -290,7 +301,7 @@ defmodule Hologram.Mutation do
     # the row: a grant's id is derived from its grant, so a delete of any grant is something every
     # client can send, and whether the row is there is an answer for whoever may revoke it. Asked
     # this way, an actor who may not gets the same refusal either way, and a stale revocation's
-    # answer - the row it was stale against - stays behind the same gate.
+    # answer - the row it was stale against - stays behind the same gate and the read rules.
     grant = Write.to_entity(write)
     Auth.authorize_revocation_write!(grant, Context.actor_entity_id())
 
@@ -301,7 +312,8 @@ defmodule Hologram.Mutation do
   end
 
   # Judged before the merge, like an update: a delete the merge drops answers with the whole row it
-  # lost to, which is an answer for whoever may delete it, not for whoever knows the id.
+  # lost to, which is an answer for whoever may delete it and read the row, not for whoever knows
+  # the id.
   defp apply_write(%Write{op: :delete} = write, _followers, index, _created_rows) do
     case EntityOperations.get(write.entity_type, write.id, lock: :update) do
       # Deleting a row that is not there is what the verb itself does: nothing, and no complaint.
@@ -337,9 +349,13 @@ defmodule Hologram.Mutation do
     verdicts =
       writes
       |> calls()
-      |> Enum.reduce(%{created: MapSet.new(), dropped: %{}, kept: %{}}, &collect_verdicts/2)
+      |> Enum.reduce(%{created: MapSet.new(), dropped: %{}, specs: %{}}, &collect_verdicts/2)
 
-    %{"status" => "confirmed", "dropped" => verdicts.dropped, "kept" => verdicts.kept}
+    %{
+      "status" => "confirmed",
+      "dropped" => verdicts.dropped,
+      "kept" => readable_kept(verdicts.specs, writes)
+    }
   end
 
   # Each call as its leading write, that write's position and the same_call writes after it. The
@@ -357,6 +373,16 @@ defmodule Hologram.Mutation do
     end)
     |> Enum.reverse()
     |> Enum.map(fn {lead, index, followers} -> {lead, index, Enum.reverse(followers)} end)
+  end
+
+  # Every value of an update is judged, the ones about to lose the merge too. The writer only sees
+  # the values that win, and a losing one goes into the answer, stored as jsonb, which can't hold
+  # some of what a write can carry.
+  defp check_values(write, index) do
+    case Entity.validate(write.entity_type, write.data) do
+      :ok -> :ok
+      {:error, violations} -> Connection.rollback({:rejected, index, violations})
+    end
   end
 
   # Checked before anything runs, against the writes as a whole - a stamp the server cannot vouch
@@ -381,27 +407,76 @@ defmodule Hologram.Mutation do
       Enum.any?(based_on, fn {_name, revision} -> stamp <= revision end)
   end
 
-  # What each write LOST and what the row KEPT in its place, both keyed by the write's position. A
-  # call answers under its leading write's: the writes that follow it are edges, which have no merge
-  # and so lose nothing, and a refusal of the call names the write it starts at.
+  # What each write LOST and what its answer is to say stands in its place (readable_kept/2), both
+  # keyed by the write's position. A call answers under its leading write's: the writes that follow
+  # it are edges, which have no merge and so lose nothing, and a refusal of the call names the write
+  # it starts at.
   #
   # The index is a string because the answer is stored as jsonb and sent as JSON, where an object's
   # keys are strings whatever they started as.
   defp collect_verdicts({write, index, followers}, verdicts) do
-    {lost, kept} = apply_write(write, followers, index, verdicts.created)
+    {lost, spec} = apply_write(write, followers, index, verdicts.created)
     key = Integer.to_string(index)
 
     verdicts
     |> put_created(write)
     |> put_verdict(:dropped, key, lost)
-    |> put_verdict(:kept, key, kept)
+    |> put_verdict(:specs, key, spec)
   rescue
     # A denial is the one refusal the executor RAISES rather than returns, because on the server it
     # is a programming error to write what the acting user may not. Here it is an ordinary answer:
     # a client asking for something it may not have is the system working. Anything else raised
-    # propagates - the transaction rolls back and re-raises it, which is what a bug should do.
-    error in Hologram.AccessDeniedError -> Connection.rollback({:rejected, index, error})
+    # propagates - the transaction rolls back and re-raises it, which is what a bug should do -
+    # except what the database says about this write itself, which a retry would only hear again.
+    error in Hologram.AccessDeniedError ->
+      Connection.rollback({:rejected, index, error})
+
+    error in Postgrex.Error ->
+      case write_refusal(error, write) do
+        nil -> refuse_unstorable(error, write, index, __STACKTRACE__)
+        reason -> Connection.rollback({:rejected, index, reason})
+      end
   end
+
+  # A record answers as the batch first landed, and a grant row that answer carries may have been
+  # revoked or hidden from its user since. A browser files such a row with no frame ever coming to
+  # correct it, so a replay reads the grant again: it answers the row as it stands when its user may
+  # read it, and otherwise says it's withheld, which has the browser leave the write's row alone.
+  # Any other row or columns come back as recorded, even from a row hidden from its user since: a
+  # patch names no type or id to read it again by and a row no type, the writes a resend carries
+  # are whatever its sender chose, and its user could read the row when the batch landed.
+  defp current_answer(%{"status" => "confirmed", "kept" => kept} = result, writes, actor_id) do
+    rejudged = Map.new(kept, fn {key, entry} -> {key, current_kept(entry, actor_id)} end)
+
+    remade = remade_grants(writes, kept, actor_id)
+
+    %{result | "kept" => Map.merge(remade, rejudged)}
+  end
+
+  defp current_answer(result, _writes, _actor_id), do: result
+
+  # A grant row is told by its own columns, whose derivation is its id. The record keeps no writes
+  # of a confirmed batch, and the ones a resend carries are whatever its sender chose.
+  defp current_kept(
+         %{
+           "id" => id,
+           "entity_id" => entity_id,
+           "entity_type" => entity_type,
+           "role" => role,
+           "user_id" => user_id
+         } = entry,
+         actor_id
+       )
+       when is_binary(entity_id) and is_binary(entity_type) and is_binary(role) and
+              is_binary(user_id) do
+    if RoleGrant.derive_id_from_labels(user_id, entity_type, entity_id, role) == id do
+      readable_grant(id, actor_id) || %{"$withheld" => true}
+    else
+      entry
+    end
+  end
+
+  defp current_kept(entry, _actor_id), do: entry
 
   # Two writes of a call naming one edge, its lead included, collapse to the later one, which is
   # where applying them in order would leave the edge too. Only a hand-made batch sends that: the
@@ -421,8 +496,51 @@ defmodule Hologram.Mutation do
     Map.merge(attributes, references)
   end
 
-  # What the row KEPT where this write lost, spelled the way a frame spells a patch - the winning
-  # values and the revisions they carry.
+  # A creator's grant names the session's own user as both granter and grantee, so either key
+  # failing means that user's row is gone, or was deleted earlier in this batch, and the database
+  # may report either. A browser-sent
+  # grant's missing grantee never gets here: the grant verb answers it first. The reason is no field
+  # of the write, which may have a user of its own. A model with no user entity type has no grant
+  # store to ask.
+  defp granter_refusal(mapping, constraint) do
+    with %{columns: columns} <- Map.get(mapping, RoleGrant),
+         %{name: name} when name in ["granted_by_id", "user_id"] <-
+           Enum.find(columns, &(&1.fk_constraint == constraint)) do
+      :actor_not_found
+    else
+      _no_match -> nil
+    end
+  end
+
+  # A row a later write of the batch took away. A delete of it answers as one that won, which is
+  # what the batch leaves, and so does an update: the browser applies the delete after it. A
+  # repeated grant is withheld: answered with nothing, the browser would file the grant, and only a
+  # write of its own taking the row away would remove it again, which a row gone another way never
+  # gets.
+  defp gone_entry(%Write{op: :create}, :row), do: %{"$withheld" => true}
+
+  defp gone_entry(_write, _spec), do: nil
+
+  # The columns of an update's answer, or nothing when none are to come back.
+  defp kept_columns([]), do: nil
+
+  defp kept_columns(names), do: {:columns, names}
+
+  # What a row its user may read is answered with, and what one they may not is. Columns they may
+  # not read are left out, which has the browser keep what it holds in them. A whole row is said
+  # to be withheld instead, which has the browser leave the write's row as it holds it, for the sync
+  # to settle: answered with nothing, it would apply the write - take away a row the sync never
+  # said went, or file its own version of a grant no frame corrects.
+  defp kept_entry({:columns, names}, row, true), do: kept_values(row, names)
+
+  defp kept_entry({:columns, _names}, _row, false), do: nil
+
+  defp kept_entry(:row, row, true), do: stringify(WireData.row(row))
+
+  defp kept_entry(:row, _row, false), do: %{"$withheld" => true}
+
+  # What the row KEPT where this write lost, spelled the way a frame spells a patch - the values
+  # that stand once the batch is done and the revisions they carry.
   #
   # Sent because the answer can reach the client BEFORE the frame carrying those values does, and
   # a client that knows only which of its own values lost has nothing to put in their place but
@@ -431,8 +549,6 @@ defmodule Hologram.Mutation do
   #
   # Server-only columns cannot appear here: a client cannot write one, so none can lose - and
   # WireData would drop it in any case.
-  defp kept_values(_row, []), do: nil
-
   defp kept_values(%entity_type{} = row, names) do
     values =
       row
@@ -451,13 +567,19 @@ defmodule Hologram.Mutation do
   # is kept of it is written after the rollback, on its own statement: the batch as it arrived and
   # the answer it got, so that a change a browser made and then lost is somewhere, with the reason.
   #
-  # Only a refusal the EVALUATOR made reaches here. A batch refused before its transaction was
-  # refused for its build or its clock rather than for what it writes, and the server read nothing
-  # of it worth keeping - a stale one it could not parse at all.
+  # A refusal the EVALUATOR made reaches here, and so does a value this server couldn't read. Any
+  # other batch refused before its transaction was refused for its build or its clock rather than
+  # for what it writes, and the server read nothing of it worth keeping - a stale one it could not
+  # parse at all.
   #
   # Nothing is kept for an anonymous session either, nor for a user id no user entity can have: an
   # answer is replayed only to the session that earned it, and the record holds every such session
   # as nobody - so a refusal kept under no actor would be readable by any of them, or by nobody.
+  #
+  # The answer comes from the record, because another arrival of this batch may have landed it after
+  # this one was refused, and the record is what every arrival has to agree with. Keeping a refusal
+  # waits for an arrival still running. A visitor's refusal keeps nothing, so it has nothing to wait
+  # on and sees only an arrival that has already finished.
   defp keep_refused(envelope, raw, actor_id, index, reason) do
     answer = rejection(index, reason)
 
@@ -472,7 +594,7 @@ defmodule Hologram.Mutation do
       )
     end
 
-    {:ok, answer}
+    recorded_answer(envelope, actor_id) || {:ok, answer}
   end
 
   defp lock_row(write, index) do
@@ -491,13 +613,14 @@ defmodule Hologram.Mutation do
     types = field_types(write.entity_type)
 
     Map.new(names, fn name ->
-      {Atom.to_string(name), Codec.encode_json(Map.get(write.data, name), types[name])}
+      {Atom.to_string(name), Codec.encode_wire(Map.get(write.data, name), types[name])}
     end)
   end
 
   defp parse(raw) do
     case Envelope.parse(raw) do
       {:ok, envelope} -> {:ok, envelope}
+      {:refused, envelope, index, violations} -> {:refused, envelope, index, violations}
       {:error, message} -> {:invalid, message}
     end
   end
@@ -513,8 +636,14 @@ defmodule Hologram.Mutation do
          :ok <- check_clocks(envelope.writes) do
       apply_batch(envelope, raw, server_struct)
     else
-      {:invalid, message} -> {:invalid, message}
-      {:rejected, index, reason} -> {:ok, rejection(index, reason)}
+      {:invalid, message} ->
+        {:invalid, message}
+
+      {:rejected, index, reason} ->
+        {:ok, rejection(index, reason)}
+
+      {:refused, envelope, index, violations} ->
+        refuse_unread(envelope, raw, server_struct, index, violations)
     end
   end
 
@@ -541,12 +670,113 @@ defmodule Hologram.Mutation do
     Map.update!(verdicts, kind, &Map.put(&1, key, values))
   end
 
+  # A revocation that won keeps nothing, and its grant may have been made again since, under the
+  # same derived id and with revisions below the revocation's stamp. Answered with nothing, the
+  # browser would take that live row away with no frame to bring it back, so a replay answers the
+  # row. Read off the resend's writes, which its sender chose, so only a row they may read comes
+  # back.
+  defp remade_grants(writes, kept, actor_id) do
+    for {%Write{op: :delete, entity_type: RoleGrant, id: id}, index} <- Enum.with_index(writes),
+        key = Integer.to_string(index),
+        not Map.has_key?(kept, key),
+        row = readable_grant(id, actor_id),
+        into: %{} do
+      {key, row}
+    end
+  end
+
+  defp readable_grant(id, actor_id) do
+    row = EntityOperations.get(RoleGrant, id)
+
+    if row != nil and Auth.can?(actor_id, :read, row), do: stringify(WireData.row(row))
+  end
+
+  # A write's answer says what its row holds only to a user who may read the row as the batch
+  # leaves it, which the batch's own writes can change: a winning column of the same write, a later
+  # write of the batch or a later delete of the row. Read off the row then, so a value that stood
+  # only while the row was hidden never comes back either. Read where each row is still locked by
+  # its write, so what the answer says is what the batch commits.
+  defp readable_kept(specs, writes) do
+    actor_id = Context.actor_user_id()
+
+    specs
+    |> Enum.map(fn {key, spec} ->
+      [write | later_writes] = Enum.drop(writes, String.to_integer(key))
+      {key, readable_entry(write, spec, later_writes, actor_id)}
+    end)
+    |> Enum.reject(fn {_key, entry} -> entry == nil end)
+    |> Map.new()
+  end
+
+  defp readable_entry(
+         %Write{entity_type: entity_type, id: id} = write,
+         spec,
+         later_writes,
+         actor_id
+       ) do
+    case EntityOperations.get(entity_type, id) do
+      nil ->
+        gone_entry(write, spec)
+
+      row ->
+        readable? = Auth.can?(actor_id, :read, row)
+        kept_entry(spec, without_later_moves(row, write, later_writes), readable?)
+    end
+  end
+
   defp recorded_answer(envelope, actor_id) do
     case Record.find(envelope.replica_id, envelope.seq) do
-      nil -> nil
-      %{actor_id: ^actor_id, result: nil} -> nil
-      %{actor_id: ^actor_id, result: result} -> {:ok, result}
-      _another_sessions -> {:ok, rejection(nil, :forged_client)}
+      nil ->
+        nil
+
+      %{actor_id: ^actor_id, result: nil} ->
+        nil
+
+      %{actor_id: ^actor_id, result: result} ->
+        {:ok, current_answer(result, envelope.writes, actor_id)}
+
+      _another_sessions ->
+        {:ok, rejection(nil, :forged_client)}
+    end
+  end
+
+  # The safety net behind the validators. A data exception (SQLSTATE class 22) almost always means
+  # a value the database can't store, and answering 500 would have the browser retry the batch
+  # forever, with every later write from that device waiting behind it. Refused, it rolls back and
+  # the queue moves on, and a signed-in user's batch is kept. A trigger or a delete can raise one
+  # too, and that write is refused the same way.
+  #
+  # 22P02 is left out: on a write it means an enum label the Postgres type doesn't have, so the
+  # database is out of step with the app, and a deploy can fix that while the write waits.
+  #
+  # The log names the type and the code and not the error's message, which can quote the value.
+  @spec refuse_unstorable(Postgrex.Error.t(), Write.t(), non_neg_integer, Exception.stacktrace()) ::
+          no_return
+  defp refuse_unstorable(
+         %Postgrex.Error{postgres: %{pg_code: "22" <> _rest = code}},
+         write,
+         index,
+         _stacktrace
+       )
+       when code != "22P02" do
+    Logger.error(
+      "Hologram refused a browser write to #{inspect(write.entity_type)}: the database answered with a data error (SQLSTATE #{code})"
+    )
+
+    Connection.rollback({:rejected, index, :unstorable})
+  end
+
+  defp refuse_unstorable(error, _write, _index, stacktrace), do: reraise(error, stacktrace)
+
+  # A batch holding a value this server can't read never reaches a transaction, and is kept like any
+  # other refused batch, so a signed-in user's write can still be recovered. Its record is asked
+  # first, which answers a repeat from it and refuses another session's pair as forged.
+  defp refuse_unread(envelope, raw, server_struct, index, violations) do
+    record_actor_id = Auth.canonical_id(server_struct.user_id)
+
+    case recorded_answer(envelope, record_actor_id) do
+      nil -> keep_refused(envelope, raw, record_actor_id, index, violations)
+      answer -> answer
     end
   end
 
@@ -591,4 +821,47 @@ defmodule Hologram.Mutation do
   defp stringify_entry({:"$revisions", revisions}), do: {"$revisions", stringify(revisions)}
 
   defp stringify_entry({name, value}), do: {Atom.to_string(name), value}
+
+  # The row an answer is built from, less what the batch's later writes moved its counters by. The
+  # browser applies those writes after this one's answer, adding each delta to whatever it holds,
+  # so answering the counter as it stands would count them twice. What comes back isn't always a
+  # value the row held, only the one the browser starts from; the revisions are the batch's last,
+  # so a later write's set the server already applied isn't applied again on top. When a frame
+  # carrying the row lands first, the browser applies none of the batch's writes to it and files
+  # nothing of the answer, so the values never show.
+  defp without_later_moves(row, %Write{entity_type: entity_type, id: id}, later_writes) do
+    later_writes
+    |> Enum.filter(&(&1.op == :update and &1.entity_type == entity_type and &1.id == id))
+    |> Enum.flat_map(& &1.deltas)
+    |> Enum.reduce(row, fn {name, amount}, row -> Map.update!(row, name, &(&1 - amount)) end)
+  end
+
+  # Three things a browser can't know before it sends, answered as refusals of the write because
+  # raising would have it retry them forever. An edge's target may be gone: deleted while the device
+  # was offline, or a create of this device's that was refused. A create's id may be taken: a form
+  # that made its id once and was submitted twice, or a derived id made on a second device. And the
+  # signed-in user's own row may be gone, which the grant a create hands its creator runs into.
+  defp write_refusal(
+         %Postgrex.Error{postgres: %{code: :foreign_key_violation, constraint: constraint}},
+         %Write{entity_type: entity_type}
+       ) do
+    mapping = DB.mapping()
+    %{join_tables: join_tables} = Map.fetch!(mapping, entity_type)
+
+    case Enum.find(join_tables, &(&1.target_fk_constraint == constraint)) do
+      %{relationship: relationship} -> %{relationship => [:not_found]}
+      nil -> granter_refusal(mapping, constraint)
+    end
+  end
+
+  defp write_refusal(
+         %Postgrex.Error{postgres: %{code: :unique_violation, constraint: constraint}},
+         %Write{op: :create, entity_type: entity_type}
+       ) do
+    if Map.fetch!(DB.mapping(), entity_type).pk_constraint == constraint do
+      %{id: [:unique]}
+    end
+  end
+
+  defp write_refusal(_error, _write), do: nil
 end

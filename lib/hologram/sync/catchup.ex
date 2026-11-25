@@ -109,7 +109,7 @@ defmodule Hologram.Sync.Catchup do
   before they were read (see `Hologram.DB.Oplog.current_xmin/0`) - or why everything must be sent
   again: a cursor judged under rules other than the given policy hash's (see
   `Hologram.Policy.hash/0`), and one filled with entity types other than the given types hash's (see
-  `Hologram.Sync.Cursor.types_hash/2`), among the reasons.
+  `Hologram.Sync.Cursor.types_hash/3`), among the reasons.
 
   What comes back names WHICH rows moved, never what they now hold - the values come from reading
   those rows as they stand. That is what makes the log safe to read as history: its order is not
@@ -179,7 +179,8 @@ defmodule Hologram.Sync.Catchup do
 
   # A client filled before a deploy changed which types sync sends holds none of a type added since,
   # and nothing in the log says so - the rows were always there, the client was just never sent
-  # them. Only filling it again does.
+  # them. Only filling it again does. The same goes for one filled under another model, whose rows a
+  # migration can have changed at rest (see `Hologram.Sync.Cursor.types_hash/3`).
   defp check_types(types_hash, types_hash), do: :ok
 
   defp check_types(_cursor_types_hash, _types_hash), do: {:full_resync, :synced_types}

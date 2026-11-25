@@ -7,7 +7,11 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
   use Hologram.Job
 
   alias Hologram.Auth
+  alias Hologram.Auth.Context
+  alias Hologram.DB.Codec
+  alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
+  alias Hologram.DB.Mapper
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Job.Module1
 
@@ -19,10 +23,14 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
       :error,
       :exit,
       :garbage,
+      :hang,
       :ok,
       :ok_tuple,
       :raise,
       :record_actor,
+      :recreated,
+      :rescheduled,
+      :superseded,
       :swept,
       :throw
     ]
@@ -57,6 +65,8 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
 
   def run(%{outcome: :garbage}), do: nil
 
+  def run(%{outcome: :hang}), do: Process.sleep(:infinity)
+
   def run(%{outcome: :ok}), do: :ok
 
   def run(%{outcome: :ok_tuple}), do: {:ok, :sent}
@@ -65,8 +75,47 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
 
   def run(%{outcome: :record_actor}) do
     Process.put(:ran_as, Auth.user_id())
+    Process.put(:ran_in_session?, Context.session?())
 
     :ok
+  end
+
+  # Replaces its row with a new one under the same id, running the same attempt number, and then
+  # fails - standing for a run that lost its lock while its job was deleted and created again.
+  def run(%{outcome: :recreated} = job) do
+    :ok = EntityOperations.delete(__MODULE__, job.id)
+
+    Hologram.Job.create!(__MODULE__, [id: job.id, outcome: :ok], trust: true)
+
+    :ok = EntityOperations.update(__MODULE__, job.id, %{attempt: job.attempt, status: :running})
+
+    # The clock behind this time ticks in milliseconds, or coarser, and the two creates can land
+    # on one tick here, as they couldn't with a run that had lost its lock in between.
+    {:ok, _result} =
+      Connection.query(
+        ~s|UPDATE "hologram_data"."#{Mapper.table_name(__MODULE__)}" | <>
+          ~s|SET "server_created_at" = "server_created_at" + interval '1 second' WHERE "id" = $1|,
+        [Codec.encode(job.id, :uuid)]
+      )
+
+    {:error, :too_late}
+  end
+
+  # Moves its own due time, standing for server code rescheduling the job while it runs.
+  def run(%{outcome: :rescheduled} = job) do
+    later = DateTime.add(DateTime.utc_now(), 1, :hour)
+
+    :ok = EntityOperations.update(__MODULE__, job.id, %{scheduled_at: later})
+
+    :ok
+  end
+
+  # Moves its row on to the next attempt and then fails, standing for a run that lost its lock, was
+  # swept back into the queue and claimed again by another worker while it was still going.
+  def run(%{outcome: :superseded} = job) do
+    :ok = EntityOperations.update(__MODULE__, job.id, %{attempt: job.attempt + 1})
+
+    {:error, :too_late}
   end
 
   # Fails its own row, standing for a sweep on another node that found the run's lock gone.

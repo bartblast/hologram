@@ -24,6 +24,22 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Reflection
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity12, as: ImplEntity12
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity3, as: ImplEntity3
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity4, as: ImplEntity4
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity6, as: ImplEntity6
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity7, as: ImplEntity7
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity8, as: ImplEntity8
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Helper, as: ImplHelper
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page1, as: ImplPage1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page6, as: ImplPage6
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page7, as: ImplPage7
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol, as: ImplProtocol
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol3, as: ImplProtocol3
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol4, as: ImplProtocol4
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct1, as: ImplStruct1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct3, as: ImplStruct3
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct4, as: ImplStruct4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, as: QueryExtractorModule53
   alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
   alias Hologram.Test.Fixtures.Component.Module43, as: ComponentModule43
@@ -298,6 +314,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
     def new(values \\ []), do: Entity.new(__MODULE__, values)
   end
 
+  # The data model bundle the kept data layer's statement makes for this build (see
+  # Hologram.Compiler.data_model_bundle/3).
+  defp data_model_bundle(opts) do
+    Compiler.data_model_bundle(
+      Cache.get().data_layer.sync_constants_js,
+      [:data_layer],
+      opts[:static_dir]
+    )
+  end
+
+  defp data_model_file_names(bundle) do
+    file_name = Path.basename(bundle.static_bundle_path)
+    [file_name, file_name <> ".gz"]
+  end
+
   # A page whose template holds a link to another page, and that page.
   @linked_page Hologram.Test.Fixtures.Page.Module2
   @linking_page Hologram.Test.Fixtures.Page.Module5
@@ -452,6 +483,105 @@ defmodule Mix.Tasks.Compile.HologramTest do
   defp count_pages_holding(module) do
     Enum.count(cache_state().data_layer.pages, fn {_page_module, reach} ->
       MapSet.member?(reach.modules, module)
+    end)
+  end
+
+  # Compiles without the implementation's beam, puts it back, compiles again, and checks that the
+  # page then names the entity, as a cold compile has it.
+  defp assert_added_impl_names(impl, page, entity, opts) do
+    beam_path = :code.which(impl)
+    bytecode = File.read!(beam_path)
+
+    remove_beam(impl)
+    run(opts)
+
+    refute entity in cache_state().data_layer.pages[page].modules
+
+    File.write!(beam_path, bytecode)
+    report_compiled(impl)
+    run(opts)
+
+    assert entity in cache_state().data_layer.pages[page].modules
+    assert_data_layer_pages_match_cold(opts)
+  end
+
+  # Compiles with the module and again without its beam. Returns its module info and a function that
+  # puts the beam back, as a compile reports it.
+  defp compile_without_beam(module, opts) do
+    run(opts)
+
+    module_info = cache_state().module_infos[module]
+    beam_path = :code.which(module)
+    bytecode = File.read!(beam_path)
+
+    remove_beam(module)
+    run(opts)
+
+    put_beam_back = fn ->
+      File.write!(beam_path, bytecode)
+      report_compiled(module)
+    end
+
+    {module_info, put_beam_back}
+  end
+
+  # Compiles with the kept entry of a held type's implementation saying it was what the given fields
+  # say, with no walk having entered it, so that its beam reads as an edit of that module. What it
+  # names then syncs.
+  defp assert_edited_impl_syncs(previous_fields, opts) do
+    impl = Module.safe_concat(ImplProtocol3, ImplEntity7)
+    {impl_info, put_beam_back} = compile_without_beam(impl, opts)
+
+    refute ImplEntity8 in synced_types(opts)
+
+    %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+      cache_state()
+
+    previous_info =
+      impl_info
+      |> Map.merge(previous_fields)
+      |> Map.put(:digest, "previous")
+
+    put_kept_module_infos(
+      Map.put(module_infos, impl, previous_info),
+      dumped_at,
+      MapSet.put(editable_modules, impl)
+    )
+
+    put_beam_back.()
+    run(opts)
+
+    assert ImplEntity8 in synced_types(opts)
+  end
+
+  # The modules the walks of the implementations of the types the given page holds through rows name.
+  defp held_impl_names(page) do
+    cache_state().data_layer.held_impl_walks
+    |> Map.get(page, %{})
+    |> Map.values()
+    |> Enum.reduce(MapSet.new(), &MapSet.union(&2, &1.read.names))
+  end
+
+  defp synced_types(opts) do
+    plt = PLT.start()
+
+    PLT.load(plt, Path.join(opts[:build_dir], Reflection.queries_plt_dump_file_name()))
+
+    PLT.get!(plt, :synced_types)
+  end
+
+  defp assert_data_layer_pages_match_cold(opts) do
+    pages = cache_state().data_layer.pages
+
+    start_cold(opts)
+    run(opts)
+
+    assert cache_state().data_layer.pages == pages
+  end
+
+  defp count_pages_holding_impl_module(module) do
+    Enum.count(cache_state().data_layer.pages, fn {_page_module, reach} ->
+      MapSet.member?(reach.impl_modules, module)
     end)
   end
 
@@ -636,6 +766,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
     receive do
       {:ir_builds, modules} -> modules
     end
+  end
+
+  # The data model bundle files in the static dir, sorted.
+  defp list_data_model_files(opts) do
+    opts[:static_dir]
+    |> File.ls!()
+    |> Enum.filter(&String.starts_with?(&1, "data-model-"))
+    |> Enum.sort()
   end
 
   defp load_entity_fixture_app(app, modules) do
@@ -2040,6 +2178,353 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert cache_state().data_layer.pages == pages
     end
 
+    # Twice per page holding the module, on the runtime's copy and on the unsplit graph: a struct's
+    # implementation is in no page's bundle, so no bundle is rebuilt for it.
+    test "an edit of an implementation lists the pages that can dispatch to it", %{opts: opts} do
+      run(opts)
+      impl = Module.safe_concat(ImplProtocol, ImplStruct1)
+
+      assert count_pages_holding_impl_module(impl) == 1
+
+      fake_edit(impl)
+
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == 2
+      assert_data_layer_pages_match_cold(opts)
+    end
+
+    test "an edit of a function only an implementation calls lists the pages reaching it", %{
+      opts: opts
+    } do
+      run(opts)
+
+      assert count_pages_holding_impl_module(ImplHelper) == 1
+
+      fake_edit(ImplHelper)
+
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == 2
+      assert_data_layer_pages_match_cold(opts)
+    end
+
+    test "a removed implementation stops naming what it named", %{opts: opts} do
+      run(opts)
+      impl = Module.safe_concat(ImplProtocol, ImplStruct1)
+
+      assert ImplEntity3 in cache_state().data_layer.pages[ImplPage1].modules
+
+      remove_beam(impl)
+      run(opts)
+
+      refute ImplEntity3 in cache_state().data_layer.pages[ImplPage1].modules
+      assert_data_layer_pages_match_cold(opts)
+    end
+
+    test "an added implementation brings what it names", %{opts: opts} do
+      impl = Module.safe_concat(ImplProtocol, ImplStruct1)
+
+      assert_added_impl_names(impl, ImplPage1, ImplEntity3, opts)
+    end
+
+    test "an added implementation of a protocol only the runtime dispatches brings what it names",
+         %{opts: opts} do
+      impl = Module.safe_concat(String.Chars, ImplStruct4)
+
+      assert_added_impl_names(impl, ImplPage6, ImplEntity4, opts)
+    end
+
+    test "syncs what the implementation of a type a page holds through rows names", %{opts: opts} do
+      run(opts)
+
+      assert ImplEntity8 in held_impl_names(ImplPage7)
+      assert ImplEntity8 in synced_types(opts)
+    end
+
+    test "keeps the page reach from before the held types' implementations were folded in", %{
+      opts: opts
+    } do
+      run(opts)
+
+      refute ImplEntity8 in cache_state().data_layer.pages[ImplPage7].modules
+    end
+
+    test "walks no page again when nothing changed", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({CallGraph, :list_page_impl_mfas, 5}, fn -> run(opts) end) == 0
+    end
+
+    test "every page preloads the one chunk of the held types", %{opts: opts} do
+      run(opts)
+
+      %{chunks: chunks} = cache_state()
+      items = load_chunk_registry_items(opts)
+
+      assert ImplEntity7 in chunks.held_types
+
+      assert [signature] =
+               chunks.mfas_by_signature
+               |> Map.keys()
+               |> Enum.reject(&MapSet.disjoint?(&1, chunks.held_types))
+
+      digest = chunks.bundle_infos[signature].digest
+
+      for {{:page, _page_module}, digests} <- items do
+        assert digest in digests
+      end
+
+      for type <- signature do
+        assert digest in items[{:type, type}]
+      end
+    end
+
+    test "holds the structs of a synced row's fields", %{opts: opts} do
+      run(opts)
+
+      assert DateTime in cache_state().chunks.held_types
+    end
+
+    test "puts each function in one chunk when the held types' chunks merge", %{opts: opts} do
+      run(opts)
+
+      mfas =
+        cache_state().chunks.mfas_by_signature
+        |> Map.values()
+        |> Enum.concat()
+
+      assert mfas == Enum.uniq(mfas)
+    end
+
+    test "a synced type with no implementation of a client protocol isn't held", %{opts: opts} do
+      run(opts)
+
+      assert ImplEntity6 in synced_types(opts)
+      refute ImplEntity6 in cache_state().chunks.held_types
+    end
+
+    test "a type with an implementation that doesn't sync isn't held", %{opts: opts} do
+      run(opts)
+
+      refute ImplEntity12 in synced_types(opts)
+      refute ImplEntity12 in cache_state().chunks.held_types
+    end
+
+    test "keeps the merged chunk when the data layer is kept", %{opts: opts} do
+      run(opts)
+
+      %{chunks: chunks} = cache_state()
+
+      assert count_calls({Compiler, :merge_held_chunks, 2}, fn -> run(opts) end) == 0
+      assert cache_state().chunks == chunks
+    end
+
+    test "groups the chunks again when the held types moved on an unchanged graph", %{opts: opts} do
+      run(opts)
+
+      %{chunks: chunks} = cache_state()
+      Cache.put_chunks(%{chunks | held_types: MapSet.new()})
+
+      assert count_calls({Compiler, :merge_held_chunks, 2}, fn -> run(opts) end) == 1
+
+      new_chunks = cache_state().chunks
+
+      assert new_chunks.held_types == chunks.held_types
+      assert new_chunks.mfas_by_signature == chunks.mfas_by_signature
+    end
+
+    test "a regroup lists the chunks on a graph holding what its walk built", %{opts: opts} do
+      run(opts)
+
+      %{call_graph: call_graph, chunks: chunks, data_layer: data_layer, ir_plt: ir_plt} =
+        cache_state()
+
+      # An implementation calling a helper, so that a copy of the graph without it loses the helper.
+      CallGraph.patch(call_graph, ir_plt, %{
+        added_modules: [],
+        edited_modules: [],
+        removed_modules: [Module.safe_concat(ImplProtocol, ImplStruct3)]
+      })
+
+      # A data layer to derive makes the runtime graph's copy before the regroup's walk.
+      data_layer
+      |> Map.delete(:held_impl_walks)
+      |> Cache.put_data_layer()
+
+      Cache.put_chunks(%{chunks | held_types: MapSet.new()})
+      run(opts)
+
+      assert cache_state().chunks.mfas_by_signature == chunks.mfas_by_signature
+    end
+
+    test "reuses a kept page's walks when an edit doesn't touch them", %{opts: opts} do
+      run(opts)
+
+      # A walk made again wouldn't have this atom, so the walk seen below is the kept one.
+      kept_walks =
+        Map.new(cache_state().data_layer.held_impl_walks[ImplPage7], fn {types, walk} ->
+          {types, update_in(walk.read.atoms, &MapSet.put(&1, :kept_walk_marker))}
+        end)
+
+      cache_state().data_layer
+      |> put_in([:held_impl_walks, ImplPage7], kept_walks)
+      |> Cache.put_data_layer()
+
+      fake_edit(PageModule18)
+      run(opts)
+
+      assert cache_state().data_layer.held_impl_walks[ImplPage7] == kept_walks
+    end
+
+    test "a module edited into an implementation of a held type syncs what it names", %{
+      opts: opts
+    } do
+      assert_edited_impl_syncs(
+        %{implemented_protocol: nil, protocol_implementation?: false},
+        opts
+      )
+    end
+
+    test "an implementation edited to implement another protocol syncs what it names", %{
+      opts: opts
+    } do
+      assert_edited_impl_syncs(%{implemented_protocol: ImplProtocol4}, opts)
+    end
+
+    test "a module edited into an implementation between two VMs syncs what it names", %{
+      opts: opts
+    } do
+      impl = Module.safe_concat(ImplProtocol3, ImplEntity7)
+      {impl_info, put_beam_back} = compile_without_beam(impl, opts)
+
+      refute ImplEntity8 in synced_types(opts)
+
+      plain_info = %{
+        impl_info
+        | digest: "plain",
+          implemented_protocol: nil,
+          mtime: impl_info.mtime - 100,
+          protocol_implementation?: false
+      }
+
+      rewrite_module_info_dump(opts, &Map.put(&1, impl, plain_info))
+      put_beam_back.()
+      Cache.reset()
+      fake_recompile()
+      run(opts)
+
+      assert ImplEntity8 in synced_types(opts)
+    end
+
+    test "an implementation no walk entered, edited between two VMs, walks no page again", %{
+      opts: opts
+    } do
+      run(opts)
+
+      fake_edit_in_dump(Module.safe_concat(ImplProtocol, ImplEntity12), opts)
+      Cache.reset()
+      fake_recompile()
+
+      assert count_calls({CallGraph, :list_page_impl_mfas, 5}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a held type's implementation no page's own reach names derives again", %{
+      opts: opts
+    } do
+      run(opts)
+      impl = Module.safe_concat(ImplProtocol3, ImplEntity7)
+
+      refute Enum.any?(cache_state().data_layer.pages, fn {_page, reach} ->
+               MapSet.member?(reach.impl_modules, impl)
+             end)
+
+      fake_edit(impl)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+      assert ImplEntity8 in held_impl_names(ImplPage7)
+    end
+
+    test "a removed implementation of a held type stops syncing what it named", %{opts: opts} do
+      run(opts)
+      impl = Module.safe_concat(ImplProtocol3, ImplEntity7)
+
+      remove_beam(impl)
+      run(opts)
+
+      refute ImplEntity8 in held_impl_names(ImplPage7)
+      refute ImplEntity8 in synced_types(opts)
+    end
+
+    test "an added implementation of a held type syncs what it names", %{opts: opts} do
+      impl = Module.safe_concat(ImplProtocol3, ImplEntity7)
+      beam_path = :code.which(impl)
+      bytecode = File.read!(beam_path)
+
+      remove_beam(impl)
+      run(opts)
+
+      refute ImplEntity8 in synced_types(opts)
+
+      File.write!(beam_path, bytecode)
+      report_compiled(impl)
+      run(opts)
+
+      assert ImplEntity8 in synced_types(opts)
+    end
+
+    test "refuses a query a held type's implementation writes", %{opts: opts} do
+      run(opts)
+
+      %{data_layer: data_layer} = cache_state()
+
+      chain = %{
+        final_sort?: false,
+        line: 1,
+        mfa: {PageModule18, :template, 0},
+        root: Hologram.Test.Fixtures.Entity.Module1,
+        steps: []
+      }
+
+      data_layer
+      |> update_in([:held_impl_walks, ImplPage7], fn walks_by_types ->
+        Map.new(walks_by_types, fn {types, walk} ->
+          {types, update_in(walk.read.query_chains, &[chain | &1])}
+        end)
+      end)
+      |> Cache.put_data_layer()
+
+      fake_edit(PageModule18)
+
+      assert_raise Hologram.CompileError, ~r/declares no allow lines/, fn -> run(opts) end
+    end
+
+    test "a kept data layer with no implementation seeds lists every page", %{opts: opts} do
+      run(opts)
+
+      %{data_layer: data_layer} = cache_state()
+
+      data_layer
+      |> Map.delete(:impl_seeds)
+      |> Cache.put_data_layer()
+
+      fake_edit(PageModule18)
+
+      # Twice per page for the data layer, and once for the bundle of the edited page.
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) ==
+               2 * @num_pages + 1
+    end
+
+    test "a change of what the implementation walks start with lists every page", %{opts: opts} do
+      run(opts)
+
+      %{data_layer: data_layer} = cache_state()
+      seeds = %{data_layer.impl_seeds | runtime_protocol_vertices: []}
+      Cache.put_data_layer(%{data_layer | impl_seeds: seeds})
+
+      fake_edit(PageModule18)
+
+      # Twice per page for the data layer, and once for the bundle of the edited page.
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) ==
+               2 * @num_pages + 1
+    end
+
     test "a removed page is forgotten from the kept page reach", %{opts: opts} do
       run(opts)
 
@@ -2073,10 +2558,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a compile keeps what the data layer derived", %{opts: opts} do
       run(opts)
 
-      %{data_layer: data_layer, runtime: runtime} = cache_state()
+      data_layer = cache_state().data_layer
 
       assert map_size(data_layer.pages) == @num_pages
-      assert data_layer.sync_constants_js == runtime.sync_constants_js
+
+      assert File.read!(data_model_bundle(opts).static_bundle_path) =~
+               data_layer.sync_constants_js
     end
 
     test "a new VM reuses the derived definitions from the compile state dump", %{opts: opts} do
@@ -2428,6 +2915,202 @@ defmodule Mix.Tasks.Compile.HologramTest do
                  run(Keyword.put(opts, :data_model_ready, data_model_ready))
                end
              end) == 0
+    end
+  end
+
+  describe "data model bundle" do
+    setup do
+      on_exit(&Cache.reset/0)
+    end
+
+    test "a build with entity types writes the data model bundle, and the runtime sets none of it",
+         %{opts: opts} do
+      run(opts)
+
+      bundle = data_model_bundle(opts)
+
+      assert File.read!(bundle.static_bundle_path) == bundle.js
+
+      gzip_copy =
+        bundle.static_bundle_path
+        |> Compiler.gzip_path()
+        |> File.read!()
+
+      assert :zlib.gunzip(gzip_copy) == bundle.js
+      assert list_data_model_files(opts) == data_model_file_names(bundle)
+
+      # The runtime's own code reads the constants, but a build with the data layer never sets them
+      # there, not even to null.
+      runtime_js = File.read!(cache_state().runtime.bundle_info.static_bundle_path)
+      assert runtime_js =~ "globalThis.Hologram.sync"
+      refute runtime_js =~ "Hologram.sync="
+    end
+
+    # A data model edit only renders the statement anew, so a kept data layer with another statement
+    # stands in for one.
+    test "a data model change writes a new data model bundle and keeps the runtime bundle", %{
+      opts: opts
+    } do
+      run(opts)
+
+      old_bundle = data_model_bundle(opts)
+      runtime_bundle_path = cache_state().runtime.bundle_info.static_bundle_path
+
+      Cache.put_data_layer(%{
+        cache_state().data_layer
+        | sync_constants_js: "globalThis.Hologram.sync = {model: {}};"
+      })
+
+      {record_built, recorded_built} = record_calls()
+
+      assert count_built_bundles(fn -> run(Keyword.put(opts, :bundles_built, record_built)) end) ==
+               0
+
+      new_bundle = data_model_bundle(opts)
+
+      assert new_bundle.static_bundle_path != old_bundle.static_bundle_path
+      assert File.read!(new_bundle.static_bundle_path) == new_bundle.js
+      assert list_data_model_files(opts) == data_model_file_names(new_bundle)
+      assert cache_state().runtime.bundle_info.static_bundle_path == runtime_bundle_path
+      assert recorded_built.() == [[:data_model]]
+    end
+
+    test "replaces a data model bundle of an older build", %{opts: opts} do
+      run(opts)
+
+      bundle = data_model_bundle(opts)
+      old_bundle_path = Path.join(opts[:static_dir], "data-model-OLDMODEL.js")
+      gzip_path = Compiler.gzip_path(bundle.static_bundle_path)
+
+      File.rename!(bundle.static_bundle_path, old_bundle_path)
+      File.rename!(gzip_path, Compiler.gzip_path(old_bundle_path))
+
+      {record_built, recorded_built} = record_calls()
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert File.read!(bundle.static_bundle_path) == bundle.js
+      assert list_data_model_files(opts) == data_model_file_names(bundle)
+      assert recorded_built.() == [[:data_model]]
+    end
+
+    test "a compile with nothing changed keeps the data model bundle and reports none", %{
+      opts: opts
+    } do
+      run(opts)
+
+      bundle = data_model_bundle(opts)
+
+      # The static dir outlives the test, so the bundle gets its content back.
+      on_exit(fn -> File.write!(bundle.static_bundle_path, bundle.js) end)
+      File.write!(bundle.static_bundle_path, "kept")
+
+      {record_built, recorded_built} = record_calls()
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert File.read!(bundle.static_bundle_path) == "kept"
+      assert recorded_built.() == []
+    end
+
+    # The bundling comes first, so the bundle the asset path registry names stays on disk.
+    test "a compile failing while bundling leaves the data model bundle as it was", %{opts: opts} do
+      run(opts)
+
+      old_file_names = list_data_model_files(opts)
+
+      # A page to build, so that the compile reaches esbuild.
+      put_pending_kept_pages(1)
+
+      Cache.put_data_layer(%{
+        cache_state().data_layer
+        | sync_constants_js: "globalThis.Hologram.sync = {model: {}};"
+      })
+
+      missing_esbuild_path = Path.join(opts[:build_dir], "missing_esbuild")
+      failing_opts = Keyword.put(opts, :esbuild_bin_path, missing_esbuild_path)
+
+      assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
+
+      assert list_data_model_files(opts) == old_file_names
+    end
+
+    # The asset path registry still names the old runtime when a compile fails here.
+    test "a data model write that fails leaves the runtime bundle it would replace", %{opts: opts} do
+      run(opts)
+
+      old_bundle_info = put_kept_runtime_bundle_under_old_digest(opts)
+      fake_edit(find_editable_runtime_module())
+
+      bundle = data_model_bundle(opts)
+      File.rm!(bundle.static_bundle_path)
+
+      # A dir where the write puts its temporary file makes the write fail.
+      blocking_dir = Compiler.gzip_path(bundle.static_bundle_path) <> ".tmp"
+      File.mkdir!(blocking_dir)
+      on_exit(fn -> File.rmdir(blocking_dir) end)
+
+      assert_raise File.Error, fn -> run(opts) end
+
+      assert File.exists?(old_bundle_info.static_bundle_path)
+    end
+
+    # The asset path registry names the old bundles until a batch is reported. The retry finds them
+    # there, so it still removes them and reloads every tab.
+    test "a compile failing after the bundling keeps the old bundles for the next one to replace",
+         %{opts: opts} do
+      run(opts)
+
+      old_runtime_info = put_kept_runtime_bundle_under_old_digest(opts)
+      fake_edit(find_editable_runtime_module())
+
+      # A page to build, so that the compile asks for a batch.
+      put_pending_kept_pages(1)
+
+      bundle = data_model_bundle(opts)
+      old_model_path = Path.join(opts[:static_dir], "data-model-OLDMODEL.js")
+      gzip_path = Compiler.gzip_path(bundle.static_bundle_path)
+
+      File.rename!(bundle.static_bundle_path, old_model_path)
+      File.rename!(gzip_path, Compiler.gzip_path(old_model_path))
+
+      # A dir where the batch's page digest dump puts its temporary file makes that dump fail. It
+      # goes in once the batches start, since the compile writes the same dump before them.
+      blocking_dir =
+        Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name()) <> ".tmp"
+
+      on_exit(fn -> File.rmdir(blocking_dir) end)
+
+      next_batch = fn _remaining_pages, _links ->
+        File.mkdir!(blocking_dir)
+        :stop
+      end
+
+      assert_raise File.Error, fn -> run(Keyword.put(opts, :next_batch, next_batch)) end
+
+      assert File.exists?(old_runtime_info.static_bundle_path)
+      assert File.exists?(old_model_path)
+
+      File.rmdir!(blocking_dir)
+
+      {record_built, recorded_built} = record_calls()
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert [[:runtime, :data_model | _rest] | _batches] = recorded_built.()
+      refute File.exists?(old_runtime_info.static_bundle_path)
+      assert list_data_model_files(opts) == data_model_file_names(bundle)
+      test_runtime_bundle(opts)
+    end
+
+    test "writes the data model bundle again when it is gone", %{opts: opts} do
+      run(opts)
+
+      bundle = data_model_bundle(opts)
+      File.rm!(bundle.static_bundle_path)
+
+      {record_built, recorded_built} = record_calls()
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert File.read!(bundle.static_bundle_path) == bundle.js
+      assert recorded_built.() == [[:data_model]]
     end
   end
 
@@ -4095,7 +4778,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       # The edit is faked in the kept infos, so the beam and with it the rebuilt bundle are
       # byte-identical and keep their digest; what the test asserts is that the bundle was built.
-      mfa = {Compiler, :create_runtime_entry_file, 7}
+      mfa = {Compiler, :create_runtime_entry_file, 6}
       :erlang.trace_pattern(mfa, true, [:call_count])
 
       try do
@@ -4435,7 +5118,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert load_chunk_registry_items(opts) == items
     end
 
-    test "the chunks are built with the first batch, after the runtime", %{opts: opts} do
+    test "the chunks are built with the first batch, after the runtime and the data model bundle",
+         %{
+           opts: opts
+         } do
       start_cold(opts)
       {record_built, recorded_built} = record_calls()
 
@@ -4443,8 +5129,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       run(Keyword.merge(opts, bundles_built: record_built, next_batch: next_batch))
 
-      assert [[:runtime, :chunks, _first_page] | rest] = recorded_built.()
+      assert [[:runtime, :data_model, :chunks, _first_page] | rest] = recorded_built.()
       refute Enum.any?(rest, &(:chunks in &1))
+      refute Enum.any?(rest, &(:data_model in &1))
       test_chunk_bundles(opts)
     end
 
@@ -5163,7 +5850,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
 
-      mfa = {Compiler, :create_runtime_entry_file, 7}
+      mfa = {Compiler, :create_runtime_entry_file, 6}
       :erlang.trace_pattern(mfa, true, [:call_count])
 
       try do
@@ -5328,6 +6015,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
       with_edited_fixture("js_fixture.mjs", fn ->
         assert run(opts) == :ok
       end)
+    end
+
+    test "a new VM whose data model bundle is gone compiles and writes it again", %{opts: opts} do
+      [_bundle_file_name, _gzip_copy_file_name] = file_names = list_data_model_files(opts)
+      Enum.each(file_names, &File.rm!(Path.join(opts[:static_dir], &1)))
+
+      assert run(opts) == :ok
+      assert list_data_model_files(opts) == file_names
     end
 
     test "a new VM whose kept bundle is gone compiles", %{opts: opts} do
