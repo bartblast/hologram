@@ -233,7 +233,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(read_edge: start_read_edge!({first, Oplog.log_id()}))
 
-      assert_receive {:dispatched, [%{tx: 201}], ^first}
+      assert_receive {:dispatched, [%{tx: 201}], ^first}, 1_000
       refute_received :lost
 
       settle(dispatcher)
@@ -249,7 +249,7 @@ defmodule Hologram.Sync.DispatcherTest do
       dispatcher =
         start_dispatcher!(advance: sandbox_advance(running: ["a"]), read_edge: read_edge)
 
-      assert_receive {:dispatched, [%{tx: 201}], ^first}
+      assert_receive {:dispatched, [%{tx: 201}], ^first}, 1_000
       assert :sys.get_state(dispatcher).cursor == first
       assert ReadEdge.get(read_edge) == {first, Oplog.log_id()}
 
@@ -265,7 +265,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(read_edge: read_edge)
 
-      assert_receive :lost
+      assert_receive :lost, 1_000
       refute_received {:dispatched, _effects, _place}
       assert :sys.get_state(dispatcher).cursor == place
       assert ReadEdge.get(read_edge) == {place, log_id}
@@ -315,8 +315,8 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(publish: publishing())
 
-      assert_receive {:published, 0}
-      assert_receive {:published, ^seq}
+      assert_receive {:published, 0}, 1_000
+      assert_receive {:published, ^seq}, 1_000
 
       settle(dispatcher)
     end
@@ -331,7 +331,7 @@ defmodule Hologram.Sync.DispatcherTest do
           read_edge: start_read_edge!({first, Oplog.log_id()})
         )
 
-      assert_receive {:published, ^seq}
+      assert_receive {:published, ^seq}, 1_000
       :sys.get_state(dispatcher)
       refute_received {:published, 0}
 
@@ -352,7 +352,7 @@ defmodule Hologram.Sync.DispatcherTest do
           read_edge: start_read_edge!({first, Oplog.log_id()})
         )
 
-      assert_receive {:published, ^published_seq}
+      assert_receive {:published, ^published_seq}, 1_000
       :sys.get_state(dispatcher)
       refute_received {:published, ^seq}
 
@@ -368,7 +368,7 @@ defmodule Hologram.Sync.DispatcherTest do
       {seq, _tx, _at} = seed(201, @entity_id)
       wake(dispatcher)
 
-      assert_receive {:published, ^seq}
+      assert_receive {:published, ^seq}, 1_000
 
       settle(dispatcher)
     end
@@ -393,7 +393,7 @@ defmodule Hologram.Sync.DispatcherTest do
       {seq, _tx, _at} = seed(201, @entity_id)
       wake(dispatcher)
 
-      assert_receive {:handling, ^seq}
+      assert_receive {:handling, ^seq}, 1_000
       assert_received {:published, ^seq}
 
       send(dispatcher, :go)
@@ -406,11 +406,11 @@ defmodule Hologram.Sync.DispatcherTest do
       dispatcher =
         start_dispatcher!(cursor: {seq + 5, tx, inserted_at}, publish: publishing())
 
-      assert_receive :lost
+      assert_receive :lost, 1_000
       assert_received {:published, 0}
 
       # The limit worked out after the loss is below the place resumed, and still goes out.
-      assert_receive {:published, ^seq}
+      assert_receive {:published, ^seq}, 1_000
 
       settle(dispatcher)
     end
@@ -425,7 +425,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(cursor: place)
 
-      assert_receive {:dispatched, [%{tx: 201}], ^place}
+      assert_receive {:dispatched, [%{tx: 201}], ^place}, 1_000
 
       settle(dispatcher)
     end
@@ -436,7 +436,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(cursor: {0, 0, 0})
 
-      assert_receive {:dispatched, [first, second], _place}
+      assert_receive {:dispatched, [first, second], _place}, 1_000
 
       assert {first.tx, first.op, first.type, first.entity_id} ==
                {201, :del_entity, Module2, @entity_id}
@@ -472,7 +472,7 @@ defmodule Hologram.Sync.DispatcherTest do
           read_edge: read_edge
         )
 
-      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}, 1_000
 
       wake(dispatcher)
 
@@ -491,12 +491,12 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
 
-      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}, 1_000
 
       seed(202, @entity_id, skipped_seq)
       wake(dispatcher)
 
-      assert_receive {:dispatched, [%{tx: 202}], ^first}
+      assert_receive {:dispatched, [%{tx: 202}], ^first}, 1_000
 
       wake(dispatcher)
 
@@ -515,12 +515,12 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
 
-      assert_receive {:sent, {^last_seq, [{^skipped_seq, ^skipped_seq}]}}
+      assert_receive {:sent, {^last_seq, [{^skipped_seq, ^skipped_seq}]}}, 1_000
 
       seed(202, @entity_id, skipped_seq)
       wake(dispatcher)
 
-      assert_receive {:sent, {^last_seq, []}}
+      assert_receive {:sent, {^last_seq, []}}, 1_000
 
       settle(dispatcher)
     end
@@ -534,17 +534,17 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
 
-      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}, 1_000
 
       seed(202, @entity_id, first_skipped)
       wake(dispatcher)
 
-      assert_receive {:dispatched, [%{tx: 202}], ^first}
+      assert_receive {:dispatched, [%{tx: 202}], ^first}, 1_000
 
       seed(203, @entity_id, second_skipped)
       wake(dispatcher)
 
-      assert_receive {:dispatched, [%{tx: 203}], ^first}
+      assert_receive {:dispatched, [%{tx: 203}], ^first}, 1_000
 
       settle(dispatcher)
     end
@@ -559,13 +559,13 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
 
-      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}, 1_000
 
       seed(202, @entity_id, skipped_seq)
       seed(202, @entity_id)
       wake(dispatcher)
 
-      assert_receive {:dispatched, [%{seq: ^skipped_seq, tx: 202}, %{tx: 202}], ^first}
+      assert_receive {:dispatched, [%{seq: ^skipped_seq, tx: 202}, %{tx: 202}], ^first}, 1_000
 
       settle(dispatcher)
     end
@@ -584,13 +584,13 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
 
-      assert_receive {:dispatched, effects, {0, 0, 0}}
+      assert_receive {:dispatched, effects, {0, 0, 0}}, 1_000
       assert length(effects) == 102
 
       seed(202, @entity_id, Enum.at(skipped_seqs, 50))
       wake(dispatcher)
 
-      assert_receive {:dispatched, [%{tx: 202}], ^first}
+      assert_receive {:dispatched, [%{tx: 202}], ^first}, 1_000
 
       wake(dispatcher)
 
@@ -609,7 +609,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
 
-      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}, 1_000
       assert :sys.get_state(dispatcher).unsent == [{skipped_seq, skipped_seq}]
 
       :sys.replace_state(dispatcher, &%{&1 | advance: sandbox_advance(high: last_seq)})
@@ -639,7 +639,7 @@ defmodule Hologram.Sync.DispatcherTest do
           handler: handler
         )
 
-      assert_receive {:final, [%{tx: 200}, %{tx: 201}], ^first_seq}
+      assert_receive {:final, [%{tx: 200}, %{tx: 201}], ^first_seq}, 1_000
 
       settle(dispatcher)
     end
@@ -652,13 +652,13 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
 
-      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}
+      assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}, 1_000
       refute_received {:limit_moved, _final_seq}
 
       :sys.replace_state(dispatcher, &%{&1 | advance: sandbox_advance(high: last_seq)})
       wake(dispatcher)
 
-      assert_receive {:limit_moved, ^last_seq}
+      assert_receive {:limit_moved, ^last_seq}, 1_000
       refute_received {:dispatched, _effects, _place}
 
       wake(dispatcher)
@@ -677,7 +677,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(cursor: {seq + 5, tx, inserted_at})
 
-      assert_receive :lost
+      assert_receive :lost, 1_000
       assert %{cursor: ^place, log_id: new_log_id} = :sys.get_state(dispatcher)
       assert new_log_id == Oplog.log_id()
       refute new_log_id == log_id
@@ -708,7 +708,7 @@ defmodule Hologram.Sync.DispatcherTest do
       place = seed(201, @entity_id)
       wake(dispatcher)
 
-      assert_receive :lost
+      assert_receive :lost, 1_000
       refute_received {:dispatched, _effects, _place}
       assert :sys.get_state(dispatcher).cursor == place
       refute Oplog.log_id() == log_id
@@ -727,7 +727,7 @@ defmodule Hologram.Sync.DispatcherTest do
       :ok = crash_server()
       wake(dispatcher)
 
-      assert_receive :lost
+      assert_receive :lost, 1_000
       refute_received {:dispatched, _effects, _place}
       assert :sys.get_state(dispatcher).cursor == place
       assert ReadEdge.get(read_edge) == {place, Oplog.log_id()}
@@ -757,7 +757,7 @@ defmodule Hologram.Sync.DispatcherTest do
       seed(201, @entity_id)
       wake(dispatcher)
 
-      assert_receive {:dispatched, [%{tx: 201}], _place}
+      assert_receive {:dispatched, [%{tx: 201}], _place}, 1_000
       refute_received :lost
 
       settle(dispatcher)
@@ -777,7 +777,7 @@ defmodule Hologram.Sync.DispatcherTest do
           read_edge: read_edge
         )
 
-      assert_receive {:lost, nil, new_log_id}
+      assert_receive {:lost, nil, new_log_id}, 1_000
       refute new_log_id == log_id
 
       :sys.get_state(dispatcher)
@@ -855,7 +855,7 @@ defmodule Hologram.Sync.DispatcherTest do
       last = Enum.reduce(201..206, nil, fn save_tx, _last -> seed(save_tx, @entity_id) end)
       wake(dispatcher)
 
-      assert_receive :lost
+      assert_receive :lost, 1_000
       refute Oplog.log_id() == log_id
 
       :sys.get_state(dispatcher)
@@ -873,7 +873,7 @@ defmodule Hologram.Sync.DispatcherTest do
       seed(201, @entity_id)
       wake(dispatcher)
 
-      assert_receive {:dispatched, [%{tx: 201}], _place}
+      assert_receive {:dispatched, [%{tx: 201}], _place}, 1_000
       refute_received :lost
 
       settle(dispatcher)
@@ -886,7 +886,7 @@ defmodule Hologram.Sync.DispatcherTest do
       read_edge = start_read_edge!()
       dispatcher = start_dispatcher!(cursor: {0, 0, 0}, read_edge: read_edge)
 
-      assert_receive {:dispatched, [_first, _second], _place}
+      assert_receive {:dispatched, [_first, _second], _place}, 1_000
 
       # The delivery is not the barrier. The handler is what sends it, and the place moves once
       # that handler RETURNS - so a read taken on the delivery alone races the round recording it.
@@ -905,7 +905,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(cursor: {0, 0, 0})
 
-      assert_receive {:dispatched, [%{tx: 200}], _place}
+      assert_receive {:dispatched, [%{tx: 200}], _place}, 1_000
 
       wake(dispatcher)
 
@@ -921,7 +921,7 @@ defmodule Hologram.Sync.DispatcherTest do
       seed(200, @entity_id)
       wake(dispatcher)
 
-      assert_receive {:dispatched, [%{tx: 200}], ^start}
+      assert_receive {:dispatched, [%{tx: 200}], ^start}, 1_000
 
       settle(dispatcher)
     end
@@ -941,10 +941,10 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(cursor: {0, 0, 0}, handler: handler)
 
-      assert_receive {:dispatched, 1, [%{tx: 200}], {0, 0, 0}}
+      assert_receive {:dispatched, 1, [%{tx: 200}], {0, 0, 0}}, 1_000
 
       wake(dispatcher)
-      assert_receive {:dispatched, 2, [%{tx: 200}], {0, 0, 0}}
+      assert_receive {:dispatched, 2, [%{tx: 200}], {0, 0, 0}}, 1_000
 
       settle(dispatcher)
     end
@@ -973,7 +973,7 @@ defmodule Hologram.Sync.DispatcherTest do
       limit = :sys.get_state(dispatcher).limit
 
       wake(dispatcher)
-      assert_receive {:round, 2}
+      assert_receive {:round, 2}, 1_000
 
       state = :sys.get_state(dispatcher)
 
@@ -1005,12 +1005,12 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(advance: failing_after_first, cursor: {0, 0, 0})
 
-      assert_receive {:dispatched, [%{tx: 200}], {0, 0, 0}}
+      assert_receive {:dispatched, [%{tx: 200}], {0, 0, 0}}, 1_000
 
       seed(201, @entity_id)
       wake(dispatcher)
 
-      assert_receive {:round, 2}
+      assert_receive {:round, 2}, 1_000
       :sys.get_state(dispatcher)
       refute_received {:dispatched, _effects, _place}
 
@@ -1026,7 +1026,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(cursor: {0, 0, 0})
 
-      assert_receive {:dispatched, [%{tx: 200}], _place}
+      assert_receive {:dispatched, [%{tx: 200}], _place}, 1_000
 
       wake(dispatcher)
       wake(dispatcher)
@@ -1149,7 +1149,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(notifications: notifications)
 
-      assert_receive {:listening, channel}
+      assert_receive {:listening, channel}, 1_000
       assert channel == Oplog.channel()
 
       settle(dispatcher)
@@ -1164,7 +1164,7 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(notifications: notifications)
 
-      assert_receive {:listening, _channel}
+      assert_receive {:listening, _channel}, 1_000
 
       # Asked for its state rather than checked for a pulse: the listen happens in the continue,
       # which runs after start_link returns, so a refusal of that answer kills the process a moment
@@ -1181,7 +1181,7 @@ defmodule Hologram.Sync.DispatcherTest do
       seed(200, @entity_id)
       send(dispatcher, {:notification, self(), make_ref(), Oplog.channel(), ""})
 
-      assert_receive {:dispatched, [%{tx: 200}], _place}
+      assert_receive {:dispatched, [%{tx: 200}], _place}, 1_000
 
       settle(dispatcher)
     end
