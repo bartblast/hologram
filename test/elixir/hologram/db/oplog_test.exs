@@ -227,6 +227,18 @@ defmodule Hologram.DB.OplogTest do
     end
   end
 
+  describe "entry_at/1" do
+    # A restore drops the system tables for a while, and the read fails until they're back.
+    test "raises the error a failed read returns" do
+      {:ok, _result} =
+        Connection.query(
+          ~s|ALTER TABLE "hologram_system"."server_run" RENAME TO "server_run_away"|
+        )
+
+      assert_raise Postgrex.Error, fn -> entry_at(1) end
+    end
+  end
+
   describe "populate_database_copy/0" do
     test "fills the view a schema-only restore leaves empty" do
       {:ok, _result} =

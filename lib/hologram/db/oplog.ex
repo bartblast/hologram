@@ -730,6 +730,10 @@ defmodule Hologram.DB.Oplog do
 
       {:ok, %Postgrex.Result{rows: [[run, entry_seq, tx, inserted_at]]}} ->
         {%{inserted_at: inserted_at, seq: entry_seq, tx: tx}, run}
+
+      # Raised as it came, so the dispatcher can retry it on its next round.
+      {:error, error} ->
+        raise error
     end
   end
 
