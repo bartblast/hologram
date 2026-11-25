@@ -1634,9 +1634,18 @@ describe("SyncStream", () => {
     });
 
     it("takes frames again when a new stream opens", () => {
-      SyncStream.listen({addEventListener() {}});
+      const replacement = {
+        addEventListener(type, listener) {
+          this.listeners[type] = listener;
+        },
+        listeners: {},
+      };
+
+      SyncStream.listen(replacement);
+      replacement.listeners.sync_deltas({data: deltas});
 
       assert.isFalse(SyncStream.awaitingIdentity);
+      assert.equal(SyncStream.syncCursor, "place-old");
     });
 
     // A stream opened after the announcement never hears it, so it brings no pair.
