@@ -1277,7 +1277,7 @@ defmodule Hologram.Migration.Renderer do
   defp validate_default_held!(op, value, mapping) do
     if not default_held?(op, value, mapping) do
       raise Hologram.CompileError,
-        message: Preflight.unheld_default_message(op.table, op.column, value)
+        message: Preflight.unheld_default_message(op.table, op.column, value, :add)
     end
   end
 

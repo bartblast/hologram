@@ -544,9 +544,31 @@ defmodule Hologram.Migration.RendererTest do
         }
       ]
 
-      assert_raise Hologram.CompileError,
-                   ~r/the default "fresh" of column "grade".*doesn't hold yet/,
-                   fn -> render(ops, pre_model) end
+      expected_msg =
+        ~s(the default "fresh" of column "grade" on table "my_app_task" is an enum value ) <>
+          "its type doesn't hold yet when the column fills - list the value in the values: of " <>
+          "the op adding the attribute, and drop the op adding it to the type further down"
+
+      assert_raise Hologram.CompileError, expected_msg, fn -> render(ops, pre_model) end
+    end
+
+    test "accepts the same add with the value listed in its values" do
+      pre_model =
+        model(%{MyApp.Task => %{attributes: [{:seats, :integer, [optional: true]}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          type: :enum,
+          opts: [default: :fresh, values: [:a, :fresh]],
+          line: 3
+        },
+        computed(:copy, {:name, [:seats]})
+      ]
+
+      assert %{transactional: _transactional} = render(ops, pre_model)
     end
   end
 

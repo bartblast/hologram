@@ -140,7 +140,7 @@ defmodule Hologram.DB.Preflight do
   """
   @spec check_fill!(%{atom => any}) :: :ok
   def check_fill!(%{default_held: false} = op) do
-    raise unheld_default_message(op.table, op.column, op.fill)
+    raise unheld_default_message(op.table, op.column, op.fill, :tighten)
   end
 
   def check_fill!(op) do
@@ -309,13 +309,15 @@ defmodule Hologram.DB.Preflight do
   end
 
   @doc """
-  Returns the refusal of a default its enum doesn't hold yet where the given column fills.
+  Returns the refusal of a default its enum doesn't hold yet where the given column fills, by the
+  op filling it: a tightening, or an add. An added column's type is new, so the value comes from
+  an addition further down the same file, and moving the add to the next file would leave that
+  addition naming an attribute not there yet.
   """
-  @spec unheld_default_message(String.t(), String.t(), any) :: String.t()
-  def unheld_default_message(table, column, value) do
+  @spec unheld_default_message(String.t(), String.t(), any, :add | :tighten) :: String.t()
+  def unheld_default_message(table, column, value, filled_by) do
     ~s(the default #{inspect(value)} of column "#{column}" on table "#{table}" is an enum value ) <>
-      "its type doesn't hold yet when the column fills - move the change filling the column to " <>
-      "the next migration file"
+      "its type doesn't hold yet when the column fills - #{unheld_default_remedy(filled_by)}"
   end
 
   # A migration's add nothing fills is one its chunk makes required, so it takes a backfill on the
@@ -746,6 +748,15 @@ defmodule Hologram.DB.Preflight do
 
   # The mapping derives unique indexes alone - the others are the index plan's - so the entity's
   # own index entries hold every unique index of its table.
+  defp unheld_default_remedy(:add) do
+    "list the value in the values: of the op adding the attribute, and drop the op adding it " <>
+      "to the type further down"
+  end
+
+  defp unheld_default_remedy(:tighten) do
+    "move the change filling the column to the next migration file"
+  end
+
   defp unique_indexes(mapping, table) do
     indexes =
       case entity_mapping(mapping, table) do
