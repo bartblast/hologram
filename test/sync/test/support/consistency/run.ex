@@ -285,7 +285,7 @@ defmodule HologramSyncTests.Consistency.Run do
     settled = Checks.diff(store, expected)
     incomplete = if complete?, do: [], else: [:incomplete]
     records = Client.records(client.pid)
-    views = Client.views(client.pid)
+    {views, final_seq} = Client.final_views(client.pid)
 
     differences =
       if first_differences == [],
@@ -294,8 +294,7 @@ defmodule HologramSyncTests.Consistency.Run do
 
     %{
       client
-      | below_final:
-          Checks.below_final(views, entries, client.user_id, Client.final_seq(client.pid)),
+      | below_final: Checks.below_final(views, entries, client.user_id, final_seq),
         differences: differences,
         events: Client.events(client.pid),
         leaks: Checks.leaks(records, entries, client.user_id),

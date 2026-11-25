@@ -186,6 +186,13 @@ defmodule HologramSyncTests.Consistency.Client do
   @spec views(pid) :: list(view)
   def views(client), do: GenServer.call(client, :views)
 
+  @doc """
+  Returns the client's views with the final limit it holds, read together so that no frame lands
+  between them.
+  """
+  @spec final_views(pid) :: {list(view), non_neg_integer | nil}
+  def final_views(client), do: GenServer.call(client, :final_views)
+
   @impl GenServer
   def init(opts) do
     # So a supervisor stopping it runs terminate/2, which closes the stream: :httpc keeps a stream
@@ -268,6 +275,9 @@ defmodule HologramSyncTests.Consistency.Client do
   end
 
   def handle_call(:views, _from, state), do: {:reply, Enum.reverse(state.views), state}
+
+  def handle_call(:final_views, _from, state),
+    do: {:reply, {Enum.reverse(state.views), state.final_seq}, state}
 
   @impl GenServer
   # Only the reconnect the client still waits for: a cut or a connect since then took it back, even

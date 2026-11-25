@@ -64,7 +64,7 @@ defmodule HologramSyncTests.Consistency.Checks do
 
   @doc """
   Returns what check 3 finds in the given views of a client of the given user, from
-  `Client.views/1`, given the history's entries and the limit the client held once the writes
+  `Client.final_views/1`, given the history's entries and the limit the client held once the writes
   stopped and the server had read every commit, or nil.
 
   Each view names a limit per type: the one every type has, which the server tells only once it
