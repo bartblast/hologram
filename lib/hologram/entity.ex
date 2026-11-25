@@ -19,9 +19,13 @@ defmodule Hologram.Entity do
     {:created_at, :datetime, []},
     {:id, :uuid, []},
     {:server_created_at, :datetime, []},
+    {:server_created_seq, :integer, []},
     {:server_updated_at, :datetime, []},
+    {:server_updated_seq, :integer, []},
     {:updated_at, :datetime, []}
   ]
+
+  @sequence_attributes [:server_created_seq, :server_updated_seq]
 
   @typedoc """
   An entity id - the canonical lowercase 8-4-4-4-12 spelling generate_id/0 mints.
@@ -318,9 +322,9 @@ defmodule Hologram.Entity do
 
       derived :message_count, :integer, fn messages -> count(messages) end
 
-      derived :unread_count, :integer, fn channel, last_seen_at ->
+      derived :unread_count, :integer, fn channel, last_seen_seq ->
         channel.messages
-        |> filter(server_created_at > ^last_seen_at)
+        |> filter(server_created_seq > ^last_seen_seq)
         |> count()
       end
 
@@ -870,6 +874,13 @@ defmodule Hologram.Entity do
       [{name, kept_opts} | declarations]
     end
   end
+
+  # Whether the given name is one of the two sequence numbers every entity carries. The server takes
+  # them from the log's sequence, and until one is final a browser and the server can read it
+  # differently.
+  @doc false
+  @spec sequence_attribute?(any) :: boolean
+  def sequence_attribute?(name), do: name in @sequence_attributes
 
   @doc false
   @spec server_only_attribute_names(module) :: list(atom)

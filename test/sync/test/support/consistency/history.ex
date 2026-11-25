@@ -12,18 +12,20 @@ defmodule HologramSyncTests.Consistency.History do
   use Agent
 
   @typedoc """
-  A committed transaction: its id, when it got the commit lock and when it had committed, as
-  `System.monotonic_time/0` in native units, its place in lock order, the writer and the operations
+  A committed transaction: when it got the commit lock and when it had committed, as
+  `System.monotonic_time/0` in native units, its place in lock order, the first and last serials
+  its log entries hold (nil for a transaction that logged nothing), the writer and the operations
   it ran, and the state of the tables it left (see `HologramSyncTests.Consistency.Model.snapshot/0`).
   """
   @type entry :: %{
           after_lock_at: integer,
           committed_at: integer,
           lock_order: integer,
+          max_seq: pos_integer | nil,
+          min_seq: pos_integer | nil,
           ops: list(String.t()),
           state: map,
-          writer: term,
-          xid: non_neg_integer
+          writer: term
         }
 
   @doc """

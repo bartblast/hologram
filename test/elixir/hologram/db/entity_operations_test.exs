@@ -132,6 +132,16 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
   end
 
+  # The log's entries for the given row, in order, as {op, seq}.
+  defp effect_seqs(id) do
+    statement =
+      ~s|SELECT "op", "seq" FROM "hologram_system"."oplog" WHERE "entity_id" = $1 ORDER BY "seq"|
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [Codec.encode(id, :uuid)])
+
+    Enum.map(rows, fn [op, seq] -> {op, seq} end)
+  end
+
   describe "add_relationship/4" do
     test "adds an edge to the join table" do
       {:ok, required_target} = create(Module1.new())
@@ -262,6 +272,69 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "create/1" do
+    test "stores one serial as both of the row's sequence numbers" do
+      {:ok, created_entity} = create(Module2.new(a: true, c: "some text"))
+
+      stored = get(Module2, created_entity.id)
+
+      assert is_integer(stored.server_created_seq)
+      assert stored.server_updated_seq == stored.server_created_seq
+    end
+
+    test "stores the row's effect under the row's serial" do
+      {:ok, created_entity} = create(Module2.new(a: true, c: "some text"))
+
+      stored = get(Module2, created_entity.id)
+
+      assert effect_seqs(created_entity.id) == [{"put_entity", stored.server_created_seq}]
+    end
+
+    test "gives rows written one after another rising sequence numbers" do
+      {:ok, first} = create(Module2.new(a: true, c: "first"))
+      {:ok, second} = create(Module2.new(a: true, c: "second"))
+
+      first_seq = get(Module2, first.id).server_created_seq
+      second_seq = get(Module2, second.id).server_created_seq
+
+      assert is_integer(first_seq)
+      assert is_integer(second_seq)
+      assert second_seq > first_seq
+    end
+
+    test "answers with no sequence numbers, since they aren't final yet" do
+      {:ok, created_entity} = create(Module2.new(a: true, c: "some text"))
+
+      assert created_entity.server_created_seq == nil
+      assert created_entity.server_updated_seq == nil
+    end
+
+    test "ignores sequence numbers the struct carries" do
+      {:ok, original} = create(Module2.new(a: true, c: "original"))
+      stored = get(Module2, original.id)
+
+      copy = %{stored | id: Entity.generate_id(), c: "copy", __meta__: %Metadata{}}
+
+      {:ok, created_copy} = create(copy)
+
+      copy_seq = get(Module2, created_copy.id).server_created_seq
+
+      assert is_integer(stored.server_created_seq)
+      assert is_integer(copy_seq)
+      assert copy_seq > stored.server_created_seq
+    end
+
+    test "leaves the sequence numbers out of the effect's data" do
+      {:ok, created_entity} = create(Module2.new(a: true, c: "some text"))
+
+      statement = ~s|SELECT "data" FROM "hologram_system"."oplog" WHERE "entity_id" = $1|
+
+      {:ok, %Postgrex.Result{rows: [[data]]}} =
+        Connection.query(statement, [Codec.encode(created_entity.id, :uuid)])
+
+      refute Map.has_key?(data, "server_created_seq")
+      refute Map.has_key?(data, "server_updated_seq")
+    end
+
     test "inserts a full row and stamps every timestamp with the same value" do
       entity = Module2.new(a: true, c: "some text")
 
@@ -1329,8 +1402,8 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert delete(Module1, target_entity.id) ==
                {:error, %{referenced_by: Module3, relationship: :c}}
 
-      assert get(Module1, target_entity.id) == target_entity
-      assert get(Module3, referencing_entity.id) == referencing_entity
+      assert unnumbered(get(Module1, target_entity.id)) == target_entity
+      assert unnumbered(get(Module3, referencing_entity.id)) == referencing_entity
     end
 
     test "restricts when the entity is the target of another entity's edges" do
@@ -1468,21 +1541,21 @@ defmodule Hologram.DB.EntityOperationsTest do
     test "locks the row for no key update with lock: :no_key_update" do
       {:ok, created_entity} = create(Module1.new())
 
-      assert get(Module1, created_entity.id, lock: :no_key_update) == created_entity
+      assert unnumbered(get(Module1, created_entity.id, lock: :no_key_update)) == created_entity
       assert "RowShareLock" in relation_lock_modes(Module1)
     end
 
     test "locks the row for share with lock: :share" do
       {:ok, created_entity} = create(Module1.new())
 
-      assert get(Module1, created_entity.id, lock: :share) == created_entity
+      assert unnumbered(get(Module1, created_entity.id, lock: :share)) == created_entity
       assert "RowShareLock" in relation_lock_modes(Module1)
     end
 
     test "locks the row for update with lock: :update" do
       {:ok, created_entity} = create(Module1.new())
 
-      assert get(Module1, created_entity.id, lock: :update) == created_entity
+      assert unnumbered(get(Module1, created_entity.id, lock: :update)) == created_entity
       assert "RowShareLock" in relation_lock_modes(Module1)
     end
 
@@ -1491,7 +1564,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       {:ok, created_entity} = create(entity)
 
-      assert get(Module4, created_entity.id) == created_entity
+      assert unnumbered(get(Module4, created_entity.id)) == created_entity
     end
 
     test "returns to-one relationship references as target ids" do
@@ -1502,7 +1575,7 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> Module3.new()
         |> create()
 
-      assert get(Module3, created_entity.id) == created_entity
+      assert unnumbered(get(Module3, created_entity.id)) == created_entity
     end
 
     test "returns nil when no row matches" do
@@ -1558,7 +1631,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       second = create_message(general, "second", 1)
       _other = create_message(random, "other", 3)
 
-      assert related_rows(Module26, general.id, :messages) ==
+      assert unnumbered(related_rows(Module26, general.id, :messages)) ==
                Enum.sort_by([first, second], & &1.id)
     end
 
@@ -1570,7 +1643,8 @@ defmodule Hologram.DB.EntityOperationsTest do
       :ok = add_relationship(Module28, message.id, :labels, later.id)
       :ok = add_relationship(Module28, message.id, :labels, urgent.id)
 
-      assert related_rows(Module28, message.id, :labels) == Enum.sort_by([urgent, later], & &1.id)
+      assert unnumbered(related_rows(Module28, message.id, :labels)) ==
+               Enum.sort_by([urgent, later], & &1.id)
     end
 
     test "reads an inverse of a to-many through the join table it reverses, in id order" do
@@ -1581,7 +1655,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       :ok = add_relationship(Module28, second.id, :labels, urgent.id)
       :ok = add_relationship(Module28, first.id, :labels, urgent.id)
 
-      assert related_rows(Module29, urgent.id, :messages) ==
+      assert unnumbered(related_rows(Module29, urgent.id, :messages)) ==
                Enum.sort_by([first, second], & &1.id)
     end
 
@@ -1593,7 +1667,7 @@ defmodule Hologram.DB.EntityOperationsTest do
         |> Module27.new()
         |> create()
 
-      assert related_rows(Module26, general.id, :topic) == [topic]
+      assert unnumbered(related_rows(Module26, general.id, :topic)) == [topic]
     end
 
     test "locks the rows and a to-many's pairs for share with lock: :share" do
@@ -1601,7 +1675,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       message = create_message(nil, "hi", 1)
       :ok = add_relationship(Module28, message.id, :labels, urgent.id)
 
-      assert related_rows(Module28, message.id, :labels, lock: :share) == [urgent]
+      assert unnumbered(related_rows(Module28, message.id, :labels, lock: :share)) == [urgent]
       assert "RowShareLock" in relation_lock_modes(Module29)
       assert "RowShareLock" in relation_lock_modes("test_fixtures_entity_module28_labels_$join")
     end
@@ -1611,7 +1685,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       message = create_message(nil, "hi", 1)
       :ok = add_relationship(Module28, message.id, :labels, urgent.id)
 
-      assert related_rows(Module29, urgent.id, :messages, lock: :share) == [message]
+      assert unnumbered(related_rows(Module29, urgent.id, :messages, lock: :share)) == [message]
       assert "RowShareLock" in relation_lock_modes(Module28)
       assert "RowShareLock" in relation_lock_modes("test_fixtures_entity_module28_labels_$join")
     end
@@ -1627,6 +1701,32 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "update/4" do
+    test "moves the updated number to the patch's serial and leaves the created one" do
+      {:ok, created_entity} = create(Module2.new(a: true, c: "some text"))
+      before = get(Module2, created_entity.id)
+
+      :ok = update(Module2, created_entity.id, c: "other text")
+
+      stored = get(Module2, created_entity.id)
+
+      assert stored.server_created_seq == before.server_created_seq
+      assert stored.server_updated_seq > before.server_updated_seq
+
+      assert effect_seqs(created_entity.id) == [
+               {"put_entity", before.server_created_seq},
+               {"patch_entity", stored.server_updated_seq}
+             ]
+    end
+
+    test "leaves both numbers alone when the update is refused" do
+      {:ok, created_entity} = create(Module2.new(a: true, c: "some text"))
+      before = get(Module2, created_entity.id)
+
+      assert {:error, _violations} = update(Module2, created_entity.id, c: nil)
+
+      assert get(Module2, created_entity.id) == before
+    end
+
     # The same inputs and messages as the browser's DB.update/3 tests.
     test "names every refused key in the order of its printed text" do
       {:ok, created_entity} =

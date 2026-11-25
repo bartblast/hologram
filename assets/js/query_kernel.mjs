@@ -46,10 +46,19 @@ import StringOrder from "./string_order.mjs";
 // once a year leaves 0 to 9999, its width and sign being the year's own, so they order by
 // Model.compareTemporal, which is the attribute's declared type deciding, the way an enum's does.
 //
+// A row's server_created_seq and server_updated_seq order by LocalDatabase.orderingKey rather than
+// as they read: this client's own row, or a row the server has not saved, goes at the newest end,
+// and a number a page showed counts though the field reads null. A sort by one leaves out any
+// other row whose number isn't known here, until it is. Only the ordering operators and sorting
+// take that rule - an ordering operator holds only for a number final here or shown - while an
+// equality judges the field as it reads. With nothing waiting it is the plain order.
+//
 // What comes back is what the database holds, arranged - never boxed. A result row is a node
 // pairing the stored row with what the query included of it, which is the shape the boxing
 // boundary reads: entity structs are built from these, once per row, when a result leaves for
 // a template.
+const ORDERING_OPERATORS = ["<", "<=", ">", ">="];
+
 export default class QueryKernel {
   // Runs the term over the database and returns what it evaluates to: nodes for a set, one node
   // or null for a single-result query, a number for a counting one.
@@ -133,8 +142,37 @@ export default class QueryKernel {
 
   static #arrange(rows, term, context) {
     return QueryKernel.#bound(
-      QueryKernel.#sort(rows, term.sort, term.entity, context),
+      QueryKernel.#sort(
+        QueryKernel.#numberedRows(rows, term.sort, term.entity),
+        term.sort,
+        term.entity,
+        context,
+      ),
       term,
+    );
+  }
+
+  // A list ordered by a row's number leaves out a row whose number isn't known here yet, since
+  // none of its places would hold once the number comes. It shows up when the number does, so the
+  // rows the list already shows keep their order. This client's own rows and the ones the server
+  // hasn't saved stay, at the newest end (see LocalDatabase.orderingKey).
+  static #numberedRows(rows, keys, entityType) {
+    const names = keys
+      .map(([name]) => name)
+      .filter(
+        (name) =>
+          LocalDatabase.isSequenceField(name) &&
+          !Model.derivedField(entityType, name),
+      );
+
+    if (names.length === 0) {
+      return rows;
+    }
+
+    return rows.filter((row) =>
+      names.every(
+        (name) => LocalDatabase.orderingKey(entityType, row, name)[0] !== 1,
+      ),
     );
   }
 
@@ -205,6 +243,13 @@ export default class QueryKernel {
     const leftValue = left[name] ?? null;
     const rightValue = right[name] ?? null;
 
+    // An ordering key (see #sort) is never missing: its rank places what has no number.
+    if (Array.isArray(leftValue)) {
+      const result = QueryKernel.#compareOrderingKeys(leftValue, rightValue);
+
+      return direction === "desc" ? -result : result;
+    }
+
     if (leftValue === null || rightValue === null) {
       if (leftValue === rightValue) {
         return 0;
@@ -218,6 +263,25 @@ export default class QueryKernel {
     const result = QueryKernel.#compareValues(left, right, name, order);
 
     return direction === "desc" ? -result : result;
+  }
+
+  static #compareOrderingKeys(
+    [leftRank, leftNumber],
+    [rightRank, rightNumber],
+  ) {
+    if (leftRank !== rightRank) {
+      return leftRank < rightRank ? -1 : 1;
+    }
+
+    if (leftNumber === null || rightNumber === null) {
+      return 0;
+    }
+
+    if (leftNumber < rightNumber) {
+      return -1;
+    }
+
+    return leftNumber > rightNumber ? 1 : 0;
   }
 
   static #compareRows(left, right, keys, orders) {
@@ -424,6 +488,30 @@ export default class QueryKernel {
     }
 
     return orders;
+  }
+
+  // What an end of a filter's triple reads: its value, or for an ordering operator over a row's
+  // number the number a list orders it by - null when that isn't one final here or shown, so the
+  // operator does not hold (see orderingKey).
+  static #filterValue(end, ordering, context) {
+    if (
+      !ordering ||
+      end.row === null ||
+      end.entityType === null ||
+      end.entityType === undefined ||
+      !LocalDatabase.isSequenceField(end.name) ||
+      Model.derivedField(end.entityType, end.name)
+    ) {
+      return QueryKernel.#endValue(end, context);
+    }
+
+    const [rank, number] = LocalDatabase.orderingKey(
+      end.entityType,
+      end.row,
+      end.name,
+    );
+
+    return rank === 0 ? number : null;
   }
 
   // A definition's expression on the row: strings joined, null when one of them is, an if's branch,
@@ -726,9 +814,14 @@ export default class QueryKernel {
     outer,
   ) {
     const order = orders[QueryKernel.#nameKey(name)];
+    const ordering = ORDERING_OPERATORS.includes(operator);
 
     const value = QueryKernel.#isAttribute(operand)
-      ? QueryKernel.#read(row, operand.attribute, entityType, outer, context)
+      ? QueryKernel.#filterValue(
+          QueryKernel.#endOf(row, operand.attribute, entityType, outer),
+          ordering,
+          context,
+        )
       : operand;
 
     const end = QueryKernel.#endOf(row, name, entityType, outer);
@@ -743,7 +836,7 @@ export default class QueryKernel {
 
     return QueryKernel.#satisfies(
       operator,
-      QueryKernel.#endValue(end, context),
+      QueryKernel.#filterValue(end, ordering, context),
       value,
       order,
       pair,
@@ -920,8 +1013,14 @@ export default class QueryKernel {
       Model.derivedField(entityType, name),
     );
 
+    const sequenceNames = names.filter(
+      (name) =>
+        LocalDatabase.isSequenceField(name) &&
+        !Model.derivedField(entityType, name),
+    );
+
     const views = rows.map((row) => {
-      if (derivedNames.length === 0) {
+      if (derivedNames.length === 0 && sequenceNames.length === 0) {
         return {row, view: row};
       }
 
@@ -929,6 +1028,13 @@ export default class QueryKernel {
 
       for (const name of derivedNames) {
         view[name] = QueryKernel.#derivedValue(row, entityType, name, context);
+      }
+
+      // A row the server hasn't saved has no number, so its id - which counts up in the order
+      // this client made its rows - stands in, and a descending order turns it around too.
+      for (const name of sequenceNames) {
+        const key = LocalDatabase.orderingKey(entityType, row, name);
+        view[name] = key[0] === 3 ? [3, row.id] : key;
       }
 
       return {row, view};

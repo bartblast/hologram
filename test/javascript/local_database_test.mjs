@@ -1,6 +1,6 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
 import Batch from "../../assets/js/batch.mjs";
 import Clock from "../../assets/js/clock.mjs";
@@ -1694,6 +1694,899 @@ describe("LocalDatabase", () => {
       LocalDatabase.unmarkCarried("MyApp.Project", "t1");
 
       assert.deepEqual(LocalDatabase.carriedEntries(), [["MyApp.Task", "t1"]]);
+    });
+  });
+
+  describe("the final point", () => {
+    const TASK = "MyApp.Task";
+
+    const row = (id, created, updated) => ({
+      id,
+      server_created_seq: created,
+      server_updated_seq: updated,
+      title: "Draft copy",
+    });
+
+    const hold = (item) =>
+      LocalDatabase.putRow(TASK, LocalDatabase.holdNumbers(TASK, item));
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {
+              id: "uuid",
+              server_created_seq: "integer",
+              server_updated_seq: "integer",
+              title: "string",
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+      Model.reset();
+    });
+
+    it("is null until the server tells one", () => {
+      assert.isNull(LocalDatabase.finalSeq());
+    });
+
+    // The point a fill's marker gives its type, which numbers of other types don't reach.
+    describe("raiseTypeFinal()", () => {
+      const NOTE = "MyApp.Note";
+
+      const created = (type, id) =>
+        LocalDatabase.baseRow(type, id).server_created_seq;
+
+      const holdNote = (item) =>
+        LocalDatabase.putRow(NOTE, LocalDatabase.holdNumbers(NOTE, item));
+
+      beforeEach(() => {
+        Model.reset();
+
+        globalThis.Hologram.sync.model[NOTE] =
+          globalThis.Hologram.sync.model[TASK];
+      });
+
+      it("files the waiting numbers of the given types, and only those", () => {
+        hold(row("t1", 80, 80));
+        holdNote(row("n1", 80, 80));
+
+        LocalDatabase.raiseTypeFinal([TASK], 100);
+
+        assert.equal(created(TASK, "t1"), 80);
+        assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+        assert.isNull(created(NOTE, "n1"));
+        assert.isNull(LocalDatabase.finalSeq());
+      });
+
+      it("files a number of the type at or below the point as it comes", () => {
+        LocalDatabase.raiseTypeFinal([TASK], 100);
+
+        hold(row("t1", 100, 100));
+        hold(row("t2", 101, 101));
+        holdNote(row("n1", 90, 90));
+
+        assert.equal(created(TASK, "t1"), 100);
+        assert.isNull(created(TASK, "t2"));
+        assert.isNull(created(NOTE, "n1"));
+      });
+
+      it("keeps the point every type has for the type", () => {
+        LocalDatabase.raiseFinal(50);
+        LocalDatabase.raiseTypeFinal([TASK], 40);
+
+        hold(row("t1", 45, 45));
+
+        assert.equal(created(TASK, "t1"), 45);
+      });
+
+      it("keeps the highest point it was told for the type", () => {
+        LocalDatabase.raiseTypeFinal([TASK], 100);
+        LocalDatabase.raiseTypeFinal([TASK], 90);
+        LocalDatabase.raiseTypeFinal([TASK], null);
+
+        hold(row("t1", 95, 95));
+
+        assert.equal(created(TASK, "t1"), 95);
+      });
+
+      it("takes a page's number of the type at or below the point as final", () => {
+        LocalDatabase.raiseTypeFinal([TASK], 100);
+
+        const filed = LocalDatabase.carryNumbers(TASK, row("t1", 90, 90));
+        const note = LocalDatabase.carryNumbers(NOTE, row("n1", 90, 90));
+
+        assert.equal(filed.server_created_seq, 90);
+        assert.isNull(note.server_created_seq);
+      });
+
+      for (const [name, end] of [
+        ["the marker for everything", () => LocalDatabase.markAllSynced()],
+        ["a refill", () => LocalDatabase.beginRefill()],
+        ["a lost log", () => LocalDatabase.forgetFinal()],
+        [
+          "the store's point taken up",
+          () => LocalDatabase.takeStoredFinal(null),
+        ],
+        ["a reset", () => LocalDatabase.reset()],
+      ]) {
+        it(`drops the type's point on ${name}`, () => {
+          LocalDatabase.raiseTypeFinal([TASK], 100);
+
+          end();
+
+          hold(row("t1", 90, 90));
+
+          assert.isNull(created(TASK, "t1"));
+        });
+      }
+    });
+
+    it("files the waiting numbers the point reaches, and only those", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 12, 12));
+      hold(row("t2", 15, 15));
+
+      LocalDatabase.raiseFinal(13);
+
+      assert.equal(LocalDatabase.finalSeq(), 13);
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 12);
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 12);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t2").server_created_seq);
+      assert.isNotNull(LocalDatabase.waitingNumbers(TASK, "t2"));
+    });
+
+    it("files a waiting number on a copy of the row", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 12, 12));
+
+      const handed = LocalDatabase.baseRow(TASK, "t1");
+
+      LocalDatabase.raiseFinal(12);
+
+      assert.isNull(handed.server_created_seq);
+      assert.notStrictEqual(LocalDatabase.baseRow(TASK, "t1"), handed);
+    });
+
+    it("files a big waiting number as a big integer", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", "9007199254740993", "9007199254740993"));
+
+      LocalDatabase.raiseFinal("9007199254740993");
+
+      assert.strictEqual(
+        LocalDatabase.baseRow(TASK, "t1").server_created_seq,
+        9007199254740993n,
+      );
+    });
+
+    it("keeps the highest point it was told", () => {
+      LocalDatabase.raiseFinal(20);
+      LocalDatabase.raiseFinal(15);
+      LocalDatabase.raiseFinal(null);
+
+      assert.equal(LocalDatabase.finalSeq(), 20);
+    });
+
+    it("files nothing for a point below the one it holds", () => {
+      LocalDatabase.raiseFinal(20);
+
+      hold(row("t1", 25, 25));
+
+      LocalDatabase.raiseFinal(15);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_created_seq);
+    });
+
+    it("drops the own flag once the created number is filed", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold({...row("t1", 12, 14), $own: true});
+
+      LocalDatabase.raiseFinal(12);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_updated_seq: 14},
+        own: false,
+      });
+    });
+
+    it("forgets the point, the waiting numbers and the rows' numbers", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 5, 5));
+      hold(row("t1", 5, 12));
+
+      LocalDatabase.forgetFinal();
+
+      assert.isNull(LocalDatabase.finalSeq());
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+
+      assert.deepStrictEqual(LocalDatabase.baseRow(TASK, "t1"), {
+        ...row("t1", 5, 5),
+        server_created_seq: null,
+        server_updated_seq: null,
+      });
+    });
+
+    it("forgets a row's numbers on a copy of the row", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 5, 5));
+
+      const handed = LocalDatabase.baseRow(TASK, "t1");
+
+      LocalDatabase.forgetFinal();
+
+      assert.equal(handed.server_created_seq, 5);
+      assert.notStrictEqual(LocalDatabase.baseRow(TASK, "t1"), handed);
+    });
+
+    it("leaves a row that holds no numbers as it is", () => {
+      LocalDatabase.putRow(TASK, {id: "t1", title: "Draft copy"});
+
+      const handed = LocalDatabase.baseRow(TASK, "t1");
+
+      LocalDatabase.forgetFinal();
+
+      assert.strictEqual(LocalDatabase.baseRow(TASK, "t1"), handed);
+    });
+
+    it("is dropped by a reset, with the waiting numbers", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 12, 12));
+
+      LocalDatabase.reset();
+
+      assert.isNull(LocalDatabase.finalSeq());
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("is kept by a refill, with the waiting numbers", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 12, 12));
+
+      LocalDatabase.beginRefill({hadPlace: true});
+
+      assert.equal(LocalDatabase.finalSeq(), 10);
+      assert.isNotNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("hands a row's waiting numbers to its record", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold({...row("t1", 12, 12), $own: true});
+
+      const [record] = LocalDatabase.records([`${TASK} t1`]);
+
+      assert.deepStrictEqual(record.waiting, {
+        numbers: {server_created_seq: 12, server_updated_seq: 12},
+        own: true,
+      });
+
+      assert.isNull(record.row.server_created_seq);
+    });
+
+    it("hands a record no waiting numbers for a row that waits for none", () => {
+      LocalDatabase.raiseFinal(12);
+
+      hold(row("t1", 12, 12));
+
+      assert.notProperty(LocalDatabase.records([`${TASK} t1`])[0], "waiting");
+    });
+
+    it("holds a restored row's numbers back again", () => {
+      LocalDatabase.restore(
+        [
+          {
+            facts: {},
+            id: "t1",
+            row: row("t1", 5, 8),
+            type: TASK,
+            waiting: {numbers: {server_updated_seq: 15}, own: false},
+          },
+        ],
+        10,
+      );
+
+      assert.equal(LocalDatabase.finalSeq(), 10);
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 8);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_updated_seq: 15},
+        own: false,
+      });
+    });
+
+    it("files a restored waiting number the restored point reaches", () => {
+      LocalDatabase.restore(
+        [
+          {
+            facts: {},
+            id: "t1",
+            row: row("t1", 5, 8),
+            type: TASK,
+            waiting: {numbers: {server_updated_seq: 15}, own: false},
+          },
+        ],
+        15,
+      );
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 15);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    // A frame naming no place is stored with its rows filed under the point held then, and the
+    // point stored with them is the one written with the last place.
+    it("holds a restored row's number above the restored point back", () => {
+      LocalDatabase.restore(
+        [{facts: {}, id: "t1", row: row("t1", 5, 15), type: TASK}],
+        10,
+      );
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 5);
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_updated_seq: 15},
+        own: false,
+      });
+    });
+
+    it("keeps a restored row's newer waiting number over the one it holds above the point", () => {
+      LocalDatabase.restore(
+        [
+          {
+            facts: {},
+            id: "t1",
+            row: row("t1", 12, 15),
+            type: TASK,
+            waiting: {numbers: {server_updated_seq: 18}, own: false},
+          },
+        ],
+        10,
+      );
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_created_seq);
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_created_seq: 12, server_updated_seq: 18},
+        own: false,
+      });
+    });
+
+    it("leaves the numbers of a row the page brought above the restored point alone", () => {
+      LocalDatabase.putRow(TASK, row("t1", 5, 15));
+
+      LocalDatabase.restore(
+        [{facts: {}, id: "t1", row: row("t1", 5, 8), type: TASK}],
+        10,
+      );
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 15);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    // The page's render hid the numbers, since its pin didn't reach them.
+    it("files a stored created number a held row holds none for once the restored point reaches it", () => {
+      LocalDatabase.putRow(TASK, row("t1", null, null));
+
+      LocalDatabase.restore(
+        [{facts: {}, id: "t1", row: row("t1", 5, 8), type: TASK}],
+        10,
+      );
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 5);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    // A stored updated number can be an older version's than the page brought.
+    it("takes no stored updated number a held row holds none for", () => {
+      LocalDatabase.putRow(TASK, row("t1", 5, null));
+
+      LocalDatabase.restore(
+        [{facts: {}, id: "t1", row: row("t1", 5, 8), type: TASK}],
+        10,
+      );
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("holds a stored created number a held row holds none for back above the restored point", () => {
+      LocalDatabase.putRow(TASK, row("t1", null, null));
+
+      LocalDatabase.restore(
+        [{facts: {}, id: "t1", row: row("t1", 15, 18), type: TASK}],
+        10,
+      );
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_created_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_created_seq: 15},
+        own: false,
+      });
+    });
+
+    it("takes no stored created number a held row's shown one is as new as", () => {
+      LocalDatabase.raiseFinal(3);
+      LocalDatabase.putRow(
+        TASK,
+        LocalDatabase.carryNumbers(TASK, row("t1", 5, null)),
+      );
+
+      LocalDatabase.restore(
+        [{facts: {}, id: "t1", row: row("t1", 5, null), type: TASK}],
+        4,
+      );
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_created_seq: 5},
+      });
+    });
+
+    // The page showed a newer version's number, so the stored one is an older version's.
+    it("takes no stored waiting number a held row's shown one is newer than", () => {
+      LocalDatabase.raiseFinal(3);
+      LocalDatabase.putRow(
+        TASK,
+        LocalDatabase.carryNumbers(TASK, row("t1", 2, 20)),
+      );
+
+      LocalDatabase.restore(
+        [
+          {
+            facts: {},
+            id: "t1",
+            row: row("t1", 2, null),
+            type: TASK,
+            waiting: {numbers: {server_updated_seq: 15}, own: false},
+          },
+        ],
+        10,
+      );
+
+      LocalDatabase.raiseFinal(15);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+
+      LocalDatabase.raiseFinal(20);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 20);
+    });
+
+    it("keeps a newer waiting created number over a stored one a held row holds none for", () => {
+      LocalDatabase.raiseFinal(3);
+      LocalDatabase.putRow(TASK, row("t1", null, null));
+      LocalDatabase.holdNumbers(TASK, {id: "t1", server_created_seq: 15});
+
+      LocalDatabase.restore(
+        [{facts: {}, id: "t1", row: row("t1", 5, null), type: TASK}],
+        4,
+      );
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_created_seq: 15},
+        own: false,
+      });
+    });
+
+    it("holds a stored number newer than a carried row's back, own flag and all", () => {
+      LocalDatabase.putRow(TASK, row("t1", null, null));
+
+      LocalDatabase.restore(
+        [
+          {
+            facts: {},
+            id: "t1",
+            row: row("t1", null, null),
+            type: TASK,
+            waiting: {
+              numbers: {server_created_seq: 12, server_updated_seq: 12},
+              own: true,
+            },
+          },
+        ],
+        10,
+      );
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_created_seq: 12, server_updated_seq: 12},
+        own: true,
+      });
+    });
+
+    it("takes no stored number a carried row holds a newer one for", () => {
+      LocalDatabase.putRow(TASK, row("t1", 12, 20));
+
+      LocalDatabase.restore(
+        [
+          {
+            facts: {},
+            id: "t1",
+            row: row("t1", null, null),
+            type: TASK,
+            waiting: {
+              numbers: {server_created_seq: 12, server_updated_seq: 14},
+              own: true,
+            },
+          },
+        ],
+        10,
+      );
+
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 20);
+    });
+
+    it("takes up a stored row with the numbers the store says it waits for", () => {
+      LocalDatabase.raiseFinal(30);
+
+      hold(row("t1", 25, 25));
+      hold(row("t1", 25, 40));
+
+      LocalDatabase.takeStoredFinal(10);
+
+      LocalDatabase.putStored(TASK, row("t1", null, null), {
+        numbers: {server_created_seq: 12},
+        own: true,
+      });
+
+      assert.equal(LocalDatabase.finalSeq(), 10);
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_created_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_created_seq: 12},
+        own: true,
+      });
+    });
+
+    it("holds a stored row's number above the store's point back", () => {
+      LocalDatabase.takeStoredFinal(10);
+      LocalDatabase.putStored(TASK, row("t1", 5, 15), null);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_updated_seq: 15},
+        own: false,
+      });
+    });
+
+    // A take-up puts every stored row, so each one settles only itself: settling the whole
+    // waiting list per row would read rows times entries.
+    it("settles only the stored row it puts", () => {
+      LocalDatabase.takeStoredFinal(10);
+
+      const baseRow = sinon.spy(LocalDatabase, "baseRow");
+
+      try {
+        for (let i = 0; i < 100; i++) {
+          LocalDatabase.putStored(TASK, row(`t${i}`, 15, 15), null);
+        }
+
+        assert.isBelow(baseRow.callCount, 1000);
+      } finally {
+        baseRow.restore();
+      }
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t0"), {
+        numbers: {server_created_seq: 15, server_updated_seq: 15},
+        own: false,
+      });
+    });
+
+    it("files a number the page showed that the store's point reaches", () => {
+      LocalDatabase.carryNumbers(TASK, row("t1", 8, 8));
+      LocalDatabase.putRow(TASK, row("t1", null, null));
+
+      LocalDatabase.takeStoredFinal(10);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 8);
+    });
+
+    it("files a stored row's waiting number the store's point reaches", () => {
+      LocalDatabase.takeStoredFinal(12);
+
+      LocalDatabase.putStored(TASK, row("t1", null, null), {
+        numbers: {server_created_seq: 12},
+        own: true,
+      });
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 12);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("keeps a carried row's numbers above the point beside it as shown", () => {
+      LocalDatabase.raiseFinal(10);
+
+      const filed = LocalDatabase.carryNumbers(TASK, row("t1", 12, 14));
+
+      assert.isNull(filed.server_created_seq);
+      assert.isNull(filed.server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_created_seq: 12, server_updated_seq: 14},
+      });
+    });
+
+    it("carries a row's numbers the point reaches as they came", () => {
+      LocalDatabase.raiseFinal(12);
+
+      const filed = LocalDatabase.carryNumbers(TASK, row("t1", 11, 12));
+
+      assert.equal(filed.server_created_seq, 11);
+      assert.equal(filed.server_updated_seq, 12);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("carries the number a held row has in place of one above the point", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 5, 8));
+
+      const filed = LocalDatabase.carryNumbers(TASK, row("t1", 5, 14));
+
+      assert.equal(filed.server_updated_seq, 8);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 14},
+      });
+    });
+
+    it("keeps the newest number a page showed", () => {
+      LocalDatabase.raiseFinal(10);
+
+      LocalDatabase.carryNumbers(TASK, row("t1", 12, 14));
+      LocalDatabase.carryNumbers(TASK, row("t1", 12, 13));
+
+      assert.equal(
+        LocalDatabase.waitingNumbers(TASK, "t1").shown.server_updated_seq,
+        14,
+      );
+    });
+
+    it("files a shown number the point reaches while a newer one waits", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 5, 8));
+      LocalDatabase.carryNumbers(TASK, row("t1", 5, 14));
+      hold(row("t1", 5, 16));
+
+      LocalDatabase.raiseFinal(14);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 14);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_updated_seq: 16},
+        own: false,
+      });
+    });
+
+    it("files the higher of a shown and a waiting number the point reaches", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 12, 18));
+      LocalDatabase.carryNumbers(TASK, row("t1", 12, 15));
+
+      LocalDatabase.raiseFinal(20);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 12);
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 18);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("files the shown number when it is the higher one the point reaches", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 12, 15));
+      LocalDatabase.carryNumbers(TASK, row("t1", 12, 18));
+
+      LocalDatabase.raiseFinal(20);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 18);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("hands a row's shown numbers to its record and takes them back", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 5, 8));
+      LocalDatabase.carryNumbers(TASK, row("t1", 5, 14));
+
+      const [record] = LocalDatabase.records([`${TASK} t1`]);
+
+      assert.deepStrictEqual(record.waiting, {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 14},
+      });
+
+      LocalDatabase.reset();
+      LocalDatabase.restore([record], 10);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 14},
+      });
+    });
+
+    it("keeps a row's shown numbers when the store's copy is taken up", () => {
+      LocalDatabase.raiseFinal(10);
+
+      hold(row("t1", 5, 8));
+      LocalDatabase.carryNumbers(TASK, row("t1", 5, 14));
+
+      LocalDatabase.takeStoredFinal(10);
+      LocalDatabase.putStored(TASK, row("t1", 5, 8), null);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 14},
+      });
+    });
+
+    it("moves a carried row's numbers above a lower stored point beside it", () => {
+      LocalDatabase.raiseFinal(20);
+
+      LocalDatabase.putRow(
+        TASK,
+        LocalDatabase.carryNumbers(TASK, row("t1", 12, 15)),
+      );
+
+      LocalDatabase.markCarried(TASK, "t1");
+
+      LocalDatabase.takeStoredFinal(12);
+
+      const held = LocalDatabase.baseRow(TASK, "t1");
+
+      assert.equal(held.server_created_seq, 12);
+      assert.isNull(held.server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 15},
+      });
+    });
+
+    it("leaves the numbers of a row a page didn't carry to the store", () => {
+      LocalDatabase.raiseFinal(20);
+
+      hold(row("t1", 12, 15));
+
+      LocalDatabase.takeStoredFinal(12);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 15);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+  });
+
+  describe("orderingKey()", () => {
+    const TASK = "MyApp.Task";
+    const SAVED_AT = "2026-11-24T10:00:00.000000Z";
+
+    const row = (id, created, updated, extra = {}) =>
+      Object.assign(
+        {
+          id,
+          server_created_at: SAVED_AT,
+          server_created_seq: created,
+          server_updated_seq: updated,
+          title: "Draft copy",
+        },
+        extra,
+      );
+
+    const hold = (item) =>
+      LocalDatabase.putRow(TASK, LocalDatabase.holdNumbers(TASK, item));
+
+    const key = (id, field = "server_updated_seq") =>
+      LocalDatabase.orderingKey(TASK, LocalDatabase.baseRow(TASK, id), field);
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {
+              id: "uuid",
+              server_created_at: "utc_datetime_usec",
+              server_created_seq: "integer",
+              server_updated_seq: "integer",
+              title: "string",
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+      LocalDatabase.raiseFinal(10);
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+      Model.reset();
+    });
+
+    it("places a row by its number final here", () => {
+      hold(row("t1", 5, 8));
+
+      assert.deepStrictEqual(key("t1"), [0, 8]);
+    });
+
+    it("places a row by the number a page showed above its own", () => {
+      hold(row("t1", 5, 8));
+      LocalDatabase.carryNumbers(TASK, row("t1", 5, 14));
+
+      assert.deepStrictEqual(key("t1"), [0, 14]);
+    });
+
+    it("places a row by a big number a page showed as a big integer", () => {
+      hold(row("t1", 5, 8));
+      LocalDatabase.carryNumbers(TASK, row("t1", 5, "9007199254740995"));
+
+      assert.deepStrictEqual(key("t1"), [0, 9007199254740995n]);
+    });
+
+    it("places a stranger's row whose number waits after the numbered ones", () => {
+      hold(row("t1", 12, 12));
+
+      assert.deepStrictEqual(key("t1"), [1, null]);
+    });
+
+    it("places this client's own row by the number it waits for", () => {
+      hold(row("t1", 12, 14, {$own: true}));
+
+      assert.deepStrictEqual(key("t1"), [2, 14]);
+      assert.deepStrictEqual(key("t1", "server_created_seq"), [2, 12]);
+    });
+
+    it("places an own row waiting for no updated number by its created one", () => {
+      hold(row("t1", 12, null, {$own: true}));
+
+      assert.deepStrictEqual(key("t1"), [2, 12]);
+    });
+
+    it("places a big waiting number as a big integer", () => {
+      hold(row("t1", "9007199254740993", "9007199254740995", {$own: true}));
+
+      assert.deepStrictEqual(key("t1"), [2, 9007199254740995n]);
+    });
+
+    it("places a row the server hasn't saved last", () => {
+      LocalDatabase.putRow(
+        TASK,
+        row("t1", null, null, {server_created_at: null}),
+      );
+
+      assert.deepStrictEqual(key("t1"), [3, null]);
     });
   });
 

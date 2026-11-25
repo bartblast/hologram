@@ -90,7 +90,9 @@ defmodule Hologram.Auth.RoleGrant do
             id: nil,
             role: nil,
             server_created_at: nil,
+            server_created_seq: nil,
             server_updated_at: nil,
+            server_updated_seq: nil,
             updated_at: nil,
             user: %NotIncluded{relationship: :user},
             user_id: nil
@@ -105,7 +107,9 @@ defmodule Hologram.Auth.RoleGrant do
           id: Entity.id() | nil,
           role: atom | module | nil,
           server_created_at: DateTime.t() | nil,
+          server_created_seq: integer | nil,
           server_updated_at: DateTime.t() | nil,
+          server_updated_seq: integer | nil,
           updated_at: DateTime.t() | nil,
           user: struct | NotIncluded.t() | nil,
           user_id: Entity.id() | nil
@@ -209,7 +213,9 @@ defmodule Hologram.Auth.RoleGrant do
       {:created_at, :datetime, []},
       {:id, :uuid, []},
       {:server_created_at, :datetime, []},
+      {:server_created_seq, :integer, []},
       {:server_updated_at, :datetime, []},
+      {:server_updated_seq, :integer, []},
       {:updated_at, :datetime, []}
     ]
   end

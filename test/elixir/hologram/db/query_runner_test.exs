@@ -18,6 +18,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
+  alias Hologram.Sync.FinalSeq
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -988,6 +989,71 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping)
       end
+    end
+  end
+
+  # The limit sits between the second row and the third: banana and apple are final, cherry and
+  # the Module3 row made after it are not.
+  describe "run/3 - sequence numbers" do
+    setup do
+      {first, second, third} = create_module_2_entities()
+      source = create_module_3_entity()
+
+      :ok = add_relationship(Module3, source.id, :a, first.id)
+      :ok = add_relationship(Module3, source.id, :a, third.id)
+
+      %{
+        limit: DB.read(Module2, second.id).server_created_seq,
+        third: DB.read(Module2, third.id)
+      }
+    end
+
+    defp pending_term do
+      Module2
+      |> filter(server_created_seq == nil)
+      |> Stage.normalize()
+    end
+
+    test "masks the numbers above the limit, in the row and in what it includes", %{limit: limit} do
+      term =
+        Module3
+        |> narrowed_include(:a, fn related_query -> sort(related_query, c) end)
+        |> Stage.normalize()
+
+      assert [source] = FinalSeq.with_pinned(limit, fn -> run(term, @mapping) end)
+      assert source.server_created_seq == nil
+
+      assert Enum.map(source.a, &{&1.c, &1.server_created_seq != nil}) ==
+               [{"banana", true}, {"cherry", false}]
+    end
+
+    test "reads the numbers as stored when raw", %{limit: limit, third: third} do
+      FinalSeq.with_pinned(limit, fn ->
+        assert [%Module2{c: "cherry", server_created_seq: nil}] = run(pending_term(), @mapping)
+        assert run(pending_term(), @mapping, raw: true) == []
+
+        cherry =
+          Module2
+          |> filter(c == "cherry")
+          |> one()
+          |> Stage.normalize()
+
+        assert run(cherry, @mapping, raw: true).server_created_seq == third.server_created_seq
+      end)
+    end
+
+    test "reads the numbers as stored when raw, through the policy", %{limit: limit} do
+      FinalSeq.with_pinned(limit, fn ->
+        assert [%Module2{c: "cherry"}] = run_policied(pending_term(), @mapping, nil)
+        assert run_policied(pending_term(), @mapping, nil, raw: true) == []
+      end)
+    end
+
+    test "filters the aggregated rows by the masked numbers unless raw", %{limit: limit} do
+      FinalSeq.with_pinned(limit, fn ->
+        assert run_policied_aggregate(pending_term(), @mapping, nil, "count(*)") == 1
+        assert run_policied_aggregate(pending_term(), @mapping, nil, "count(*)", raw: true) == 0
+      end)
     end
   end
 

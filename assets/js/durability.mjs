@@ -513,7 +513,12 @@ export default class Durability {
   // `factRemovals` are pairs to take out of stored sets, leaving the rest of each record as stored
   // (see `LocalDatabase.takeStoredFactRemovals`). Read after the frame's own puts, which a
   // transaction runs in order, so a record this frame wrote is judged as written.
-  static persistFrame(records, cursor, factRemovals = []) {
+  //
+  // How far the numbers are final goes down with the place, and only with it: a frame naming no
+  // place can come mid-fill, when the rows of a type still to come are not yet stored, and the
+  // point a reload takes up has to hold for every row stored beside it. A point written with an
+  // earlier place is lower, which holds back more numbers than it needs to and nothing else.
+  static persistFrame(records, cursor, factRemovals = [], finalSeq = null) {
     return Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);
       const meta = transaction.objectStore(META);
@@ -534,6 +539,7 @@ export default class Durability {
       // lets a client cut off mid-fill come back asking for what it can still honour.
       if (cursor !== null) {
         meta.put(cursor, "cursor");
+        Durability.#putFinal(meta, finalSeq);
       }
 
       meta.put(Clock.last(), "clock");
@@ -640,6 +646,7 @@ export default class Durability {
   // restore refuses them. Answers the stored place, with every stored record, or with
   // `records: null` when the place is the given one or there is none - and the user the store
   // belongs to, since one store serves every user of the browser, each in a group of their own.
+  // The records come with how far the numbers they hold are final, which is written with the place.
   //
   // With the rows comes what the queue records as landed, batch by batch: a stored frame can
   // have landed a batch this tab holds unlanded, and promoted again over rows that already hold
@@ -670,9 +677,11 @@ export default class Durability {
         // Requests on one transaction answer in the order they were made, so the owner is in by the
         // time the place's callback runs.
         const owned = meta.get("actorUserId");
+        const final = meta.get("finalSeq");
         const stored = meta.get("cursor");
 
         owned.onerror = () => reject(owned.error);
+        final.onerror = () => reject(final.error);
         stored.onerror = () => reject(stored.error);
 
         stored.onsuccess = () => {
@@ -693,6 +702,7 @@ export default class Durability {
               ([records, queued]) =>
                 resolve({
                   cursor: place,
+                  finalSeq: final.result ?? null,
                   // A record can predate the marks (see Batch#record).
                   landed: (queued ?? []).map(({landed, seq}) => ({
                     landed: landed ?? [],
@@ -742,7 +752,7 @@ export default class Durability {
   // So a read that fails is a write that fails, and stops the storage the way any failed write
   // does (see #fail) - rather than skipping the repair, which would leave the store naming another
   // place than this tab with nothing to say so.
-  static async repair(records, cursor) {
+  static async repair(records, cursor, finalSeq = null) {
     let placeless = false;
 
     await Durability.#write([ENTITIES, META], (transaction) => {
@@ -770,6 +780,7 @@ export default class Durability {
         }
 
         meta.put(cursor, "cursor");
+        Durability.#putFinal(meta, finalSeq);
         meta.put(Clock.last(), "clock");
       };
     });
@@ -858,7 +869,7 @@ export default class Durability {
     const refusal = leader ? Durability.#refusal(loaded, ownerChanged) : null;
 
     if (refusal === null) {
-      LocalDatabase.restore(loaded.records);
+      LocalDatabase.restore(loaded.records, loaded.finalSeq);
     } else {
       Logger.debug(
         `Hologram: the stored rows were dropped (${refusal}), this page fills from nothing`,
@@ -1088,7 +1099,7 @@ export default class Durability {
     }
   }
 
-  // Everything the previous page load left, in one read - the six things `meta` holds and every
+  // Everything the previous page load left, in one read - what `meta` holds, the queue and every
   // row record. Absences are normalized here rather than at every reader: a key nothing was ever
   // written under reads as undefined, and "nothing stored" is a state restore has to reason about.
   static async #read() {
@@ -1101,21 +1112,31 @@ export default class Durability {
     const meta = transaction.objectStore(META);
     const queue = transaction.objectStore(QUEUE);
 
-    const [actorUserId, clock, cursor, queued, records, replica, seq] =
-      await Promise.all([
-        Durability.#request(meta.get("actorUserId")),
-        Durability.#request(meta.get("clock")),
-        Durability.#request(meta.get("cursor")),
-        Durability.#request(queue.getAll()),
-        Durability.#request(entities.getAll()),
-        Durability.#request(meta.get("replica")),
-        Durability.#request(meta.get("seq")),
-      ]);
+    const [
+      actorUserId,
+      clock,
+      cursor,
+      finalSeq,
+      queued,
+      records,
+      replica,
+      seq,
+    ] = await Promise.all([
+      Durability.#request(meta.get("actorUserId")),
+      Durability.#request(meta.get("clock")),
+      Durability.#request(meta.get("cursor")),
+      Durability.#request(meta.get("finalSeq")),
+      Durability.#request(queue.getAll()),
+      Durability.#request(entities.getAll()),
+      Durability.#request(meta.get("replica")),
+      Durability.#request(meta.get("seq")),
+    ]);
 
     return {
       actorUserId: actorUserId ?? null,
       clock: clock ?? 0,
       cursor: cursor ?? null,
+      finalSeq: finalSeq ?? null,
       queue: queued ?? [],
       records: records ?? [],
       replica: replica ?? null,
@@ -1234,6 +1255,17 @@ export default class Durability {
   static #wipe(transaction) {
     transaction.objectStore(ENTITIES).clear();
     transaction.objectStore(META).delete("cursor");
+    transaction.objectStore(META).delete("finalSeq");
+  }
+
+  // A place told with no final point - a server of a build from before it, or a point forgotten
+  // since - takes away the one stored with an earlier place.
+  static #putFinal(meta, finalSeq) {
+    if (finalSeq === null) {
+      meta.delete("finalSeq");
+    } else {
+      meta.put(finalSeq, "finalSeq");
+    }
   }
 
   // Every write goes through here, so there is one place that counts what is in flight and one

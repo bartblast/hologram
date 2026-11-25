@@ -2,7 +2,7 @@ defmodule Hologram.Query.InterpreterTest do
   use Hologram.Test.DatabaseCase, async: true
   use Hologram.DB
 
-  import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
+  import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1, update: 3]
   import Hologram.Query.Interpreter
 
   alias Hologram.DB.Codec
@@ -14,6 +14,7 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.MisuseError
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
+  alias Hologram.Sync.FinalSeq
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module13
@@ -895,6 +896,169 @@ defmodule Hologram.Query.InterpreterTest do
       bound = ~T[10:00:00]
 
       assert matched_ids(agreed(filter(Module22, opens_at == ^bound))) == [round.id]
+    end
+  end
+
+  # The limit sits in the middle of the rows' numbers: ann was made and updated at or below it,
+  # bob was made at or below it and updated above it, and cleo was made above it.
+  describe "run/2 - sequence numbers against a limit" do
+    setup do
+      created_ann = module_2("ann")
+      created_bob = module_2("bob")
+      :ok = update(Module2, created_ann.id, %{b: 1})
+      cleo = module_2("cleo")
+      :ok = update(Module2, created_bob.id, %{b: 2})
+
+      ann = DB.read(Module2, created_ann.id)
+      bob = DB.read(Module2, created_bob.id)
+
+      %{ann: ann, bob: bob, cleo: cleo, limit: ann.server_updated_seq}
+    end
+
+    # Both executors read the same stored rows, each against the same limit.
+    defp agreed_at(query, limit) do
+      term = Stage.normalize(query)
+
+      expected = FinalSeq.with_pinned(limit, fn -> QueryRunner.run(term, @mapping) end)
+
+      actual = run(term, Map.put(database(), :final_seq, limit))
+
+      assert actual == expected
+
+      actual
+    end
+
+    defp matched_titles_at(query, limit) do
+      query
+      |> agreed_at(limit)
+      |> titles()
+      |> Enum.sort()
+    end
+
+    test "returns a number above the limit as nil", %{limit: limit} do
+      rows = agreed_at(sort(Module2, c), limit)
+
+      assert Enum.map(rows, &{&1.c, &1.server_created_seq != nil, &1.server_updated_seq != nil}) ==
+               [{"ann", true, true}, {"bob", true, false}, {"cleo", false, false}]
+    end
+
+    test "matches nil and what is not nil", %{limit: limit} do
+      assert matched_titles_at(filter(Module2, server_updated_seq == nil), limit) == [
+               "bob",
+               "cleo"
+             ]
+
+      assert matched_titles_at(filter(Module2, server_updated_seq != nil), limit) == ["ann"]
+    end
+
+    test "matches a number only at or below the limit", %{ann: ann, bob: bob, limit: limit} do
+      assert matched_titles_at(
+               filter(Module2, server_updated_seq == ^ann.server_updated_seq),
+               limit
+             ) ==
+               ["ann"]
+
+      assert matched_titles_at(
+               filter(Module2, server_updated_seq == ^bob.server_updated_seq),
+               limit
+             ) ==
+               []
+
+      assert matched_titles_at(
+               filter(Module2, server_updated_seq != ^ann.server_updated_seq),
+               limit
+             ) ==
+               ["bob", "cleo"]
+    end
+
+    test "matches membership against the masked numbers", %{ann: ann, bob: bob, limit: limit} do
+      final = ann.server_updated_seq
+      pending = bob.server_updated_seq
+
+      assert matched_titles_at(filter(Module2, server_updated_seq in [^pending, nil]), limit) ==
+               ["bob", "cleo"]
+
+      assert matched_titles_at(filter(Module2, server_updated_seq in [^final, ^pending]), limit) ==
+               ["ann"]
+
+      assert matched_titles_at(filter(Module2, server_updated_seq not in [^final]), limit) ==
+               ["bob", "cleo"]
+
+      assert matched_titles_at(filter(Module2, server_updated_seq not in [^pending, nil]), limit) ==
+               ["ann"]
+    end
+
+    test "compares the masked numbers", %{limit: limit} do
+      assert matched_titles_at(filter(Module2, server_created_seq > 0), limit) == ["ann", "bob"]
+
+      assert matched_titles_at(filter(Module2, server_updated_seq > server_created_seq), limit) ==
+               ["ann"]
+
+      # Two numbers above the limit both read nil, and so equal each other.
+      assert matched_titles_at(filter(Module2, server_updated_seq == server_created_seq), limit) ==
+               ["cleo"]
+    end
+
+    # None of a number's places would hold once it's final, so a list ordered by it leaves the row
+    # out until it is.
+    test "orders only the final numbers", %{limit: limit} do
+      assert titles(agreed_at(sort(Module2, [server_created_seq, c]), limit)) == ["ann", "bob"]
+
+      assert titles(agreed_at(sort(Module2, server_created_seq: :desc, c: :asc), limit)) ==
+               ["bob", "ann"]
+
+      assert titles(agreed_at(sort(Module2, [server_created_seq, server_updated_seq]), limit)) ==
+               ["ann"]
+    end
+
+    test "orders only the final numbers a filter letting nil through leaves", %{
+      bob: bob,
+      limit: limit
+    } do
+      query =
+        Module2
+        |> filter(server_updated_seq != ^bob.server_updated_seq)
+        |> sort(server_updated_seq: :desc)
+
+      assert titles(agreed_at(query, limit)) == ["ann"]
+    end
+
+    test "keeps a number that isn't final in a list ordered by something else", %{limit: limit} do
+      assert titles(agreed_at(sort(Module2, c), limit)) == ["ann", "bob", "cleo"]
+    end
+
+    test "counts the numbers that aren't final in a count ordered by them", %{limit: limit} do
+      query =
+        Module2
+        |> sort(server_updated_seq: :desc)
+        |> count()
+
+      assert agreed_at(query, limit) == 3
+    end
+
+    test "reads the newest final number", %{limit: limit} do
+      query =
+        Module2
+        |> filter(server_updated_seq != nil)
+        |> sort(server_updated_seq: :desc)
+        |> one()
+
+      assert agreed_at(query, limit).c == "ann"
+    end
+
+    test "reads a number a path reaches against the limit", %{bob: bob, limit: limit} do
+      required = DB.create!(Module1.new())
+
+      {:ok, source} =
+        %{b_id: bob.id, c_id: required.id}
+        |> Module3.new()
+        |> create()
+
+      assert matched_ids(agreed_at(filter(Module3, b.server_updated_seq == nil), limit)) == [
+               source.id
+             ]
+
+      assert matched_ids(agreed_at(filter(Module3, b.server_created_seq == nil), limit)) == []
     end
   end
 

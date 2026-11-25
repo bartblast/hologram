@@ -9,6 +9,7 @@ defmodule Hologram.Sync.FillTest do
   alias Hologram.DB.Connection
   alias Hologram.Mutation.Record
   alias Hologram.Query.Stage
+  alias Hologram.Sync.FinalSeq
   alias Hologram.Sync.PackedIds
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -81,6 +82,25 @@ defmodule Hologram.Sync.FillTest do
       {rows, _applied_seq} = read(PolicyModule1, user.id, nil, [PolicyModule1])
 
       assert sorted_ids(rows) == Enum.sort([public.id, granted.id])
+    end
+
+    # The client holds back a number above the final it is told, so sync sends each one as stored.
+    test "answers the numbers as stored, whatever the limit" do
+      public = policy_entity(true)
+      stored = DB.read(PolicyModule1, public.id)
+
+      assert is_integer(stored.server_created_seq) and stored.server_created_seq > 0
+      assert is_integer(stored.server_updated_seq) and stored.server_updated_seq > 0
+
+      {masked, {[row], _applied_seq}} =
+        FinalSeq.with_pinned(0, fn ->
+          {DB.read(PolicyModule1, public.id), read(PolicyModule1, nil, nil, [PolicyModule1])}
+        end)
+
+      assert {masked.server_created_seq, masked.server_updated_seq} == {nil, nil}
+
+      assert row.server_created_seq == stored.server_created_seq
+      assert row.server_updated_seq == stored.server_updated_seq
     end
 
     # The sandbox makes every read here a savepoint of the test's transaction, so this one runs in a

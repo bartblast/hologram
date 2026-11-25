@@ -60,7 +60,9 @@ defmodule Hologram.Sync.Fill do
     rows =
       entity_type
       |> term(synced_types)
-      |> QueryRunner.run_policied(DB.mapping(), actor_user_id)
+      # Sync sends every number as stored: the client holds back the ones above the final it is
+      # told, so it shows each number once it is final, without the row being sent again.
+      |> QueryRunner.run_policied(DB.mapping(), actor_user_id, raw: true)
 
     {rows, applied_seq}
   end
@@ -80,7 +82,7 @@ defmodule Hologram.Sync.Fill do
 
     entity_type
     |> Stage.normalize()
-    |> QueryRunner.run_policied_aggregate(DB.mapping(), actor_user_id, packed_ids_sql)
+    |> QueryRunner.run_policied_aggregate(DB.mapping(), actor_user_id, packed_ids_sql, raw: true)
   end
 
   @doc false

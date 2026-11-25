@@ -74,6 +74,19 @@ defmodule HologramSyncTests.Consistency.PlanTest do
     assert :connect_cut_mid_fill in steps
   end
 
+  test "brings some cut tabs back by reloading" do
+    schedules =
+      for seed <- 1..5,
+          client <- Plan.generate(seed, 60).clients,
+          do: client.schedule
+
+    assert Enum.any?(schedules, fn schedule ->
+             schedule
+             |> Enum.drop_while(&(&1 != :cut))
+             |> Enum.member?(:reload)
+           end)
+  end
+
   # Taken one after another in the order the plan picked them, every operation is one the state
   # before it allows - so a transaction rolls back at run time only for meeting another's write.
   test "every planned operation can be written in the state the plan leaves before it" do

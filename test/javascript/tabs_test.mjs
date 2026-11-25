@@ -1565,12 +1565,14 @@ describe("Tabs", () => {
       SyncStream.servedModelHash = "b7e1d4";
       SyncStream.stopReason = "model_hash";
       SyncStream.syncCursor = "place-1";
+      LocalDatabase.raiseFinal(12);
 
       Tabs.postState();
 
       assert.deepStrictEqual(posting.firstCall.args[0], {
         completeness: {all: false, types: ["MyApp.Task"]},
         cursor: "place-1",
+        finalSeq: 12,
         kind: "state",
         replica: {id: "r-group", token: "statement-group"},
         rules: null,
@@ -1890,6 +1892,86 @@ describe("Tabs", () => {
       sinon.assert.notCalled(LocalDatabase.markAllSynced);
     });
 
+    it("takes the final point with the place", () => {
+      sinon.stub(SyncStream, "scheduleRender");
+      Tabs.receive({
+        cursor: "place-1",
+        finalSeq: 12,
+        kind: "state",
+        replica: {id: null, token: null},
+        completeness: {all: false, types: []},
+        synced: [],
+      });
+
+      assert.equal(LocalDatabase.finalSeq(), 12);
+    });
+
+    it("takes a higher final point with the place it already holds", () => {
+      sinon.stub(SyncStream, "scheduleRender");
+      SyncStream.syncCursor = "place-1";
+      LocalDatabase.raiseFinal(5);
+      Tabs.leader = false;
+
+      try {
+        Tabs.receive({
+          cursor: "place-1",
+          finalSeq: 12,
+          kind: "state",
+          replica: {id: null, token: null},
+          completeness: {all: false, types: []},
+          synced: [],
+        });
+      } finally {
+        Tabs.leader = true;
+      }
+
+      assert.equal(LocalDatabase.finalSeq(), 12);
+    });
+
+    // Moving the point files numbers into the rows the page shows, which nothing else in taking a
+    // state renders.
+    it("renders when the final point it takes moves", () => {
+      const rendering = sinon.stub(SyncStream, "scheduleRender");
+      SyncStream.syncCursor = "place-1";
+      LocalDatabase.raiseFinal(5);
+
+      const state = (finalSeq) => ({
+        cursor: "place-1",
+        finalSeq,
+        kind: "state",
+        replica: {id: null, token: null},
+        completeness: {all: false, types: []},
+        synced: [],
+      });
+
+      Tabs.leader = false;
+
+      try {
+        Tabs.receive(state(5));
+        sinon.assert.notCalled(rendering);
+
+        Tabs.receive(state(12));
+        sinon.assert.calledOnce(rendering);
+      } finally {
+        Tabs.leader = true;
+      }
+    });
+
+    it("leaves the final point alone with another place it already holds", () => {
+      SyncStream.syncCursor = "place-2";
+
+      Tabs.receive({
+        cursor: "place-1",
+        finalSeq: 12,
+        kind: "state",
+        replica: {id: null, token: null},
+        completeness: {all: false, types: []},
+        synced: [],
+      });
+
+      assert.isNull(LocalDatabase.finalSeq());
+    });
+
     // Its own reading has already brought it further, or to somewhere else entirely - a tab that
     // leads itself, as one in no group does. (A tab that follows reads the store again, below.)
     it("keeps a place it already holds", () => {
@@ -2160,6 +2242,68 @@ describe("Tabs", () => {
         assert.equal(SyncStream.syncCursor, "place-2");
         assert.isTrue(rendering.calledOnce);
         sinon.assert.calledOnce(LocalDatabase.markAllSynced);
+      });
+
+      // The store's rows were written with its point, which can be behind the one this tab heard.
+      it("takes up the store's final point and the numbers its rows wait for", async () => {
+        LocalDatabase.raiseFinal(30);
+
+        sinon.stub(Durability, "readBase").resolves({
+          cursor: "place-2",
+          finalSeq: 10,
+          records: [
+            {
+              ...record("t-stored", "stored"),
+              waiting: {numbers: {server_created_seq: 12}, own: true},
+            },
+          ],
+        });
+
+        await follow();
+
+        Tabs.receive(state("place-3"));
+        await waitForEventLoop();
+
+        assert.equal(LocalDatabase.finalSeq(), 10);
+
+        assert.deepStrictEqual(
+          LocalDatabase.waitingNumbers("MyApp.Task", "t-stored"),
+          {numbers: {server_created_seq: 12}, own: true},
+        );
+      });
+
+      // The rows the stream vouched for go before the store's come in, and the numbers the page
+      // showed for them are final on the server whatever the store holds.
+      it("keeps the numbers the page showed for the rows it takes up", async () => {
+        LocalDatabase.raiseFinal(10);
+
+        LocalDatabase.putRow("MyApp.Task", {id: "t-stored", title: "vouched"});
+
+        LocalDatabase.carryNumbers("MyApp.Task", {
+          id: "t-stored",
+          server_updated_seq: 14,
+        });
+
+        sinon.stub(Durability, "readBase").resolves({
+          cursor: "place-2",
+          finalSeq: 10,
+          records: [record("t-stored", "stored")],
+        });
+
+        await follow();
+
+        Tabs.receive(state("place-3"));
+        await waitForEventLoop();
+
+        assert.equal(
+          LocalDatabase.baseRow("MyApp.Task", "t-stored").title,
+          "stored",
+        );
+
+        assert.deepStrictEqual(
+          LocalDatabase.waitingNumbers("MyApp.Task", "t-stored"),
+          {numbers: {}, own: false, shown: {server_updated_seq: 14}},
+        );
       });
 
       // Before there was a store to read, it took the state's place and swept every row it held.

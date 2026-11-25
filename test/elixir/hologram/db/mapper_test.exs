@@ -65,9 +65,33 @@ defmodule Hologram.DB.MapperTest do
                  source: :system
                },
                %{
+                 name: "server_created_seq",
+                 type: :integer,
+                 sql_type: "int8",
+                 collation: nil,
+                 enum_values: nil,
+                 default: nil,
+                 null: false,
+                 references: nil,
+                 fk_constraint: nil,
+                 source: :system
+               },
+               %{
                  name: "server_updated_at",
                  type: :datetime,
                  sql_type: "timestamptz",
+                 collation: nil,
+                 enum_values: nil,
+                 default: nil,
+                 null: false,
+                 references: nil,
+                 fk_constraint: nil,
+                 source: :system
+               },
+               %{
+                 name: "server_updated_seq",
+                 type: :integer,
+                 sql_type: "int8",
                  collation: nil,
                  enum_values: nil,
                  default: nil,
@@ -484,6 +508,8 @@ defmodule Hologram.DB.MapperTest do
       assert Enum.map(mapping[Module26].columns, & &1.source) == [
                :system,
                {:attribute, :name},
+               :system,
+               :system,
                :system,
                :system,
                :system,

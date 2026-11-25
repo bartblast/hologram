@@ -32,9 +32,10 @@ export default class Deltas {
     Deltas.#hashes = {byType: new Map(), salt: null};
   }
 
-  // `insertOnly` is how rows a page carried are applied, which changes two things and nothing
-  // else: a row already held is left alone, and one that is filed is remembered as unconfirmed
-  // until the stream delivers it.
+  // `insertOnly` is how rows a page carried are applied, which changes three things and nothing
+  // else: a row already held is left alone, one that is filed is remembered as unconfirmed until
+  // the stream delivers it, and its numbers past the final point are kept beside the row as shown
+  // rather than in it (see LocalDatabase.carryNumbers), held row or not.
   //
   // Left alone because what a page carries can be OLDER than what the client holds - a page
   // rendered at one moment lands after the stream delivered a later change to the same row - and
@@ -257,6 +258,8 @@ export default class Deltas {
   // it has already been told to let go of - a resync between the two is enough for that to
   // happen. Filing the changes alone would leave a row with holes where its other attributes
   // should be, and nothing would ever fill them.
+  //
+  // An updated number above the final point waits beside the row, which keeps the one it held.
   static #patchRow(type, changes) {
     Deltas.#observeRevisions(changes);
 
@@ -266,7 +269,11 @@ export default class Deltas {
       return null;
     }
 
-    const merged = Object.assign({}, held, changes);
+    const merged = Object.assign(
+      {},
+      held,
+      LocalDatabase.holdNumbers(type, changes),
+    );
 
     // A patch carries the revisions of the columns it names and nothing else, so the row's map is
     // the held one with those written over it - the assign above would otherwise have replaced the
@@ -282,21 +289,29 @@ export default class Deltas {
     return changes.id;
   }
 
+  // A row holds only the numbers that are final here, the rest waiting beside it (see
+  // LocalDatabase.holdNumbers) - or, for one a page carried, kept beside it as shown (see
+  // LocalDatabase.carryNumbers), since the render left out every number the server could not call
+  // final.
   static #putRow(type, row, opts) {
     Deltas.#observeRevisions(row);
 
     if (opts.insertOnly) {
+      // A number the page showed is kept even for a row held already, since a list orders the row
+      // by it until the stream's own is final.
+      const carried = LocalDatabase.carryNumbers(type, row);
+
       if (LocalDatabase.baseRow(type, row.id) !== null) {
         return null;
       }
 
-      Deltas.#fileRow(type, row);
+      Deltas.#fileRow(type, carried);
       LocalDatabase.markCarried(type, row.id);
 
       return row.id;
     }
 
-    Deltas.#fileRow(type, row);
+    Deltas.#fileRow(type, LocalDatabase.holdNumbers(type, row));
 
     // The stream has delivered it, so it is no longer a row the client only has because a page
     // carried it - and no longer one the completeness marker should take away.

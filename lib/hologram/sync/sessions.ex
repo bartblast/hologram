@@ -26,6 +26,15 @@ defmodule Hologram.Sync.Sessions do
   end
 
   @doc """
+  Cuts every session on this node with the given reason. Each one stops once it has read what was
+  queued ahead of the cut, and its client comes back through the doors.
+  """
+  @spec cut_all(term) :: :ok
+  def cut_all(reason) do
+    Enum.each(list(), fn {session, _user_id} -> send(session, {:cut, reason}) end)
+  end
+
+  @doc """
   Returns every session on this node, each with the user it serves: an id in the spelling
   Hologram generates, or nil for an anonymous one - and for a user id in any other spelling, which
   names no user entity (see `Hologram.Auth.canonical_id/1`).

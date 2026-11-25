@@ -1,6 +1,6 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
 import Utils from "../../assets/js/utils.mjs";
 
@@ -205,6 +205,59 @@ describe("Utils", () => {
 
       assert.isAtLeast(embeddedUnixMs, unixMsBefore);
       assert.isAtMost(embeddedUnixMs, unixMsAfter);
+    });
+
+    // The clock is frozen a few milliseconds ahead, so that each test starts a new millisecond and
+    // the real clock passes it again right after.
+    describe("with the clock frozen", () => {
+      let timers;
+
+      const embeddedMs = (uuid) =>
+        parseInt(uuid.replaceAll("-", "").slice(0, 12), 16);
+
+      const strictlyIncreasing = (uuids) =>
+        uuids.every((uuid, index) => index === 0 || uuids[index - 1] < uuid);
+
+      afterEach(() => {
+        timers.restore();
+      });
+
+      it("returns UUIDs in the order of the calls within one millisecond", () => {
+        const nowMs = Date.now() + 5;
+        timers = sinon.useFakeTimers(nowMs);
+
+        const uuids = Array.from({length: 100}, () => Utils.uuidv7());
+
+        assert.isTrue(strictlyIncreasing(uuids));
+        assert.isTrue(uuids.every((uuid) => embeddedMs(uuid) === nowMs));
+      });
+
+      it("moves on to the next millisecond once the counter runs out", () => {
+        const nowMs = Date.now() + 10;
+        timers = sinon.useFakeTimers(nowMs);
+
+        // A millisecond holds 2049 to 4096 UUIDs, so this many always reaches the next one and
+        // never the one after it.
+        const uuids = Array.from({length: 4_097}, () => Utils.uuidv7());
+
+        assert.isTrue(strictlyIncreasing(uuids));
+        assert.equal(embeddedMs(uuids[0]), nowMs);
+        assert.equal(embeddedMs(uuids.at(-1)), nowMs + 1);
+      });
+
+      it("keeps the order when the clock moves back", () => {
+        const nowMs = Date.now() + 20;
+        timers = sinon.useFakeTimers(nowMs);
+
+        const first = Utils.uuidv7();
+
+        timers.setSystemTime(nowMs - 10);
+
+        const second = Utils.uuidv7();
+
+        assert.isTrue(second > first);
+        assert.equal(embeddedMs(second), nowMs);
+      });
     });
   });
 });

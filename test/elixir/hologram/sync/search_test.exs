@@ -95,12 +95,12 @@ defmodule Hologram.Sync.SearchTest do
 
   # The effects the given writes record on the grant store, as the log reads them back.
   defp grant_effects(fun) do
-    before = Oplog.read_type_after(RoleGrant, 0, 0, %{})
+    before = Oplog.read_type_after(RoleGrant, 0, %{})
 
     fun.()
 
     RoleGrant
-    |> Oplog.read_type_after(0, 0, %{})
+    |> Oplog.read_type_after(0, %{})
     |> Enum.drop(length(before))
   end
 
@@ -482,7 +482,7 @@ defmodule Hologram.Sync.SearchTest do
 
       effects =
         PolicyModule18
-        |> Oplog.read_type_after(0, 0, %{})
+        |> Oplog.read_type_after(0, %{})
         |> Enum.filter(&(&1.op in [:patch_entity, :del_entity]))
 
       assert candidates(effects, @members_edges).rows == %{
@@ -602,7 +602,7 @@ defmodule Hologram.Sync.SearchTest do
 
       effects =
         PolicyModule20
-        |> Oplog.read_type_after(0, 0, %{})
+        |> Oplog.read_type_after(0, %{})
         |> Enum.filter(&(&1.op in [:del_relationship, :del_entity]))
 
       assert candidates(effects, @tasks_edges).rows == %{PolicyModule21 => ids(tags)}
