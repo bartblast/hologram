@@ -13,6 +13,7 @@ import {
 import App from "../../assets/js/app.mjs";
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import Config from "../../assets/js/config.mjs";
 import Connection from "../../assets/js/connection.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
@@ -448,7 +449,30 @@ describe("Client", () => {
 
       sinon.assert.calledOnceWithExactly(fetchStub, "/hologram/identity-tag", {
         cache: "no-store",
+        signal: sinon.match.instanceOf(AbortSignal),
       });
+    });
+
+    // A navigation waits on the answer.
+    it("answers null when no answer comes in time", async () => {
+      const timers = sinon.useFakeTimers();
+
+      sinon
+        .stub(globalThis, "fetch")
+        .callsFake(
+          (_url, {signal}) =>
+            new Promise((_resolve, reject) =>
+              signal?.addEventListener("abort", () => reject(signal.reason)),
+            ),
+        );
+
+      const answer = Client.fetchIdentityTag();
+
+      await timers.tickAsync(Config.clientFetchTimeoutMs);
+
+      const pending = Symbol("pending");
+
+      assert.isNull(await Promise.race([answer, Promise.resolve(pending)]));
     });
 
     it("answers the tag the response carries", async () => {

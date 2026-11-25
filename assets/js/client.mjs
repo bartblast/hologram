@@ -129,16 +129,27 @@ export default class Client {
 
   // Asks the server for the tag of the identity the browser's session holds now (see
   // Hologram.checkIdentity). Answers null when no answer comes - offline, say - which says nothing
-  // about the identity.
+  // about the identity, and so does a server that doesn't answer in time: navigations and the sync
+  // stream wait on this (see settleIdentity).
   static async fetchIdentityTag() {
+    const controller = new AbortController();
+
+    const deadline = setTimeout(
+      () => controller.abort(),
+      Config.clientFetchTimeoutMs,
+    );
+
     try {
       const response = await fetch("/hologram/identity-tag", {
         cache: "no-store",
+        signal: controller.signal,
       });
 
       return response.headers.get(IdentityTracker.HEADER);
     } catch {
       return null;
+    } finally {
+      clearTimeout(deadline);
     }
   }
 
