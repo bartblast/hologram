@@ -1530,7 +1530,10 @@ describe("Durability", () => {
         await Durability.open();
         await Durability.load();
 
-        assert.isTrue(await Durability.fileBatch(unfiledBatch()));
+        const batch = unfiledBatch();
+
+        assert.isTrue(await Durability.fileBatch(batch));
+        assert.deepStrictEqual(await readAll("queue"), [batch.record()]);
       });
 
       it("answers not when the write failed", async () => {
