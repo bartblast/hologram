@@ -1119,11 +1119,13 @@ defmodule Hologram.Sync.DispatcherTest do
     end
 
     test "doesn't look again when no round waits" do
-      dispatcher = start_dispatcher!([])
+      # A look scheduled at startup would still be pending, so the state shows it.
+      dispatcher = start_dispatcher!(recheck_interval_ms: 60_000)
 
       :erlang.trace(dispatcher, true, [:receive])
 
       refute_receive {:trace, ^dispatcher, :receive, :recheck}, 100
+      refute :sys.get_state(dispatcher).recheck_scheduled
 
       settle(dispatcher)
     end
