@@ -376,8 +376,7 @@ defmodule Hologram.Entity.ValidatorTest do
     test "splits a key between its strings" do
       attributes = [{:a, :string, []}, {:b, :string, []}, {:n, :integer, []}]
 
-      assert %{a: bound, b: bound} = unique_string_max_bytes(attributes, [[:a, :b, :n]])
-      assert bound < 2692 / 2
+      assert unique_string_max_bytes(attributes, [[:a, :b, :n]]) == %{a: 1331, b: 1331}
     end
 
     test "takes the smallest of a string's bounds" do
