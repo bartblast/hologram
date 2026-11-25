@@ -65,7 +65,7 @@ defmodule Hologram.Migration.RendererTest do
 
   describe "render/2, a constant uuid backfill" do
     test "encodes it whichever case the file wrote it in" do
-      uuid = "018f0000-0000-7000-8000-000000000000"
+      uuid = "018f0000-0000-7000-8000-00000000abcd"
       pre_model = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
       op = %{
