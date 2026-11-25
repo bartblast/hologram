@@ -3,4 +3,7 @@ reviews:
   auto_review:
     base_branches: [".*"]
     drafts: true
+  path_filters:
+    - "!test/elixir/hologram/compiler/query_extractor_test.exs"
+    - "!test/elixir/hologram/compiler_test.exs"
   poem: false
