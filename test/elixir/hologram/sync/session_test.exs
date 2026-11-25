@@ -3260,6 +3260,11 @@ defmodule Hologram.Sync.SessionTest do
         end)
 
       assert is_integer(rows) and is_integer(marker) and rows < marker
+
+      assert frames
+             |> Enum.take(marker)
+             |> Enum.all?(&match?({:sync_deltas, _cursor, _deltas, _applied_seq, nil}, &1))
+
       assert {:sync_synced, :all, _cursor, 200} = List.last(frames)
     end
 
@@ -3414,6 +3419,7 @@ defmodule Hologram.Sync.SessionTest do
       send(session, {:final, 250})
 
       assert %{final_seq: 200} = :sys.get_state(session)
+      refute_received {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq}
     end
 
     # The client lands its own create once the server's row reaches it, and has to tell it apart
