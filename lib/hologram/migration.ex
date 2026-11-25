@@ -134,6 +134,9 @@ defmodule Hologram.Migration do
       add_relationship :owner, Offgrid.User, backfill: coalesce(creator_id, ^@admin_id)
       add_relationship :owner, Offgrid.User, backfill: trip.owner_id
 
+  Here `creator` is a to-one relationship to `Offgrid.User`. An id is a reference to a type only
+  through a relationship to it, so a `:uuid` attribute holding one doesn't fit.
+
   An id no row of the target holds is refused, naming the id and the type. Adding a required
   to-one to a type that already exists needs a `backfill:` or `optional: true`, since a
   relationship takes no `default:`.
