@@ -9107,13 +9107,15 @@ describe("Hologram", () => {
     it("still mounts after a jump to a #fragment", async () => {
       const originalState = history.state;
       const originalUrl = window.location.href;
-      history.replaceState(null, "", `${window.location.pathname}#section`);
-
-      const replaceStateStub = sinon.stub(history, "replaceState");
       Hologram.pagePath = window.location.pathname;
+
+      let replaceStateStub = null;
 
       try {
         const mounting = Hologram.mountDocument(pageSnapshot, 0);
+
+        history.replaceState(null, "", `${window.location.pathname}#section`);
+        replaceStateStub = sinon.stub(history, "replaceState");
 
         await Hologram.handlePopstateEvent({state: null});
 
@@ -9123,7 +9125,7 @@ describe("Hologram", () => {
         sinon.assert.calledOnceWithExactly(restoreStub, pageSnapshot);
         sinon.assert.calledOnce(mountStub);
       } finally {
-        replaceStateStub.restore();
+        replaceStateStub?.restore();
         history.replaceState(originalState, "", originalUrl);
       }
     });
