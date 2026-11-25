@@ -1185,6 +1185,38 @@ defmodule Hologram.Template.RendererDerivedTest do
       assert server_struct.user_id == user.id
     end
 
+    # The render for the new user starts from the struct the first one began with, and the child
+    # signs nobody in then.
+    test "keeps the session, cookies and headers the init/3 that signed in set", %{user: user} do
+      %{server_struct: server_struct} =
+        render_page(Module179, %{user_id: user.id}, %Server{}, @page_opts)
+
+      assert server_struct.session["signed_in_by"] == "module_180"
+      assert server_struct.cookies["welcome"] == "module_180"
+      assert server_struct.response_headers["x-signed-in-by"] == "module_180"
+      assert server_struct.__meta__.session_ops["signed_in_by"] == {:put, "module_180"}
+      assert %{value: "module_180"} = server_struct.__meta__.cookie_ops["welcome"]
+    end
+
+    test "keeps what the init/3 that signed in set when its component doesn't render again", %{
+      user: user
+    } do
+      %{server_struct: server_struct} =
+        render_page(Module179, %{renames_child: true, user_id: user.id}, %Server{}, @page_opts)
+
+      assert server_struct.session["signed_in_by"] == "module_180"
+    end
+
+    # As on the first run, where the child's init/3 came after the page's.
+    test "keeps what the init/3 that signed in set over what an earlier init/3 sets", %{
+      user: user
+    } do
+      %{server_struct: server_struct} =
+        render_page(Module179, %{signs_in_over: true, user_id: user.id}, %Server{}, @page_opts)
+
+      assert server_struct.session["signed_in_by"] == "module_180"
+    end
+
     test "gives the actor back after rendering again", %{user: user} do
       render_page(Module179, %{user_id: user.id}, %Server{}, @page_opts)
 

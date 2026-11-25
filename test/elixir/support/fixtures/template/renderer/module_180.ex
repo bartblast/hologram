@@ -12,8 +12,23 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module180 do
 
     user_id = if props.change_each_time, do: "user-#{inits}", else: props.user_id
 
-    {component, put_user_id(server, user_id)}
+    server =
+      server
+      |> sign_in()
+      |> put_user_id(user_id)
+
+    {component, server}
   end
+
+  # What a sign-in sets along with the user, which the render for that user no longer does.
+  defp sign_in(%{user_id: nil} = server) do
+    server
+    |> put_session(:signed_in_by, "module_180")
+    |> put_cookie("welcome", "module_180")
+    |> put_response_header("x-signed-in-by", "module_180")
+  end
+
+  defp sign_in(server), do: server
 
   @impl Component
   def template do
