@@ -159,8 +159,8 @@ defmodule HologramSyncTests.ConsistencyTest do
     assert message =~ "at 10, on a connection opened at 0, bounded by seq 1234"
 
     assert message =~
-             "was told at 12 the numbers are final up to 1233, and misses it: " <>
-               "HologramSyncTests.Entities.Card card-1 is numbered {1232, 1233}"
+             "was told at 12 the numbers of HologramSyncTests.Entities.Card are final up to 1233, " <>
+               "and misses it: card-1 is numbered {1232, 1233}"
 
     dir =
       Path.join(System.tmp_dir!(), "sync_consistency_test_#{System.unique_integer([:positive])}")
