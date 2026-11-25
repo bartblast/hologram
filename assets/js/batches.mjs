@@ -800,6 +800,7 @@ export default class Batches {
     const batch = new Batch(target);
 
     batch.actorUserId = LocalDatabase.actorUserId ?? null;
+    batch.actorUserChanges = LocalDatabase.actorUserChanges;
 
     Batches.#running = batch;
     Overlay.push(batch);

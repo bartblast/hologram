@@ -16,6 +16,11 @@ export default class Batch {
   // would become Bob's.
   actorUserId = null;
 
+  // How many times the signed-in user had changed when the action opened this batch (see
+  // LocalDatabase.actorUserChanges). Not part of `record()`: only the action that opened the batch
+  // asks.
+  actorUserChanges = 0;
+
   // Whether the store holds this batch: null while the filing is in flight, true once it is stored
   // and for a batch read back from it, false when it never got there. A batch the store doesn't
   // hold exists only in this tab, so nothing else will ever send it. Not part of `record()`: what

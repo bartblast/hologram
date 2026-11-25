@@ -2712,6 +2712,17 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    // What it read while the other user was signed in was theirs.
+    it("refuses a write once the user who started the action is back", () => {
+      LocalDatabase.actorUserId = "i1";
+
+      assertBoxedError(
+        () => creating(),
+        "Hologram.MisuseError",
+        message("create"),
+      );
+    });
+
     it("refuses an update", () => {
       assertBoxedError(
         () =>
@@ -2753,14 +2764,6 @@ describe("Elixir_Hologram_DB", () => {
       }
 
       assert.deepStrictEqual(Batches.current().writes, []);
-    });
-
-    it("writes again once the user is back", () => {
-      LocalDatabase.actorUserId = "i1";
-
-      creating();
-
-      assert.equal(Batches.current().writes.length, 1);
     });
 
     // UNDEFINED is what a mount leaves when its data names no actor, and a visitor's batch is
