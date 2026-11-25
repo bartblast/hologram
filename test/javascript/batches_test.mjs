@@ -2288,6 +2288,37 @@ describe("Batches", () => {
         assert.isTrue(reconnecting.calledOnce);
       });
 
+      // The retry's own flush finds the sender busy reading the queue.
+      it("may switch once its backoff ends during the queue read", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(59_000);
+
+        let read;
+
+        const reading = sinon.stub(Durability, "queuedBatches").resolves([]);
+
+        // The read after the refusal, not the one before the send.
+        reading.onSecondCall().returns(
+          new Promise((resolve) => {
+            read = resolve;
+          }),
+        );
+
+        const flushing = Batches.flush();
+
+        await timers.tickAsync(1_000);
+
+        assert.isTrue(reading.calledTwice);
+
+        read([]);
+        await flushing;
+
+        assert.equal(Replica.id, "r-next");
+        assert.isTrue(reconnecting.calledTwice);
+      });
+
       // Its send under the new pair is still out when the earlier batch's retry fires.
       it("keeps its switch through a retry an earlier batch left", async () => {
         sendStub.resolves({httpStatus: 503, status: "failed"});

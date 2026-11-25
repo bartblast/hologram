@@ -653,11 +653,19 @@ export default class Batches {
           // be lost. A batch waiting out a switch waits for the retry set for it, and not for one
           // an earlier batch left, which ends sooner. Pushed back by every flush the user's actions
           // start, it would never get to switch to the pair the next handshake hands.
+          const waitingOut = batch.switchedPair && Batches.#retryFor === batch;
+
           await Batches.#takeUpWhileHeld();
 
           // The tab can have followed another user during that read, and that user's batches wait
           // in the queue: the flush the move started found this sender busy.
           if (!Batches.pending.includes(batch)) {
+            continue;
+          }
+
+          // Its wait ended during the read, and the flush the retry started found this sender
+          // busy. It may switch now, rather than after another backoff.
+          if (waitingOut && !batch.switchedPair) {
             continue;
           }
 
