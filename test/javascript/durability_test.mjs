@@ -1640,7 +1640,7 @@ describe("Durability", () => {
 
       visit = "visit-joined";
 
-      const later = unfiledBatch();
+      const later = unfiledBatch("u2");
       const second = Durability.fileBatch(later);
 
       starting.firstCall.returnValue.abort();
@@ -1650,6 +1650,42 @@ describe("Durability", () => {
       assert.deepStrictEqual(
         (await readAll("queue")).map((record) => record.seq),
         [later.seq],
+      );
+    });
+
+    // An action that started under the user of the left visit closes in the new one, and may name a
+    // row the batch that aborted created. A batch of another user in between doesn't break the line.
+    it("stores no batch of the same user filed in the new visit behind one that aborted", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await Durability.open();
+      await Durability.load();
+
+      let visit = "visit-left";
+
+      sinon.stub(Tabs, "visit").get(() => visit);
+      sinon.stub(Tabs, "isVisit").callsFake((given) => given === visit);
+
+      const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+      const first = Durability.fileBatch(unfiledBatch("u1"));
+
+      visit = "visit-joined";
+
+      const other = unfiledBatch("u2");
+      const second = Durability.fileBatch(other);
+      const third = Durability.fileBatch(unfiledBatch("u1"));
+
+      starting.firstCall.returnValue.abort();
+
+      assert.deepStrictEqual(await Promise.all([first, second, third]), [
+        false,
+        true,
+        false,
+      ]);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [other.seq],
       );
     });
 

@@ -347,9 +347,22 @@ export default class Durability {
     // Only a filing of the same visit to a group takes this one down with it. One made for a group
     // the tab has since left fails that group (see #write), and the new group's next filing is
     // this one.
+    //
+    // Unless it's a batch of the same user: an action can close in the new visit with a batch for
+    // the user it started under, and name a row the failed batch created. Carried down the line,
+    // since filings of another user can come in between.
+    const owner = batch.actorUserId ?? null;
+
     const stored = await Durability.#write([META, QUEUE], (transaction) => {
       const earlier = Durability.#lastFiling;
-      const filing = {aborted: false, done: false, visit: Tabs.visit};
+
+      const filing = {
+        aborted: false,
+        done: false,
+        failedOwners: null,
+        owner,
+        visit: Tabs.visit,
+      };
 
       Durability.#lastFiling = filing;
 
@@ -375,7 +388,16 @@ export default class Durability {
             return;
           }
 
-          if (earlier?.aborted && earlier.visit === filing.visit) {
+          filing.failedOwners = new Set(earlier?.failedOwners);
+
+          if (earlier?.aborted) {
+            filing.failedOwners.add(earlier.owner);
+          }
+
+          if (
+            (earlier?.aborted && earlier.visit === filing.visit) ||
+            filing.failedOwners.has(owner)
+          ) {
             transaction.abort();
 
             return;
