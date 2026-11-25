@@ -752,8 +752,8 @@ defmodule Hologram.Migration.Generator do
   defp answers_note(%{answers_above: true}) do
     [
       "The answers above come first, since one can free a column a fill takes - one taking " <>
-        "away what a backfill reads goes below the fills, or renames the member there and " <>
-        "takes it away below."
+        "away what a backfill reads renames the member there and takes it away below, or goes " <>
+        "below the fills when it frees no column a fill takes."
     ]
   end
 
