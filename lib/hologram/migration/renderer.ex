@@ -494,9 +494,14 @@ defmodule Hologram.Migration.Renderer do
 
   defp place_op(op, [{cut, [last | _earlier] = current} | done] = placed) do
     cond do
-      fills_apart?(op) or recreates_entity?(op, current) -> [{op, [op]} | placed]
-      fills_apart?(last) or segment_kind(op) != segment_kind(last) -> [{nil, [op]} | placed]
-      true -> [{cut, [op | current]} | done]
+      fills_apart?(op) or recreates_entity?(op, current) or retypes_filled_add?(op, current) ->
+        [{op, [op]} | placed]
+
+      fills_apart?(last) or segment_kind(op) != segment_kind(last) ->
+        [{nil, [op]} | placed]
+
+      true ->
+        [{cut, [op | current]} | done]
     end
   end
 
@@ -630,6 +635,18 @@ defmodule Hologram.Migration.Renderer do
   end
 
   defp recreates_entity?(_op, _ops), do: false
+
+  # A backfill holds a value of the type its add declares, so a type change of the attribute after
+  # it applies to the filled rows on its own, as a cast, rather than merging into the add.
+  defp retypes_filled_add?(%{op: :change_attribute, changes: changes} = op, ops) do
+    Keyword.has_key?(changes, :type) and
+      Enum.any?(ops, fn earlier ->
+        earlier.op == :add_attribute and earlier.entity == op.entity and
+          earlier.name == op.name and Keyword.has_key?(earlier.opts, :backfill)
+      end)
+  end
+
+  defp retypes_filled_add?(_op, _ops), do: false
 
   defp role_values(mapping) do
     case Map.fetch(mapping, RoleGrant) do

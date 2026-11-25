@@ -2948,6 +2948,38 @@ defmodule Hologram.Migration.RendererTest do
       assert alter_column.after.type == "float8"
     end
 
+    test "applies a type change after the backfill of the attribute added above it" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :estimate,
+          type: :float,
+          opts: [backfill: 7.5],
+          line: 3
+        },
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :estimate,
+          changes: [type: :integer],
+          line: 4
+        }
+      ]
+
+      assert [add_column, alter_column] = render(ops, pre).transactional
+
+      assert add_column.op == :add_column
+      assert add_column.definition.type == "float8"
+      assert add_column.backfill == 7.5
+
+      assert alter_column.op == :alter_column
+      assert alter_column.before.type == "float8"
+      assert alter_column.after.type == "int8"
+    end
+
     test "renders an optional flip as its column nullability" do
       pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
