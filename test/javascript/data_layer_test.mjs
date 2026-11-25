@@ -28,6 +28,15 @@ import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
 
+// Takes the sender wake-up a handshake's pair leaves for the stream's answer, which a later test
+// would otherwise take.
+const clearHandshakeWake = () => {
+  const flush = sinon.stub(Batches, "flush");
+
+  DataLayer.takeReplica(null);
+  flush.restore();
+};
+
 describe("DataLayer", () => {
   afterEach(() => {
     sinon.restore();
@@ -1413,6 +1422,8 @@ describe("DataLayer", () => {
         id: "replica-2",
         token: "token-2",
       });
+
+      clearHandshakeWake();
     });
   });
 
@@ -1732,6 +1743,8 @@ describe("DataLayer", () => {
           assert.deepStrictEqual(Replica.current(), pair);
           assert.deepStrictEqual(Replica.fresh, pair);
           assert.isFalse(SyncStream.holdsWrites());
+
+          clearHandshakeWake();
         });
       });
 
