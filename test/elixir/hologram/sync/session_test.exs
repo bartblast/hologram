@@ -3625,18 +3625,18 @@ defmodule Hologram.Sync.SessionTest do
       route([effect], batch_seq)
 
       assert_receive {:sync_deltas, rows_cursor, [%{id: label_id, op: :put_entity}], 8,
-                      _final_seq}
+                      rows_final}
 
       assert label_id == label.id
 
       assert_receive {:sync_deltas, pairs_cursor, [%{data: data, id: holder_id, op: op}], 7,
-                      _final_seq}
+                      pairs_final}
 
       assert {op, holder_id, data.target_id} == {:add_relationship, message.id, label.id}
 
-      # The pairs frame is the batch's last, so it alone claims the batch's place.
-      assert rows_cursor == nil
-      assert pairs_cursor != nil
+      # The pairs frame is the batch's last, so it alone claims the batch's place and its limit.
+      assert {rows_cursor, rows_final} == {nil, nil}
+      assert {pairs_cursor, pairs_final} == {cursor_at(batch_seq), batch_seq}
     end
 
     # The type is read again whole after the batch, and the read holds this client's batch 8,
