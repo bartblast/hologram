@@ -514,6 +514,36 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
                Checks.below_final([view(10, 20, %{})], [created, deleted], @member, 20)
     end
 
+    # The card is on b-1 when the frame arrives, so a commit above the limit naming b-2 can't keep
+    # it away, whatever moves it to b-2 after.
+    test "judges a row by what its access goes through when the frame arrives" do
+      state = card_state([@member])
+
+      created = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 5,
+        min_seq: 5,
+        ops: ["create_card c-1 b-1"],
+        state: state
+      }
+
+      elsewhere = %{created | after_lock_at: 2, max_seq: 11, min_seq: 11, ops: ["archive b-2"]}
+
+      moved = %{
+        created
+        | after_lock_at: 30,
+          committed_at: 31,
+          max_seq: 12,
+          min_seq: 12,
+          ops: ["move_card c-1 b-2"],
+          state: put_in(state, [:rows, Card, "c-1", "board_id"], "b-2")
+      }
+
+      assert [%{id: "c-1", problem: :missing}] =
+               Checks.below_final([card_view(20)], [created, elsewhere, moved], @member, 20)
+    end
+
     test "judges a row a type-wide grant on its way can't let its user read" do
       created = %{
         after_lock_at: 0,

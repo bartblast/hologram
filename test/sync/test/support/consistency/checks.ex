@@ -235,9 +235,9 @@ defmodule HologramSyncTests.Consistency.Checks do
   # hold serials on both sides - may still be on its way, and the server reads what a gained access
   # lets through from the live tables, so one locked after the floor can keep a row from coming
   # until its own effect does. Every such commit that matters locked before the frame arrived, the
-  # floor's among them. When one names the row or what its access goes through, the client may
-  # rightly not hold the row yet. A type-wide grant or revoke names only the user, and changes only
-  # who reads boards and the cards on them.
+  # floor's among them. When one names the row or what its access went through by then, the client
+  # may rightly not hold the row yet. A type-wide grant or revoke names only the user, and changes
+  # only who reads boards and the cards on them.
   defp touched_above?(indexed, at, final_seq, user_id, type, id) do
     above =
       for {entry, _index} <- indexed,
@@ -249,7 +249,8 @@ defmodule HologramSyncTests.Consistency.Checks do
         false
 
       above ->
-        names = related_ids(id, Enum.map(indexed, &elem(&1, 0)))
+        names =
+          related_ids(id, for({entry, _index} <- indexed, entry.after_lock_at < at, do: entry))
 
         wide? = type in [Board, Card]
 
