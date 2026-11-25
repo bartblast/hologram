@@ -53,6 +53,14 @@ defmodule Hologram.Sync.CatchupTest do
     :ok
   end
 
+  # What retention does to an entry the log has kept long enough.
+  defp prune({seq, _tx, _inserted_at}) do
+    {:ok, _result} =
+      Connection.query(~s|DELETE FROM "hologram_system"."oplog" WHERE "seq" = $1|, [seq])
+
+    :ok
+  end
+
   defp seed(tx, model_hash \\ Model.hash()) do
     statement = """
     INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash")
@@ -129,10 +137,11 @@ defmodule Hologram.Sync.CatchupTest do
     end
 
     test "sends everything again when the log no longer holds the client's entry" do
-      {seq, tx, inserted_at} = seed(200)
+      place = seed(200)
+      seed(201)
+      prune(place)
 
-      assert check(cursor({seq + 1, tx, inserted_at}), @policy_hash, @types_hash) ==
-               {:full_resync, :retention}
+      assert check(cursor(place), @policy_hash, @types_hash) == {:full_resync, :retention}
     end
 
     # What a server that lost the commit of the client's entry leaves at its seq.
@@ -269,10 +278,11 @@ defmodule Hologram.Sync.CatchupTest do
     end
 
     test "sends everything again when the log no longer holds the client's entry" do
-      {seq, tx, inserted_at} = seed(200)
+      place = seed(200)
+      seed(201)
+      prune(place)
 
-      assert gap(cursor({seq + 1, tx, inserted_at}), nil, @policy_hash, @types_hash) ==
-               {:full_resync, :retention}
+      assert gap(cursor(place), nil, @policy_hash, @types_hash) == {:full_resync, :retention}
     end
 
     # What a server that lost the commit of the client's entry leaves at its seq: the serials above
