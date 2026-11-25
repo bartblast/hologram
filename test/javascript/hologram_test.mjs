@@ -6179,6 +6179,8 @@ describe("Hologram", () => {
 
         await waitForEventLoop();
 
+        sinon.assert.calledOnce(fetchStub);
+
         Hologram.navigationCount += 1;
 
         answer("overtaken-digest");
