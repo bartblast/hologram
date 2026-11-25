@@ -871,6 +871,7 @@ describe("Durability", () => {
         await letGo();
 
         const sentUnder = Durability.sentUnder();
+        Replica.owner = "u2";
         Replica.adopt({id: "r-minted", token: "statement-minted"});
 
         await Durability.forgetBatch(7, sentUnder);
