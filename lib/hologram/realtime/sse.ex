@@ -1299,7 +1299,7 @@ defmodule Hologram.Realtime.SSE do
     id = System.unique_integer([:positive, :monotonic])
 
     chunk_data =
-      Frame.encode_identity_envelope(id, user_id, identity_tag, read_user_rows(user_id))
+      Frame.encode_identity_envelope(id, user_id, identity_tag, read_user_rows(conn, user_id))
 
     case Plug.Conn.chunk(conn, chunk_data) do
       {:ok, conn} -> {:cont, conn}
@@ -1310,8 +1310,11 @@ defmodule Hologram.Realtime.SSE do
   # The new user's row, which the tab's pages read as `{Hologram, :user}`. A failed read sends the
   # event without it, since a raise would end the stream and the tab would never hear of the
   # change. The tab then holds the row once its stream fills it or its next page carries it.
-  defp read_user_rows(user_id) do
-    Renderer.session_user_rows(user_id)
+  #
+  # Nor is it sent to a tab of another model: the row is spelled the way the current model names
+  # it, and that tab reads the old names, which only its sync translates to.
+  defp read_user_rows(conn, user_id) do
+    if of_current_model?(conn), do: Renderer.session_user_rows(user_id)
   rescue
     # A live reload holds the data model, which is no failure.
     StaleModelError ->
@@ -1329,6 +1332,14 @@ defmodule Hologram.Realtime.SSE do
       Logger.warning("Hologram: reading the session user's row failed: " <> inspect(reason))
 
       nil
+  end
+
+  # A client that greets with no model reads no rows.
+  defp of_current_model?(conn) do
+    case greeting(conn) do
+      %{model_hash: model_hash} -> model_hash == Model.hash()
+      _no_greeting -> true
+    end
   end
 
   defp watch_client(conn, adapter) do
