@@ -6982,7 +6982,11 @@ describe("Hologram", () => {
 
       // Filed under a history id of its own each time: the handler first saves the page being
       // left under the id it holds, which is the one the last restore went to.
-      const seedSnapshot = (historyId, snapshotPageModule = pageModule) => {
+      const seedSnapshot = (
+        historyId,
+        snapshotPageModule = pageModule,
+        scrollPosition = [0, 0],
+      ) => {
         const pageSnapshot = {
           chunkDigests: ["SNAPSHOT"],
           componentRegistryEntries: Type.map(),
@@ -6990,7 +6994,7 @@ describe("Hologram", () => {
           instanceId: "restored-instance",
           pageModule: snapshotPageModule,
           pageParams: Type.map(),
-          scrollPosition: [0, 0],
+          scrollPosition: scrollPosition,
           subscriptionReceipts: [],
         };
 
@@ -7230,6 +7234,66 @@ describe("Hologram", () => {
           assert.equal(Hologram.domEpoch, 1);
           assert.isFalse(Hologram.isMounting);
           assert.isFalse(Hologram.isPageShown);
+        } finally {
+          delete window.requestAnimationFrame;
+          delete globalThis.Hologram.assetManifest;
+          AssetPathRegistry.entries = assetPathEntries;
+          LiveReload.pageBundleDigests.delete(mountedModule.value);
+          Hologram.isMounting = false;
+          Hologram.isPageShown = false;
+          renderStub.restore();
+          scrollToStub.restore();
+          sseStartStub.restore();
+        }
+      });
+
+      // The restored page's own position is applied in the frame of its first render. A save
+      // before then, like the one on unload, is of the restored page, and the document's position
+      // is still the left page's.
+      it("saves the position the restored page is to be scrolled to, before its first render", async () => {
+        const mountedModule = Type.atom(
+          "Elixir.Hologram.Test.Fixtures.ScrolledFromSnapshot",
+        );
+
+        const assetPathEntries = AssetPathRegistry.entries;
+        const renderStub = sinon.stub(Hologram, "render");
+        const scrollToStub = sinon.stub(window, "scrollTo");
+        const sseStartStub = sinon.stub(Sse, "start");
+
+        let frame = null;
+        window.requestAnimationFrame = (callback) => (frame = callback);
+        globalThis.Hologram.assetManifest = {};
+
+        try {
+          ScriptRegistry.statuses.set("SNAPSHOT", "loaded");
+          seedSnapshot(
+            "history-scrolled-from-snapshot",
+            mountedModule,
+            [0, 640],
+          );
+
+          await Hologram.handlePopstateEvent({
+            state: "history-scrolled-from-snapshot",
+          });
+
+          await flushPromises();
+
+          announce("restored-1");
+          MountGate.settle();
+
+          assert.isNotNull(frame);
+
+          Hologram.handleBeforeunloadEvent();
+
+          const savedSnapshot = Deserializer.deserialize(
+            sessionStorage.getItem(
+              "hologram_page_snapshot_history-scrolled-from-snapshot",
+            ),
+          );
+
+          assert.deepStrictEqual(savedSnapshot.scrollPosition, [0, 640]);
+
+          frame();
         } finally {
           delete window.requestAnimationFrame;
           delete globalThis.Hologram.assetManifest;

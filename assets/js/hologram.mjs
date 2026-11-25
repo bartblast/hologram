@@ -3541,7 +3541,9 @@ export default class Hologram {
       pageModule: pageModule,
       pageParams: Hologram.#pageParams,
       runtimeDigest: $.#runtimeDigest(),
-      scrollPosition: [window.scrollX, window.scrollY],
+      // A restored page is scrolled to its own position in the frame of its first render. Until
+      // then the document still holds the left page's.
+      scrollPosition: $.#scrollPosition ?? [window.scrollX, window.scrollY],
       subscriptionReceipts: Array.from(
         App.subscriptionReceiptRegistry.entries.entries(),
       ),
