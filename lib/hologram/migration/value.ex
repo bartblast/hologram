@@ -1764,6 +1764,14 @@ defmodule Hologram.Migration.Value do
     {:cond, meta, [Enum.flat_map(clauses, fn {:->, _meta, [heads, body]} -> [body | heads] end)]}
   end
 
+  # In a bitstring generator every segment before the <- is pattern too.
+  defp without_pattern({:<<>>, meta, [_first | _rest] = parts} = node, _env) do
+    case List.last(parts) do
+      {:<-, _arrow_meta, [pattern, right]} -> {:__block__, meta, [guard_of(pattern), right]}
+      _segment -> node
+    end
+  end
+
   defp without_pattern({op, meta, [pattern, right]}, _env) when op in [:=, :<-, :match?] do
     {op, meta, [guard_of(pattern), right]}
   end

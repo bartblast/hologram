@@ -1915,6 +1915,22 @@ defmodule Hologram.Migration.ValueTest do
                "write String.split/2"
     end
 
+    test "takes a pin in a bitstring generator's pattern" do
+      {module, _value} =
+        elixir_op(
+          ~S|fn title -> marker = ?a; for <<^marker, byte <- title>>, into: "", do: <<byte>> end|
+        )
+
+      assert module.__backfill_0__("abac") == "bc"
+    end
+
+    test "refuses a pin in a bitstring generator's source" do
+      assert compiled_refusal(~S|change_entity MyApp.Trip do
+                 add_attribute :value, :string,
+                   backfill: fn title -> marker = "a"; for <<byte <- ^marker>>, into: title, do: <<byte>> end
+               end|) =~ "so it pins nothing"
+    end
+
     test "takes what a quote with separate options ignores beside the do as data" do
       {module, _value} =
         elixir_op(
