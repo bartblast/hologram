@@ -58,6 +58,12 @@ defmodule Hologram.Query.Words do
         {:|>, _meta, [left, {:quote, _quote_meta, args}]}, word when is_list(args) ->
           {quote_code([left | args]), word}
 
+        {{:., _dot_meta, [{:__aliases__, _alias_meta, [:Kernel]}, :|>]}, _meta,
+         [left, {:quote, _quote_meta, args}]},
+        word
+        when is_list(args) ->
+          {quote_code([left | args]), word}
+
         {name, _meta, args} = node, nil when name in @backfill_only_words and is_list(args) ->
           {node, name}
 

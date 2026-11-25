@@ -92,17 +92,22 @@ defmodule Hologram.Query.WordsTest do
     test "is empty for a word in a body piped into a quote" do
       for source <- [
             ~s{foo([do: split(a, " ")] |> quote())},
-            ~s{foo([] |> quote(do: split(a, " ")))}
+            ~s{foo([] |> quote(do: split(a, " ")))},
+            ~s{foo(Kernel.|>([do: split(a, " ")], quote()))},
+            ~s{foo(Kernel.|>([], quote(do: split(a, " "))))}
           ] do
         assert backfill_only_hint(Code.string_to_quoted!(source)) == ""
       end
     end
 
     test "finds a word in the options piped into a quote" do
-      ast = Code.string_to_quoted!(~s{foo([bind_quoted: [x: at(a, 0)]] |> quote(do: x))})
-
-      assert backfill_only_hint(ast) ==
-               " - if you meant the query word at, it works only in a migration's backfill: for now"
+      for source <- [
+            ~s{foo([bind_quoted: [x: at(a, 0)]] |> quote(do: x))},
+            ~s{foo(Kernel.|>([bind_quoted: [x: at(a, 0)]], quote(do: x)))}
+          ] do
+        assert backfill_only_hint(Code.string_to_quoted!(source)) ==
+                 " - if you meant the query word at, it works only in a migration's backfill: for now"
+      end
     end
 
     test "finds a word unquoted as the name of a remote call" do
