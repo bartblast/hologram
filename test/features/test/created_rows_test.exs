@@ -110,11 +110,9 @@ defmodule HologramFeatureTests.CreatedRowsTest do
 
     rearmed = hold_sync_frames(clicked)
 
-    # The registry holds the stream again only once the reconnect after the first blip attaches, so
-    # the second blip waits for it.
-    instance_id
-    |> wait_for_connection()
-    |> simulate_sse_disconnect()
+    # The registry holds a live stream again only once the reconnect after the first blip attaches,
+    # which the second blip waits for.
+    simulate_sse_disconnect(instance_id)
 
     await_held_all_marker(rearmed)
   end

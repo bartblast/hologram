@@ -139,10 +139,9 @@ defmodule HologramFeatureTests.ResyncTest do
     :ok = delete(Todo, beta.id)
 
     # The emptied log reads as lost commits once the server's next round finds it, which stops the
-    # session and drops the stream until the browser reconnects, so the blip waits for the stream.
+    # session and drops the stream until the browser reconnects, so the blip waits for a live stream.
     session
     |> current_instance_id()
-    |> wait_for_connection()
     |> simulate_sse_disconnect()
 
     session

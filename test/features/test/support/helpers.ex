@@ -1283,7 +1283,7 @@ defmodule HologramFeatureTests.Helpers do
 
   @doc """
   Simulates a network blip by killing the SSE process attached to the given
-  `instance_id`.
+  `instance_id`, waiting for one when there's none yet.
 
   After this call the client's `EventSource` fires `onerror` and the
   JS-driven reconnect cycle begins: backoff, then POST handshake (the
@@ -1295,8 +1295,7 @@ defmodule HologramFeatureTests.Helpers do
   """
   @spec simulate_sse_disconnect(String.t()) :: :ok
   def simulate_sse_disconnect(instance_id) do
-    [{^instance_id, entry}] = :ets.lookup(SubscriptionRegistry.ets_table_name(), instance_id)
-    sse_pid = entry.sse_pid
+    sse_pid = await_live_sse_pid(instance_id, current_time())
 
     # Killing the SSE process makes Ranch log an expected `:killed` request-process
     # exit at :error level. That line is emitted asynchronously by the connection
@@ -1740,6 +1739,29 @@ defmodule HologramFeatureTests.Helpers do
   # to.
   defp bundle_file_path(bundle_url) do
     Path.join(Reflection.bundles_dir(), Path.basename(bundle_url))
+  end
+
+  # The registry drops a stream's entry only once it handles the stream's :DOWN, so the entry can
+  # name a stream that already ended, or be gone until the browser reconnects.
+  defp await_live_sse_pid(instance_id, start_time) do
+    sse_pid =
+      case :ets.lookup(SubscriptionRegistry.ets_table_name(), instance_id) do
+        [{^instance_id, entry}] -> entry.sse_pid
+        [] -> nil
+      end
+
+    cond do
+      sse_pid && Process.alive?(sse_pid) ->
+        sse_pid
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for a live connection for instance #{inspect(instance_id)}"
+
+      true ->
+        :timer.sleep(100)
+        await_live_sse_pid(instance_id, start_time)
+    end
   end
 
   defp connection?(instance_id) do
