@@ -418,12 +418,30 @@ describe("Client", () => {
       assert.equal(IdentityTracker.period, period);
     });
 
-    it("asks once for callers that overlap", async () => {
+    it("asks once for callers that overlap, and both wait for the answer", async () => {
+      let answer;
+
+      asking.onFirstCall().returns(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+
       asking.resolves("6.other");
 
-      await Promise.all([Client.settleIdentity(), Client.settleIdentity()]);
+      const settled = [];
+      const first = Client.settleIdentity().then(() => settled.push("first"));
+      const second = Client.settleIdentity().then(() => settled.push("second"));
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      assert.deepStrictEqual(settled, []);
+
+      answer("6.other");
+      await Promise.all([first, second]);
 
       sinon.assert.calledOnce(asking);
+      assert.equal(IdentityTracker.tag, "6.other");
     });
 
     it("asks anew once the last round is over", async () => {
