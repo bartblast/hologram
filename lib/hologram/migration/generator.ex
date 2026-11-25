@@ -182,14 +182,14 @@ defmodule Hologram.Migration.Generator do
 
   defp entity_of(op), do: Map.get(op, :entity)
 
-  # A change making a to-one optional, whatever else it changes. It only ever takes a required edge
-  # away, so it can't close a cycle wherever it goes. A retarget stays below: it adds an edge too,
-  # and the block's own backfill can read through the old target - as it can read what the deletes
-  # and the changes to a to-many take away.
+  # A change making a to-one optional, whatever else it changes but its type. It only ever takes a
+  # required edge away, so it can't close a cycle wherever it goes. A retarget stays below, an
+  # optional one too: it can add an edge, and the block's own backfill can read through the old
+  # target - as it can read what the deletes and the changes to a to-many take away.
   defp ends_required_edge?(%{op: :change_attribute, changes: [optional: true]}), do: true
 
   defp ends_required_edge?(%{op: :change_relationship, changes: changes}) do
-    Keyword.get(changes, :optional) == true and not is_list(Keyword.get(changes, :type))
+    Keyword.get(changes, :optional) == true and not Keyword.has_key?(changes, :type)
   end
 
   defp ends_required_edge?(_op), do: false

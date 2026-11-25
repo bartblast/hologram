@@ -1044,12 +1044,12 @@ defmodule Hologram.Migration.GeneratorTest do
       assert before_questions =~
                "change_entity MyApp.Beta do\n" <>
                  "    change_relationship :a, optional: true, unique: true\n" <>
-                 "    change_relationship :c, optional: true, type: MyApp.Gamma\n" <>
                  "  end\n\n" <>
                  "  change_entity MyApp.Alpha do"
 
-      # A retarget adds a required edge, and it, a to-many and a delete change what Beta's own
-      # backfill can still read.
+      # A retarget can add a required edge, and it, optional or not, a to-many and a delete change
+      # what Beta's own backfill can still read.
+      assert beta_question =~ "change_relationship :c, optional: true, type: MyApp.Gamma"
       assert beta_question =~ "change_relationship :d, type: [MyApp.Alpha]"
       assert beta_question =~ "change_relationship :g, type: MyApp.Gamma"
       assert beta_question =~ "change_relationship :e, unique: true"
