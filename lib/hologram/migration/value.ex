@@ -741,20 +741,28 @@ defmodule Hologram.Migration.Value do
     {[options, block], all_acc}
   end
 
+  # Elixir takes the options and the do from any list, and ignores what isn't a pair in it, which
+  # never runs.
   defp map_reduce_quote_args(args, unquotes, splicing, acc, fun) do
     Enum.map_reduce(args, acc, fn arg, acc ->
-      if Keyword.keyword?(arg) do
-        Enum.map_reduce(arg, acc, &map_reduce_quote_option(&1, unquotes, splicing, &2, fun))
+      if is_list(arg) do
+        Enum.map_reduce(arg, acc, fn
+          {key, _value} = option, acc when is_atom(key) ->
+            map_reduce_quote_option(option, unquotes, splicing, acc, fun)
+
+          ignored, acc ->
+            {ignored, acc}
+        end)
       else
         fun.(arg, acc, true, splicing)
       end
     end)
   end
 
-  # With separate options, Elixir takes the first do and ignores the rest. The block is in a quote,
-  # so the function splices nothing in it.
+  # With separate options, Elixir takes the first do of any list and ignores the rest. The block is
+  # in a quote, so the function splices nothing in it.
   defp map_reduce_quote_block(block, unquotes, acc, fun) do
-    if Keyword.keyword?(block) do
+    if is_list(block) do
       {block, {all_acc, _taken?}} =
         Enum.map_reduce(block, {acc, false}, fn
           {:do, _body} = option, {acc, false} ->
@@ -1054,7 +1062,7 @@ defmodule Hologram.Migration.Value do
 
   # Whether a quote with the given args unquotes its body: true or false as its options spell it,
   # or :unknown when only the compiler can read them, like an attribute. With separate options,
-  # Elixir ignores any beside the do.
+  # Elixir ignores any beside the do, and in any list it ignores what isn't a pair.
   defp quote_unquotes(args) do
     written =
       case args do
@@ -1063,7 +1071,10 @@ defmodule Hologram.Migration.Value do
         _other -> []
       end
 
-    settings = if Keyword.keyword?(written), do: written, else: [unquote: written]
+    settings =
+      if is_list(written),
+        do: Enum.filter(written, &match?({key, _value} when is_atom(key), &1)),
+        else: [unquote: written]
 
     case Keyword.get(settings, :unquote, not Keyword.has_key?(settings, :bind_quoted)) do
       setting when is_boolean(setting) -> setting

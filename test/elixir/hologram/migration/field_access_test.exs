@@ -133,6 +133,8 @@ defmodule Hologram.Migration.FieldAccessTest do
 
       assert unchanged?("Kernel.|>([do: x.y], quote())")
       assert unchanged?("quote(unquote: false, do: unquote(x.y))")
+      assert unchanged?("quote([0, {:unquote, false}, {:do, unquote(x.y)}])")
+      assert unchanged?("quote([], [0, {:do, x.y}, {:do, x}])")
       assert unchanged?("quote(do: quote(do: unquote(unquote(x.y))))")
     end
 

@@ -1144,6 +1144,8 @@ defmodule Hologram.Migration.ValueTest do
     test "accepts quoted code that doesn't unquote an argument" do
       for quoted <- [
             "quote(unquote: false, do: unquote(title))",
+            "quote([0, {:unquote, false}, {:do, unquote(title)}])",
+            "quote([0, {:unquote, false}], [0, {:do, unquote(title)}])",
             "quote(do: quote(do: unquote(title)))",
             "quote(do: Foo.unquote_splicing(title))",
             "quote(do: title |> unquote())",
@@ -2024,6 +2026,17 @@ defmodule Hologram.Migration.ValueTest do
         )
 
       assert module.__backfill_0__("a") == "1a"
+    end
+
+    test "takes the first do of any list a quote takes as data" do
+      for quoted <- [
+            ~s|quote([], [0, {:do, split(title, ",")}, {:do, title}])|,
+            ~s|quote([0, {:do, split(title, ",")}])|
+          ] do
+        {module, _value} = elixir_op("fn title -> inspect(#{quoted}) <> title end")
+
+        assert module.__backfill_0__("a") =~ ~r/^\{:split, \[\], \[\{:title, .*\}, ","\]\}a$/
+      end
     end
 
     test "takes a call to the migration's own macro inside a quote as data" do
