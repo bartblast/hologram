@@ -328,6 +328,24 @@ defmodule Hologram.Migration.ValueTest do
       end
     end
 
+    test "refuses a function of the migration module taking no arguments" do
+      module =
+        compile_migration("20260813091522", """
+        def __backfill_0__, do: "x"
+
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: "x"
+        end
+        """)
+
+      value = %Value{args: [], term: {:function, module, :__backfill_0__, []}}
+      op = %{function_op(module) | opts: [backfill: value]}
+
+      assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
+        Value.validate_ops!([op], "app/migrations/20260813091522.ex", module)
+      end
+    end
+
     test "refuses a function of another migration exporting the same backfill function" do
       body = """
       change_entity MyApp.Trip do

@@ -1525,9 +1525,10 @@ defmodule Hologram.Migration.Value do
 
   defp valid_term?(_term), do: false
 
+  # A function reading nothing of the row would be a constant, which the op holds as one.
   defp valid_top_term?({:function, function_module, function, args}, module) do
     module != nil and function_module == module and is_atom(function) and valid_args?(args) and
-      function_exported?(module, function, length(args))
+      args != [] and function_exported?(module, function, length(args))
   end
 
   defp valid_top_term?(term, _module), do: valid_term?(term)
