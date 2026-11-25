@@ -2433,6 +2433,10 @@ describe("DataLayer", () => {
     });
 
     afterEach(() => {
+      // What the handshake left for the stream's answer to act on, which a later test would take.
+      sinon.stub(Batches, "flush");
+      DataLayer.takeReplica(null);
+
       Object.assign(IdentityTracker, originalTracker);
 
       Replica.reset();
