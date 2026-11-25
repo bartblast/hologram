@@ -178,6 +178,11 @@ defmodule Hologram.Migration do
 
   @op_run_calls_attribute :__hologram_migration_op_run_calls__
 
+  # The module, name and arguments of each function an Elixir backfill fn runs as, so a backfill
+  # can name no other function (see Value.validate_ops!/4). Hologram sets it once the module body
+  # is done, and refuses a body that sets it or makes it accumulate.
+  @backfill_functions_attribute :__hologram_migration_backfill_functions__
+
   @locals_without_parens [
     add_attribute: 2,
     add_attribute: 3,
@@ -301,12 +306,20 @@ defmodule Hologram.Migration do
     validate_snapshots_taken!(env)
     validate_op_imports!(env)
     validate_no_op_macros!(env)
+    validate_backfill_functions_unset!(env)
 
-    {settled_ops, functions} =
+    {settled_ops, backfills} =
       env.module
       |> Module.get_attribute(@ops_attribute)
       |> Enum.reverse()
       |> settle_fn_backfills(env)
+
+    {signatures, functions} =
+      backfills
+      |> Enum.reverse()
+      |> Enum.unzip()
+
+    Module.put_attribute(env.module, @backfill_functions_attribute, signatures)
 
     ops = FieldAccess.rewrite(settled_ops, env)
 
@@ -333,7 +346,9 @@ defmodule Hologram.Migration do
 
     migration = env.module.__hologram_migration__()
 
-    Value.validate_ops!(migration.ops, migration.path, env.module)
+    backfill_functions = Module.get_attribute(env.module, @backfill_functions_attribute)
+
+    Value.validate_ops!(migration.ops, migration.path, env.module, backfill_functions)
     Loader.verify_rename_order!(migration.ops, migration.path)
     Loader.validate_resolved!([migration], build_env())
   end
@@ -732,11 +747,13 @@ defmodule Hologram.Migration do
         unquote(definition)
       end
 
-    {Value.function_value(reading, env.module, name), [function | functions]}
+    signature = {env.module, name, reading.args}
+
+    {Value.function_value(reading, env.module, name), [{signature, function} | functions]}
   end
 
   # Options written as a list in place. Ones from a variable or a call are evaluated with the
-  # op, and validate_ops!/2 checks a computed value they hold.
+  # op, and validate_ops!/4 checks a computed value they hold.
   defp imports_at(code, caller) do
     code
     |> Value.local_calls(caller)
@@ -1125,7 +1142,8 @@ defmodule Hologram.Migration do
     end
   end
 
-  # Returns the ops with each fn settled, and the functions the Elixir ones run as.
+  # Returns the ops with each fn settled, and the functions the Elixir ones run as, each with
+  # the module, name and arguments a backfill names it by.
   defp settle_fn_backfills(ops, env) do
     readings =
       env.module
@@ -1353,6 +1371,19 @@ defmodule Hologram.Migration do
             line: line
       end
     end)
+  end
+
+  # The list of backfill functions is Hologram's to set: one the body set, or made to accumulate,
+  # could let a backfill run a function no fn generated.
+  defp validate_backfill_functions_unset!(env) do
+    unless Module.get_attribute(env.module, @backfill_functions_attribute) == nil do
+      raise Hologram.CompileError,
+        message:
+          "@#{@backfill_functions_attribute} is the attribute Hologram lists the functions " <>
+            "backfill fns run as in - rename the attribute",
+        file: env.file,
+        line: env.line
+    end
   end
 
   # An op's code is placed in a function defined at the end of the module, under the imports in

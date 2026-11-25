@@ -291,7 +291,7 @@ defmodule Hologram.Migration.ValueTest do
     end
   end
 
-  describe "validate_ops!/2, a function term" do
+  describe "validate_ops!/4, a function term" do
     defp function_op(module) do
       value = %Value{args: [:title], term: {:function, module, :__backfill_0__, [:title]}}
 
@@ -305,6 +305,9 @@ defmodule Hologram.Migration.ValueTest do
       }
     end
 
+    # The backfill functions a migration generated, as its __after_compile__ gives them.
+    defp generated(module, args \\ [:title]), do: [{module, :__backfill_0__, args}]
+
     test "accepts a function of the migration module" do
       module =
         compile_migration("20260813091522", """
@@ -316,7 +319,8 @@ defmodule Hologram.Migration.ValueTest do
       assert Value.validate_ops!(
                [function_op(module)],
                "app/migrations/20260813091522.ex",
-               module
+               module,
+               generated(module)
              ) == :ok
     end
 
@@ -329,7 +333,54 @@ defmodule Hologram.Migration.ValueTest do
         """)
 
       assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
-        Value.validate_ops!([function_op(module)], "app/migrations/20260813091522.ex", module)
+        Value.validate_ops!(
+          [function_op(module)],
+          "app/migrations/20260813091522.ex",
+          module,
+          generated(module, [:a, :b])
+        )
+      end
+    end
+
+    test "refuses a function of the migration module the backfill didn't generate" do
+      module =
+        compile_migration("20260813091522", """
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: fn title -> String.upcase(title) end
+        end
+        """)
+
+      op = function_op(module)
+      value = %Value{args: [:status], term: {:function, module, :module_info, [:status]}}
+
+      assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
+        Value.validate_ops!(
+          [%{op | opts: [backfill: value]}],
+          "app/migrations/20260813091522.ex",
+          module,
+          generated(module)
+        )
+      end
+    end
+
+    test "refuses a listed function the module doesn't export at that arity" do
+      module =
+        compile_migration("20260813091522", """
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: fn title -> String.upcase(title) end
+        end
+        """)
+
+      op = function_op(module)
+      value = %Value{args: [:a, :b], term: {:function, module, :__backfill_0__, [:a, :b]}}
+
+      assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
+        Value.validate_ops!(
+          [%{op | opts: [backfill: value]}],
+          "app/migrations/20260813091522.ex",
+          module,
+          generated(module, [:a, :b])
+        )
       end
     end
 
@@ -347,7 +398,12 @@ defmodule Hologram.Migration.ValueTest do
       op = %{function_op(module) | opts: [backfill: value]}
 
       assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
-        Value.validate_ops!([op], "app/migrations/20260813091522.ex", module)
+        Value.validate_ops!(
+          [op],
+          "app/migrations/20260813091522.ex",
+          module,
+          generated(module, [])
+        )
       end
     end
 
@@ -362,13 +418,19 @@ defmodule Hologram.Migration.ValueTest do
       owner = compile_migration("20260813091523", body)
 
       assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
-        Value.validate_ops!([function_op(other)], "app/migrations/20260813091523.ex", owner)
+        Value.validate_ops!(
+          [function_op(other)],
+          "app/migrations/20260813091523.ex",
+          owner,
+          generated(owner)
+        )
       end
 
       assert Value.validate_ops!(
                [function_op(owner)],
                "app/migrations/20260813091523.ex",
-               owner
+               owner,
+               generated(owner)
              ) == :ok
     end
 
@@ -389,7 +451,8 @@ defmodule Hologram.Migration.ValueTest do
         Value.validate_ops!(
           [%{op | opts: [backfill: value]}],
           "app/migrations/20260813091522.ex",
-          module
+          module,
+          generated(module, [:id])
         )
       end
     end
@@ -406,12 +469,12 @@ defmodule Hologram.Migration.ValueTest do
       root = function_op(module)
       term = root.opts[:backfill].term
 
-      assert Value.validate_ops!([root], path, module) == :ok
+      assert Value.validate_ops!([root], path, module, generated(module)) == :ok
 
       nested = put_in(root.opts[:backfill].term, {:coalesce, [term, {:value, "a"}]})
 
       assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
-        Value.validate_ops!([nested], path, module)
+        Value.validate_ops!([nested], path, module, generated(module))
       end
     end
   end

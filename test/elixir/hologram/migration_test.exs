@@ -45,6 +45,77 @@ defmodule Hologram.MigrationTest do
       end
     end
 
+    test "refuses a backfill naming a function of the module the backfill didn't generate" do
+      body = """
+      def opts do
+        value = %Hologram.Migration.Value{
+          args: [:status],
+          term: {:function, __MODULE__, :module_info, [:status]}
+        }
+
+        [backfill: value]
+      end
+
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, opts()
+      end
+      """
+
+      assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses a module body setting the list of generated backfill functions" do
+      body = """
+      @__hologram_migration_backfill_functions__ [{__MODULE__, :module_info, [:status]}]
+
+      def opts do
+        value = %Hologram.Migration.Value{
+          args: [:status],
+          term: {:function, __MODULE__, :module_info, [:status]}
+        }
+
+        [backfill: value]
+      end
+
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, opts()
+      end
+      """
+
+      assert_raise Hologram.CompileError, ~r/is the attribute Hologram lists the functions/, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses a module body making the list of generated backfill functions accumulate" do
+      body = """
+      Module.register_attribute(__MODULE__, :__hologram_migration_backfill_functions__,
+        accumulate: true
+      )
+
+      @__hologram_migration_backfill_functions__ {__MODULE__, :module_info, [:status]}
+
+      def opts do
+        value = %Hologram.Migration.Value{
+          args: [:status],
+          term: {:function, __MODULE__, :module_info, [:status]}
+        }
+
+        [backfill: value]
+      end
+
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, opts()
+      end
+      """
+
+      assert_raise Hologram.CompileError, ~r/is the attribute Hologram lists the functions/, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
     test "fails the build when an op cannot be evaluated" do
       body = """
       change_entity MyApp.Task do

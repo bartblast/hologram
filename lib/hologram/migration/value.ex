@@ -429,15 +429,21 @@ defmodule Hologram.Migration.Value do
   Validates that every computed backfill of the given evaluated ops holds a term lowering can
   produce. Op options may come from a call, so a migration could build the struct by hand, and
   what a term runs must never be anything the call check hasn't seen, so a function it runs has to
-  be one of the given migration module.
+  be one of the backfill functions the given migration module generated, each given as its module,
+  name and arguments.
 
   Raises Hologram.CompileError, located at the op in the given file, on any other term.
   """
-  @spec validate_ops!(list(%{atom => any}), String.t(), module | nil) :: :ok
-  def validate_ops!(ops, file, module \\ nil) do
+  @spec validate_ops!(
+          list(%{atom => any}),
+          String.t(),
+          module | nil,
+          list({module, atom, list(atom)})
+        ) :: :ok
+  def validate_ops!(ops, file, module \\ nil, backfill_functions \\ []) do
     for op <- ops,
         %{__struct__: __MODULE__} = value <- op_backfills(op),
-        not (valid_top_term?(Map.get(value, :term), module) and
+        not (valid_top_term?(Map.get(value, :term), module, backfill_functions) and
                valid_args?(Map.get(value, :args, [])) and
                function_args_match?(Map.get(value, :term), Map.get(value, :args, []))) do
       raise Hologram.CompileError,
@@ -1548,12 +1554,13 @@ defmodule Hologram.Migration.Value do
   defp valid_term?(_term), do: false
 
   # A function reading nothing of the row would be a constant, which the op holds as one.
-  defp valid_top_term?({:function, function_module, function, args}, module) do
-    module != nil and function_module == module and is_atom(function) and valid_args?(args) and
-      args != [] and function_exported?(module, function, length(args))
+  defp valid_top_term?({:function, function_module, function, args}, module, backfill_functions) do
+    module != nil and function_module == module and args != [] and
+      {module, function, args} in backfill_functions and
+      function_exported?(module, function, length(args))
   end
 
-  defp valid_top_term?(term, _module), do: valid_term?(term)
+  defp valid_top_term?(term, _module, _backfill_functions), do: valid_term?(term)
 
   # A term reading nothing of the row is a constant, and a name that isn't an argument, or an
   # argument pinned, would read the surrounding code.
