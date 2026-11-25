@@ -11,6 +11,7 @@ defmodule HologramFeatureTests.MutationsTest do
   alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Runtime.Serializer
   alias HologramFeatureTests.Entities.Item
@@ -168,6 +169,26 @@ defmodule HologramFeatureTests.MutationsTest do
     |> visit(MutationsPage)
     |> click(button("Log in"))
     |> assert_text(css("#result"), "logged_in")
+    |> await_stream_of_session_user()
+  end
+
+  # The command's reply comes before the stream records the login, and a batch the stream still
+  # holds for the previous user is answered 409 ahead of any token check.
+  defp await_stream_of_session_user(session, attempts_left \\ 100) do
+    instance_id = script_result(session, "return globalThis.Hologram.instanceId;")
+    user_id = session_user().id
+
+    case SubscriptionRegistry.identity_of(instance_id) do
+      {_session_id, ^user_id} ->
+        session
+
+      _other when attempts_left > 0 ->
+        Process.sleep(50)
+        await_stream_of_session_user(session, attempts_left - 1)
+
+      other ->
+        raise "The stream never recorded the login, it holds #{inspect(other)}"
+    end
   end
 
   # What the page sends as its replica_id, and so what the record is keyed by.
