@@ -353,6 +353,13 @@ defmodule Hologram.Migration.Value.SQLTest do
       assert [%{column: "label_$sort"}] = sort_keys(%{term: term}, MyApp.Trip, mapping())
     end
 
+    test "names a sort key two words order by once" do
+      most_common = {:most_common, {:relationship, [:tags]}, :label, :string, nil}
+
+      assert sort_keys(%{term: {:coalesce, [most_common, most_common]}}, MyApp.Trip, mapping()) ==
+               [%{op: :add_column, table: "my_app_tag", column: "label_$sort"}]
+    end
+
     test "names nothing for a value with no sort key" do
       term = {:most_common, {:relationship, [:tags]}, :rank, :integer, nil}
 

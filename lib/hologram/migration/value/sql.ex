@@ -145,7 +145,7 @@ defmodule Hologram.Migration.Value.SQL do
 
   @doc """
   Returns the sort key columns the given resolved backfill orders by, in the form the companion
-  fill takes.
+  fill takes, each once however many of its words order by it.
   """
   @spec sort_keys(
           %{required(:term) => Resolver.resolved(), optional(atom) => any},
@@ -160,6 +160,7 @@ defmodule Hologram.Migration.Value.SQL do
         sort_key = Enum.find(entry.columns, &(&1.source == {:sort_key, attribute})) do
       %{op: :add_column, table: entry.table, column: sort_key.name}
     end
+    |> Enum.uniq()
   end
 
   # Each word over the rows pointing at this one, with the alias its join goes under.
