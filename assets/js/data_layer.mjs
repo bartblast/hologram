@@ -71,6 +71,10 @@ export default class DataLayer {
   // taken (see takeReplica).
   static #tookHandshakePair = false;
 
+  // Whether the last handshake ended a hold over a cookie that lagged, which wakes the sender the
+  // same way: the writes held meanwhile have nothing else to wake them (see takeReplica).
+  static #endedCookieHold = false;
+
   // The pairs of the users whose batches wait in this tab with no store to hold them, by user (see
   // followIdentity).
   static #heldPairs = new Map();
@@ -849,7 +853,9 @@ export default class DataLayer {
       );
     }
 
+    const wasLagging = SyncStream.laggingCookie;
     SyncStream.laggingCookie = isLagging();
+    $.#endedCookieHold = wasLagging && !SyncStream.laggingCookie;
 
     if (SyncStream.laggingCookie) {
       return false;
@@ -1293,7 +1299,9 @@ export default class DataLayer {
   // pair have one now, and nothing else tells it.
   static takeReplica(replica, refused = false, presentedId = undefined) {
     const tookHandshakePair = $.#tookHandshakePair;
+    const endedCookieHold = $.#endedCookieHold;
     $.#tookHandshakePair = false;
+    $.#endedCookieHold = false;
 
     if (refused) {
       Replica.refuseMint(presentedId);
@@ -1301,7 +1309,7 @@ export default class DataLayer {
       return Batches.flush();
     }
 
-    return tookHandshakePair ? Batches.flush() : null;
+    return tookHandshakePair || endedCookieHold ? Batches.flush() : null;
   }
 
   // Whether the next stream handshake should ask the server for an identity (see

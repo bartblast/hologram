@@ -2647,6 +2647,28 @@ describe("DataLayer", () => {
         }
       });
 
+      // The writes held over the lagging cookie have nothing else to wake them, and the tab keeps
+      // its pair.
+      it("wakes the sender once a handshake ends a hold over a lagging cookie", () => {
+        const flush = sinon.stub(Batches, "flush");
+
+        try {
+          Replica.adopt({id: "replica-1", token: "token-1"});
+          SyncStream.laggingCookie = true;
+
+          DataLayer.takeHandshake(answer());
+          DataLayer.takeReplica(null);
+
+          sinon.assert.calledOnce(flush);
+
+          DataLayer.takeReplica(null);
+
+          sinon.assert.calledOnce(flush);
+        } finally {
+          flush.restore();
+        }
+      });
+
       it("leaves the sender alone when the tab keeps the pair it holds", () => {
         const flush = sinon.stub(Batches, "flush");
 
