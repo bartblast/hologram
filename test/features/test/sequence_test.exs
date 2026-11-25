@@ -48,7 +48,12 @@ defmodule HologramFeatureTests.SequenceTest do
       "first, held, after | after, held, first | after | held, after | after, first, held"
     )
 
-    assert read_notice("held").server_created_seq < read_notice("after").server_created_seq
+    held_seq = read_notice("held").server_created_seq
+    after_seq = read_notice("after").server_created_seq
+
+    assert is_integer(held_seq)
+    assert is_integer(after_seq)
+    assert held_seq < after_seq
   end
 
   # Mine waits unsent, then is saved while another save holds its number back, then theirs arrives
