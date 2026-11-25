@@ -754,22 +754,25 @@ defmodule Hologram.Migration.Value do
     {[options, block], all_acc}
   end
 
-  # Elixir takes the options and the do from any list, and ignores what isn't a pair in it, which
-  # never runs.
   defp map_reduce_quote_args(args, unquotes, splicing, acc, fun) do
-    Enum.map_reduce(args, acc, fn arg, acc ->
-      if is_list(arg) do
-        Enum.map_reduce(arg, acc, fn
-          {key, _value} = option, acc when is_atom(key) ->
-            map_reduce_quote_option(option, unquotes, splicing, acc, fun)
+    Enum.map_reduce(args, acc, fn
+      arg, acc when is_list(arg) ->
+        Enum.map_reduce(arg, acc, &map_reduce_quote_item(&1, unquotes, splicing, &2, fun))
 
-          ignored, acc ->
-            {ignored, acc}
-        end)
-      else
+      arg, acc ->
         fun.(arg, acc, true, splicing)
-      end
     end)
+  end
+
+  # Elixir takes the options and the do from any list, and runs the list whole first, so what isn't
+  # a pair in it, like an attribute, is code that runs and can hold options itself.
+  defp map_reduce_quote_item({key, _value} = option, unquotes, splicing, acc, fun)
+       when is_atom(key) do
+    map_reduce_quote_option(option, unquotes, splicing, acc, fun)
+  end
+
+  defp map_reduce_quote_item(item, _unquotes, splicing, acc, fun) do
+    fun.(item, acc, true, splicing)
   end
 
   # With separate options, Elixir takes the first do of any list and ignores the rest. The block is

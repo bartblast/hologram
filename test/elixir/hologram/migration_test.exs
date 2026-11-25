@@ -417,6 +417,32 @@ defmodule Hologram.MigrationTest do
       end
     end
 
+    test "reads an attribute in a quote's option list where the op is written" do
+      for quoted <- ["quote([@opts, do: x])", "[@opts, do: x] |> quote()"] do
+        module =
+          compile_migration("20260813091522", """
+          @opts {:bind_quoted, [x: "early"]}
+
+          change_entity MyApp.Task do
+            add_attribute :first, :string,
+              backfill: fn title -> coalesce(title, ^inspect(#{quoted})) end
+          end
+
+          @opts {:bind_quoted, [x: "late"]}
+
+          change_entity MyApp.Task do
+            add_attribute :second, :string, default: inspect(@opts)
+          end
+          """)
+
+        assert [%{opts: [backfill: %{term: {:coalesce, [_title, {:value, result}]}}]}, _second] =
+                 module.__hologram_migration__().ops
+
+        assert result =~ "early"
+        refute result =~ "late"
+      end
+    end
+
     test "leaves an attribute in a quote's body as data, piped or not" do
       for quoted <- [
             "quote(do: @o)",
