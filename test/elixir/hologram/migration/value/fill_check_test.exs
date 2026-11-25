@@ -151,5 +151,30 @@ defmodule Hologram.Migration.Value.FillCheckTest do
         assert check!(@fill) == :ok
       end)
     end
+
+    test "reads only the rows a fill of NULLs kept", %{scratch: scratch} do
+      route(scratch, fn ->
+        prepare()
+
+        kept_id = "018f0000-0000-7000-8000-000000000001"
+
+        insert_task("ok", kept_id)
+        insert_task("long", "018f0000-0000-7000-8000-000000000002")
+
+        result =
+          Connection.transaction(fn ->
+            create_filled_ids!()
+            keep_filled_ids!([kept_id])
+
+            on_page = &send(self(), {:page, &1})
+
+            Connection.rollback(check!(Map.put(@fill, :nulls_only, true), on_page: on_page))
+          end)
+
+        assert result == {:error, :ok}
+        assert_received {:page, [[^kept_id, "ok"]]}
+        refute_received {:page, _rows}
+      end)
+    end
   end
 end
