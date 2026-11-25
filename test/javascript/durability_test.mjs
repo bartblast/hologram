@@ -469,6 +469,7 @@ describe("Durability", () => {
       assert.equal(await readMeta("cursor"), "place-1");
 
       sinon.stub(Tabs, "storeLost").callsFake(() => {
+        LocalDatabase.actorUserId = "u2";
         Replica.owner = "u2";
       });
 
