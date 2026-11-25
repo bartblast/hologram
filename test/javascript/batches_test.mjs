@@ -1767,12 +1767,21 @@ describe("Batches", () => {
     it("forgets a batch under the identity it was sent under", async () => {
       const forgetting = sinon.stub(Durability, "forgetBatch");
       const sentUnder = {holdsIdentity: true, owner: null, replicaId: "r-sent"};
+      const signedIn = {holdsIdentity: true, owner: "u2", replicaId: "r-new"};
+      let current = sentUnder;
+      let answer;
 
-      sinon.stub(Durability, "sentUnder").returns(sentUnder);
+      sinon.stub(Durability, "sentUnder").callsFake(() => current);
+      sendStub.returns(new Promise((resolve) => (answer = resolve)));
       sealed(creating("t1", "first"));
-      sendStub.resolves(confirmed());
 
-      await Batches.flush();
+      const flushing = Batches.flush();
+
+      await waitForEventLoop();
+
+      current = signedIn;
+      answer(confirmed());
+      await flushing;
 
       sinon.assert.calledOnceWithExactly(forgetting, 1, sentUnder);
     });
