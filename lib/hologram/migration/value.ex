@@ -1779,7 +1779,10 @@ defmodule Hologram.Migration.Value do
     end
   end
 
-  defp without_pattern({op, meta, [pattern, right]}, _env) when op in [:=, :<-, :match?] do
+  # Kernel.destructure/2 matches its first argument against the list it pads, so a pin there is a
+  # pattern's - and the call check refuses the call, naming the real reason.
+  defp without_pattern({op, meta, [pattern, right]}, _env)
+       when op in [:=, :<-, :match?, :destructure] do
     {op, meta, [guard_of(pattern), right]}
   end
 
@@ -1788,9 +1791,10 @@ defmodule Hologram.Migration.Value do
   end
 
   defp without_pattern(
-         {{:., _dot_meta, [receiver, :match?]} = form, meta, [pattern, right]} = node,
+         {{:., _dot_meta, [receiver, name]} = form, meta, [pattern, right]} = node,
          env
-       ) do
+       )
+       when name in [:match?, :destructure] do
     if Macro.expand(receiver, env) == Kernel,
       do: {form, meta, [guard_of(pattern), right]},
       else: node

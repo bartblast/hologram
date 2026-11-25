@@ -1777,6 +1777,24 @@ defmodule Hologram.Migration.ValueTest do
       end
     end
 
+    test "leaves a pin in destructure's pattern to the call check, however it's spelled" do
+      for {call, extra} <- [
+            {"destructure([^b, rest], a)", ""},
+            {"Kernel.destructure([^b, rest], a)", ""},
+            {"Elixir.Kernel.destructure([^b, rest], a)", ""},
+            {"K.destructure([^b, rest], a)", "alias Kernel, as: K"},
+            {"[^b, rest] |> destructure(a)", ""}
+          ] do
+        # The call check lists every refused call with its line, so the error carries none.
+        error =
+          assert_raise Hologram.CompileError, fn ->
+            elixir_op(~s(fn a, b -> #{call}; rest end), extra)
+          end
+
+        assert error.message =~ "calls Kernel.Utils.destructure/2"
+      end
+    end
+
     test "refuses the migration's macro in a guard" do
       body = """
       @o "1"
