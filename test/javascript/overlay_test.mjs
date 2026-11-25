@@ -1479,6 +1479,20 @@ describe("Overlay", () => {
       assert.equal(Overlay.foldRow(TODO, "t1", null).title, "Third");
     });
 
+    it("folds it between batches with a lower and a higher number", () => {
+      Overlay.push(sealed(2, createWrite()));
+      Overlay.push(sealed(5, update("Fifth")));
+
+      Overlay.insert(
+        sealed(3, updateWrite({data: {done: true}, stamp: stamp + 1})),
+      );
+
+      const row = Overlay.foldRow(TODO, "t1", null);
+
+      assert.isTrue(row.done);
+      assert.equal(row.title, "Fifth");
+    });
+
     it("folds it when nothing else is held", () => {
       Overlay.insert(sealed(3, createWrite()));
 
