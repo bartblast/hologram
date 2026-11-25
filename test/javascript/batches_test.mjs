@@ -239,6 +239,231 @@ describe("Batches", () => {
       assert.isTrue(sendStub.calledOnce);
     });
 
+    // A pair that replaces the one being written has a write of its own.
+    it("sends nothing until an identity written during the wait is stored", async () => {
+      let firstWritten, secondWritten;
+
+      const first = new Promise((resolve) => (firstWritten = resolve));
+      const second = new Promise((resolve) => (secondWritten = resolve));
+      let current = first;
+
+      sinon.stub(Durability, "replicaWritten").callsFake(() => current);
+
+      sendStub.resolves(confirmed());
+      sealed(creating("t1", "first"));
+
+      const flushing = Batches.flush();
+
+      try {
+        await waitForEventLoop();
+
+        current = second;
+        firstWritten();
+        await waitForEventLoop();
+
+        assert.isFalse(sendStub.called);
+      } finally {
+        firstWritten();
+        secondWritten();
+        await flushing;
+      }
+
+      assert.isTrue(sendStub.calledOnce);
+    });
+
+    describe("when the user changes", () => {
+      let written;
+
+      beforeEach(() => {
+        LocalDatabase.actorUserId = "u1";
+
+        sinon
+          .stub(Durability, "replicaWritten")
+          .onFirstCall()
+          .returns(new Promise((resolve) => (written = resolve)))
+          .returns(Promise.resolve());
+      });
+
+      // The server applies a batch under the user of the session that sends it.
+      it("doesn't send a batch of the previous user", async () => {
+        sealed(creating("t1", "first"));
+
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        LocalDatabase.actorUserId = "u2";
+
+        written();
+        await flushing;
+
+        assert.isFalse(sendStub.called);
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+
+      it("goes on to the new user's batch behind it", async () => {
+        sendStub.resolves(confirmed());
+        sealed(creating("t1", "first"));
+
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        LocalDatabase.actorUserId = "u2";
+        const second = sealed(creating("t2", "second"));
+
+        written();
+        await flushing;
+
+        assert.isTrue(sendStub.calledOnceWithExactly(second));
+      });
+
+      // A later batch may name a row this one created, and a frame naming the later number marks
+      // everything below it as applied.
+      it("sends first a lower number that arrived during the wait", async () => {
+        sendStub.resolves(confirmed());
+
+        // The lower one is a stored batch, which goes out only under the identity the store holds.
+        sinon.stub(Durability, "holdsIdentity").returns(true);
+
+        Batches.resumeFrom(5);
+        sealed(creating("t2", "second"));
+
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        Batches.adopt([
+          {
+            actorUserId: "u1",
+            landed: [],
+            seq: 5,
+            writes: [creating("t1", "first")],
+          },
+        ]);
+
+        written();
+        await flushing;
+
+        assert.deepStrictEqual(
+          sendStub.getCalls().map((call) => call.args[0].seq),
+          [5, 6],
+        );
+      });
+
+      // The group dissolved during the wait, and the tab that kept its identity sends the batch.
+      it("doesn't send a batch let go of with the user unchanged", async () => {
+        // One the store holds, which the tab that kept its identity sends from there.
+        sealed(creating("t1", "first")).filed = true;
+
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        Batches.disown();
+
+        written();
+        await flushing;
+
+        assert.isFalse(sendStub.called);
+      });
+
+      // The 403 is the old user's pair being refused, and the pair in use is the new user's.
+      it("takes no other pair when a batch let go of while out fails", async () => {
+        const persisting = sinon.stub(Durability, "persistReplica");
+        const reconnecting = sinon.stub(Sse, "reconnect");
+        const delaying = sinon.stub(Sse, "computeReconnectDelay");
+
+        written();
+
+        Replica.adopt({id: "r-stored", token: "statement-stored"});
+        Replica.offer({id: "r-fresh", token: "statement-fresh"});
+
+        let answer;
+
+        sendStub.returns(new Promise((resolve) => (answer = resolve)));
+
+        const batch = sealed(creating("t1", "first"));
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        assert.isTrue(sendStub.calledOnce);
+
+        LocalDatabase.actorUserId = "u2";
+        Batches.releaseForeign("u2");
+
+        answer({httpStatus: 403, status: "failed"});
+        await flushing;
+
+        assert.equal(Replica.id, "r-stored");
+        assert.isFalse(persisting.called);
+        assert.isFalse(reconnecting.called);
+        assert.isFalse(delaying.called);
+        assert.equal(batch.state, "pending");
+      });
+
+      // The server applied it, so it has nothing left to wait for in the store.
+      it("forgets a batch let go of while out once it is answered", async () => {
+        const forgetting = sinon.stub(Durability, "forgetBatch");
+
+        written();
+
+        let answer;
+
+        sendStub.returns(new Promise((resolve) => (answer = resolve)));
+
+        const batch = sealed(creating("t1", "first"));
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        LocalDatabase.actorUserId = "u2";
+        Batches.releaseForeign("u2");
+
+        answer(confirmed());
+        await flushing;
+
+        sinon.assert.calledOnceWithExactly(
+          forgetting,
+          batch.seq,
+          sinon.match.object,
+        );
+
+        assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+      });
+
+      // The tab moved to the new user's group as a follower while the send was out: the tab that
+      // leads there sends the new user's queue, under its own pair.
+      it("sends nothing more once the tab stopped sending while one was out", async () => {
+        written();
+
+        let answer;
+
+        sendStub.returns(new Promise((resolve) => (answer = resolve)));
+
+        sealed(creating("t1", "first"));
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        assert.isTrue(sendStub.calledOnce);
+
+        LocalDatabase.actorUserId = "u2";
+        Batches.releaseForeign("u2");
+        const second = sealed(creating("t2", "second"));
+        Tabs.leader = false;
+
+        answer(confirmed());
+        await flushing;
+
+        assert.isTrue(sendStub.calledOnce);
+        assert.deepStrictEqual(Batches.pending, [second]);
+        assert.equal(second.state, "pending");
+      });
+    });
+
     // The server would refuse them over a mismatch the person did not cause, and roll back what
     // they did.
     it("holds every batch while the server stopped the tab over its model", async () => {
@@ -538,6 +763,34 @@ describe("Batches", () => {
       await Batches.flush();
 
       assert.isFalse(announcing.called);
+    });
+
+    // The flush that the end of the hold starts finds the sender busy with that read, so nothing
+    // else would send the queue.
+    it("sends the queue when the hold ends while the queue is read", async () => {
+      sendStub.resolves(confirmed());
+
+      SyncStream.stopReason = "model_hash";
+
+      sealed(creating("t1", "first"));
+
+      let reads = 0;
+
+      sinon.stub(Durability, "queuedBatches").callsFake(async () => {
+        reads += 1;
+
+        if (reads === 2) {
+          SyncStream.stopReason = null;
+          Batches.flush();
+        }
+
+        return [];
+      });
+
+      await Batches.flush();
+
+      assert.isTrue(sendStub.calledOnce);
+      assert.deepStrictEqual(Batches.pending, []);
     });
 
     // A stubbed read can't tell the old loop from this one: only a real store says what a read
@@ -1567,7 +1820,76 @@ describe("Batches", () => {
 
       await Batches.flush();
 
-      assert.isTrue(forgetting.calledOnceWithExactly(1));
+      sinon.assert.calledOnceWithExactly(forgetting, 1, sinon.match.object);
+    });
+
+    // The tab can follow a sign-in while the batch is out.
+    it("forgets a batch under the identity it was sent under", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+      const sentUnder = {holdsIdentity: true, owner: null, replicaId: "r-sent"};
+      const signedIn = {holdsIdentity: true, owner: "u2", replicaId: "r-new"};
+      let current = sentUnder;
+      let answer;
+
+      sinon.stub(Durability, "sentUnder").callsFake(() => current);
+      sendStub.returns(new Promise((resolve) => (answer = resolve)));
+      sealed(creating("t1", "first"));
+
+      const flushing = Batches.flush();
+
+      await waitForEventLoop();
+
+      current = signedIn;
+      answer(confirmed());
+      await flushing;
+
+      sinon.assert.calledOnceWithExactly(forgetting, 1, sentUnder);
+    });
+
+    // Its number was never recorded, so a batch the store holds under it can be another tab's.
+    it("forgets and tells nothing of a batch the store never got", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+      const posting = sinon.stub(Tabs, "post");
+
+      const originalMode = Durability.mode;
+
+      const batch = sealed(creating("t1", "first"));
+      batch.filed = false;
+      sendStub.resolves(confirmed());
+
+      try {
+        Durability.mode = "indexeddb";
+
+        await Batches.flush();
+      } finally {
+        Durability.mode = originalMode;
+      }
+
+      assert.deepStrictEqual(Batches.pending, []);
+      sinon.assert.notCalled(forgetting);
+      sinon.assert.neverCalledWithMatch(posting, {kind: "answered"});
+    });
+
+    // The answer is withheld for it, so a tab that took it up would keep it on screen.
+    it("announces no batch the store never got as it sends it", async () => {
+      const announcing = sinon.stub(Tabs, "postNow");
+
+      const originalMode = Durability.mode;
+
+      const batch = sealed(creating("t1", "first"));
+      batch.filed = false;
+      sendStub.resolves(confirmed());
+
+      try {
+        Durability.mode = "indexeddb";
+
+        await Batches.flush();
+      } finally {
+        Durability.mode = originalMode;
+      }
+
+      sinon.assert.calledOnce(sendStub);
+      sinon.assert.neverCalledWithMatch(announcing, {kind: "sealed"});
     });
 
     // Refused for the writes or refused for the build, it is answered either way - and a batch
@@ -1585,7 +1907,7 @@ describe("Batches", () => {
 
       await Batches.flush();
 
-      assert.isTrue(forgetting.calledOnceWithExactly(1));
+      sinon.assert.calledOnceWithExactly(forgetting, 1, sinon.match.object);
     });
 
     // A delete that fails on the spot ends the group, and a tab that never heard would resend it.
@@ -1648,6 +1970,32 @@ describe("Batches", () => {
 
         sinon.assert.calledTwice(sendStub);
         assert.deepStrictEqual(Batches.pending, []);
+      });
+
+      // The flush the move started found the sender busy, so nothing else sends the new user's.
+      it("sends the next user's batches when the tab follows that user during the read", async () => {
+        LocalDatabase.actorUserId = "u1";
+        sealed(creating("t1", "first"));
+
+        sendStub.onFirstCall().resolves({httpStatus: 503, status: "failed"});
+        sendStub.onSecondCall().resolves(confirmed());
+
+        let next = null;
+
+        sinon.stub(Durability, "queuedBatches").callsFake(async () => {
+          if (sendStub.calledOnce && next === null) {
+            LocalDatabase.actorUserId = "u2";
+            Batches.releaseForeign("u2");
+            next = sealed(creating("t2", "second"));
+          }
+
+          return [];
+        });
+
+        await Batches.flush();
+
+        sinon.assert.calledTwice(sendStub);
+        assert.strictEqual(sendStub.secondCall.args[0], next);
       });
 
       // One tick per retry rather than one tick for all: a retry scheduled DURING a tick, at the
@@ -1871,6 +2219,213 @@ describe("Batches", () => {
       assert.equal(sendStub.callCount, 1);
       assert.equal(batch.state, "pending");
       assert.deepStrictEqual(Batches.pending, [batch]);
+    });
+
+    // Every handshake hands the tab a new pair, so a refusal no pair cures would otherwise switch
+    // and send again for as long as it lasts, with no pause.
+    describe("a 403 of a batch sent under the pair it switched to", () => {
+      let delaying, reconnecting, timers;
+
+      beforeEach(() => {
+        timers = sinon.useFakeTimers();
+
+        sinon.stub(Durability, "persistReplica");
+
+        delaying = sinon.stub(Sse, "computeReconnectDelay").returns(60_000);
+
+        reconnecting = sinon.stub(Sse, "reconnect").callsFake(() => {
+          Replica.offer({id: "r-next", token: "statement-next"});
+        });
+
+        Replica.adopt({id: "r-stored", token: "statement-stored"});
+        Replica.offer({id: "r-fresh", token: "statement-fresh"});
+
+        sendStub.resolves({httpStatus: 403, status: "failed"});
+      });
+
+      it("waits out the backoff", async () => {
+        const batch = sealed(creating("t1", "first"));
+
+        await Batches.flush();
+
+        assert.equal(sendStub.callCount, 2);
+        assert.isTrue(reconnecting.calledOnce);
+        assert.equal(Replica.id, "r-fresh");
+        assert.equal(batch.state, "pending");
+        assert.isTrue(delaying.calledOnce);
+      });
+
+      afterEach(() => {
+        timers.restore();
+      });
+
+      // The new stream's opening flushes the queue, and would switch again with no pause.
+      it("switches no pair on a flush before the backoff ends", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await Batches.flush();
+
+        assert.equal(Replica.id, "r-fresh");
+        assert.isTrue(reconnecting.calledOnce);
+      });
+
+      // The user's actions flush the queue more often than the backoff lasts.
+      it("waits for the retry already set, through flushes that come before it", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(30_000);
+        await Batches.flush();
+        await timers.tickAsync(30_000);
+
+        assert.equal(Replica.id, "r-next");
+      });
+
+      // A later refusal can be a session that changed again, which the newest pair does cure.
+      it("may switch again once the backoff ends", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(60_000);
+
+        assert.equal(Replica.id, "r-next");
+        assert.isTrue(reconnecting.calledTwice);
+      });
+
+      // A retry an earlier batch left ends sooner than the backoff the switch is held to.
+      it("waits out its own backoff, not one an earlier batch left", async () => {
+        sendStub.resolves({httpStatus: 503, status: "failed"});
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(50_000);
+
+        // The call history goes too, so the first call configured is the next one.
+        sendStub.reset();
+        sendStub.onFirstCall().resolves(confirmed());
+        sendStub.resolves({httpStatus: 403, status: "failed"});
+        const second = sealed(creating("t2", "second"));
+
+        await Batches.flush();
+
+        // The first one's retry, then the second one under each pair. The first is settled.
+        assert.equal(sendStub.callCount, 3);
+        assert.deepStrictEqual(Batches.pending, [second]);
+        assert.equal(Replica.id, "r-fresh");
+
+        await timers.tickAsync(10_000);
+
+        assert.equal(Replica.id, "r-fresh");
+        assert.isTrue(reconnecting.calledOnce);
+      });
+
+      // The retry's own flush finds the sender busy reading the queue.
+      it("may switch once its backoff ends during the queue read", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(59_000);
+
+        let read;
+
+        const reading = sinon.stub(Durability, "queuedBatches").resolves([]);
+
+        // The read after the refusal, not the one before the send.
+        reading.onSecondCall().returns(
+          new Promise((resolve) => {
+            read = resolve;
+          }),
+        );
+
+        const flushing = Batches.flush();
+
+        await timers.tickAsync(1_000);
+
+        assert.isTrue(reading.calledTwice);
+
+        read([]);
+        await flushing;
+
+        assert.equal(Replica.id, "r-next");
+        assert.isTrue(reconnecting.calledTwice);
+      });
+
+      // Its send under the new pair is still out when the earlier batch's retry fires.
+      it("keeps its switch through a retry an earlier batch left", async () => {
+        sendStub.resolves({httpStatus: 503, status: "failed"});
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(50_000);
+
+        let answer;
+
+        sendStub.reset();
+        sendStub.onFirstCall().resolves(confirmed());
+        sendStub.onSecondCall().resolves({httpStatus: 403, status: "failed"});
+
+        sendStub.onThirdCall().returns(
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+        );
+
+        sendStub.resolves({httpStatus: 403, status: "failed"});
+        sealed(creating("t2", "second"));
+
+        const flushing = Batches.flush();
+
+        await timers.tickAsync(10_000);
+
+        answer({httpStatus: 403, status: "failed"});
+        await flushing;
+
+        assert.equal(Replica.id, "r-fresh");
+        assert.isTrue(reconnecting.calledOnce);
+      });
+
+      // Back from being put aside, a refusal under the pair it switched to again starts a new wait.
+      it("waits out a new backoff once it comes back from being put aside", async () => {
+        let minted = 0;
+
+        reconnecting.callsFake(() => {
+          minted++;
+          Replica.offer({id: `r-${minted}`, token: `statement-${minted}`});
+        });
+
+        const batch = sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await timers.tickAsync(30_000);
+
+        Batches.releaseForeign("u2");
+        Batches.releaseForeign(batch.actorUserId);
+
+        await Batches.flush();
+
+        assert.isTrue(reconnecting.calledTwice);
+
+        await timers.tickAsync(30_000);
+
+        assert.isTrue(reconnecting.calledTwice);
+      });
+
+      // Its owner signs in again in another session, which the newest pair can cure.
+      it("may switch again once it comes back from being put aside", async () => {
+        const batch = sealed(creating("t1", "first"));
+
+        await Batches.flush();
+
+        Batches.releaseForeign("u2");
+
+        await timers.tickAsync(60_000);
+
+        Batches.releaseForeign(batch.actorUserId);
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.isFalse(batch.switchedPair);
+      });
     });
 
     // The pair's twin: a dropped connection says nothing about who this client is, so what it is
@@ -2704,8 +3259,38 @@ describe("Batches", () => {
       assert.strictEqual(batch.recorded, recording);
     });
 
-    // Taken at seal rather than at send: the page that eventually sends this batch may belong to
-    // somebody else, and only a page mounted under this user takes it up again.
+    describe("whether the store holds it", () => {
+      const closedFiled = async (stored) => {
+        Durability.mode = "indexeddb";
+        sinon.stub(Durability, "fileBatch").resolves(stored);
+
+        Batches.open("todos");
+        wrote("t1");
+
+        const batch = Batches.close();
+        await batch.recorded;
+
+        return batch;
+      };
+
+      it("is so once the store filed it", async () => {
+        assert.isTrue((await closedFiled(true)).filed);
+      });
+
+      it("is not when the store failed to file it", async () => {
+        assert.isFalse((await closedFiled(false)).filed);
+      });
+
+      it("is not with nowhere to file it", () => {
+        Batches.open("todos");
+        wrote("t1");
+
+        assert.isFalse(Batches.close().filed);
+      });
+    });
+
+    // The page that eventually sends this batch may belong to somebody else, and only a page
+    // mounted under this user takes it up again.
     it("seals the batch under the page's user", () => {
       LocalDatabase.actorUserId = "u1";
 
@@ -2734,25 +3319,155 @@ describe("Batches", () => {
       assert.equal(stored.actorUserId, "u1");
     });
 
+    // An action can be suspended across a login.
+    describe("of an action whose user changed while it was open", () => {
+      const closedAfterChange = () => {
+        LocalDatabase.actorUserId = "u1";
+
+        Batches.open("todos");
+        wrote("t1");
+
+        LocalDatabase.actorUserId = "u2";
+
+        return Batches.close();
+      };
+
+      it("keeps the batch under the user who opened it", () => {
+        assert.equal(closedAfterChange().actorUserId, "u1");
+      });
+
+      it("stores it under that user", () => {
+        let stored = null;
+
+        sinon.stub(Durability, "fileBatch").callsFake((batch) => {
+          stored = batch.record();
+
+          return Promise.resolve();
+        });
+
+        closedAfterChange();
+
+        assert.equal(stored.actorUserId, "u1");
+      });
+
+      it("doesn't queue it", () => {
+        closedAfterChange();
+
+        assert.deepStrictEqual(Batches.pending, []);
+      });
+
+      it("takes its writes off the new user's screen", () => {
+        closedAfterChange();
+
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+
+      // A tab that hasn't heard of the change would take it up and send it under the new session.
+      it("doesn't tell the group about it", () => {
+        const posting = sinon.stub(Tabs, "post");
+
+        closedAfterChange();
+
+        assert.isFalse(posting.called);
+      });
+
+      it("doesn't tell the group when the user changes before the store answers", async () => {
+        const posting = sinon.stub(Tabs, "post");
+
+        let answer;
+
+        sinon
+          .stub(Durability, "fileBatch")
+          .returns(new Promise((resolve) => (answer = resolve)));
+
+        Durability.mode = "indexeddb";
+        LocalDatabase.actorUserId = "u1";
+
+        Batches.open("todos");
+        wrote("t1");
+        const batch = Batches.close();
+
+        LocalDatabase.actorUserId = "u2";
+
+        answer();
+        await batch.recorded;
+
+        assert.isFalse(posting.called);
+      });
+
+      it("still spends a number", () => {
+        assert.equal(closedAfterChange().seq, 1);
+
+        Batches.open("todos");
+        wrote("t2");
+
+        assert.equal(Batches.close().seq, 2);
+      });
+
+      it("seals what the new user opens afterwards under them", () => {
+        closedAfterChange();
+
+        Batches.open("todos");
+        wrote("t2");
+
+        assert.equal(Batches.close().actorUserId, "u2");
+        assert.equal(Batches.pending.length, 1);
+      });
+    });
+
     // UNDEFINED rather than null, which is what a page mount leaves when its data names no actor.
     // It has to reach the batch as null: the owner filter that decides whether a later load takes
     // the batch up compares with ===, and undefined would match nothing a page ever mounts under.
     // What puts a write made in one tab on the screen of the next before the server has heard of
     // it - and what lets the tab that sends send it without reading the store again.
-    it("tells the group about a batch it has filed", () => {
-      const posting = sinon.stub(Tabs, "post");
+    describe("telling the group", () => {
+      const closedFiled = async (stored) => {
+        Durability.mode = "indexeddb";
+        sinon.stub(Durability, "fileBatch").callsFake(async (batch) => {
+          batch.seal(7);
 
-      Batches.open("todos");
-      wrote("t1");
+          return stored;
+        });
 
-      const batch = Batches.close();
+        Batches.open("todos");
+        wrote("t1");
 
-      assert.isTrue(
-        posting.calledOnceWithExactly({
-          kind: "sealed",
-          record: batch.record(),
-        }),
-      );
+        const batch = Batches.close();
+        await batch.recorded;
+
+        return batch;
+      };
+
+      it("tells it about a batch it has filed", async () => {
+        const posting = sinon.stub(Tabs, "post");
+        const batch = await closedFiled(true);
+
+        assert.isTrue(
+          posting.calledOnceWithExactly({
+            kind: "sealed",
+            record: batch.record(),
+          }),
+        );
+      });
+
+      // Its number was never written down, so the store can give it to another batch.
+      it("says nothing of one the store failed to file", async () => {
+        const posting = sinon.stub(Tabs, "post");
+
+        await closedFiled(false);
+
+        sinon.assert.notCalled(posting);
+      });
+
+      it("says nothing of one with nowhere to file it", () => {
+        const posting = sinon.stub(Tabs, "post");
+
+        Batches.open("todos");
+        wrote("t1");
+        Batches.close();
+
+        sinon.assert.notCalled(posting);
+      });
     });
 
     it("takes the number the store gives it", () => {
@@ -2971,6 +3686,437 @@ describe("Batches", () => {
 
     it("settles at once with nothing sealed", async () => {
       await Batches.recorded();
+    });
+
+    describe("for a batch of another user", () => {
+      let record, settled;
+
+      const waitFor = async () => {
+        settled = false;
+
+        const waiting = Batches.recorded().then(() => {
+          settled = true;
+        });
+
+        await waitForEventLoop();
+
+        assert.isFalse(settled);
+
+        record();
+        await waiting;
+
+        assert.isTrue(settled);
+      };
+
+      beforeEach(() => {
+        sinon.stub(Durability, "fileBatch").returns(
+          new Promise((resolve) => {
+            record = resolve;
+          }),
+        );
+
+        LocalDatabase.actorUserId = "u1";
+        Batches.open("todos");
+        wrote("t1");
+      });
+
+      it("waits for one closed after the user changed", async () => {
+        LocalDatabase.actorUserId = "u2";
+        Batches.close();
+
+        await waitFor();
+      });
+
+      it("waits for one let go of while still being filed", async () => {
+        Batches.close();
+
+        LocalDatabase.actorUserId = "u2";
+        Batches.releaseForeign("u2");
+
+        await waitFor();
+      });
+
+      it("doesn't wait for it again once it is written down", async () => {
+        LocalDatabase.actorUserId = "u2";
+
+        const batch = Batches.close();
+
+        record();
+        await batch.recorded;
+        await waitForEventLoop();
+
+        batch.recorded = new Promise(() => {});
+
+        await Batches.recorded();
+      });
+    });
+  });
+
+  describe("releaseForeign()", () => {
+    const made = (owner, id) => {
+      LocalDatabase.actorUserId = owner;
+
+      Batches.open("todos");
+      wrote(id);
+
+      return Batches.close();
+    };
+
+    it("takes another user's batches out of the queue", () => {
+      made("u1", "t1");
+      const own = made("u2", "t2");
+
+      Batches.releaseForeign("u2");
+
+      assert.deepStrictEqual(Batches.pending, [own]);
+    });
+
+    it("takes them off the screen and keeps the user's own", () => {
+      made("u1", "t1");
+      made("u2", "t2");
+
+      Batches.releaseForeign("u2");
+
+      assert.isFalse(Overlay.names(TODO, "t1"));
+      assert.isTrue(Overlay.names(TODO, "t2"));
+    });
+
+    // Their owner's next page takes them up from there.
+    it("leaves them in the store", () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+
+      made("u1", "t1").filed = true;
+
+      Batches.releaseForeign("u2");
+
+      assert.isFalse(forgetting.called);
+    });
+
+    // An action suspended across the login has its writes on the screen before it is sealed.
+    it("takes an open batch of another user off the screen", () => {
+      LocalDatabase.actorUserId = "u1";
+
+      Batches.open("todos");
+      wrote("t1");
+
+      Batches.releaseForeign("u2");
+
+      assert.isFalse(Overlay.names(TODO, "t1"));
+    });
+
+    // A mount can leave the actor undefined, and a visitor's batches are stamped null.
+    it("keeps a visitor's own batches when named as undefined", () => {
+      const own = made(null, "t1");
+
+      Batches.releaseForeign(undefined);
+
+      assert.deepStrictEqual(Batches.pending, [own]);
+      assert.isTrue(Overlay.names(TODO, "t1"));
+    });
+
+    describe("of an action open when its user leaves and returns", () => {
+      beforeEach(() => {
+        LocalDatabase.actorUserId = "u1";
+
+        Batches.open("todos");
+        wrote("t1");
+
+        Batches.releaseForeign("u2");
+      });
+
+      it("puts its writes back on the screen", () => {
+        Batches.releaseForeign("u1");
+
+        assert.isTrue(Overlay.names(TODO, "t1"));
+      });
+
+      it("puts them back once", () => {
+        Batches.releaseForeign("u1");
+        Batches.releaseForeign("u1");
+
+        const held = Overlay.removeWhere((batch) => batch.state === "open");
+
+        assert.equal(held.length, 1);
+      });
+
+      it("doesn't bring them back for another user", () => {
+        Batches.releaseForeign("u3");
+
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+
+      // As a sealed batch, where no store holds it (see the tests below).
+      it("brings back once one that closed while away", () => {
+        LocalDatabase.actorUserId = "u2";
+        const batch = Batches.close();
+
+        Batches.releaseForeign("u1");
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.equal(Overlay.removeWhere(() => true).length, 1);
+      });
+
+      it("doesn't bring back one discarded while away", () => {
+        Batches.discard();
+
+        Batches.releaseForeign("u1");
+
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+
+      it("queues it when it closes after the return", () => {
+        Batches.releaseForeign("u1");
+
+        const batch = Batches.close();
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.isTrue(Overlay.names(TODO, "t1"));
+      });
+    });
+
+    it("treats a visitor as a user of their own", () => {
+      made(null, "t1");
+      const own = made("u1", "t2");
+
+      Batches.releaseForeign("u1");
+
+      assert.deepStrictEqual(Batches.pending, [own]);
+    });
+
+    // Nothing else holds them, and nothing else will send them.
+    describe("of a batch no store holds, when its user returns", () => {
+      let batch;
+
+      beforeEach(() => {
+        batch = made("u1", "t1");
+
+        Batches.releaseForeign("u2");
+      });
+
+      it("is held for that user while away", () => {
+        assert.isTrue(Batches.heldFor("u1"));
+        assert.isFalse(Batches.heldFor("u2"));
+      });
+
+      it("puts it back in the queue and on the screen", () => {
+        Batches.releaseForeign("u1");
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.isTrue(Overlay.names(TODO, "t1"));
+        assert.isFalse(Batches.heldFor("u1"));
+      });
+
+      it("puts it back once", () => {
+        Batches.releaseForeign("u1");
+        Batches.releaseForeign("u1");
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.equal(Overlay.removeWhere(() => true).length, 1);
+      });
+
+      it("doesn't put it back for another user", () => {
+        Batches.releaseForeign("u3");
+
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+
+      // Its send was out when the user changed, and its answer came after.
+      it("doesn't put back one answered while away", () => {
+        Batches.settle(batch.seq, {dropped: {}, kept: {}, status: "confirmed"});
+
+        Batches.releaseForeign("u1");
+
+        assert.deepStrictEqual(Batches.pending, []);
+      });
+
+      it("puts it ahead of the batches made since", () => {
+        const later = made("u1", "t2");
+
+        Batches.releaseForeign("u1");
+
+        assert.deepStrictEqual(Batches.pending, [batch, later]);
+      });
+    });
+
+    // Its owner's next page takes it up from there.
+    it("holds nothing for a batch the store holds", () => {
+      made("u1", "t1").filed = true;
+
+      Batches.releaseForeign("u2");
+      Batches.releaseForeign("u1");
+
+      assert.isFalse(Batches.heldFor("u1"));
+      assert.deepStrictEqual(Batches.pending, []);
+    });
+
+    it("holds a batch whose filing settles with no store", async () => {
+      let file;
+
+      sinon
+        .stub(Durability, "fileBatch")
+        .returns(new Promise((resolve) => (file = resolve)));
+
+      Durability.mode = "indexeddb";
+      const batch = made("u1", "t1");
+
+      LocalDatabase.actorUserId = "u2";
+      Batches.releaseForeign("u2");
+
+      Durability.mode = "memory";
+      file(false);
+      await batch.recorded;
+      await Promise.resolve();
+
+      assert.isTrue(Batches.heldFor("u1"));
+    });
+
+    it("puts back a batch whose filing settles with no store after its user returned", async () => {
+      let file;
+
+      sinon
+        .stub(Durability, "fileBatch")
+        .returns(new Promise((resolve) => (file = resolve)));
+
+      sinon.stub(Batches, "flush");
+
+      Durability.mode = "indexeddb";
+      const batch = made("u1", "t1");
+
+      LocalDatabase.actorUserId = "u2";
+      Batches.releaseForeign("u2");
+
+      LocalDatabase.actorUserId = "u1";
+      Batches.releaseForeign("u1");
+
+      Durability.mode = "memory";
+      file(false);
+      await batch.recorded;
+      await Promise.resolve();
+
+      assert.deepStrictEqual(Batches.pending, [batch]);
+      assert.isTrue(Overlay.names(TODO, "t1"));
+    });
+
+    // An action its user starts once back can undo what the batch did, and has to stay on top of
+    // it.
+    it("puts a batch whose filing was out while its user was away beneath an action started since", async () => {
+      let file;
+
+      globalThis.Hologram.sync = {model: TODO_MODEL};
+
+      sinon
+        .stub(Durability, "fileBatch")
+        .returns(new Promise((resolve) => (file = resolve)));
+
+      sinon.stub(Batches, "flush");
+
+      const edge = (op) => ({
+        id: "t1",
+        op,
+        relationship: "tags",
+        target_id: "g1",
+        type: TODO,
+      });
+
+      // A store that failed after the page had one, which numbers a batch only in its turn.
+      Durability.hadStore = true;
+      Durability.mode = "indexeddb";
+      LocalDatabase.actorUserId = "u1";
+
+      Batches.open("todos");
+      Batches.current().append(edge("add_relationship"));
+      const batch = Batches.close();
+
+      LocalDatabase.actorUserId = "u2";
+      Batches.releaseForeign("u2");
+
+      LocalDatabase.actorUserId = "u1";
+      Batches.releaseForeign("u1");
+
+      Batches.open("todos");
+      Batches.current().append(edge("delete_relationship"));
+
+      Durability.mode = "memory";
+      file(false);
+      await batch.recorded;
+      await Promise.resolve();
+
+      try {
+        assert.include(Batches.pending, batch);
+
+        assert.deepStrictEqual(
+          Overlay.foldTargetIds(TODO, "tags", "t1", []),
+          new Set(),
+        );
+
+        Batches.discard();
+
+        assert.deepStrictEqual(
+          Overlay.foldTargetIds(TODO, "tags", "t1", []),
+          new Set(["g1"]),
+        );
+      } finally {
+        Batches.discard();
+        Durability.hadStore = false;
+        delete globalThis.Hologram.sync;
+      }
+    });
+
+    // The store failed while the first was still being filed, so the second was set aside with no
+    // number, and is the newer one all the same.
+    it("puts a batch whose filing was out ahead of a later one set aside", async () => {
+      let file;
+
+      globalThis.Hologram.sync = {model: TODO_MODEL};
+
+      sinon
+        .stub(Durability, "fileBatch")
+        .returns(new Promise((resolve) => (file = resolve)));
+
+      sinon.stub(Batches, "flush");
+
+      const edge = (op) => ({
+        id: "t1",
+        op,
+        relationship: "tags",
+        target_id: "g1",
+        type: TODO,
+      });
+
+      Durability.hadStore = true;
+      Durability.mode = "indexeddb";
+      LocalDatabase.actorUserId = "u1";
+
+      Batches.open("todos");
+      Batches.current().append(edge("add_relationship"));
+      const first = Batches.close();
+
+      Durability.mode = "memory";
+
+      Batches.open("todos");
+      Batches.current().append(edge("delete_relationship"));
+      const second = Batches.close();
+
+      LocalDatabase.actorUserId = "u2";
+      Batches.releaseForeign("u2");
+
+      LocalDatabase.actorUserId = "u1";
+      Batches.releaseForeign("u1");
+
+      try {
+        assert.deepStrictEqual(Batches.pending, [first, second]);
+
+        assert.deepStrictEqual(
+          Overlay.foldTargetIds(TODO, "tags", "t1", []),
+          new Set(),
+        );
+      } finally {
+        file(false);
+        await first.recorded;
+        Durability.hadStore = false;
+        delete globalThis.Hologram.sync;
+      }
     });
   });
 
@@ -3595,6 +4741,24 @@ describe("Batches", () => {
 
       assert.isTrue(rendering.calledOnce);
     });
+
+    // A batch taken up seals before the open action does, so the server applies it first - and
+    // the action reads its own write on top of it.
+    it("folds a batch it takes under an action still open", () => {
+      Batches.open("todos");
+
+      Batches.current().append({
+        data: {title: "open"},
+        id: "t1",
+        op: "update",
+        stamp: STAMP + 1,
+        type: TODO,
+      });
+
+      Batches.adopt([stored(3, "t1")]);
+
+      assert.equal(LocalDatabase.getRow(TODO, "t1").title, "open");
+    });
   });
 
   describe("resumeFrom()", () => {
@@ -3605,6 +4769,18 @@ describe("Batches", () => {
       wrote("t1");
 
       assert.equal(Batches.close().seq, 42);
+    });
+
+    // A tab that moves to another group resumes from that group's store, whose count can be
+    // behind a number this tab has already spent.
+    it("never numbers below a batch it already numbered", () => {
+      Batches.resumeFrom(50);
+      Batches.resumeFrom(41);
+
+      Batches.open("todos");
+      wrote("t1");
+
+      assert.equal(Batches.close().seq, 51);
     });
   });
 });

@@ -2,6 +2,9 @@
 defmodule Hologram.Test.Fixtures.Controller.Module55 do
   use Hologram.Component
 
+  # Sets a user id the server refuses, which is what the tests check.
+  @dialyzer {:nowarn_function, authenticate: 2}
+
   middleware :authenticate
 
   def authenticate(server, _opts) do

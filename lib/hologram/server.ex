@@ -33,7 +33,7 @@ defmodule Hologram.Server do
             user_id: nil,
             __meta__: %Metadata{}
 
-  @type identity_id :: String.t() | integer | atom
+  @type identity_id :: String.t() | integer
 
   @reserved_session_keys Session.reserved_keys()
 
@@ -773,13 +773,12 @@ defmodule Hologram.Server do
   The change is persisted to the session when the server struct is applied. Use
   `delete_user_id/1` to clear the identity.
 
-  Raises `Hologram.MisuseError` for a user id that is not a string, an integer or an atom, and
-  for `true` and `false`, which no user is identified by.
+  Raises `Hologram.MisuseError` for a user id that is not a UTF-8 string or an integer.
 
   ## Parameters
 
     * `server` - The server struct
-    * `user_id` - The user identity (a string, integer, or atom other than `true` and `false`)
+    * `user_id` - The user identity (a UTF-8 string or an integer)
   """
   @spec put_user_id(t(), identity_id()) :: t()
   def put_user_id(server, user_id) do
@@ -789,18 +788,25 @@ defmodule Hologram.Server do
   @doc false
   # The one check of a user id, wherever one comes in: put_user_id/2, the session it is persisted
   # to - which a user id set on the struct directly reaches too - and the actor the framework runs
-  # work as. nil is no user. A boolean is refused rather than read as one: false would read as
-  # nobody wherever a check tests for a user id, true as somebody nobody can be.
+  # work as. nil is no user.
   @spec validate_user_id!(any) :: identity_id | nil
-  def validate_user_id!(user_id)
-      when (is_binary(user_id) or is_integer(user_id) or is_atom(user_id)) and
-             not is_boolean(user_id),
-      do: user_id
+  def validate_user_id!(nil), do: nil
 
-  def validate_user_id!(user_id) do
-    raise MisuseError,
-          "User ID must be a string, integer, or atom other than true and false, but received #{inspect(user_id)}"
+  def validate_user_id!(user_id) when is_binary(user_id) or is_integer(user_id) do
+    if valid_user_id?(user_id), do: user_id, else: raise_invalid_user_id!(user_id)
   end
+
+  def validate_user_id!(user_id), do: raise_invalid_user_id!(user_id)
+
+  @doc false
+  # A user id is sent to the browser and kept there, so it has to be a value JSON can carry exactly
+  # once it is written as text (see Hologram.Auth.owner_key/1).
+  @spec valid_user_id?(any) :: boolean
+  def valid_user_id?(user_id) when is_integer(user_id), do: true
+
+  def valid_user_id?(user_id) when is_binary(user_id), do: String.valid?(user_id)
+
+  def valid_user_id?(_user_id), do: false
 
   @doc """
   Returns the request's referrer URL, or `nil` when absent.
@@ -852,6 +858,11 @@ defmodule Hologram.Server do
   end
 
   defp ensure_not_cookie_header!(_name), do: :ok
+
+  defp raise_invalid_user_id!(user_id) do
+    raise MisuseError,
+          "User ID must be a UTF-8 string or an integer, but received #{inspect(user_id)}"
+  end
 
   defp raise_reserved_session_key!("hologram_user_id") do
     raise MisuseError,

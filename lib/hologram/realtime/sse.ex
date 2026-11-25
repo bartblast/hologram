@@ -1,6 +1,8 @@
 defmodule Hologram.Realtime.SSE do
   @moduledoc false
 
+  require Logger
+
   alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Component.Action
@@ -24,6 +26,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Sync.Handshake, as: SyncHandshake
   alias Hologram.Sync.Rules
   alias Hologram.Sync.Session, as: SyncSession
+  alias Hologram.Template.Renderer
 
   # Read only when the host app enables the test seams - see maybe_delay_attach/1.
   @attach_delay_cookie "hologram_sse_attach_delay_ms"
@@ -325,6 +328,16 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
+      # A resync for a change of identity, naming the tag of the identity it is for.
+      {:sync_resync, reason, identity_tag} ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = Frame.encode_resync_envelope(id, reason, identity_tag)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
       {:sync_rules, policy_hash, rules} ->
         id = System.unique_integer([:positive, :monotonic])
         chunk_data = Frame.encode_rules_envelope(id, policy_hash, rules)
@@ -472,7 +485,7 @@ defmodule Hologram.Realtime.SSE do
             {:halt, conn}
         end
 
-      {:identity_changed, new_session_id, new_user_id} ->
+      {:identity_changed, new_session_id, new_user_id, identity_tag} ->
         maybe_reconcile_identity_subs(:session, session_id, new_session_id)
         maybe_reconcile_session_announce_sub(session_id, new_session_id)
         maybe_reconcile_identity_subs(:user, user_id, new_user_id)
@@ -482,15 +495,19 @@ defmodule Hologram.Realtime.SSE do
         instance_id = conn.query_params["instance_id"]
         SubscriptionRegistry.update_identity(instance_id, new_session_id, new_user_id)
 
-        case maybe_drop_identity_change_bindings(conn, instance_id, user_id, new_user_id) do
-          {:cont, conn} ->
-            {conn, sync_session} =
-              restart_syncing(conn, Keyword.get(opts, :sync_session), new_user_id)
+        with {:cont, conn} <-
+               maybe_drop_identity_change_bindings(conn, instance_id, user_id, new_user_id),
+             {:cont, conn} <- tell_identity(conn, new_user_id, identity_tag) do
+          {conn, sync_session} =
+            restart_syncing(
+              conn,
+              Keyword.get(opts, :sync_session),
+              user_id,
+              new_user_id,
+              identity_tag
+            )
 
-            {:cont, conn, new_session_id, new_user_id, sync_session}
-
-          {:halt, conn} ->
-            {:halt, conn}
+          {:cont, conn, new_session_id, new_user_id, sync_session}
         end
 
       :refresh_receipts ->
@@ -1232,17 +1249,20 @@ defmodule Hologram.Realtime.SSE do
   # down. It ends after the read it is in, and what it sends until then is dropped, since it is no
   # longer this stream's session. Unlinked first, so whatever it ends with is not this stream's
   # business.
-  defp restart_syncing(conn, nil, _new_user_id), do: {conn, nil}
+  #
+  # The resync names the identity's tag, so a client that already followed the change from
+  # `sync_identity` lets it pass (see tell_identity/3).
+  defp restart_syncing(conn, nil, _old_user_id, _new_user_id, _identity_tag), do: {conn, nil}
 
   # Nothing to stop yet, but the client may hold rows from before the hold as who it was.
-  defp restart_syncing(conn, {:held, _resume?}, new_user_id) do
-    send(self(), {:sync_resync, :identity})
+  defp restart_syncing(conn, {:held, _resume?}, old_user_id, new_user_id, identity_tag) do
+    send(self(), {:sync_resync, identity_resync_reason(old_user_id, new_user_id), identity_tag})
 
     start_syncing(conn, new_user_id, false)
   end
 
-  defp restart_syncing(conn, session, new_user_id) do
-    send(self(), {:sync_resync, :identity})
+  defp restart_syncing(conn, session, old_user_id, new_user_id, identity_tag) do
+    send(self(), {:sync_resync, identity_resync_reason(old_user_id, new_user_id), identity_tag})
 
     Process.unlink(session)
     send(session, :sync_stop)
@@ -1250,11 +1270,69 @@ defmodule Hologram.Realtime.SSE do
     start_syncing(conn, new_user_id, false)
   end
 
+  # The client drops its rows at once only for `:identity`, since those were somebody else's. A new
+  # session id for the same user leaves the rows that user's, so they stay readable until the
+  # refill ends, as on any other resync.
+  defp identity_resync_reason(user_id, user_id), do: :session
+
+  defp identity_resync_reason(_old_user_id, _new_user_id), do: :identity
+
   # A term travels as a nested JSON value rather than as a JSON string holding one: the client then
   # parses the event's data once, and no quote inside the term is escaped on the way.
   defp serialize_to_fragment(term) do
     serialized = Serializer.serialize!(term)
     Jason.Fragment.new(serialized)
+  end
+
+  # Tells the client who its session is now, on every stream whether or not it syncs, so that each
+  # tab hears it from its own stream, whichever tab of its group leads. Written ahead of the resync
+  # restart_syncing/5 sends itself, so a client that follows it can tell that resync is the same
+  # change's.
+  defp tell_identity(conn, user_id, identity_tag) do
+    id = System.unique_integer([:positive, :monotonic])
+
+    chunk_data =
+      Frame.encode_identity_envelope(id, user_id, identity_tag, read_user_rows(conn, user_id))
+
+    case Plug.Conn.chunk(conn, chunk_data) do
+      {:ok, conn} -> {:cont, conn}
+      {:error, _reason} -> {:halt, conn}
+    end
+  end
+
+  # The new user's row, which the tab's pages read as `{Hologram, :user}`. A failed read sends the
+  # event without it, since a raise would end the stream and the tab would never hear of the
+  # change. The tab then holds the row once its stream fills it or its next page carries it.
+  #
+  # Nor is it sent to a tab of another model: the row is spelled the way the current model names
+  # it, and that tab reads the old names, which only its sync translates to.
+  defp read_user_rows(conn, user_id) do
+    if of_current_model?(conn), do: Renderer.session_user_rows(user_id)
+  rescue
+    # A live reload holds the data model, which is no failure.
+    StaleModelError ->
+      nil
+
+    exception ->
+      Logger.warning(
+        "Hologram: reading the session user's row failed: " <> Exception.message(exception)
+      )
+
+      nil
+  catch
+    # A database pool that's down exits rather than raises.
+    :exit, reason ->
+      Logger.warning("Hologram: reading the session user's row failed: " <> inspect(reason))
+
+      nil
+  end
+
+  # A client that greets with no model reads no rows.
+  defp of_current_model?(conn) do
+    case greeting(conn) do
+      %{model_hash: model_hash} -> model_hash == Model.hash()
+      _no_greeting -> true
+    end
   end
 
   defp watch_client(conn, adapter) do

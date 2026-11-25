@@ -3102,7 +3102,7 @@ These helpers are imported into pages, components, and `use Hologram.Middleware`
 ##### Identity
 
 - `delete_user_id(server)` - clears the authenticated user.
-- `put_user_id(server, user_id)` - records the authenticated user, persisted to the session. The user id is a string, integer, or atom, but not `true` or `false`. Any other value raises `Hologram.MisuseError`.
+- `put_user_id(server, user_id)` - records the authenticated user, persisted to the session. The user id is a UTF-8 string or an integer. Any other value raises `Hologram.MisuseError`.
 
 ##### Session and Cookies
 
@@ -3205,7 +3205,7 @@ Hologram provides the following functions for working with sessions:
 
 **Note:** Session keys must be atoms or strings - other types raise. Atom keys are accepted and converted to strings, so `:locale` and `"locale"` address the same value. In embedded mode the session is backed by the Phoenix session store, which keys by string, and recovering the original atom would require an unsafe string-to-atom conversion.
 
-Hologram keeps its own state under three session keys, `:hologram_csrf_token`, `:hologram_session_id` and `:hologram_user_id`. `put_session/3` and `delete_session/2` raise `Hologram.MisuseError` for them. Use `put_user_id/2` and `delete_user_id/1` to record and clear the logged-in user.
+Hologram keeps its own state under four session keys, `:hologram_csrf_token`, `:hologram_identity_stamp`, `:hologram_session_id` and `:hologram_user_id`. `put_session/3` and `delete_session/2` raise `Hologram.MisuseError` for them. Use `put_user_id/2` and `delete_user_id/1` to record and clear the logged-in user.
 
 #### Reading Session Data
 

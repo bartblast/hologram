@@ -69,6 +69,8 @@ defmodule Hologram.Template.Renderer do
   # Where the refs of the render in progress are kept, each with the module whose template wrote its
   # element, so that a second element under one of them is caught wherever in the page it renders.
   @rendered_refs_key {__MODULE__, :rendered_refs}
+  @response_changes_key {__MODULE__, :response_changes}
+  @restart_render {__MODULE__, :restart_render}
 
   # The characters a value cannot carry into a script element as the text of a JavaScript string
   # literal, each with the escape sequence it is written as instead. Every sequence is valid
@@ -434,7 +436,7 @@ defmodule Hologram.Template.Renderer do
           chunk_digests: [String.t()],
           component_registry: %{String.t() => %{module: module, struct: Component.t()}},
           mount_data: %{
-            actor_user_id: String.t() | integer | atom | nil,
+            actor_user_id: Server.identity_id() | nil,
             component_registry: %{String.t() => %{module: module, struct: Component.t()}},
             page_module: module,
             page_params: %{atom => any},
@@ -446,14 +448,47 @@ defmodule Hologram.Template.Renderer do
           tree: tree
         }
   def render_page(page_module, params, server_struct, opts) do
-    # One limit for the whole render, so a number every query of the page reads is final in all of
-    # them or in none: one shown in a list and hidden in another would leave the page disagreeing
-    # with what the browser works out from the rows it carries.
+    render_page_once(page_module, params, server_struct, opts)
+  catch
+    :throw, {@restart_render, user_id, changes} ->
+      Process.put(@response_changes_key, changes)
+
+      try do
+        page_module
+        |> rerender_page_as(params, %{server_struct | user_id: user_id}, opts)
+        |> put_uncarried_changes()
+      after
+        Process.delete(@response_changes_key)
+      end
+  end
+
+  # One limit for the whole render, so a number every query of the page reads is final in all of
+  # them or in none: one shown in a list and hidden in another would leave the page disagreeing
+  # with what the browser works out from the rows it carries. A render again for a user signed in
+  # during it is a render of its own, and pins a limit of its own.
+  defp render_page_once(page_module, params, server_struct, opts) do
     FinalSeq.with_pinned(fn ->
       Context.with_actor(server_struct.user_id, fn ->
         render_page_as_actor(page_module, params, server_struct, opts)
       end)
     end)
+  end
+
+  # A layout's or child's init/3 changed who is signed in after the render had read data as the
+  # previous user. Rendering again is the one way for the whole page to be the new user's. Started
+  # from the struct the render began with, so what the first run queued isn't done twice. What that
+  # init/3 set in the response along with the user is kept, since it runs again for the new user
+  # and need not set it then. It's put back where that init/3 runs, so the inits before and after
+  # it write over one another as they did (see response_changes/3).
+  defp rerender_page_as(page_module, params, server_struct, opts) do
+    render_page_once(page_module, params, server_struct, opts)
+  catch
+    :throw, {@restart_render, _user_id, _changes} ->
+      raise Hologram.MisuseError,
+        message:
+          "#{inspect(page_module)} changed the signed-in user in a layout's or component's " <>
+            "init/3 again when it was rendered for the new user - change it in one place: " <>
+            "the page's init/3, middleware or a command"
   end
 
   # Queries evaluated during the render are filtered by the session user's policies, and the
@@ -465,7 +500,7 @@ defmodule Hologram.Template.Renderer do
     Carry.start()
 
     {page_component_struct, page_server_struct} =
-      init_component(page_module, params, server_struct)
+      init_component(page_module, params, server_struct, true)
 
     page_digest = PageDigestRegistry.lookup(page_module)
 
@@ -519,15 +554,16 @@ defmodule Hologram.Template.Renderer do
     # controller to serialize: into the first page's boot data block, or into a navigation's
     # payload. The values that depend on the render's Realtime state, the self-echoes and the
     # receipts, join them there, which keeps the renderer Realtime-agnostic. The acting user and the
-    # rows travel as plain JSON, since the data layer reads them as JSON.
+    # rows travel as plain JSON, since the data layer reads them as JSON. The acting user is the one
+    # the render leaves signed in, since that's whose session the page's writes go out under.
     mount_data = %{
-      actor_user_id: server_struct.user_id,
+      actor_user_id: final_server_struct.user_id,
       component_registry: component_registry_for_client,
       page_module: page_module,
       page_params: params,
       sync_count_types: Carry.take_count_types(),
       sync_counts: Carry.take_counts(),
-      sync_rows: Carry.take(server_struct.user_id)
+      sync_rows: Carry.take(final_server_struct.user_id)
     }
 
     %{
@@ -537,6 +573,29 @@ defmodule Hologram.Template.Renderer do
       server_struct: final_server_struct,
       tree: initial_tree
     }
+  end
+
+  @doc """
+  Returns the session user's row as the given user sees it, spelled the way a page carries its rows
+  (see `Hologram.Sync.Carry.take/1`), or nil when there's no row to carry: nobody is signed in, the
+  app designates no user entity type, the id isn't an entity id, or the user's read rules deny the
+  row. On a build checking permissions on the client, the rows its type's rules read through
+  relationships come with it.
+
+  Read the way a page reads the row it hands its components as `{Hologram, :user}`, for a stream
+  telling a tab that its session changed user, so the tab holds the new user's row before its
+  stream fills it. Called outside a render: it clears the rows the process gathered before it reads,
+  and takes the ones its read gathers.
+  """
+  @spec session_user_rows(Server.identity_id() | nil) :: map | nil
+  def session_user_rows(user_id) do
+    Carry.discard()
+
+    # Checks the id before the data model, which raises while a live reload holds it.
+    with id when id != nil <- Auth.canonical_id(user_id),
+         row when row != nil <- read_session_user(RoleGrant.user_entity(), id) do
+      Carry.take(id)
+    end
   end
 
   @doc """
@@ -1365,7 +1424,7 @@ defmodule Hologram.Template.Renderer do
   # the state it returned - so the template renders once, with what init set.
   #
   # WARNING: the struct it starts from must match the client renderer's #maybeInitComponent.
-  defp init_component(module, props, server_struct) do
+  defp init_component(module, props, server_struct, page? \\ false) do
     {before_init, after_init} = ComponentDerived.split_by_init(module.__derived__())
     state_defaults = state_defaults(module)
     compute_opts = derived_compute_opts(module)
@@ -1386,7 +1445,7 @@ defmodule Hologram.Template.Renderer do
         {initial_component_struct, server_struct}
       end
 
-    {component_struct, returned_server_struct} =
+    {component_struct, initialized_server_struct} =
       case init_result do
         {component_struct, mutaded_server_struct} ->
           {component_struct, mutaded_server_struct}
@@ -1400,6 +1459,24 @@ defmodule Hologram.Template.Renderer do
 
     validate_declared_state(component_struct.state, module, "init/3")
 
+    returned_server_struct = put_carried_changes(initialized_server_struct, module, server_struct)
+
+    derived_before_init =
+      cond do
+        returned_server_struct.user_id == server_struct.user_id ->
+          computed_before_init
+
+        page? ->
+          render_as_user(returned_server_struct.user_id)
+
+          ComponentDerived.compute(before_init, module, props, state_defaults, %{}, compute_opts)
+
+        true ->
+          follow_user_change(module, server_struct, returned_server_struct)
+
+          computed_before_init
+      end
+
     # Only a field reading state is a placeholder while init runs, so a component declaring none
     # has nothing to look for - and its state, which can hold every row it loaded, isn't walked.
     if after_init != [] do
@@ -1412,11 +1489,138 @@ defmodule Hologram.Template.Renderer do
         module,
         props,
         component_struct.state,
-        computed_before_init,
+        derived_before_init,
         compute_opts
       )
 
     {%{component_struct | derived: derived, props: props}, %{returned_server_struct | cid: nil}}
+  end
+
+  # What follows a page's init/3 that changed who is signed in renders for the user it left signed
+  # in. What the render gathered before it belongs to the previous user, so it stays behind.
+  defp render_as_user(user_id) do
+    Context.put_actor(user_id)
+    Carry.start()
+  end
+
+  # A layout's or child's init/3 changed who is signed in. When the render read anything as the
+  # previous user, part of the page is theirs, so it starts over (see render_page/4). The page's
+  # {Hologram, :user} context counts, worked out for them even for a visitor, as does a query that
+  # found nothing. With nothing read, as in an app with no data model, the render just goes
+  # on as the new user. Outside a page render there's no actor to move.
+  defp follow_user_change(module, server_struct, returned_server_struct) do
+    user_id = returned_server_struct.user_id
+
+    cond do
+      not Carry.active?() ->
+        :ok
+
+      RoleGrant.user_entity() != nil or Carry.read?() ->
+        changes = response_changes(module, server_struct, returned_server_struct)
+        throw({@restart_render, user_id, changes})
+
+      true ->
+        Context.put_actor(user_id)
+    end
+  end
+
+  # The session entries, cookies and response headers one init/3 set or deleted, each as the key
+  # and what the returned struct holds under it, :error for a deleted one, and the status and body
+  # it set, like a redirect's 302. Only that init/3's: the
+  # ones before it run again, and a change carried over would then be made twice. Named by the
+  # component and its cid, which the render for the new user gives it again.
+  #
+  # A write of the value already there changes the entry's operation and not its value. Its value
+  # goes with it all the same: an earlier init/3 can set another one when it runs again, and the
+  # page would then read one value and persist the other.
+  defp response_changes(module, server_struct, returned_server_struct) do
+    cookie_ops =
+      map_changes(server_struct.__meta__.cookie_ops, returned_server_struct.__meta__.cookie_ops)
+
+    session_ops =
+      map_changes(server_struct.__meta__.session_ops, returned_server_struct.__meta__.session_ops)
+
+    %{
+      component: {module, server_struct.cid},
+      cookie_ops: cookie_ops,
+      cookies: value_changes(server_struct.cookies, returned_server_struct.cookies, cookie_ops),
+      response_fields:
+        field_changes(server_struct, returned_server_struct, [:response_body, :status]),
+      response_headers:
+        map_changes(server_struct.response_headers, returned_server_struct.response_headers),
+      session: value_changes(server_struct.session, returned_server_struct.session, session_ops),
+      session_ops: session_ops
+    }
+  end
+
+  defp field_changes(before, returned, fields) do
+    for field <- fields,
+        value = Map.fetch!(returned, field),
+        value != Map.fetch!(before, field),
+        do: {field, value}
+  end
+
+  defp value_changes(before, returned, op_changes) do
+    changes = map_changes(before, returned)
+    op_keys = for {key, _op} <- op_changes, not List.keymember?(changes, key, 0), do: key
+
+    changes ++ Enum.map(op_keys, &{&1, Map.fetch(returned, &1)})
+  end
+
+  defp map_changes(before, returned) do
+    keys = Enum.uniq(Map.keys(before) ++ Map.keys(returned))
+
+    for key <- keys,
+        fetched = Map.fetch(returned, key),
+        fetched != Map.fetch(before, key),
+        do: {key, fetched}
+  end
+
+  # Puts back what the init/3 that changed the user set, after it runs again for the new user.
+  defp put_carried_changes(returned_server_struct, module, server_struct) do
+    case Process.get(@response_changes_key) do
+      %{component: {^module, cid}} = changes when cid == server_struct.cid ->
+        Process.delete(@response_changes_key)
+        put_response_changes(returned_server_struct, changes)
+
+      _no_changes ->
+        returned_server_struct
+    end
+  end
+
+  # The component that changed the user can be left out of the render for the new user, like a
+  # sign-in form shown only to a visitor. What it set goes on the response then.
+  defp put_uncarried_changes(result) do
+    case Process.delete(@response_changes_key) do
+      nil -> result
+      changes -> %{result | server_struct: put_response_changes(result.server_struct, changes)}
+    end
+  end
+
+  defp put_response_changes(server_struct, changes) do
+    meta = %{
+      server_struct.__meta__
+      | cookie_ops: put_map_changes(server_struct.__meta__.cookie_ops, changes.cookie_ops),
+        session_ops: put_map_changes(server_struct.__meta__.session_ops, changes.session_ops)
+    }
+
+    server_struct = %{
+      server_struct
+      | __meta__: meta,
+        cookies: put_map_changes(server_struct.cookies, changes.cookies),
+        response_headers:
+          put_map_changes(server_struct.response_headers, changes.response_headers),
+        session: put_map_changes(server_struct.session, changes.session)
+    }
+
+    struct!(server_struct, changes.response_fields)
+  end
+
+  defp put_map_changes(map, changes) do
+    Enum.reduce(changes, map, fn
+      {key, {:ok, value}}, acc -> Map.put(acc, key, value)
+      {key, :error}, acc -> Map.delete(acc, key)
+    end)
   end
 
   defp inject_default_prop_values(props, module) do

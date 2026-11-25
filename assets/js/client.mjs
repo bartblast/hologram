@@ -15,6 +15,15 @@ import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 
 export default class Client {
+  // How long to wait before each question in settleIdentity. They add up to about four seconds,
+  // which a login's response can take to arrive after the stream has announced it.
+  static IDENTITY_ASK_DELAYS_MS = [0, 100, 250, 500, 1000, 2000];
+
+  static #identitySettling = null;
+
+  // The tag the last reply that joined a settlement under way named (see settleIdentity).
+  static #namedWhileSettling = null;
+
   // Deps: [:maps.get/2]
   static buildCommandPayload(command) {
     const target = Erlang_Maps["get/2"](Type.atom("target"), command);
@@ -99,6 +108,23 @@ export default class Client {
     ]);
   }
 
+  // Checks the tab's stream against the identity a command's or a save's reply left the client
+  // with, for a stream that missed the change (see DataLayer.catchUpIdentity). Every reply is
+  // checked, not just one that moved the tracker: one turned away because the stream serves the
+  // previous user names the tag the tracker already holds. Not for a page: a page for another user
+  // follows it at mount and then opens a stream that presents the new page's receipts, and a
+  // prefetched one isn't on screen.
+  //
+  // Takes what observeIdentity answered.
+  static catchUpIdentity({settling}) {
+    if (settling) {
+      // The server's answer can move the identity the client knows.
+      settling.then(() => Hologram.dataLayer?.catchUpIdentity());
+    } else {
+      Hologram.dataLayer?.catchUpIdentity();
+    }
+  }
+
   static connect(sendImmediatePing) {
     Connection.connect();
     HttpTransport.restartPing(sendImmediatePing);
@@ -106,17 +132,52 @@ export default class Client {
 
   // Asks the server for the tag of the identity the browser's session holds now (see
   // Hologram.checkIdentity). Answers null when no answer comes - offline, say - which says nothing
-  // about the identity.
+  // about the identity, and so does a server that doesn't answer in time: navigations and the sync
+  // stream wait on this (see settleIdentity).
   static async fetchIdentityTag() {
+    const controller = new AbortController();
+
+    const deadline = setTimeout(
+      () => controller.abort(),
+      Config.clientFetchTimeoutMs,
+    );
+
     try {
       const response = await fetch("/hologram/identity-tag", {
         cache: "no-store",
+        signal: controller.signal,
       });
 
       return response.headers.get(IdentityTracker.HEADER);
     } catch {
       return null;
+    } finally {
+      clearTimeout(deadline);
     }
+  }
+
+  // Finds out who is signed in, after hearing about an identity that can't be told to be the latest.
+  //
+  // This asks the identity route rather than repeating the request, which could run app code
+  // twice. An answer older than what the client knows can be a cookie that hasn't caught up with a
+  // login yet, so it's asked again after a while. Once the delays run out the answer is believed:
+  // the cookie this browser holds is what the next request will be served under.
+  //
+  // Callers that overlap share one settlement. A reply that names a tag joins it too, but the
+  // lookup under way can have been answered before the change that reply came from, so once it
+  // ends, the server is asked once more unless the tab now holds that tag.
+  static settleIdentity(namedTag = null) {
+    if ($.#identitySettling !== null) {
+      $.#namedWhileSettling = namedTag ?? $.#namedWhileSettling;
+
+      return $.#identitySettling;
+    }
+
+    $.#identitySettling = $.#settle().finally(() => {
+      $.#identitySettling = null;
+    });
+
+    return $.#identitySettling;
   }
 
   // Asks the server to describe a page rather than render it, for a client that renders it itself.
@@ -150,7 +211,7 @@ export default class Client {
 
       // Read whatever the answer is: a page's middleware can log the user in or out and answer
       // with something other than a page.
-      const identityPeriod = IdentityTracker.observeResponse(response);
+      const {period: identityPeriod} = $.observeIdentity(response);
 
       // Awaited so that whatever the callback goes on to do is part of this promise. A redirect
       // answers by fetching the next page, and without the await a failure there - the hop limit
@@ -162,6 +223,9 @@ export default class Client {
         // prefetched page can wait a while before it is shown, and the identity can change
         // meanwhile.
         payload.identityPeriod = identityPeriod;
+
+        // A redirect doesn't name the page it answers for, and a stale one is asked for again.
+        payload.requestedPage = toParam;
 
         await onSuccess(payload);
       } else {
@@ -193,6 +257,21 @@ export default class Client {
     return Connection.isConnected();
   }
 
+  // Takes in the identity a response names, and asks the server when that can't be told to be the
+  // latest word on it. Answers with the period and, when the server was asked, the promise of its
+  // answer.
+  static observeIdentity(response) {
+    const period = IdentityTracker.observeResponse(response);
+
+    // Not awaited: what the reply carries doesn't wait for the server's answer.
+    const settling =
+      period === IdentityTracker.SUPERSEDED
+        ? $.settleIdentity(response.headers.get(IdentityTracker.HEADER))
+        : null;
+
+    return {period, settling};
+  }
+
   // The epoch stamps the next action the reply carries: it is the page the command was sent from,
   // so that a reply landing after a navigation is dropped as stale instead of running against the
   // destination. A command the user triggered passes the displayed page's epoch, a command an
@@ -209,12 +288,16 @@ export default class Client {
       body: Serializer.serialize($.buildCommandPayload(command), "server"),
     };
 
+    // Checked once the reply is taken in, whatever came of it: the new stream's handshake presents
+    // the receipts the reply added.
+    let identity = null;
+
     try {
       const response = await fetch("/hologram/command", opts);
 
       // Read before the status: a command turned away can still have come with another identity
       // than the one the client knew, and this reply is where the client learns of it.
-      IdentityTracker.observeResponse(response);
+      identity = $.observeIdentity(response);
 
       if (!response.ok) {
         $.#failCommand(response.status);
@@ -270,6 +353,44 @@ export default class Client {
       }
 
       $.#failCommand(error);
+    } finally {
+      if (identity !== null) {
+        $.catchUpIdentity(identity);
+      }
+    }
+  }
+
+  static async #settle() {
+    await $.#askForIdentity();
+
+    while ($.#namedWhileSettling !== null) {
+      const named = $.#namedWhileSettling;
+
+      $.#namedWhileSettling = null;
+
+      if (IdentityTracker.tag !== named) {
+        await $.#askForIdentity();
+      }
+    }
+  }
+
+  static async #askForIdentity() {
+    let answer = null;
+
+    for (const delayMs of $.IDENTITY_ASK_DELAYS_MS) {
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
+      answer = await $.fetchIdentityTag();
+
+      if (answer !== null && !IdentityTracker.isOlder(answer)) {
+        break;
+      }
+    }
+
+    if (answer !== null) {
+      IdentityTracker.observe(answer);
     }
   }
 

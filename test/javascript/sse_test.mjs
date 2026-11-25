@@ -13,9 +13,11 @@ import App from "../../assets/js/app.mjs";
 import Batches from "../../assets/js/batches.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
+import DataLayer from "../../assets/js/data_layer.mjs";
 import Deserializer from "../../assets/js/deserializer.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import IdentityTracker from "../../assets/js/identity_tracker.mjs";
 import LiveReload from "../../assets/js/live_reload.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
@@ -69,6 +71,7 @@ describe("Sse", () => {
     replica = undefined,
     replicaRefused = undefined,
     status = 200,
+    ...session
   } = {}) {
     const serializedRefreshedReceipts = serializedValue(refreshedReceipts);
 
@@ -79,6 +82,7 @@ describe("Sse", () => {
         handshakeId,
         heartbeatIntervalMs,
         refreshedReceipts: serializedRefreshedReceipts,
+        ...session,
         replica,
         replicaRefused,
       }),
@@ -572,6 +576,52 @@ describe("Sse", () => {
 
       assert.isTrue(mockEventSource.close.calledOnce);
       assert.equal(globalThis.EventSource.callCount, 2);
+    });
+
+    // Made under the session as it was, and answering last it would put its stream in place of
+    // this one.
+    it("calls off a handshake still on its way", async () => {
+      sinon.stub(Logger, "debug");
+
+      let answerFirst;
+
+      fetchStub.onFirstCall().returns(
+        new Promise((resolve) => {
+          answerFirst = resolve;
+        }),
+      );
+
+      fetchStub.onSecondCall().resolves({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          handshakeId: "second",
+          heartbeatIntervalMs: 15_000,
+          refreshedReceipts: serializedValue(Type.list()),
+        }),
+      });
+
+      const first = Sse.connect();
+
+      await Sse.reconnect();
+
+      answerFirst({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          handshakeId: "first",
+          heartbeatIntervalMs: 15_000,
+          refreshedReceipts: serializedValue(Type.list()),
+        }),
+      });
+
+      await first;
+
+      assert.equal(globalThis.EventSource.callCount, 1);
+      assert.include(
+        globalThis.EventSource.firstCall.args[0],
+        "handshake_id=second",
+      );
     });
 
     // A left page has no stream to replace, and one opened here would outlive the document.
@@ -1177,6 +1227,77 @@ describe("Sse", () => {
         assert.isTrue(signal.aborted);
       });
 
+      // It dropped the previous user's pair, and only this handshake brings the next user's. No
+      // stream is left to tell it to ask again.
+      it("sets a deadline on the handshake of a tab waiting for its new user's pair", () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        Replica.id = null;
+        SyncStream.awaitingPair = true;
+
+        fetchStub.returns(new Promise(() => {}));
+
+        try {
+          Sse.connect();
+
+          const {signal} = fetchStub.firstCall.args[1];
+
+          timers.tick(Config.mutationTimeoutMs);
+
+          assert.isTrue(signal.aborted);
+        } finally {
+          SyncStream.awaitingPair = false;
+        }
+      });
+
+      // The tab still holds the previous user's pair, and no stream is left to tell it to ask again.
+      it("sets a deadline on the handshake of a tab catching up with a change of user", () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        DataLayer.caughtUpTag = "2.tag-2";
+
+        fetchStub.returns(new Promise(() => {}));
+
+        try {
+          Sse.connect();
+
+          const {signal} = fetchStub.firstCall.args[1];
+
+          timers.tick(Config.mutationTimeoutMs);
+
+          assert.isTrue(signal.aborted);
+        } finally {
+          DataLayer.caughtUpTag = null;
+        }
+      });
+
+      // The tab still holds its writes, and no stream is left to tell it to ask again.
+      it("sets a deadline on the handshake after one whose cookie lagged", () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        SyncStream.laggingCookie = true;
+
+        fetchStub.returns(new Promise(() => {}));
+
+        try {
+          Sse.connect();
+
+          const {signal} = fetchStub.firstCall.args[1];
+
+          timers.tick(Config.mutationTimeoutMs);
+
+          assert.isTrue(signal.aborted);
+        } finally {
+          SyncStream.laggingCookie = false;
+        }
+      });
+
       it("sets no deadline on a handshake while no identity is wanted", async () => {
         const timers = sinon.useFakeTimers({
           toFake: ["setTimeout", "clearTimeout"],
@@ -1448,6 +1569,269 @@ describe("Sse", () => {
 
       sinon.assert.calledOnce(globalThis.window.location.reload);
       sinon.assert.notCalled(globalThis.EventSource);
+    });
+
+    // The subscriptions it held were authorized for an identity it has left.
+    describe("after the identity moved", () => {
+      const refusedKey = Type.encodeMapKey(
+        Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
+      );
+
+      const keptKey = Type.encodeMapKey(
+        Type.tuple([Type.atom("room_b"), Type.bitstring("page")]),
+      );
+
+      const refused = receipt(Type.atom("room_a"), "page", "refused-token");
+      const kept = receipt(Type.atom("room_b"), "page", "kept-token");
+
+      beforeEach(() => {
+        IdentityTracker.init("1.tag-1");
+        Sse.receiptsPeriod = IdentityTracker.period;
+        IdentityTracker.observe("2.tag-2");
+
+        SubscriptionReceiptRegistry.entries.set(refusedKey, refused);
+      });
+
+      afterEach(() => {
+        Sse.receiptsPeriod = null;
+        IdentityTracker.init(null);
+        IdentityTracker.period = null;
+        IdentityTracker.documentPeriod = null;
+      });
+
+      it("drops the refused receipts instead of reloading", async () => {
+        stubHandshakeResponse({refreshedReceipts: Type.list()});
+
+        await Sse.connect();
+
+        sinon.assert.notCalled(globalThis.window.location.reload);
+        assert.equal(SubscriptionReceiptRegistry.entries.size, 0);
+        sinon.assert.calledOnce(globalThis.EventSource);
+      });
+
+      // Refused by one handshake or the next, a receipt mustn't be left to look like a reason to
+      // reload once the others are gone.
+      it("drops a refused receipt when another one is honored", async () => {
+        SubscriptionReceiptRegistry.entries.set(keptKey, kept);
+
+        stubHandshakeResponse({refreshedReceipts: Type.list([kept])});
+
+        await Sse.connect();
+
+        assert.isFalse(SubscriptionReceiptRegistry.entries.has(refusedKey));
+        assert.isTrue(SubscriptionReceiptRegistry.entries.has(keptKey));
+      });
+
+      it("keeps a receipt added while the handshake was under way", async () => {
+        fetchStub.callsFake(async () => {
+          SubscriptionReceiptRegistry.entries.set(keptKey, kept);
+
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              handshakeId: "handshake",
+              heartbeatIntervalMs: 15_000,
+              refreshedReceipts: serializedValue(Type.list()),
+            }),
+          };
+        });
+
+        await Sse.connect();
+
+        assert.isTrue(SubscriptionReceiptRegistry.entries.has(keptKey));
+      });
+
+      // The page the new user mounted meanwhile can hold a subscription the old one held too.
+      it("keeps a receipt that replaced a refused one while the handshake was under way", async () => {
+        const renewed = receipt(Type.atom("room_a"), "page", "renewed-token");
+
+        fetchStub.callsFake(async () => {
+          SubscriptionReceiptRegistry.entries.set(refusedKey, renewed);
+
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              handshakeId: "handshake",
+              heartbeatIntervalMs: 15_000,
+              refreshedReceipts: serializedValue(Type.list()),
+            }),
+          };
+        });
+
+        await Sse.connect();
+
+        assert.strictEqual(
+          SubscriptionReceiptRegistry.entries.get(refusedKey),
+          renewed,
+        );
+      });
+
+      it("expects its receipts to be honored from then on", async () => {
+        stubHandshakeResponse({refreshedReceipts: Type.list()});
+
+        await Sse.connect();
+
+        assert.equal(Sse.receiptsPeriod, IdentityTracker.period);
+      });
+
+      // The receipts are the page's, and a page mounted for the new identity holds them before
+      // any handshake under it answers (see Hologram.pageIdentityPeriod).
+      it("reloads when a page mounted for the new identity had every receipt rejected", async () => {
+        Sse.receiptsPeriod = IdentityTracker.period;
+
+        stubHandshakeResponse({refreshedReceipts: Type.list()});
+
+        await Sse.connect();
+
+        sinon.assert.calledOnce(globalThis.window.location.reload);
+        sinon.assert.notCalled(globalThis.EventSource);
+      });
+
+      // The page stays on screen, and a receipt added for the new identity is the new identity's.
+      it("reloads when a receipt added after the first handshake under it is rejected", async () => {
+        // The page was mounted for the identity the tab left.
+        Hologram.pageIdentityPeriod = Sse.receiptsPeriod;
+
+        try {
+          stubHandshakeResponse({refreshedReceipts: Type.list()});
+
+          await Sse.connect();
+
+          sinon.assert.notCalled(globalThis.window.location.reload);
+
+          SubscriptionReceiptRegistry.entries.set(keptKey, kept);
+
+          await Sse.connect();
+
+          sinon.assert.calledOnce(globalThis.window.location.reload);
+        } finally {
+          Hologram.pageIdentityPeriod = null;
+        }
+      });
+    });
+
+    // What it says of the session: who the cookie signs in, and a pair minted for it.
+    describe("with a data layer", () => {
+      const session = {
+        actorEntityId: "entity-2",
+        actorUserId: "u2",
+        identityTag: "2.tag-2",
+        sessionReplica: {id: "replica-2", token: "token-2"},
+      };
+
+      let taking;
+
+      beforeEach(() => {
+        setDataLayer();
+
+        taking = sinon.stub(DataLayer, "takeHandshake").returns(true);
+        sinon.stub(DataLayer, "buildStreamGreeting").returns({});
+        sinon.stub(DataLayer, "listenToStream");
+      });
+
+      afterEach(() => {
+        Sse.receiptsPeriod = null;
+        IdentityTracker.init(null);
+        IdentityTracker.period = null;
+        IdentityTracker.documentPeriod = null;
+      });
+
+      it("hands it what the handshake says of the session", async () => {
+        stubHandshakeResponse(session);
+
+        await Sse.connect();
+
+        sinon.assert.calledOnceWithExactly(taking, {
+          actorEntityId: "entity-2",
+          actorUserId: "u2",
+          identityTag: "2.tag-2",
+          replica: {id: "replica-2", token: "token-2"},
+        });
+        sinon.assert.calledOnce(globalThis.EventSource);
+      });
+
+      // A tab the handshake moves to another user has left the identity its receipts were
+      // authorized for, and the server refused them for that.
+      it("hands it over before the receipts are judged", async () => {
+        IdentityTracker.init("1.tag-1");
+
+        taking.callsFake(() => {
+          IdentityTracker.observe("2.tag-2");
+
+          return true;
+        });
+
+        SubscriptionReceiptRegistry.entries.set(
+          "key-a",
+          receipt(Type.atom("room_a"), "page", "refused-token"),
+        );
+
+        stubHandshakeResponse({...session, refreshedReceipts: Type.list()});
+
+        await Sse.connect();
+
+        sinon.assert.notCalled(globalThis.window.location.reload);
+        assert.equal(SubscriptionReceiptRegistry.entries.size, 0);
+        sinon.assert.calledOnce(globalThis.EventSource);
+      });
+
+      // A cookie behind the identity the tab follows: the stream would serve the previous user.
+      describe("when it holds the stream", () => {
+        beforeEach(() => {
+          taking.returns(false);
+        });
+
+        it("opens no stream", async () => {
+          stubHandshakeResponse(session);
+
+          await Sse.connect();
+
+          sinon.assert.notCalled(globalThis.EventSource);
+        });
+
+        // The cookie isn't the session the tab is in, so the next handshake's receipts are judged
+        // against the period the last real one left.
+        it("records no period", async () => {
+          IdentityTracker.init("1.tag-1");
+          Sse.receiptsPeriod = IdentityTracker.period;
+          const previous = Sse.receiptsPeriod;
+          IdentityTracker.observe("2.tag-2");
+
+          stubHandshakeResponse(session);
+
+          await Sse.connect();
+
+          assert.equal(Sse.receiptsPeriod, previous);
+        });
+
+        it("changes no receipts, and reloads for none", async () => {
+          SubscriptionReceiptRegistry.entries.set("key-a", receiptA);
+
+          stubHandshakeResponse({...session, refreshedReceipts: Type.list()});
+
+          await Sse.connect();
+
+          assert.isTrue(SubscriptionReceiptRegistry.entries.has("key-a"));
+          sinon.assert.notCalled(globalThis.window.location.reload);
+        });
+      });
+
+      // A tab whose store already stopped reconnects as it follows.
+      it("opens nothing once the follow has opened a new stream", async () => {
+        taking.callsFake(() => {
+          Sse.runId++;
+
+          return true;
+        });
+
+        stubHandshakeResponse(session);
+
+        await Sse.connect();
+
+        sinon.assert.notCalled(globalThis.EventSource);
+      });
     });
 
     it("does not reload on the initial fresh load with no stored receipts", async () => {

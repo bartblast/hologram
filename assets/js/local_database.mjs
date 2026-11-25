@@ -39,11 +39,25 @@ const OWN = "$own";
 const SEQUENCE_FIELDS = ["server_created_seq", "server_updated_seq"];
 
 export default class LocalDatabase {
-  // Who the client is, the session's user id as it is - nil for a visitor. It names whose rows and
-  // queued writes this database holds. It arrives with the page rather than with the rows, and a
-  // resync does not clear it: what the client may see can change without anyone becoming someone
-  // else.
-  static actorUserId = null;
+  // Who the client is, the session's user id as exact text from the server - null for a visitor.
+  // It only tells owners apart: it names whose rows and queued writes this database holds, and is
+  // never an id to look up. It arrives with the page rather than with the rows, and a resync does
+  // not clear it: what the client may see can change without anyone becoming someone else.
+  static get actorUserId() {
+    return LocalDatabase.#actorUserId;
+  }
+
+  static set actorUserId(actorUserId) {
+    if ((actorUserId ?? null) !== (LocalDatabase.#actorUserId ?? null)) {
+      LocalDatabase.actorUserChanges += 1;
+    }
+
+    LocalDatabase.#actorUserId = actorUserId;
+  }
+
+  // How many times the user above changed. A user who signs out and back in is the same id again,
+  // and this tells the two apart: what was read in between was somebody else's.
+  static actorUserChanges = 0;
 
   // The same user as the data layer reads them - the id of a user entity, or null for a visitor and
   // for a user id no user entity can have, like an app's own serial id. The rules, the grants and
@@ -78,6 +92,8 @@ export default class LocalDatabase {
   static identityEndedPeriod = null;
 
   // type -> relationship -> source id -> Set of target ids
+  static #actorUserId = null;
+
   static #facts = {};
 
   // How many times anything was filed here, which lets a reader of every id skip reading them again

@@ -115,6 +115,67 @@ defmodule Hologram.Sync.CarryTest do
     |> Stage.normalize()
   end
 
+  describe "active?/0" do
+    test "is false before a render starts gathering" do
+      refute active?()
+    end
+
+    test "is true while a render is gathering" do
+      start()
+
+      assert active?()
+    end
+
+    test "is false once the render has taken its grant scopes" do
+      start()
+      take_grant_scopes()
+
+      refute active?()
+    end
+  end
+
+  describe "read?/0" do
+    setup do
+      start()
+    end
+
+    test "is false with nothing read" do
+      refute read?()
+    end
+
+    test "is true with a row gathered" do
+      collect(%Module2{id: "row-1"})
+
+      assert read?()
+    end
+
+    test "is true after a query that found nothing" do
+      collect([])
+
+      assert read?()
+    end
+
+    test "is true with a count gathered" do
+      collect_count(Module2, :total, total_term(), 7)
+
+      assert read?()
+    end
+
+    test "is true with a permission check recorded" do
+      record_grant_scope("user-1", :global)
+
+      assert read?()
+    end
+
+    test "is false again once a new render starts" do
+      collect([])
+
+      start()
+
+      refute read?()
+    end
+  end
+
   describe "collect/1" do
     test "records the rows a result holds" do
       first = module_2(c: "first")

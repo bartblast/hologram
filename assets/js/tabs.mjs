@@ -91,6 +91,10 @@ export default class Tabs {
   // How many messages are on that chain.
   static #queued = 0;
 
+  // Whether this tab follows and found another user's store at its restore, so it holds none of
+  // what the group's leader stored, and the group hasn't yet said what that means (see #takeState).
+  static #readForeign = false;
+
   // Whether this tab has taken up what it holds and can be told what the server said.
   static #ready = false;
 
@@ -123,12 +127,12 @@ export default class Tabs {
   // greets the server as the replica of its own it now is, and opening one before the mount would
   // greet it with none of the page's subscriptions (see where the page starts it, in hologram.mjs).
   //
-  // The group can hand the lead to a tab that has not taken it yet - one still starting, or
-  // reading the store again (see #takeStore). It holds the lock, so it is the tab that sends the
-  // queue, and keeps it with the identity (a tab still starting holds neither yet: the stored
-  // queue waits for the next page load, see Durability.detach); but its stream is still a
-  // follower's, which the server serves no sync on, so it opens one of its own as a follower
-  // would.
+  // The group can hand the lead to a tab that has not taken it yet - one still starting, reading
+  // the store again (see #takeStore), or waiting on the store's answer (see #lead). It holds the
+  // lock, so it is the tab that sends the queue, and keeps it with the identity (a tab still
+  // starting holds neither yet: the stored queue waits for the next page load, see
+  // Durability.detach); but its stream is still a follower's, which the server serves no sync on,
+  // so it opens one of its own as a follower would.
   //
   // And a tab that is not ready holds no place it can greet the server from: what it held is
   // dropped as it leaves, and a tab reading the store again was doing so because its place was in
@@ -142,7 +146,7 @@ export default class Tabs {
     }
 
     const followed = !Tabs.leader;
-    const untaken = Tabs.#leadWhenReady;
+    const untaken = Tabs.#leadWhenReady || Tabs.takingLead;
 
     if (!Tabs.#ready) {
       SyncStream.syncCursor = null;
@@ -152,6 +156,10 @@ export default class Tabs {
 
     if (followed) {
       Batches.disown();
+
+      // A tab that followed to another user holds no pair (see DataLayer.followIdentity), so it
+      // shows none, and its handshake's pair for the session as it stands is minted for it alone
+      // (see DataLayer.takeHandshake).
       Replica.requestMint();
     }
 
@@ -216,6 +224,7 @@ export default class Tabs {
     Tabs.#held = [];
     Tabs.#leadWhenReady = false;
     Tabs.#onLead = onLead ?? Tabs.#lead;
+    Tabs.#readForeign = false;
     Tabs.#ready = false;
     Tabs.#token = token;
     Tabs.#unrecorded = false;
@@ -292,6 +301,7 @@ export default class Tabs {
     Tabs.#onMessage = null;
     Tabs.#posting = Promise.resolve();
     Tabs.#queued = 0;
+    Tabs.#readForeign = false;
     Tabs.#ready = false;
     Tabs.#release = null;
     Tabs.#token = null;
@@ -302,6 +312,44 @@ export default class Tabs {
     Tabs.takingLead = false;
 
     return released ?? Promise.resolve();
+  }
+
+  // Leaves this tab's group for the given one, keeping the handlers, for a tab that followed the
+  // session to another user (see DataLayer.followIdentity). Answers the visit to the new group, or
+  // nothing when a newer move or the group ending took the tab elsewhere while it joined. A tab in
+  // no group stays in none.
+  //
+  // The tab is starting up again in the new group: what the group says is held until it has read
+  // the store again (see ready()), and its stream is served no sync until then, the same as while a
+  // lead is being settled (see takingLead). A frame stored in that window would land under a claim
+  // this tab hasn't judged, and give the stream a place to greet from that the tab never filled.
+  static async move(name) {
+    if (Tabs.name === null) {
+      return null;
+    }
+
+    const handlers = {onLead: Tabs.#onLead, onMessage: Tabs.#onMessage};
+
+    Tabs.leave();
+
+    const joining = Tabs.join(name, handlers);
+    const visit = Tabs.#token;
+
+    Tabs.takingLead = true;
+
+    await joining;
+
+    return Tabs.isVisit(visit) ? visit : null;
+  }
+
+  // The visit to a group this tab is on, or null outside one (see isVisit).
+  static get visit() {
+    return Tabs.#token;
+  }
+
+  // Whether the given visit to a group is the one this tab is on (see move).
+  static isVisit(visit) {
+    return visit !== null && Tabs.#token === visit;
   }
 
   // What the group's messages mean, and the whole of what one tab does on hearing another.
@@ -321,8 +369,29 @@ export default class Tabs {
       // page this tab is on: what a frame says is about the rows this browser holds. Nothing is
       // stored: the tab that received it wrote it down already, and one store written by two tabs
       // is two tabs racing over one place.
+      //
+      // A start-over answers a tab that found another user's store: the whole fill is on its way
+      // to it, so it holds everything the leader stores from here (see #takeState). Until one does,
+      // a marker is passed over, since it would call rows whole that this tab never got. The
+      // leader's messages arrive in order, so the state that settles it includes the marker.
       case "frame":
+        if (SyncStream.isFollowedStartOver(message.event, message.frame)) {
+          return;
+        }
+
+        if (message.event === "sync_resync") {
+          Tabs.#readForeign = false;
+        } else if (message.event === "synced" && Tabs.#readForeign) {
+          return;
+        }
+
         SyncStream.receiveFrame(message.event, message.frame);
+
+        // A place would name rows this tab never took up, and leading from it would ask the server
+        // only for what changed since.
+        if (Tabs.#readForeign) {
+          SyncStream.syncCursor = null;
+        }
 
         return;
 
@@ -482,7 +551,11 @@ export default class Tabs {
   // is the window `takingLead` keeps it out of. And a tab that already leads, the first tab of its
   // group, says what it holds here, for the first time and once for every tab that asked: nothing
   // else prompts it before its stream first serves it.
-  static ready() {
+  //
+  // `readForeign` says the restore found another user's store and took nothing from it.
+  static ready(readForeign = false) {
+    Tabs.#readForeign = readForeign === true;
+
     const lead = Tabs.#leadWhenReady;
     const fromNowhere = Tabs.leader && SyncStream.syncCursor === null;
     const first = Tabs.leader && !lead;
@@ -542,10 +615,12 @@ export default class Tabs {
     }
 
     // Cleared only now: a message above can lose the store and end the group, and the tab then
-    // needs a stream of its own, since it hasn't taken this lead (see dissolve).
+    // needs a stream of its own, since it hasn't taken this lead (see dissolve). A tab that moved
+    // to another group held its stream back from sync until now too (see move).
+    Tabs.takingLead = false;
+
     if (lead) {
       Tabs.#leadWhenReady = false;
-      Tabs.takingLead = false;
       Tabs.#onLead();
     } else if (Tabs.leader) {
       Tabs.postState();
@@ -687,6 +762,8 @@ export default class Tabs {
 
     let recorded = null;
 
+    Tabs.#readForeign = false;
+
     // Nothing goes out until the identity is written down, from the flush below or any other: a
     // batch another tab files, an action, the stream opening (see Tabs.sends). The write comes
     // last, whatever happens before it, so a lead that fails to settle still writes it down before
@@ -716,7 +793,15 @@ export default class Tabs {
             LocalDatabase.finalSeq(),
           );
         } finally {
-          Tabs.takingLead = false;
+          if (Tabs.#token === token) {
+            Tabs.takingLead = false;
+          }
+        }
+
+        // The tab left this group while the store answered, so the answer is about a lead it no
+        // longer holds, and starting over would throw away what its next group gave it.
+        if (Tabs.#token !== token) {
+          return;
         }
 
         if (placeless) {
@@ -748,7 +833,13 @@ export default class Tabs {
       // awaits it: nothing is sent under an identity that is not recorded, or a reload after a lost
       // answer would send the stored batch again under a new pair, and the server would apply it
       // twice.
-      await (recorded ?? Durability.persistReplica(Replica.current()));
+      //
+      // Not for a visit that has ended: a tab that moved to another user's group since holds that
+      // user's pair, or none, and the slot this would write is the group's.
+      await (recorded ??
+        (Tabs.#token === token
+          ? Durability.persistReplica(Replica.current())
+          : null));
 
       // A lead of a visit that has ended leaves the next one's to settle.
       if (Tabs.#token === token) {
@@ -801,6 +892,12 @@ export default class Tabs {
   // to be (see #lead). So it takes up the store again (see #takeStore). A state naming no place
   // leaves it as it is: the leader is starting over, and the start-over that follows says so.
   //
+  // A tab that found another user's store at its restore goes back to the store too, whatever
+  // place the state names. A leader refusing that store says so with a start-over before any state,
+  // so a state heard first means the leader isn't refilling, and this tab holds none of what it
+  // stored. Its completeness would mark types whole over rows this tab never got. The read settles
+  // it: a store still somebody else's sends the tab out of the group (see #takeStore).
+  //
   // A tab that leads is left as it is: once ready it passes over the group's state (see #deliver),
   // and one handed the lead while starting brings the store to its own memory as it takes it.
   static #takeState(message) {
@@ -821,9 +918,10 @@ export default class Tabs {
 
     if (
       !Tabs.leader &&
-      message.cursor !== null &&
-      message.cursor !== SyncStream.syncCursor
+      (Tabs.#readForeign ||
+        (message.cursor !== null && message.cursor !== SyncStream.syncCursor))
     ) {
+      Tabs.#readForeign = false;
       Tabs.#takeStore(message);
 
       return;
@@ -1067,9 +1165,9 @@ export default class Tabs {
   // What the restore judges is the store as the tab READ it, which can be older than what the tab
   // that led wrote since. A fill that finished after the read is refused and filled again, which
   // costs a download. A read taken before that tab recorded who the store belongs to is refused
-  // as somebody else's, so the ready tabs drop their rows until the refill. And an identity it
-  // wrote since is written over, which ready() takes back from the group's state when it heard one,
-  // and #lead writes down again.
+  // as somebody else's, so the ready tabs refill in place. And an identity it wrote since is
+  // written over, which ready() takes back from the group's state when it heard one, and #lead
+  // writes down again.
   //
   // Until it is ready it holds no place: the restore is what hands it the one the store had.
   // Taking the lead without one is asking for everything again, clearing the store and telling

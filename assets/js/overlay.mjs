@@ -190,6 +190,10 @@ export default class Overlay {
     Overlay.remove(batch);
   }
 
+  static push(batch) {
+    Overlay.#batches.push(batch);
+  }
+
   // For a numbered batch taken up from elsewhere, which can arrive after a higher one: a row folds
   // through the batches in this order, and the late one can hold the create the other updates.
   //
@@ -206,12 +210,17 @@ export default class Overlay {
     Overlay.#batches.splice(index, 0, batch);
   }
 
-  static push(batch) {
-    Overlay.#batches.push(batch);
-  }
-
   static remove(batch) {
     Overlay.#batches = Overlay.#batches.filter((held) => held !== batch);
+  }
+
+  // Answers the batches it took out.
+  static removeWhere(predicate) {
+    const removed = Overlay.#batches.filter(predicate);
+
+    Overlay.#batches = Overlay.#batches.filter((held) => !predicate(held));
+
+    return removed;
   }
 
   // Deliberately NOT called by LocalDatabase.reset(): a resync replaces what the server said, and

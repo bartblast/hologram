@@ -15,6 +15,7 @@ defmodule Hologram.Sync.Frame do
   alias Hologram.DB.QueryCache
   alias Hologram.Entity.Model
   alias Hologram.Policy
+  alias Hologram.Server
   alias Hologram.Sync.PackedIds
   alias Hologram.Sync.WireData
 
@@ -227,12 +228,47 @@ defmodule Hologram.Sync.Frame do
 
   It is its own chunk rather than a flag on the rows that follow, because there may be none: a
   client whose rows are all gone still has to be told to let go of them.
+
+  A resync a change of identity sends names the tag of the identity it is for (see
+  `Hologram.Runtime.Session.identity_tag/1`), so a client that already followed that change from
+  `encode_identity_envelope/4` lets it pass instead of dropping its rows a second time.
   """
-  @spec encode_resync_envelope(integer, atom) :: String.t()
-  def encode_resync_envelope(id, reason) do
-    payload = %{protocol_version: @protocol_version, reason: reason}
+  @spec encode_resync_envelope(integer, atom, String.t() | nil) :: String.t()
+  def encode_resync_envelope(id, reason, identity_tag \\ nil) do
+    payload =
+      maybe_put_identity_tag(%{protocol_version: @protocol_version, reason: reason}, identity_tag)
 
     "event: sync_resync\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
+  end
+
+  @doc """
+  Builds the SSE event-stream chunk telling a client who its session is now: the user's id as the
+  browser keys its store by it (see `Hologram.Auth.owner_key/1`), the id its rules compare (see
+  `Hologram.Auth.canonical_id/1`), and the tag of the identity (see
+  `Hologram.Runtime.Session.identity_tag/1`), with the user's row spelled the way a page carries its
+  rows (see `Hologram.Template.Renderer.session_user_rows/1`), or nil when there's none to carry.
+
+  Sent on every stream of a session whose identity changed, whether or not it syncs, so that every
+  tab hears it from its own stream, whichever tab leads its group. It carries no replica pair: each
+  tab takes one from its next handshake, which mints a pair for it alone.
+  """
+  @spec encode_identity_envelope(
+          integer,
+          Server.identity_id() | nil,
+          String.t() | nil,
+          map | nil
+        ) :: String.t()
+  def encode_identity_envelope(id, user_id, identity_tag, user_rows) do
+    payload =
+      %{
+        actor_entity_id: Auth.canonical_id(user_id),
+        actor_user_id: Auth.owner_key(user_id),
+        protocol_version: @protocol_version
+      }
+      |> maybe_put_identity_tag(identity_tag)
+      |> maybe_put_user_rows(user_rows)
+
+    "event: sync_identity\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
   end
 
   @doc """
@@ -398,6 +434,18 @@ defmodule Hologram.Sync.Frame do
     |> Enum.group_by(& &1.type)
     |> Map.new(fn {type, grouped} -> {type, Enum.map(grouped, &payload(op, &1))} end)
   end
+
+  # A tag is named only when there is one: a client reads a missing one as a server that says
+  # nothing of whom it serves.
+  defp maybe_put_identity_tag(payload, nil), do: payload
+
+  defp maybe_put_identity_tag(payload, identity_tag) do
+    Map.put(payload, :identity_tag, identity_tag)
+  end
+
+  defp maybe_put_user_rows(payload, nil), do: payload
+
+  defp maybe_put_user_rows(payload, user_rows), do: Map.put(payload, :user_row, user_rows)
 
   # The row comes along for its type as much as its id: a bag of changed attributes cannot say
   # what it belongs to, and without that the values cannot be written the way the wire wants them.

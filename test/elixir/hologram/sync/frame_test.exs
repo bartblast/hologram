@@ -5,6 +5,7 @@ defmodule Hologram.Sync.FrameTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Auth
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Model
@@ -597,6 +598,78 @@ defmodule Hologram.Sync.FrameTest do
       envelope = encode_resync_envelope(42, :model_hash)
 
       assert String.contains?(envelope, ~s["reason":"model_hash"])
+    end
+
+    # A client that already followed the change lets the resync pass.
+    test "names the tag of the identity a change of identity's resync is for" do
+      "event: sync_resync\nid: 42\ndata: " <> data =
+        encode_resync_envelope(42, :identity, "1.tag")
+
+      assert Jason.decode!(data) == %{
+               "identity_tag" => "1.tag",
+               "protocol_version" => 1,
+               "reason" => "identity"
+             }
+    end
+
+    test "names no tag when it has none" do
+      envelope = encode_resync_envelope(42, :identity, nil)
+
+      refute String.contains?(envelope, "identity_tag")
+    end
+  end
+
+  describe "encode_identity_envelope/4" do
+    test "wraps who the session is now in a sync_identity SSE event envelope" do
+      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+
+      assert "event: sync_identity\nid: 42\ndata: " <> data =
+               encode_identity_envelope(42, user_id, "1.tag", nil)
+
+      assert Jason.decode!(data) == %{
+               "actor_entity_id" => user_id,
+               "actor_user_id" => Auth.owner_key(user_id),
+               "identity_tag" => "1.tag",
+               "protocol_version" => 1
+             }
+    end
+
+    # The browser keys its store by the owner key, so an id past 2^53 or an integer and the same
+    # digits as a string stay different users.
+    test "names an integer user by its owner key, with no entity id" do
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, 7, "1.tag", nil)
+
+      assert %{"actor_entity_id" => nil, "actor_user_id" => "i7"} = Jason.decode!(data)
+    end
+
+    test "names nobody for a session with no user" do
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, nil, "1.tag", nil)
+
+      assert %{"actor_entity_id" => nil, "actor_user_id" => nil} = Jason.decode!(data)
+    end
+
+    # The tab holds the new user's row before its stream fills it, as a page's first render does.
+    test "carries the user's row the way a page carries it" do
+      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+      user_rows = %{put_entity: %{"MyApp.User" => [%{id: user_id, email: "a@example.com"}]}}
+
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, user_id, "1.tag", user_rows)
+
+      assert Jason.decode!(data)["user_row"] == %{
+               "put_entity" => %{"MyApp.User" => [%{"id" => user_id, "email" => "a@example.com"}]}
+             }
+    end
+
+    test "names no row when there's none to carry" do
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, 7, "1.tag", nil)
+
+      payload = Jason.decode!(data)
+
+      refute Map.has_key?(payload, "user_row")
     end
   end
 

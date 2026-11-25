@@ -1,6 +1,7 @@
 "use strict";
 
 import Batches from "./batches.mjs";
+import Client from "./client.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
 import IdentityTracker from "./identity_tracker.mjs";
@@ -62,6 +63,39 @@ export default class DataLayer {
   // Whether this document has taken up what the store holds, so whether it holds a place is known.
   static isStoreRestored = false;
 
+  // Whether the mount under way moved this tab to another user, so the stream has to be replaced
+  // once the mount is done (see #followMountedIdentity).
+  static #reconnectsAfterMount = false;
+
+  // Whether the last handshake put its pair in use, which wakes the sender once the handshake is
+  // taken (see takeReplica).
+  static #tookHandshakePair = false;
+
+  // Whether the last handshake ended a hold over a cookie that lagged, which wakes the sender the
+  // same way: the writes held meanwhile have nothing else to wake them (see takeReplica).
+  static #endedCookieHold = false;
+
+  // The pairs of the users whose batches wait in this tab with no store to hold them, by user, each
+  // with whether the server minted it for this tab (see followIdentity).
+  static #heldPairs = new Map();
+
+  // Made public to make tests easier
+  //
+  // The tag the tab last opened a new stream to catch up with, until a handshake names a tag or the
+  // tab follows one (see catchUpIdentity).
+  static caughtUpTag = null;
+
+  // Made public to make tests easier
+  //
+  // How long a reply that names an identity this tab doesn't follow gives the stream to tell the
+  // tab of it before a new one is opened (see catchUpIdentity).
+  static CATCH_UP_DELAY_MS = 500;
+
+  // Made public to make tests easier
+  //
+  // The catch-up waiting out CATCH_UP_DELAY_MS, if any.
+  static catchUpTimer = null;
+
   // Based on run_query!/4
   //
   // Answers the given normalized term a derived field of the given module is defined by, for the
@@ -91,6 +125,10 @@ export default class DataLayer {
     // wins, and this is what the client falls back to when the server refuses it.
     Replica.offer(replica);
 
+    // The identity this document was rendered for, which the stream's handshake is held to (see
+    // takeHandshake).
+    SyncStream.followedTag = IdentityTracker.tag;
+
     // Opened here and read below, once the group is joined.
     await Durability.open();
 
@@ -116,9 +154,7 @@ export default class DataLayer {
     // Nothing to join where there is no store: the tabs of such a browser share nothing, so each
     // is a replica of its own, exactly as every tab was before any of this.
     if (Durability.mode === "indexeddb") {
-      const group = `${Durability.databaseName()}.${readActorUserId() ?? "anonymous"}`;
-
-      await Tabs.join(group, {});
+      await Tabs.join(Durability.groupName(readActorUserId() ?? null), {});
     }
 
     // Awaited HERE, before the mount, which is what lets the restore that follows the mount be
@@ -177,6 +213,36 @@ export default class DataLayer {
   // resume into whichever action started meanwhile, and write, close or discard that one's batch.
   static carryAcrossSuspension(promise) {
     return Batches.carryAcrossSuspension(promise);
+  }
+
+  // Opens a new stream when a command's or a save's reply names an identity this tab doesn't
+  // follow, and its handshake follows it (see takeHandshake). The server tells every stream of the
+  // session of a change, but a stream whose request left with the previous cookie, and which
+  // started listening just after the change was told, never hears of it and goes on serving the
+  // previous user. When the stream told this tab first, the tags match and nothing is done.
+  //
+  // The reply and the stream's word on the change race each other, and the reply usually wins, so
+  // the stream gets a moment to tell the tab before it's given up on. A new stream throws away the
+  // sync session and starts another, and it takes the connection a following request would have
+  // gone over. What's checked once the moment is over is the identity of the latest reply then.
+  //
+  // Once per tag, until a handshake names a tag or the tab follows one: replies that land while the
+  // handshake is on its way would each open another stream and throw away the one about to open,
+  // and a handshake that names no tag follows nothing. A tab already waiting to hear who it serves
+  // has a new stream coming.
+  static catchUpIdentity() {
+    if ($.catchUpTimer !== null || !$.#needsCatchUp()) {
+      return;
+    }
+
+    $.catchUpTimer = setTimeout(() => {
+      $.catchUpTimer = null;
+
+      if ($.#needsCatchUp()) {
+        $.caughtUpTag = IdentityTracker.tag;
+        Sse.reconnect();
+      }
+    }, $.CATCH_UP_DELAY_MS);
   }
 
   // Sealed BEFORE the render that follows an action, so the one frame that follows shows the
@@ -615,14 +681,17 @@ export default class DataLayer {
     $.#unfiledCounts = [];
 
     if (mountData.syncRows) {
-      // A number counted for one identity must never answer for another. The period tells apart
-      // what the ids can't, like two integer ids too large for the browser to hold exactly. The
-      // ids cover a server that tags no responses, where the period never moves.
-      //
       // The period the page was rendered in rather than the one lasting now: the identity can
-      // change between a page arriving and its mount, and its numbers are still the old identity's.
+      // change between a page arriving and its mount.
       const period = mountData.identityPeriod ?? IdentityTracker.period;
 
+      if ($.holdsOtherUser(mountData.actorUserId)) {
+        $.#followMountedIdentity(mountData);
+      }
+
+      // A number counted for one identity must never answer for another. The period tells apart
+      // what the ids can't, like one user signing out and back in. The ids cover a server that
+      // tags no responses, where the period never moves.
       if (
         period !== LocalDatabase.syncCountsPeriod ||
         (mountData.actorUserId ?? null) !== (LocalDatabase.actorUserId ?? null)
@@ -643,6 +712,329 @@ export default class DataLayer {
         mountData.syncCountTypes ?? {},
       );
     }
+  }
+
+  // Whether a page for the given user is for somebody else than this tab holds. Only once this
+  // document has read its store: its first mount is what says who it is for, and the store it read
+  // is held to that (see Durability.restore).
+  static holdsOtherUser(actorUserId) {
+    return (
+      $.isStoreRestored &&
+      (actorUserId ?? null) !== (LocalDatabase.actorUserId ?? null)
+    );
+  }
+
+  // Takes this tab to the user the server says is signed in now, in one turn, so that nothing reads
+  // the previous user's rows under the new user's name. The rows, the place and the counts go, and
+  // the previous user's batches leave the queue and the screen and wait in the store for them.
+  //
+  // The period moves first: what is filed for the new user from here on belongs to it. A server
+  // that tags no responses has no new period to move to, so the one lasting now counts as ended
+  // (see LocalDatabase.reset).
+  //
+  // The same user keeps everything. Another user's tab holds no pair until a handshake hands it
+  // one, which mints a pair for that tab alone (see takeHandshake): the server's event names none,
+  // since two groups of one user on builds that differ only in protocol version or storage layout
+  // would each send under it from their own counter.
+  //
+  // `heldSync` is whether the stream the tab is leaving held a sync session, which a tab that ends
+  // up following has to close (see #moveGroup).
+  //
+  // Answers whether the tab moved to another user.
+  static followIdentity(
+    {actorEntityId, actorUserId, identityTag, userRow},
+    {heldSync = SyncStream.heldSync} = {},
+  ) {
+    // This stream's server side has moved to an identity this tab can't take for the latest, so
+    // what it sends from here on may not be for the user the tab holds. A new stream is opened
+    // under the session as it stands, once the server has said who that is. Unless one was opened
+    // in the meantime, say for a page mounted while the question was out: it was opened under a
+    // session at least as new as the one asked about.
+    if (IdentityTracker.isBehind(identityTag)) {
+      const run = Sse.runId;
+
+      SyncStream.awaitingIdentity = true;
+
+      Client.settleIdentity().then(() => {
+        if (Sse.runId === run) {
+          Sse.reconnect();
+        }
+      });
+
+      return false;
+    }
+
+    const owner = actorUserId ?? null;
+    const previous = LocalDatabase.actorUserId ?? null;
+    const isSameUser = owner === previous;
+
+    IdentityTracker.observe(identityTag);
+    SyncStream.followedTag = identityTag ?? null;
+
+    // A cookie set back brings an earlier tag back, stamp and all, which a catch-up has to see.
+    $.caughtUpTag = null;
+
+    if (!isSameUser) {
+      LocalDatabase.reset();
+
+      if (identityTag !== null && identityTag !== undefined) {
+        LocalDatabase.identityEndedPeriod = null;
+      }
+
+      LocalDatabase.actorUserId = owner;
+      LocalDatabase.actorEntityId = actorEntityId ?? null;
+
+      if (userRow) {
+        Deltas.apply(userRow, {insertOnly: true});
+      }
+
+      SyncStream.syncCursor = null;
+      SyncStream.rowsChangedSinceRender = true;
+
+      const isReturning = Batches.heldFor(owner);
+
+      Batches.releaseForeign(owner);
+      SyncStream.scheduleRender();
+
+      // The pair goes with the user. The previous user's would be written into the new user's
+      // slot, or sent under the new user's session: the tab holds none until the store, its group
+      // or a handshake gives it the new user's (see SyncStream.awaitingPair). The page's offer was
+      // minted for the previous user too. So does any pair this tab asked the server for: it was
+      // minted for the previous user, or refused them.
+      //
+      // Except where the tab holds batches of a user that no store has: those wait here, and go out
+      // under that user's pair once the user is signed in again. The server may have applied one
+      // whose answer never came, and only that pair tells it so. A pair its group shared comes back
+      // as shared: a number this tab spent under it would be recorded nowhere, so a batch with none
+      // still waits for a pair minted for this tab (see Batches.#numbered).
+      if (Batches.heldFor(previous) && Replica.id !== null) {
+        $.#heldPairs.set(previous, {
+          minted: Replica.minted,
+          pair: Replica.current(),
+        });
+      }
+
+      const heldPair = isReturning ? $.#heldPairs.get(owner) : undefined;
+
+      $.#heldPairs.delete(owner);
+
+      Replica.owner = owner;
+      Replica.endMint();
+      $.#holdNoPair();
+
+      if (heldPair?.minted) {
+        Replica.adoptOwn(heldPair.pair);
+      } else if (heldPair !== undefined) {
+        Replica.adopt(heldPair.pair);
+      }
+
+      if (heldPair !== undefined) {
+        SyncStream.awaitingPair = false;
+      }
+    }
+
+    if (!isSameUser && Tabs.name !== null) {
+      $.#moveGroup(owner, heldSync);
+    }
+
+    return !isSameUser;
+  }
+
+  // Takes in what a stream's handshake says of the session, before the stream is greeted, and
+  // answers whether the stream may open.
+  //
+  // The cookie the handshake was made with can name another identity than this tab follows. Newer,
+  // when this tab missed the change: a login made outside Hologram announces nothing, and a stream
+  // opened after the announcement never hears it. So the tab follows it here. Older, when the
+  // server announced the change before the response that set the cookie arrived. Then the stream
+  // would serve the previous user, so none opens: the follow asks the server again who is signed in
+  // and opens a new stream once it has answered (see followIdentity), and writes wait for it (see
+  // SyncStream.holdsWrites). After about four seconds that answer is believed, so a cookie that
+  // never catches up is followed rather than waited for.
+  //
+  // A server that names no identity in its handshake isn't held to one.
+  //
+  // The handshake also hands the tab a pair for the session as it stands, which the tab keeps as
+  // the fresh one, so a refusal of the pair in use has a pair to switch to (see Batches.flush). A
+  // tab holding none takes it up when it sends for itself: one leading its group, which writes it
+  // down and hands it to the group, or one in no group. A tab following its group takes the group's
+  // pair, and a lead taken up while it settles reads the store's, which is why it's left alone then
+  // too: its next handshake comes once it has settled.
+  static takeHandshake({actorEntityId, actorUserId, identityTag, replica}) {
+    const named = identityTag !== null && identityTag !== undefined;
+
+    // A handshake that names who the stream serves answers any catch-up, followed or not: an older
+    // cookie set back while it was on its way names the tag already followed.
+    if (named) {
+      $.caughtUpTag = null;
+    }
+
+    // A cookie of the identity the tab follows can still be behind the latest response: one for the
+    // next user can have come back while the handshake was on its way. The follow asks the server
+    // then too (see followIdentity).
+    const isLagging = () =>
+      named &&
+      (identityTag !== SyncStream.followedTag ||
+        IdentityTracker.isBehind(identityTag));
+
+    if (isLagging()) {
+      // The stream about to open replaces the one the tab is leaving, which closes any sync session
+      // that one held.
+      $.followIdentity(
+        {actorEntityId, actorUserId, identityTag},
+        {heldSync: false},
+      );
+    }
+
+    const wasLagging = SyncStream.laggingCookie;
+    SyncStream.laggingCookie = isLagging();
+    $.#endedCookieHold = wasLagging && !SyncStream.laggingCookie;
+
+    if (SyncStream.laggingCookie) {
+      return false;
+    }
+
+    if (replica?.id) {
+      Replica.fresh = {id: replica.id, token: replica.token};
+
+      // A leader sends only under a pair it has written down, and a slot that belongs to another
+      // user isn't its to write.
+      const leadsForItself =
+        Tabs.leader &&
+        !Tabs.takingLead &&
+        Replica.owner === (LocalDatabase.actorUserId ?? null);
+
+      // The server minted it for this tab alone, so a tab in no group counts its batches under it
+      // as under a pair it asked for (see Replica.requestMint).
+      if (Replica.id === null && Tabs.name === null) {
+        Replica.adoptOwn(Replica.fresh);
+        $.#tookHandshakePair = true;
+      } else if (Replica.id === null && leadsForItself) {
+        Replica.adopt(Replica.fresh);
+        Durability.persistReplica(Replica.current());
+        Tabs.postState();
+        $.#tookHandshakePair = true;
+      }
+    }
+
+    return true;
+  }
+
+  // Holds no pair, and writes wait for the one the next handshake hands (see takeHandshake).
+  static #holdNoPair() {
+    Replica.id = null;
+    Replica.token = null;
+    Replica.fresh = null;
+    SyncStream.awaitingPair = true;
+  }
+
+  // Takes a tab that followed the session to another user out of the previous user's group and
+  // into the new one's, and takes up what the store holds for the new user, as a page load would:
+  // joined first, read after (see boot). The store is judged by the tab that leads the new group,
+  // and claimed by it when another user's: only the holder of a user's lock claims for that user,
+  // so a tab leading that user's group never finds its claim out of date. One that follows reads
+  // only whose the store is (see Durability.restore).
+  //
+  // What the tab held of its own is kept: the rows its page carried, and the batches of the new
+  // user it still holds. The store adds the rest of that user's queue - a tab back with a user it
+  // left takes up everything they left, the batches it released itself included, since its
+  // counter has moved past them.
+  //
+  // Then a stream the server serves as the tab now stands. One that leads asks for sync from the
+  // place the store gave it, or from nowhere: the stream it had may be serving the new user
+  // already, but frames it sent while the tab joined were passed over (see
+  // SyncStream.dropsFrame). One that follows closes the sync session its stream held, if it did.
+  //
+  // A newer follow, or the group ending, takes over from any point here.
+  static async #moveGroup(owner, heldSync) {
+    // A tab whose store already stopped has nothing to share with the new user's tabs, and joined,
+    // it could lead them from memory. So it leaves the group it was in and goes on as a replica of
+    // its own. It keeps its batches, as a tab that leads does when its store stops: the ones it
+    // made since were never stored, and it is the only tab that can send them. The reconnect's
+    // handshake hands it a pair of its own (see takeHandshake).
+    if (Durability.mode !== "indexeddb") {
+      Tabs.leave();
+
+      if (Sse.isStarted) {
+        Sse.reconnect();
+      }
+
+      return;
+    }
+
+    const visit = await Tabs.move(Durability.groupName(owner));
+
+    if (visit === null) {
+      return;
+    }
+
+    // A lead handed over from here on is taken at ready(), which opens its own stream (see
+    // Tabs.#lead).
+    const ledOnJoin = Tabs.leader;
+
+    await Durability.load(() => Tabs.isVisit(visit));
+
+    if (!Tabs.isVisit(visit)) {
+      return;
+    }
+
+    // The store couldn't be read, or stopped while the tab moved: nothing left to share, so the tab
+    // leads itself and lets go of the batches the store holds, as at boot. The tab leading the new
+    // user's group sends those, or the next page load does. Kept, each would be sent twice: by this
+    // tab, and from the store under another pair. The ones its actions sealed after the store
+    // stopped are kept: nothing else holds them (see Batches.disown). Its filings settle first,
+    // since that is what tells the two apart. The other tabs are told nothing, since the store
+    // failed only for this one.
+    //
+    // Its stream is a replica's of its own from here, served sync from no place, and it holds no
+    // pair until that stream's handshake hands it one. Any fresh pair a handshake handed it while
+    // it read goes too, so it switches to none: the reconnect below hands one for the stream it
+    // goes on with.
+    if (Durability.mode !== "indexeddb") {
+      await Batches.recorded();
+
+      if (!Tabs.isVisit(visit)) {
+        return;
+      }
+
+      Tabs.leave();
+      $.#holdNoPair();
+      Batches.disown();
+
+      if (Sse.isStarted) {
+        Sse.reconnect();
+      }
+
+      return;
+    }
+
+    const resumed = Durability.restore(Tabs.leader);
+
+    SyncStream.syncCursor = resumed.cursor;
+    SyncStream.scheduleRender();
+
+    $.#resume(resumed);
+
+    if (Sse.isStarted && (ledOnJoin || (!Tabs.leader && heldSync))) {
+      Sse.reconnect();
+    }
+  }
+
+  // A page arrived for another user than this tab holds. The stream in front of it can still be
+  // serving the previous user, so its frames wait for a new one, opened once the mount is done:
+  // its handshake presents the receipts of the page now mounted, and a login made outside Hologram
+  // announces nothing. The page's response carries no replica pair, so writes wait for one (see
+  // followIdentity).
+  static #followMountedIdentity(mountData) {
+    $.followIdentity({
+      actorEntityId: mountData.actorEntityId,
+      actorUserId: mountData.actorUserId,
+      identityTag: IdentityTracker.tag,
+    });
+
+    SyncStream.awaitingIdentity = true;
+
+    $.#reconnectsAfterMount = Sse.isStarted;
   }
 
   // The four sync kinds the stream delivers (see SyncStream.listen). A tab the server refused an
@@ -750,32 +1142,98 @@ export default class DataLayer {
     ReloadNotice.update(SyncStream.stopReason !== null);
   }
 
+  // Replaces the stream when the mount that just ended moved this tab to another user (see
+  // #followMountedIdentity). Called for a mount that raised too, which would otherwise leave the
+  // tab on a stream whose frames it drops.
+  static reconnectIfFollowed() {
+    if ($.#reconnectsAfterMount) {
+      $.#reconnectsAfterMount = false;
+
+      Sse.reconnect();
+    }
+  }
+
+  // Whether the tab holds a reply's identity no stream has told it of, nor is about to (see
+  // catchUpIdentity).
+  static #needsCatchUp() {
+    const tag = IdentityTracker.tag;
+
+    return (
+      Sse.isStarted &&
+      tag !== null &&
+      tag !== SyncStream.followedTag &&
+      tag !== $.caughtUpTag &&
+      !SyncStream.awaitingIdentity
+    );
+  }
+
+  // Whether a new stream was opened to hear who the session serves (see catchUpIdentity). Nothing
+  // else asks again if its handshake never answers.
+  static catchesUp() {
+    return $.caughtUpTag !== null;
+  }
+
+  // Whether the last handshake's cookie was behind the identity this tab follows, so writes wait
+  // for the next handshake to bring one that isn't (see takeHandshake).
+  static waitsForCookie() {
+    return SyncStream.laggingCookie;
+  }
+
+  // Whether this tab followed a change of user and waits for a handshake to bring the new user's
+  // pair: it dropped the previous user's, so it has none to show (see replicaToReplace).
+  static awaitsPair() {
+    return SyncStream.awaitingPair && Replica.id === null;
+  }
+
   // The pair a stream handshake shows the server when this tab needs a new one, which it mints for
-  // the same owner (see Replica.requestMint).
+  // the same owner (see Replica.requestMint). A tab that followed a change of user holds none to
+  // show, and takes the handshake's pair for the session as it stands (see takeHandshake).
   static replicaToReplace() {
-    return Replica.withoutIdentity() ? Replica.current() : null;
+    return Replica.withoutIdentity() && Replica.id !== null
+      ? Replica.current()
+      : null;
   }
 
   // Takes up what a previous page load left - the place to resume the stream from, the number to
   // count batches on from, and the batches it never managed to send - and answers nothing on every
   // visit after the first, since the runtime's page-script listener fires again on each
   // client-side navigation and this runs once per page visit.
+  //
+  // Only the first visit reads the store: a tab moving to another user's group takes up what it
+  // reads itself (see #moveGroup), which a later visit landing between that read and its use
+  // must not take instead.
   static restore() {
-    const resumed = Durability.restore(Tabs.leader);
+    const resumed = $.isStoreRestored ? null : Durability.restore(Tabs.leader);
 
     $.isStoreRestored = true;
 
-    if (resumed === null) {
-      return;
+    if (resumed !== null) {
+      SyncStream.syncCursor = resumed.cursor;
     }
 
-    SyncStream.syncCursor = resumed.cursor;
+    // What a Back before the first mount brought with it, now that the place is known. Only then:
+    // filing trims the counts to the cap, and a page's own counts may go past it.
+    if ($.#unfiledCounts.length > 0) {
+      $.#fileCounts($.#unfiledCounts);
+      $.#unfiledCounts = [];
+    }
+
+    $.reconnectIfFollowed();
+
+    if (resumed !== null) {
+      $.#resume(resumed);
+    }
+  }
+
+  // What a tab does with what its restore took up, at its first visit and after moving to another
+  // user's group (see #moveGroup).
+  static #resume(resumed) {
     Batches.resumeFrom(resumed.seq);
     Batches.adopt(resumed.batches);
 
     // Everything this tab starts with is in place, so what the group has said since may land on it
     // - and whatever arrived while it was starting up is applied now, in the order it arrived.
-    Tabs.ready();
+    Tabs.ready(resumed.readForeign);
 
     // And what the store could not tell it is asked for: what is complete, which nothing
     // writes down, and the place and the identity as they stand in the tab that has them.
@@ -810,6 +1268,10 @@ export default class DataLayer {
       return;
     }
 
+    $.#fileCounts(entries);
+  }
+
+  static #fileCounts(entries) {
     const isIdentityEnded =
       LocalDatabase.identityEndedPeriod !== null &&
       LocalDatabase.identityEndedPeriod === IdentityTracker.period;
@@ -879,14 +1341,22 @@ export default class DataLayer {
   // Takes up the identity a stream handshake brought, if this tab asked for one, and wakes the
   // sender that was holding for it. Answers the sender's promise, so a page about to reload can let
   // it finish. A handshake that refused the pair it showed ends the asking, so the stream can open.
+  //
+  // The sender is woken too when the handshake put its own pair in use: the writes it held for a
+  // pair have one now, and nothing else tells it.
   static takeReplica(replica, refused = false, presentedId = undefined) {
+    const tookHandshakePair = $.#tookHandshakePair;
+    const endedCookieHold = $.#endedCookieHold;
+    $.#tookHandshakePair = false;
+    $.#endedCookieHold = false;
+
     if (refused) {
       Replica.refuseMint(presentedId);
-
-      return null;
+    } else if (Replica.takeMinted(replica)) {
+      return Batches.flush();
     }
 
-    return Replica.takeMinted(replica) ? Batches.flush() : null;
+    return tookHandshakePair || endedCookieHold ? Batches.flush() : null;
   }
 
   // Whether the next stream handshake should ask the server for an identity (see

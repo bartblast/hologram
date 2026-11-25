@@ -488,7 +488,7 @@ defmodule HologramFeatureTests.Helpers do
   """
   @spec await_memory_mode(Wallaby.Session.t()) :: Wallaby.Session.t()
   def await_memory_mode(session) do
-    await_script_result(session, "return globalThis.Hologram.durability.mode() === 'memory';")
+    await_script(session, "return globalThis.Hologram.durability.mode() === 'memory';")
   end
 
   @doc """
@@ -514,6 +514,27 @@ defmodule HologramFeatureTests.Helpers do
     else
       Process.sleep(50)
       await_page_mount(session, page_module, attempts_left - 1)
+    end
+  end
+
+  @doc """
+  Blocks until the given JavaScript returns true, then returns the `session`. For a value a page
+  sets at a time the test can't wait for in any other way.
+  """
+  @spec await_script(Wallaby.Session.t(), String.t(), integer | nil) :: Wallaby.Session.t()
+  def await_script(session, script, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      script_result(session, script) == true ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError, "Timed out waiting for #{script} to answer true"
+
+      true ->
+        Process.sleep(50)
+        await_script(session, script, start_time)
     end
   end
 
@@ -660,7 +681,7 @@ defmodule HologramFeatureTests.Helpers do
 
     Browser.execute_script(session, script)
 
-    await_script_result(session, "return globalThis.__hologramStoreBlock.readWaiting === true;")
+    await_script(session, "return globalThis.__hologramStoreBlock.readWaiting === true;")
   end
 
   @doc """
@@ -727,7 +748,7 @@ defmodule HologramFeatureTests.Helpers do
 
     Browser.execute_script(session, script)
 
-    await_script_result(session, "return globalThis.__hologramStoreBlock?.active === true;")
+    await_script(session, "return globalThis.__hologramStoreBlock?.active === true;")
   end
 
   @doc """
@@ -1110,7 +1131,7 @@ defmodule HologramFeatureTests.Helpers do
 
     session
     |> Browser.focus_window(await_new_tab(session, known))
-    |> await_script_result(
+    |> await_script(
       # The tab starts on about:blank, whose document is complete too.
       "return location.pathname === #{Jason.encode!(path)} && document.readyState === 'complete';"
     )
@@ -1470,15 +1491,27 @@ defmodule HologramFeatureTests.Helpers do
   cookie. Use it to give a connection a same-session sibling.
   """
   def visit_as_sibling(session, origin, page_module, params \\ []) do
+    session
+    |> visit("/external")
+    |> share_session_cookie(origin)
+    |> visit(page_module, params)
+  end
+
+  @doc """
+  Copies `origin`'s signed `phoenix_session` cookie into `session`, which must
+  already be on the domain.
+
+  Wallaby sessions have isolated cookie jars, so a cookie one tab's response sets
+  never reaches its siblings the way it does across a browser's tabs. Use it to
+  carry such a cookie over, for example after a re-auth in one tab.
+  """
+  def share_session_cookie(session, origin) do
     %{"value" => session_cookie} =
       origin
       |> cookies()
       |> Enum.find(&(&1["name"] == "phoenix_session"))
 
-    session
-    |> visit("/external")
-    |> Browser.set_cookie("phoenix_session", session_cookie)
-    |> visit(page_module, params)
+    Browser.set_cookie(session, "phoenix_session", session_cookie)
   end
 
   @doc """
@@ -1710,22 +1743,6 @@ defmodule HologramFeatureTests.Helpers do
       true ->
         Process.sleep(50)
         await_new_tab(session, known, start_time)
-    end
-  end
-
-  defp await_script_result(session, script, start_time \\ nil) do
-    start_time = start_time || current_time()
-
-    cond do
-      script_result(session, script) ->
-        session
-
-      timed_out?(start_time) ->
-        raise Wallaby.ExpectationNotMetError, "Timed out waiting for #{script} to answer true"
-
-      true ->
-        Process.sleep(50)
-        await_script_result(session, script, start_time)
     end
   end
 

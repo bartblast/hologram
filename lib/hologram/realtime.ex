@@ -138,11 +138,13 @@ defmodule Hologram.Realtime do
   # post-handler identity differs from the pre-handler identity. Compares
   # `session_id` and `user_id` between `pre` and `post`; if either differs and
   # `pre.session_id` is not nil, broadcasts `{:identity_changed,
-  # post.session_id, post.user_id}` on
-  # `"hologram:announce:session:<pre.session_id>"`. Returns `:ok` either way.
+  # post.session_id, post.user_id, identity_tag}` on
+  # `"hologram:announce:session:<pre.session_id>"`. The tag is the one the
+  # response making the change names (see `Hologram.Runtime.Session.identity_tag/1`),
+  # which each stream passes on to its client. Returns `:ok` either way.
   @doc false
-  @spec maybe_announce_identity_change(Server.t(), Server.t()) :: :ok
-  def maybe_announce_identity_change(%Server{} = pre, %Server{} = post) do
+  @spec maybe_announce_identity_change(Server.t(), Server.t(), String.t()) :: :ok
+  def maybe_announce_identity_change(%Server{} = pre, %Server{} = post, identity_tag) do
     identity_changed? = pre.session_id != post.session_id or pre.user_id != post.user_id
 
     if identity_changed? and pre.session_id != nil do
@@ -151,7 +153,7 @@ defmodule Hologram.Realtime do
       Phoenix.PubSub.broadcast(
         Hologram.PubSub,
         topic,
-        {:identity_changed, post.session_id, post.user_id}
+        {:identity_changed, post.session_id, post.user_id, identity_tag}
       )
     end
 

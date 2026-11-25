@@ -64,7 +64,7 @@ defmodule Hologram.Auth.ContextTest do
     end
 
     test "returns nil for an id in any other spelling" do
-      for user_id <- ["0190C4E2-7C1F-7B3A-9D4E-1A2B3C4D5E6F", 7, "abc", :admin] do
+      for user_id <- ["0190C4E2-7C1F-7B3A-9D4E-1A2B3C4D5E6F", 7, "abc"] do
         assert with_actor(user_id, fn -> actor_entity_id() end) == nil
       end
     end
@@ -81,7 +81,7 @@ defmodule Hologram.Auth.ContextTest do
       put_actor("user_id_10")
 
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      put_actor(false)
                    end
@@ -110,8 +110,8 @@ defmodule Hologram.Auth.ContextTest do
       assert with_actor(nil, fn -> session?() end)
     end
 
-    test "is true for an atom user id" do
-      assert with_actor(:admin, fn -> session?() end)
+    test "is true for an integer user id" do
+      assert with_actor(7, fn -> session?() end)
     end
 
     test "is false again after with_actor/2" do
@@ -152,6 +152,20 @@ defmodule Hologram.Auth.ContextTest do
       send(pid, :go)
 
       assert_receive {^ref, true}, @receive_timeout
+    end
+
+    # A connection's process serves one request after another, so the starter can be in the next
+    # user's session by the time the task reads.
+    test "raises Hologram.MisuseError while the starter is in another user's session" do
+      {pid, ref} =
+        with_actor("user_id_70", fn -> spawn_waiting(fn -> refused?(&session?/0) end, self()) end)
+
+      # Still in that session when the task reads.
+      with_actor("user_id_71", fn ->
+        send(pid, :go)
+
+        assert_receive {^ref, true}, @receive_timeout
+      end)
     end
 
     test "raises Hologram.MisuseError in a task a supervisor started for a session" do
@@ -900,7 +914,7 @@ defmodule Hologram.Auth.ContextTest do
     test "raises Hologram.MisuseError for a boolean before the function runs, leaving the actor as it was" do
       with_actor("user_id_11", fn ->
         assert_error Hologram.MisuseError,
-                     "User ID must be a string, integer, or atom other than true and false, but received true",
+                     "User ID must be a UTF-8 string or an integer, but received true",
                      fn ->
                        with_actor(true, fn -> send(self(), :ran) end)
                      end

@@ -239,6 +239,13 @@ describe("Elixir_Hologram_DB", () => {
       Batches.open("todos");
     });
 
+    // A batch belongs to the user signed in when its action opened it.
+    const openAs = (userId) => {
+      Batches.discard();
+      LocalDatabase.actorUserId = userId;
+      Batches.open("todos");
+    };
+
     afterEach(() => {
       timers.restore();
     });
@@ -271,7 +278,7 @@ describe("Elixir_Hologram_DB", () => {
     // grant's id from the grant itself - so the row appended here and the one the server inserts
     // are one row. They ride the create's batch, so they land together with it or not at all.
     it("appends the grants a creator takes beside the create", () => {
-      LocalDatabase.actorUserId = ACTOR;
+      openAs(ACTOR);
       LocalDatabase.actorEntityId = ACTOR;
 
       create(struct(NOTE, {title: "alpha"}));
@@ -313,7 +320,7 @@ describe("Elixir_Hologram_DB", () => {
     // The server takes a user id no user entity can have as no data-layer user, and grants it
     // nothing - creator_grants/1's nil clause again.
     it("appends no grant for a user id no user entity can have", () => {
-      LocalDatabase.actorUserId = 7;
+      openAs(7);
       LocalDatabase.actorEntityId = null;
 
       create(struct(NOTE, {title: "alpha"}));
@@ -325,7 +332,7 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("appends no grant for a type whose creator takes none", () => {
-      LocalDatabase.actorUserId = ACTOR;
+      openAs(ACTOR);
       LocalDatabase.actorEntityId = ACTOR;
 
       create(struct(TASK, {done: false, title: "alpha"}));
@@ -339,7 +346,7 @@ describe("Elixir_Hologram_DB", () => {
     // grant_role/3's own idempotency, read off the same derived id: a grant the client holds is
     // not written a second time.
     it("appends no grant the client already holds", () => {
-      LocalDatabase.actorUserId = ACTOR;
+      openAs(ACTOR);
       LocalDatabase.actorEntityId = ACTOR;
 
       LocalDatabase.putRow(ROLE_GRANT, {
@@ -2651,6 +2658,127 @@ describe("Elixir_Hologram_DB", () => {
         "Hologram.MisuseError",
         "cannot rollback - not inside a transaction",
       );
+    });
+  });
+
+  // What such an action reads now is the new user's, and its batch is the previous user's.
+  describe("a write by an action whose user changed while it was suspended", () => {
+    const message = (verb) =>
+      `${verb} was called after the signed-in user changed while this action was suspended - writes made for the new user belong in a new action`;
+
+    const noOpts = Type.list([]);
+
+    const creating = () =>
+      create(
+        Model.box(TASK, {
+          done: false,
+          id: "018f0000-0000-7000-8000-000000000009",
+          title: "alpha",
+        }),
+      );
+
+    const fun = (body) =>
+      Type.anonymousFunction(
+        0,
+        [{params: (_context) => [], guards: [], body}],
+        contextFixture(),
+      );
+
+    let timers;
+
+    beforeEach(() => {
+      timers = sinon.useFakeTimers(1_756_100_000_123);
+
+      LocalDatabase.actorUserId = "i1";
+      Batches.open("todos");
+
+      LocalDatabase.putRow(TASK, {
+        done: false,
+        id: ID_1,
+        title: "Draft copy",
+        $revisions: {done: 10, title: 11},
+      });
+
+      LocalDatabase.actorUserId = "i2";
+    });
+
+    afterEach(() => {
+      timers.restore();
+    });
+
+    it("refuses a create", () => {
+      assertBoxedError(
+        () => creating(),
+        "Hologram.MisuseError",
+        message("create"),
+      );
+    });
+
+    // What it read while the other user was signed in was theirs.
+    it("refuses a write once the user who started the action is back", () => {
+      LocalDatabase.actorUserId = "i1";
+
+      assertBoxedError(
+        () => creating(),
+        "Hologram.MisuseError",
+        message("create"),
+      );
+    });
+
+    it("refuses an update", () => {
+      assertBoxedError(
+        () =>
+          updateById(
+            task,
+            Type.bitstring(ID_1),
+            Type.map([[Type.atom("title"), Type.bitstring("Ship it")]]),
+          ),
+        "Hologram.MisuseError",
+        message("update"),
+      );
+    });
+
+    it("refuses a delete", () => {
+      assertBoxedError(
+        () => deleteById(task, Type.bitstring(ID_1)),
+        "Hologram.MisuseError",
+        message("delete"),
+      );
+    });
+
+    it("refuses a transaction", () => {
+      assertBoxedError(
+        () =>
+          transaction(
+            fun(() => Type.atom("done")),
+            noOpts,
+          ),
+        "Hologram.MisuseError",
+        message("transaction"),
+      );
+    });
+
+    it("adds nothing to the previous user's batch", () => {
+      try {
+        creating();
+      } catch {
+        // The refusal is what the tests above pin.
+      }
+
+      assert.deepStrictEqual(Batches.current().writes, []);
+    });
+
+    // UNDEFINED is what a mount leaves when its data names no actor, and a visitor's batch is
+    // stamped null.
+    it("takes a visitor named as undefined for the same visitor", () => {
+      Batches.discard();
+      LocalDatabase.actorUserId = null;
+      Batches.open("todos");
+      LocalDatabase.actorUserId = undefined;
+
+      creating();
+
+      assert.equal(Batches.current().writes.length, 1);
     });
   });
 

@@ -71,7 +71,7 @@ describe("Hologram", () => {
     let fetchIdentityTagStub, reloadStub;
 
     beforeEach(() => {
-      IdentityTracker.init("tag-1");
+      IdentityTracker.init("1.tag-1");
       fetchIdentityTagStub = sinon.stub(Client, "fetchIdentityTag");
       reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
     });
@@ -84,20 +84,20 @@ describe("Hologram", () => {
 
     // A logout in a document loaded after this one, for one.
     it("loads the page afresh when the identity changed", async () => {
-      fetchIdentityTagStub.resolves("tag-2");
+      fetchIdentityTagStub.resolves("2.tag-2");
 
       await Hologram.checkIdentity();
 
       sinon.assert.calledOnce(reloadStub);
-      assert.equal(IdentityTracker.tag, "tag-2");
+      assert.equal(IdentityTracker.tag, "2.tag-2");
     });
 
     // A click or a queued command can come back while the check waits for its answer, and see the
     // change first.
     it("loads the page afresh when another response saw the change first", async () => {
       fetchIdentityTagStub.callsFake(async () => {
-        IdentityTracker.observe("tag-2");
-        return "tag-2";
+        IdentityTracker.observe("2.tag-2");
+        return "2.tag-2";
       });
 
       await Hologram.checkIdentity();
@@ -106,7 +106,7 @@ describe("Hologram", () => {
     });
 
     it("leaves the page as it is when the identity is the same", async () => {
-      fetchIdentityTagStub.resolves("tag-1");
+      fetchIdentityTagStub.resolves("1.tag-1");
 
       await Hologram.checkIdentity();
 
@@ -1108,6 +1108,61 @@ describe("Hologram", () => {
       sinon.assert.notCalled(renderStub);
     });
 
+    it("waits for the store before leaving for a next page the server answers with no page", async () => {
+      const fetchPageStub = sinon.stub(Client, "fetchPage");
+      const navigating = sinon.stub(Hologram, "navigateBrowserTo");
+      let record;
+
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module7],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      // Only the action is stubbed: building the next page's path calls the page's module.
+      callNamedFunctionStub.callsFake((module, fun, args, context) =>
+        fun.value === "action"
+          ? Type.componentStruct({nextPage: module7})
+          : callNamedFunctionStub.wrappedMethod.call(
+              Interpreter,
+              module,
+              fun,
+              args,
+              context,
+            ),
+      );
+
+      try {
+        Hologram.executeAction(actionFor(cid1));
+
+        const [_toParam, _onSuccess, onNotPage] = fetchPageStub.firstCall.args;
+
+        Hologram.dataLayer = {
+          saved: () =>
+            new Promise((resolve) => {
+              record = resolve;
+            }),
+          stopped: () => false,
+        };
+
+        onNotPage();
+        await waitForEventLoop();
+
+        sinon.assert.notCalled(navigating);
+
+        record();
+        await waitForEventLoop();
+
+        sinon.assert.calledOnce(navigating);
+      } finally {
+        Hologram.dataLayer = null;
+        navigating.restore();
+        fetchPageStub.restore();
+      }
+    });
+
     it("raises for state an asynchronous action put without declaring it", async () => {
       const struct = Type.componentStruct({nextAction: Type.nil()});
 
@@ -1770,7 +1825,7 @@ describe("Hologram", () => {
 
     // Kept rather than dropped, the entry lets the click hand the target straight to the browser
     // instead of fetching it again.
-    it("hands the target to the browser when the prefetch found no page", () => {
+    it("hands the target to the browser when the prefetch found no page", async () => {
       const navigateBrowserToStub = sinon.stub(Hologram, "navigateBrowserTo");
 
       eventTargetNode = {__hologramId__: "dummy_hologram_id"};
@@ -1801,10 +1856,59 @@ describe("Hologram", () => {
       // The browser takes over from any page still on its way.
       assert.equal(Hologram.navigationCount, navigationCount + 1);
 
+      await waitForEventLoop();
+
       sinon.assert.calledOnceWithExactly(navigateBrowserToStub, pagePath);
       sinon.assert.notCalled(loadNewPageStub);
 
       navigateBrowserToStub.restore();
+    });
+
+    it("waits for the store before handing over a target the prefetch found no page for", async () => {
+      const navigating = sinon.stub(Hologram, "navigateBrowserTo");
+      let record;
+
+      eventTargetNode = {__hologramId__: "dummy_hologram_id"};
+
+      Hologram.prefetchedPages = new Map([
+        [
+          "dummy_hologram_id:/hologram-test-fixtures-module7",
+          {
+            isNavigateConfirmed: false,
+            isPage: false,
+            pagePath: pagePath,
+            payload: null,
+            timestamp: Date.now(),
+          },
+        ],
+      ]);
+
+      Hologram.dataLayer = {
+        saved: () =>
+          new Promise((resolve) => {
+            record = resolve;
+          }),
+        stopped: () => false,
+      };
+
+      try {
+        Hologram.executeLoadPrefetchedPageAction(
+          loadPrefetchedPageAction,
+          eventTargetNode,
+        );
+
+        await waitForEventLoop();
+
+        sinon.assert.notCalled(navigating);
+
+        record();
+        await waitForEventLoop();
+
+        sinon.assert.calledOnceWithExactly(navigating, pagePath);
+      } finally {
+        navigating.restore();
+        Hologram.dataLayer = null;
+      }
     });
 
     // A click that no pointer press came before: Enter on a focused link, a screen reader,
@@ -1870,7 +1974,7 @@ describe("Hologram", () => {
         sinon.assert.calledOnceWithExactly(loadNewPageStub, pagePath, payload);
       });
 
-      it("hands the target to the browser once the fetch finds no page", () => {
+      it("hands the target to the browser once the fetch finds no page", async () => {
         Hologram.executeLoadPrefetchedPageAction(
           loadPrefetchedPageAction,
           eventTargetNode,
@@ -1879,6 +1983,8 @@ describe("Hologram", () => {
         notPageCallbacks[0]();
 
         assert.equal(Hologram.prefetchedPages.size, 0);
+
+        await waitForEventLoop();
 
         sinon.assert.calledOnceWithExactly(navigateBrowserToStub, pagePath);
         sinon.assert.notCalled(loadNewPageStub);
@@ -3549,6 +3655,182 @@ describe("Hologram", () => {
       }
     });
 
+    // A response a page's middleware wrote itself, or a target outside the app.
+    describe("an answer only the browser can show", () => {
+      const sectionUrl = () =>
+        `${window.location.pathname}${window.location.search}#section`;
+
+      let notPage, pushStateStub, record, reloadStub, replaceLocationStub;
+      let replaceStateStub;
+
+      beforeEach(() => {
+        fetchPageStub.callsFake((_toParam, _onSuccess, onNotPage) => {
+          notPage = onNotPage;
+        });
+
+        pushStateStub = sinon.stub(history, "pushState");
+        reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+        replaceLocationStub = sinon.stub(Hologram, "replaceBrowserLocation");
+        replaceStateStub = sinon.stub(history, "replaceState");
+
+        Hologram.dataLayer = {
+          saved: () =>
+            new Promise((resolve) => {
+              record = resolve;
+            }),
+          stopped: () => false,
+        };
+      });
+
+      afterEach(() => {
+        Hologram.dataLayer = null;
+        replaceStateStub.restore();
+        replaceLocationStub.restore();
+        reloadStub.restore();
+        pushStateStub.restore();
+      });
+
+      it("waits for the store before leaving for a hop that names no page", async () => {
+        await Hologram.loadNewPage("/clicked", redirectTo("/target"));
+
+        notPage();
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(assignedUrls, []);
+
+        record();
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(assignedUrls, ["/target"]);
+      });
+
+      it("waits for the store before leaving for a target outside the app", async () => {
+        const loading = Hologram.loadNewPage("/clicked", {
+          to: "https://example.com/x",
+          type: "redirect",
+        });
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(assignedUrls, []);
+
+        record();
+        await loading;
+
+        assert.deepStrictEqual(assignedUrls, ["https://example.com/x"]);
+      });
+
+      it("waits for the store before loading a page whose held code a live reload replaced", async () => {
+        const module7 = Type.atom("Elixir.Hologram.Test.Fixtures.Module7");
+
+        globalThis.Hologram.config.liveReload = true;
+        LiveReload.recordPageBundle(module7, "old");
+
+        try {
+          const loading = Hologram.loadNewPage("/target", payloadFor("new"));
+
+          await waitForEventLoop();
+
+          assert.deepStrictEqual(assignedUrls, []);
+
+          record();
+          await loading;
+
+          assert.deepStrictEqual(assignedUrls, ["/target"]);
+        } finally {
+          globalThis.Hologram.config.liveReload = false;
+          LiveReload.pageBundleDigests = new Map();
+        }
+      });
+
+      it("stays when a navigation begins while the store is awaited", async () => {
+        await Hologram.loadNewPage("/clicked", redirectTo("/target"));
+
+        notPage();
+        await waitForEventLoop();
+
+        Hologram.navigationCount += 1;
+
+        record();
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(assignedUrls, []);
+      });
+
+      // An assign to it would only jump within the document and leave this page up.
+      it("loads a target a #fragment away from the address bar in a new entry", async () => {
+        const url = sectionUrl();
+
+        await Hologram.loadNewPage("/clicked", redirectTo(url));
+
+        notPage();
+        record();
+        await waitForEventLoop();
+
+        sinon.assert.calledOnceWithExactly(pushStateStub, null, null, url);
+        sinon.assert.calledOnce(reloadStub);
+        sinon.assert.callOrder(pushStateStub, reloadStub);
+        assert.deepStrictEqual(assignedUrls, []);
+      });
+
+      // The browser treats a URL ending in # as a jump as well.
+      it("loads a target with an empty fragment in a new entry", async () => {
+        const url = `${window.location.pathname}${window.location.search}#`;
+
+        await Hologram.loadNewPage("/clicked", redirectTo(url));
+
+        notPage();
+        record();
+        await waitForEventLoop();
+
+        sinon.assert.calledOnceWithExactly(pushStateStub, null, null, url);
+        sinon.assert.calledOnce(reloadStub);
+        sinon.assert.callOrder(pushStateStub, reloadStub);
+        assert.deepStrictEqual(assignedUrls, []);
+      });
+
+      it("loads a target a #fragment away in place of the entry it was meant for", async () => {
+        const url = sectionUrl();
+
+        await Hologram.loadNewPage(
+          "/entry",
+          redirectTo(url),
+          0,
+          "history-entry-fragment",
+        );
+
+        notPage();
+        record();
+        await waitForEventLoop();
+
+        sinon.assert.calledOnceWithExactly(
+          replaceStateStub,
+          history.state,
+          null,
+          url,
+        );
+
+        sinon.assert.calledOnce(reloadStub);
+        sinon.assert.callOrder(replaceStateStub, reloadStub);
+        sinon.assert.notCalled(pushStateStub);
+        sinon.assert.notCalled(replaceLocationStub);
+      });
+
+      it("assigns the address bar's own URL when it carries no fragment", async () => {
+        const url = `${window.location.pathname}${window.location.search}`;
+
+        await Hologram.loadNewPage("/clicked", redirectTo(url));
+
+        notPage();
+        record();
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(assignedUrls, [url]);
+        sinon.assert.notCalled(pushStateStub);
+        sinon.assert.notCalled(reloadStub);
+      });
+    });
+
     it("follows a redirect by asking for the page it names", async () => {
       fetchPageStub.callsFake((toParam, _onSuccess, _onNotPage) => {
         assert.equal(
@@ -3615,7 +3897,7 @@ describe("Hologram", () => {
       });
 
       it("is stamped with the identity its page was put on screen for", async () => {
-        IdentityTracker.init("tag-1");
+        IdentityTracker.init("1.tag-1");
         Hologram.pageIdentityPeriod = IdentityTracker.period;
 
         await Hologram.loadNewPage("/target", payloadFor("new"));
@@ -3623,16 +3905,16 @@ describe("Hologram", () => {
         const snapshot = serializeStub.firstCall.args[0];
 
         assert.equal(snapshot.identityPeriod, IdentityTracker.period);
-        assert.equal(snapshot.identityTag, "tag-1");
+        assert.equal(snapshot.identityTag, "1.tag-1");
       });
 
       // A logout on the page leaves it holding what both identities put in it, so no document may
       // restore it.
       it("is stamped with no identity tag when the identity changed since its page was put on screen", async () => {
-        IdentityTracker.init("tag-1");
+        IdentityTracker.init("1.tag-1");
         const pagePeriod = IdentityTracker.period;
         Hologram.pageIdentityPeriod = pagePeriod;
-        IdentityTracker.observe("tag-2");
+        IdentityTracker.observe("2.tag-2");
 
         await Hologram.loadNewPage("/target", payloadFor("new"));
 
@@ -4456,6 +4738,7 @@ describe("Hologram", () => {
       // the document when the URL has a fragment.
       it("reloads the entry the browser went to when it was meant for one", async () => {
         const reloading = sinon.stub(Hologram, "reloadBrowserLocation");
+        const writingEntry = sinon.stub(history, "replaceState");
         const entryPath = window.location.pathname + window.location.search;
 
         try {
@@ -4473,6 +4756,7 @@ describe("Hologram", () => {
           sinon.assert.notCalled(replaceLocationStub);
           assert.deepStrictEqual(assignedUrls, []);
         } finally {
+          writingEntry.restore();
           reloading.restore();
         }
       });
@@ -4481,6 +4765,7 @@ describe("Hologram", () => {
       // jump within the document.
       it("reloads the entry the browser went to when its URL has a fragment", async () => {
         const reloading = sinon.stub(Hologram, "reloadBrowserLocation");
+        const writingEntry = sinon.stub(history, "replaceState");
         const entryPath = window.location.pathname + window.location.search;
 
         try {
@@ -4494,9 +4779,18 @@ describe("Hologram", () => {
           record();
           await loading;
 
+          sinon.assert.calledOnceWithExactly(
+            writingEntry,
+            history.state,
+            null,
+            `${entryPath}#section`,
+          );
+
           sinon.assert.calledOnce(reloading);
+          sinon.assert.callOrder(writingEntry, reloading);
           sinon.assert.notCalled(replaceLocationStub);
         } finally {
+          writingEntry.restore();
           reloading.restore();
         }
       });
@@ -4532,11 +4826,11 @@ describe("Hologram", () => {
 
       // Loaded afresh either way, and only once what the person wrote is in the store.
       it("waits for the store when the page was also described for another identity", async () => {
-        IdentityTracker.init("tag-1");
+        IdentityTracker.init("1.tag-1");
 
         try {
           const identityPeriod = IdentityTracker.period;
-          IdentityTracker.observe("tag-2");
+          IdentityTracker.observe("2.tag-2");
 
           const loading = Hologram.loadNewPage("/target", {
             ...payloadFor("stopped-4"),
@@ -4609,17 +4903,21 @@ describe("Hologram", () => {
 
     // A prefetch kept across a logout, or a response read before one.
     describe("a page described for an identity that has since changed", () => {
-      let frames, pushStateStub, reloadStub;
+      const requestedPage = Type.alias("Hologram.Test.Fixtures.Requested");
+
+      let frames, pushStateStub, reloadStub, settlingStub;
 
       beforeEach(() => {
         frames = [];
         window.requestAnimationFrame = (callback) => frames.push(callback);
         pushStateStub = sinon.stub(history, "pushState");
         reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
-        IdentityTracker.init("tag-1");
+        settlingStub = sinon.stub(Client, "settleIdentity").resolves();
+        IdentityTracker.init("1.tag-1");
       });
 
       afterEach(() => {
+        settlingStub.restore();
         reloadStub.restore();
         pushStateStub.restore();
         delete window.requestAnimationFrame;
@@ -4629,41 +4927,463 @@ describe("Hologram", () => {
 
       const staleTo = (payload) => {
         const identityPeriod = IdentityTracker.period;
-        IdentityTracker.observe("tag-2");
+        IdentityTracker.observe("2.tag-2");
 
-        return {...payload, identityPeriod: identityPeriod};
+        return {
+          ...payload,
+          identityPeriod: identityPeriod,
+          requestedPage: requestedPage,
+        };
       };
 
-      it("is handed to the browser, which loads it for the identity the session holds now", async () => {
+      // A full load would be visible in the middle of an in-app navigation.
+      it("is asked for again in the document", async () => {
         await Hologram.loadNewPage("/target", staleTo(payloadFor("stale-1")));
 
-        assert.deepStrictEqual(assignedUrls, ["/target"]);
+        sinon.assert.calledOnce(fetchPageStub);
+        assert.strictEqual(fetchPageStub.firstCall.args[0], requestedPage);
+        assert.deepStrictEqual(assignedUrls, []);
         sinon.assert.notCalled(reloadStub);
         assert.deepStrictEqual(frames, []);
         assert.isNull(bundleScript("stale-1"));
       });
 
-      // The address bar shows the entry's URL already.
-      it("reloads the entry the browser went to when it was meant for one", async () => {
+      // Asked again before that, it would get the same stale answer while a cookie catches up.
+      it("is asked for once the server has said who is signed in", async () => {
+        let settle;
+
+        settlingStub.returns(
+          new Promise((resolve) => {
+            settle = resolve;
+          }),
+        );
+
+        const loading = Hologram.loadNewPage(
+          "/target",
+          staleTo(payloadFor("stale-8")),
+        );
+
+        await Promise.resolve();
+        sinon.assert.notCalled(fetchPageStub);
+
+        settle();
+        await loading;
+
+        sinon.assert.calledOnce(fetchPageStub);
+      });
+
+      it("isn't asked for when a later navigation took over meanwhile", async () => {
+        let settle;
+
+        settlingStub.returns(
+          new Promise((resolve) => {
+            settle = resolve;
+          }),
+        );
+
+        const loading = Hologram.loadNewPage(
+          "/target",
+          staleTo(payloadFor("stale-9")),
+        );
+
+        Hologram.navigationCount += 1;
+
+        settle();
+        await loading;
+
+        sinon.assert.notCalled(fetchPageStub);
+      });
+
+      // The identity can change while the page being left is saved or the frame is awaited.
+      describe("when the identity changes before its frame", () => {
+        beforeEach(async () => {
+          await Hologram.loadNewPage("/target", {
+            ...payloadFor("stale-10"),
+            identityPeriod: IdentityTracker.period,
+            requestedPage: requestedPage,
+          });
+
+          IdentityTracker.observe("2.tag-2");
+
+          frames.splice(0).forEach((frame) => frame());
+
+          await Promise.resolve();
+        });
+
+        it("is asked for again", () => {
+          sinon.assert.calledOnce(fetchPageStub);
+          assert.strictEqual(fetchPageStub.firstCall.args[0], requestedPage);
+        });
+
+        it("adds no history entry", () => {
+          sinon.assert.notCalled(pushStateStub);
+        });
+
+        it("puts nothing on screen", () => {
+          assert.isNull(bundleScript("stale-10"));
+        });
+      });
+
+      it("shows the page the server answers with for the identity that lasts", async () => {
+        seedCurrentPage();
+
+        await Hologram.loadNewPage("/target", staleTo(payloadFor("stale-2")));
+
+        const onSuccess = fetchPageStub.firstCall.args[1];
+
+        await onSuccess({
+          ...payloadFor("fresh-2", "fresh content"),
+          identityPeriod: IdentityTracker.period,
+        });
+
+        try {
+          frames.splice(0).forEach((frame) => frame());
+
+          assert.include(document.body.textContent, "fresh content");
+          assert.deepStrictEqual(assignedUrls, []);
+        } finally {
+          Hologram.virtualDocument = null;
+        }
+      });
+
+      it("is asked for again for the entry the browser went to", async () => {
         await Hologram.loadNewPage(
           "/entry",
-          staleTo(payloadFor("stale-2")),
+          staleTo(payloadFor("stale-3")),
           0,
           "history-entry-stale",
         );
 
-        sinon.assert.calledOnce(reloadStub);
+        sinon.assert.calledOnce(fetchPageStub);
+        sinon.assert.notCalled(reloadStub);
         assert.deepStrictEqual(assignedUrls, []);
         assert.deepStrictEqual(frames, []);
       });
 
-      // A redirect a prefetch kept is stale the same way: the page it leads to is the server's
-      // answer for the previous identity.
-      it("is handed to the browser when it is a redirect", async () => {
+      // Where it led was the server's answer for the previous identity.
+      it("asks for the page it answered rather than following a kept redirect", async () => {
+        seedCurrentPage();
+
         await Hologram.loadNewPage("/clicked", staleTo(redirectTo("/target")));
 
-        assert.deepStrictEqual(assignedUrls, ["/clicked"]);
+        sinon.assert.calledOnce(fetchPageStub);
+        assert.strictEqual(fetchPageStub.firstCall.args[0], requestedPage);
+        assert.deepStrictEqual(assignedUrls, []);
+
+        await fetchPageStub.firstCall.args[1]({
+          ...payloadFor("stale-11"),
+          identityPeriod: IdentityTracker.period,
+        });
+
+        frames.splice(0).forEach((frame) => frame());
+
+        sinon.assert.calledWith(
+          pushStateStub,
+          sinon.match.any,
+          null,
+          "/clicked",
+        );
+
+        Hologram.virtualDocument = null;
+      });
+
+      it("doesn't hand a kept redirect outside the app to the browser", async () => {
+        await Hologram.loadNewPage(
+          "/clicked",
+          staleTo({to: "https://example.com", type: "redirect"}),
+        );
+
+        assert.deepStrictEqual(assignedUrls, []);
+        sinon.assert.calledOnce(fetchPageStub);
+      });
+
+      // An identity that keeps changing can't keep a navigation going for ever.
+      it("gives up after as many tries as a chain of redirects gets", async () => {
+        let error = null;
+
+        try {
+          await Hologram.loadNewPage(
+            "/target",
+            staleTo(payloadFor("stale-4")),
+            20,
+          );
+        } catch (caught) {
+          error = caught;
+        }
+
+        assert.instanceOf(error, HologramRuntimeError);
         sinon.assert.notCalled(fetchPageStub);
+      });
+
+      describe("when the user changes while its code loads", () => {
+        let dataLayer;
+
+        const showPage = async (pageDigest) => {
+          await Hologram.loadNewPage("/target", {
+            ...payloadFor(pageDigest),
+            actorUserId: "u1",
+            identityPeriod: IdentityTracker.period,
+            syncRows: {},
+          });
+
+          frames.splice(0).forEach((frame) => frame());
+        };
+
+        const bundleArrives = (pageDigest) => {
+          ScriptRegistry.statuses.set(pageDigest, "loaded");
+          MountGate.settle();
+        };
+
+        // A mount that stops at its first step, before it registers the page for the tests after.
+        const bundleArrivesAndMountRaises = (pageDigest) => {
+          const recording = sinon
+            .stub(LiveReload, "recordPageBundle")
+            .throws(new Error("mount failed"));
+
+          try {
+            assert.throws(() => bundleArrives(pageDigest), "mount failed");
+          } finally {
+            recording.restore();
+            Hologram.isMounting = false;
+          }
+        };
+
+        beforeEach(() => {
+          seedCurrentPage();
+
+          dataLayer = {
+            closeBatch: sinon.spy(),
+            discardBatch: sinon.spy(),
+            holdsOtherUser: sinon.stub().returns(true),
+            ingestMountData: sinon.spy(),
+            pageCounts: () => [],
+            reconnectIfFollowed: sinon.spy(),
+            restore: sinon.spy(),
+            restoreCounts: sinon.spy(),
+            stopped: () => false,
+          };
+
+          Hologram.dataLayer = dataLayer;
+          sinon.stub(history, "replaceState");
+        });
+
+        afterEach(() => {
+          history.replaceState.restore();
+          Hologram.dataLayer = null;
+          Hologram.virtualDocument = null;
+          Hologram.domEpoch = 0;
+          Hologram.registryEpoch = 0;
+        });
+
+        it("asks for the page again rather than mounting the previous user's", async () => {
+          await showPage("stale-5");
+
+          IdentityTracker.observe("2.tag-2");
+          bundleArrives("stale-5");
+
+          sinon.assert.calledOnce(fetchPageStub);
+          sinon.assert.notCalled(dataLayer.ingestMountData);
+          sinon.assert.notCalled(dataLayer.restore);
+          sinon.assert.notCalled(reloadStub);
+          assert.deepStrictEqual(assignedUrls, []);
+        });
+
+        // The visitor asked for another page meanwhile, which takes over from this one's.
+        it("leaves the page asked for meanwhile to its own request", async () => {
+          await showPage("stale-7");
+
+          const loading = sinon.stub(Hologram, "loadNewPage");
+
+          try {
+            IdentityTracker.observe("2.tag-2");
+            bundleArrives("stale-7");
+
+            sinon.assert.calledOnce(fetchPageStub);
+            const answer = fetchPageStub.lastCall.args[1];
+
+            Hologram.navigationCount += 1;
+
+            await answer({identityPeriod: null});
+
+            sinon.assert.notCalled(loading);
+          } finally {
+            loading.restore();
+          }
+        });
+
+        it("mounts a page of an ended period for the user the tab holds", async () => {
+          dataLayer.holdsOtherUser.returns(false);
+
+          await showPage("stale-6");
+
+          IdentityTracker.observe("2.tag-2");
+
+          bundleArrivesAndMountRaises("stale-6");
+
+          sinon.assert.notCalled(fetchPageStub);
+        });
+
+        // The snapshot says nothing about whose it is, so its period ending is enough.
+        describe("for a restored snapshot", () => {
+          const snapshotModule = Type.alias(
+            "Hologram.Test.Fixtures.RestoredPage",
+          );
+
+          const pageSnapshot = (scrollPosition) => ({
+            chunkDigests: [],
+            componentRegistryEntries: Type.map(),
+            identityPeriod: IdentityTracker.period,
+            instanceId: "restored-instance",
+            pageModule: snapshotModule,
+            pageParams: Type.map(),
+            scrollPosition: scrollPosition,
+            subscriptionReceipts: [],
+          });
+
+          let digestStub, instanceId;
+
+          const restore = async (
+            historyId,
+            digest,
+            scrollPosition = [0, 0],
+          ) => {
+            sessionStorage.setItem(
+              `hologram_page_snapshot_${historyId}`,
+              Serializer.serialize(pageSnapshot(scrollPosition), "client"),
+            );
+
+            digestStub.callsFake((_module, onSuccess) => onSuccess(digest));
+
+            await Hologram.handlePopstateEvent({state: historyId});
+            await waitForEventLoop();
+          };
+
+          beforeEach(() => {
+            instanceId = App.instanceId;
+            digestStub = sinon.stub(Client, "fetchPageDigest");
+            dataLayer.saved = sinon.stub().resolves(null);
+          });
+
+          afterEach(() => {
+            digestStub.restore();
+            sessionStorage.clear();
+            App.instanceId = instanceId;
+            document.head
+              .querySelectorAll('script[src*="RestoredPage"]')
+              .forEach((script) => script.remove());
+          });
+
+          it("asks for the entry's page rather than mounting the old user's state", async () => {
+            await restore("history-snapshot-1", "restored-1");
+
+            IdentityTracker.observe("2.tag-2");
+            bundleArrives("restored-1");
+
+            sinon.assert.calledOnce(fetchPageStub);
+
+            assert.deepStrictEqual(
+              fetchPageStub.firstCall.args[0].data[0],
+              snapshotModule,
+            );
+
+            sinon.assert.notCalled(dataLayer.restore);
+            sinon.assert.notCalled(reloadStub);
+          });
+
+          // A page that never got to mount left its data behind.
+          it("doesn't mistake a page it took over from for the one to ask for", async () => {
+            await showPage("abandoned-1");
+            await restore("history-snapshot-2", "restored-2");
+
+            IdentityTracker.observe("2.tag-2");
+            bundleArrives("restored-2");
+
+            sinon.assert.calledOnce(fetchPageStub);
+
+            assert.deepStrictEqual(
+              fetchPageStub.firstCall.args[0].data[0],
+              snapshotModule,
+            );
+          });
+
+          // The page that answers is the one left next, and is saved where it was scrolled to.
+          it("doesn't take the position of the restore it gave up on for the page that answers", async () => {
+            await restore("history-snapshot-4", "restored-4", [0, 640]);
+
+            IdentityTracker.observe("2.tag-2");
+            bundleArrives("restored-4");
+
+            await fetchPageStub.firstCall.args[1]({
+              ...payloadFor("restored-answer-4"),
+              actorUserId: "u2",
+              identityPeriod: IdentityTracker.period,
+              syncRows: {},
+            });
+
+            frames.splice(0).forEach((frame) => frame());
+
+            Hologram.handleBeforeunloadEvent();
+
+            const savedSnapshot = Deserializer.deserialize(
+              sessionStorage.getItem(
+                `hologram_page_snapshot_${Hologram.historyId}`,
+              ),
+            );
+
+            assert.deepStrictEqual(savedSnapshot.scrollPosition, [0, 0]);
+          });
+
+          // The restore it gave up on must not make the page it asked for skip its mount data.
+          it("mounts the page that answers with that page's data", async () => {
+            await restore("history-snapshot-3", "restored-3");
+
+            IdentityTracker.observe("2.tag-2");
+            bundleArrives("restored-3");
+
+            const freshRows = {
+              put_entity: {"App.Task": [{id: "t2", title: "Bob's task"}]},
+            };
+
+            await fetchPageStub.firstCall.args[1]({
+              ...payloadFor("restored-answer"),
+              actorUserId: "u2",
+              identityPeriod: IdentityTracker.period,
+              syncRows: freshRows,
+            });
+
+            frames.splice(0).forEach((frame) => frame());
+
+            // Stopped right after the ingest, before the page is registered for the tests after.
+            dataLayer.ingestMountData = sinon
+              .stub()
+              .throws(new Error("mount failed"));
+
+            try {
+              assert.throws(
+                () => bundleArrives("restored-answer"),
+                "mount failed",
+              );
+            } finally {
+              Hologram.isMounting = false;
+            }
+
+            sinon.assert.calledOnceWithMatch(dataLayer.ingestMountData, {
+              actorUserId: "u2",
+              pageDigest: "restored-answer",
+              syncRows: freshRows,
+            });
+          });
+        });
+
+        it("replaces the stream of a mount that raises", async () => {
+          dataLayer.holdsOtherUser.returns(false);
+
+          await showPage("stale-7");
+
+          bundleArrivesAndMountRaises("stale-7");
+
+          sinon.assert.calledOnce(dataLayer.reconnectIfFollowed);
+        });
       });
 
       it("is shown when it was described for the identity that lasts", async () => {
@@ -4800,7 +5520,7 @@ describe("Hologram", () => {
         seedCurrentPage();
 
         // Some of these tests restore a snapshot, which takes one taken for the current identity.
-        IdentityTracker.init("tag-1");
+        IdentityTracker.init("1.tag-1");
       });
 
       afterEach(() => {
@@ -5170,7 +5890,7 @@ describe("Hologram", () => {
 
     afterEach(() => navigateBrowserToStub.restore());
 
-    it("leaves the app when navigate has already been confirmed", () => {
+    it("leaves the app when navigate has already been confirmed", async () => {
       Hologram.prefetchedPages = new Map([
         [
           "dummy_map_key",
@@ -5188,10 +5908,57 @@ describe("Hologram", () => {
       Hologram.handlePrefetchPageNotPage("dummy_map_key");
 
       assert.equal(Hologram.prefetchedPages.size, 0);
+
+      await waitForEventLoop();
+
       sinon.assert.calledOnceWithExactly(
         navigateBrowserToStub,
         "/my-page-path",
       );
+    });
+
+    it("waits for the store before leaving the app", async () => {
+      let record;
+
+      Hologram.prefetchedPages = new Map([
+        [
+          "dummy_map_key",
+          {
+            isNavigateConfirmed: true,
+            isPage: true,
+            navigation: Hologram.navigationCount,
+            pagePath: "/my-page-path",
+            payload: null,
+            timestamp: Date.now(),
+          },
+        ],
+      ]);
+
+      Hologram.dataLayer = {
+        saved: () =>
+          new Promise((resolve) => {
+            record = resolve;
+          }),
+        stopped: () => false,
+      };
+
+      try {
+        Hologram.handlePrefetchPageNotPage("dummy_map_key");
+
+        await waitForEventLoop();
+
+        sinon.assert.notCalled(navigateBrowserToStub);
+
+        record();
+        await waitForEventLoop();
+
+        sinon.assert.calledOnceWithExactly(
+          navigateBrowserToStub,
+          "/my-page-path",
+        );
+      } finally {
+        Hologram.dataLayer = null;
+      }
     });
 
     // Going back or forward, or another click, after the click on the link.
@@ -5360,11 +6127,74 @@ describe("Hologram", () => {
   describe("handlePopstateEvent()", () => {
     // A snapshot is restored only for the identity it was taken for, so the tests that restore one
     // seed it with the current period.
-    beforeEach(() => IdentityTracker.init("tag-1"));
+    beforeEach(() => {
+      IdentityTracker.init("1.tag-1");
+      Hologram.virtualDocument = {sel: "html", data: {}, children: []};
+    });
 
     afterEach(() => {
       clearIdentityTracker();
       Hologram.pageIdentityPeriod = null;
+      Hologram.virtualDocument = null;
+    });
+
+    // A click on a Link, say, while the snapshot is read. What the visitor did last is that.
+    it("leaves the entry to a navigation that started while the snapshot was read", async () => {
+      const originalConfig = globalThis.Hologram.config;
+      globalThis.Hologram.config = {...originalConfig, liveReload: true};
+
+      sessionStorage.setItem(
+        "hologram_page_snapshot_history-overtaken",
+        Serializer.serialize(
+          {
+            componentRegistryEntries: Type.map(),
+            identityPeriod: IdentityTracker.period,
+            instanceId: "overtaken-instance",
+            pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Module7"),
+            pageParams: Type.map(),
+            scrollPosition: [0, 0],
+            subscriptionReceipts: [],
+          },
+          "client",
+        ),
+      );
+
+      let answer;
+
+      const fetchStub = sinon
+        .stub(Client, "fetchPageDigest")
+        .returns(new Promise((resolve) => (answer = resolve)));
+
+      const fetchPageStub = sinon
+        .stub(Client, "fetchPage")
+        .rejects(new Error("not to be fetched"));
+
+      const historyId = Hologram.historyId;
+      const registryEpoch = Hologram.registryEpoch;
+
+      try {
+        const restoring = Hologram.handlePopstateEvent({
+          state: "history-overtaken",
+        });
+
+        await waitForEventLoop();
+
+        sinon.assert.calledOnce(fetchStub);
+
+        Hologram.navigationCount += 1;
+
+        answer("overtaken-digest");
+        await restoring;
+
+        sinon.assert.notCalled(fetchPageStub);
+        assert.equal(Hologram.historyId, historyId);
+        assert.equal(Hologram.registryEpoch, registryEpoch);
+      } finally {
+        fetchPageStub.restore();
+        fetchStub.restore();
+        sessionStorage.clear();
+        globalThis.Hologram.config = originalConfig;
+      }
     });
 
     // The entry's page would run the same code the server can no longer serve.
@@ -5375,6 +6205,7 @@ describe("Hologram", () => {
         reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
 
         Hologram.dataLayer = {
+          pageCounts: () => [],
           saved: () =>
             new Promise((resolve) => {
               record = resolve;
@@ -5430,7 +6261,7 @@ describe("Hologram", () => {
         stopped.onFirstCall().returns(false);
         stopped.returns(true);
 
-        Hologram.dataLayer = {saved: saving, stopped};
+        Hologram.dataLayer = {pageCounts: () => [], saved: saving, stopped};
 
         await Hologram.handlePopstateEvent({state: "history-stopped-4"});
 
@@ -5443,7 +6274,7 @@ describe("Hologram", () => {
         const saving = sinon.stub().resolves(null);
         const stopped = sinon.stub().returns(false);
 
-        Hologram.dataLayer = {saved: saving, stopped};
+        Hologram.dataLayer = {pageCounts: () => [], saved: saving, stopped};
 
         sessionStorage.setItem(
           "hologram_page_snapshot_history-stopped-5",
@@ -5597,6 +6428,610 @@ describe("Hologram", () => {
       }
     });
 
+    // A reloaded document keeps the history entries before it, so Back can arrive while its own
+    // page bundle is still loading. The mount that follows reads no mount data, and the store is
+    // read right after it, so the document has to know who it was rendered for by then.
+    describe("in a document that has not mounted", () => {
+      const pageModule = Type.atom(
+        "Elixir.Hologram.Test.Fixtures.RestoredBeforeFirstMount",
+      );
+
+      const syncRows = {
+        put_entity: {"App.User": [{id: "user-1", email: "user@example.com"}]},
+      };
+
+      const bootFieldNames = [
+        "assetManifest",
+        "csrfToken",
+        "identityTag",
+        "initialChunkDigests",
+        "initialPageDigest",
+        "instanceId",
+        "replicaId",
+        "replicaToken",
+      ];
+
+      const carriedCounts = [["App.Page/total/", 3, ["App.Task"]]];
+
+      // A snapshot of this document's by default. One a previous document took names a period of
+      // that document's, and the tag it was stamped with.
+      const seedSnapshot = (
+        historyId,
+        {identityPeriod = IdentityTracker.period, identityTag} = {},
+      ) =>
+        sessionStorage.setItem(
+          `hologram_page_snapshot_${historyId}`,
+          Serializer.serialize(
+            {
+              carriedCounts,
+              chunkDigests: [],
+              componentRegistryEntries: Type.map(),
+              identityPeriod,
+              ...(identityTag === undefined ? {} : {identityTag}),
+              instanceId: "restored-instance",
+              pageModule,
+              pageParams: Type.map(),
+              scrollPosition: [0, 0],
+              subscriptionReceipts: [],
+            },
+            "client",
+          ),
+        );
+
+      let dataLayer,
+        consoleErrorStub,
+        fetchPageStub,
+        fetchStub,
+        instanceId,
+        originalBootFields,
+        reloadStub;
+
+      beforeEach(() => {
+        Hologram.virtualDocument = null;
+        reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+        instanceId = App.instanceId;
+
+        originalBootFields = Object.fromEntries(
+          bootFieldNames.map((name) => [name, globalThis.Hologram[name]]),
+        );
+
+        const block = document.createElement("script");
+        block.type = "application/json";
+        block.id = "hologram-boot-data";
+
+        block.textContent = JSON.stringify({
+          actorEntityId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+          actorUserId: "u02x9QDX4pOzriCIlt0xKjn",
+          syncCountTypes: {},
+          syncCounts: {},
+          syncRows,
+        });
+
+        document.body.appendChild(block);
+        Hologram.readBootData();
+
+        dataLayer = {
+          closeBatch: sinon.spy(),
+          discardBatch: sinon.spy(),
+          ingestMountData: sinon.spy(),
+          isStoreRestored: false,
+          pageCounts: () => [],
+          restoreCounts: sinon.spy(),
+          stopped: () => false,
+        };
+
+        Hologram.dataLayer = dataLayer;
+
+        consoleErrorStub = sinon.stub(console, "error");
+        fetchPageStub = sinon.stub(Client, "fetchPage").resolves();
+
+        fetchStub = sinon
+          .stub(Client, "fetchPageDigest")
+          .callsFake((_pageModule, onSuccess) => onSuccess("restored-1"));
+      });
+
+      afterEach(() => {
+        Hologram.dataLayer = null;
+
+        document
+          .querySelectorAll("#hologram-boot-data")
+          .forEach((block) => block.remove());
+
+        Hologram.readBootData();
+
+        for (const name of bootFieldNames) {
+          globalThis.Hologram[name] = originalBootFields[name];
+        }
+
+        fetchStub.restore();
+        fetchPageStub.restore();
+        consoleErrorStub.restore();
+        reloadStub.restore();
+
+        document.head
+          .querySelectorAll("script[src^='/hologram/']")
+          .forEach((script) => script.remove());
+
+        ScriptRegistry.statuses.clear();
+        MountGate.require([]);
+        MountGate.cancel();
+        LiveReload.pageBundleDigests.delete(pageModule.value);
+
+        sessionStorage.clear();
+        ComponentRegistry.clear();
+        App.instanceId = instanceId;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      });
+
+      it("takes in who the document was rendered for", async () => {
+        seedSnapshot("history-unmounted-1");
+
+        await Hologram.handlePopstateEvent({state: "history-unmounted-1"});
+
+        sinon.assert.calledOnceWithExactly(dataLayer.ingestMountData, {
+          actorEntityId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+          actorUserId: "u02x9QDX4pOzriCIlt0xKjn",
+          identityPeriod: IdentityTracker.documentPeriod,
+          syncCountTypes: {},
+          syncCounts: {},
+          syncRows,
+        });
+      });
+
+      // The entries before a reload hold the snapshots the previous document took.
+      it("takes in who it was rendered for when restoring a previous document's snapshot", async () => {
+        seedSnapshot("history-unmounted-13", {
+          identityPeriod: "a-period-of-another-document",
+          identityTag: IdentityTracker.tag,
+        });
+
+        await Hologram.handlePopstateEvent({state: "history-unmounted-13"});
+
+        sinon.assert.notCalled(fetchPageStub);
+
+        sinon.assert.calledOnceWithMatch(dataLayer.ingestMountData, {
+          identityPeriod: IdentityTracker.documentPeriod,
+        });
+
+        sinon.assert.calledOnceWithExactly(
+          dataLayer.restoreCounts,
+          carriedCounts,
+        );
+      });
+
+      // The ingest lets go of the counts the page held, so the snapshot's have to come after it.
+      it("takes it in before the snapshot's counts", async () => {
+        seedSnapshot("history-unmounted-2");
+
+        await Hologram.handlePopstateEvent({state: "history-unmounted-2"});
+
+        sinon.assert.calledOnceWithExactly(
+          dataLayer.restoreCounts,
+          carriedCounts,
+        );
+
+        assert.isTrue(
+          dataLayer.ingestMountData.calledBefore(dataLayer.restoreCounts),
+        );
+      });
+
+      // Another entry with a snapshot of its own is restored, wherever the document was rendered.
+      it("restores another entry under another URL", async () => {
+        Hologram.documentUrl = "/rendered-for-another-url";
+
+        seedSnapshot("history-unmounted-11");
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-unmounted-11"});
+
+          sinon.assert.notCalled(reloadStub);
+          sinon.assert.calledOnce(dataLayer.ingestMountData);
+        } finally {
+          Hologram.documentUrl = null;
+        }
+      });
+
+      // A click on a Link while the server is asked for the page's bundle, which moves no epoch
+      // until its page arrives. What the visitor did last is that.
+      it("leaves the entry to a navigation that started while the bundle was asked for", async () => {
+        fetchStub.callsFake((_pageModule, onSuccess) => {
+          Hologram.navigationCount += 1;
+
+          return onSuccess("restored-1");
+        });
+
+        seedSnapshot("history-unmounted-12");
+
+        await Hologram.handlePopstateEvent({state: "history-unmounted-12"});
+
+        sinon.assert.calledOnce(fetchStub);
+        sinon.assert.notCalled(dataLayer.ingestMountData);
+        sinon.assert.notCalled(dataLayer.restoreCounts);
+      });
+
+      it("takes in nothing once the document has mounted", async () => {
+        dataLayer.isStoreRestored = true;
+
+        seedSnapshot("history-unmounted-3");
+
+        await Hologram.handlePopstateEvent({state: "history-unmounted-3"});
+
+        sinon.assert.notCalled(dataLayer.ingestMountData);
+        sinon.assert.calledOnce(dataLayer.restoreCounts);
+      });
+
+      // There is no rendered tree to patch a fetched page onto.
+      it("reloads when the snapshot is another identity's", async () => {
+        seedSnapshot("history-unmounted-4");
+        IdentityTracker.observe("2.tag-2");
+
+        await Hologram.handlePopstateEvent({state: "history-unmounted-4"});
+
+        sinon.assert.calledOnce(reloadStub);
+        sinon.assert.notCalled(fetchPageStub);
+        sinon.assert.notCalled(dataLayer.ingestMountData);
+      });
+
+      // The socket opens after boot, and the popstate has cancelled the mount that was waiting.
+      it("reloads when the page's digest can't be fetched", async () => {
+        fetchStub.callsFake((_pageModule, _onSuccess, onFail) => {
+          onFail();
+
+          return Promise.reject(new Error("Failed to send message"));
+        });
+
+        seedSnapshot("history-unmounted-5");
+
+        history.replaceState("history-unmounted-5", null);
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-unmounted-5"});
+
+          sinon.assert.calledOnce(reloadStub);
+          sinon.assert.notCalled(dataLayer.ingestMountData);
+          assert.isTrue(Hologram.wasReloadedForHistoryEntry());
+        } finally {
+          history.replaceState(null, null);
+        }
+      });
+
+      it("reloads when the page's bundle fails to load", async () => {
+        seedSnapshot("history-unmounted-7");
+
+        await Hologram.handlePopstateEvent({state: "history-unmounted-7"});
+        await waitForEventLoop();
+
+        history.replaceState("history-unmounted-7", null);
+
+        try {
+          document.head.querySelector("script[src*='restored-1']").onerror();
+
+          sinon.assert.calledOnce(reloadStub);
+          assert.isTrue(Hologram.wasReloadedForHistoryEntry());
+        } finally {
+          history.replaceState(null, null);
+        }
+      });
+
+      it("reloads when deciding what to show fails", async () => {
+        const failure = new Error("failed to decide");
+        const stub = sinon.stub(IdentityTracker, "isOwnPeriod").throws(failure);
+
+        seedSnapshot("history-unmounted-8");
+        history.replaceState("history-unmounted-8", null);
+
+        try {
+          let raised = null;
+
+          try {
+            await Hologram.handlePopstateEvent({state: "history-unmounted-8"});
+          } catch (error) {
+            raised = error;
+          }
+
+          assert.equal(raised, failure);
+          sinon.assert.calledOnce(reloadStub);
+          assert.isTrue(Hologram.wasReloadedForHistoryEntry());
+        } finally {
+          history.replaceState(null, null);
+          stub.restore();
+        }
+      });
+
+      // Dispatched by the scripts of the page the document was rendered with.
+      it("drops the actions buffered for the document's own page", async () => {
+        const shimActions = [{name: "not-taken-over-by-the-init-yet"}];
+
+        Hologram.pendingJsInteropActions = [{name: "for-the-document's-page"}];
+        globalThis.Hologram._pendingJsInteropActions = shimActions;
+
+        seedSnapshot("history-unmounted-9");
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-unmounted-9"});
+          await waitForEventLoop();
+
+          assert.deepStrictEqual(Hologram.pendingJsInteropActions, []);
+          assert.deepStrictEqual(shimActions, []);
+        } finally {
+          delete globalThis.Hologram._pendingJsInteropActions;
+        }
+      });
+
+      it("still raises a failed digest fetch once the document has rendered", async () => {
+        Hologram.virtualDocument = {sel: "html", data: {}, children: []};
+
+        fetchStub.callsFake(
+          (_pageModule, _onSuccess, onFail) =>
+            new Promise(() => {
+              onFail();
+            }),
+        );
+
+        seedSnapshot("history-unmounted-10");
+
+        let raised = null;
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-unmounted-10"});
+        } catch (error) {
+          raised = error;
+        }
+
+        Hologram.deadEpochs.clear();
+
+        assert.instanceOf(raised, HologramRuntimeError);
+        sinon.assert.notCalled(reloadStub);
+      });
+
+      describe("two popstates that overlap", () => {
+        let answers, originalLiveReload;
+
+        beforeEach(() => {
+          originalLiveReload = globalThis.Hologram.config.liveReload;
+          globalThis.Hologram.config.liveReload = true;
+          answers = [];
+
+          // The live reload check is the wait each popstate decides through. With no answer it
+          // goes on as if the snapshot still fits.
+          fetchStub.callsFake(
+            (_pageModule, onSuccess) =>
+              new Promise((resolve, reject) => {
+                answers.push({onSuccess, reject, resolve});
+              }),
+          );
+        });
+
+        afterEach(() => {
+          globalThis.Hologram.config.liveReload = originalLiveReload;
+        });
+
+        it("lets the newer one decide when the older one finishes last", async () => {
+          seedSnapshot("history-overlap-1");
+          seedSnapshot("history-overlap-2");
+
+          const older = Hologram.handlePopstateEvent({
+            state: "history-overlap-1",
+          });
+
+          await waitForEventLoop();
+
+          const newer = Hologram.handlePopstateEvent({
+            state: "history-overlap-2",
+          });
+
+          await waitForEventLoop();
+
+          answers[1].reject(new Error("no answer"));
+          await waitForEventLoop();
+
+          answers[0].reject(new Error("no answer"));
+          await older;
+
+          assert.equal(Hologram.registryEpoch, 1);
+          assert.notEqual(Hologram.historyId, "history-overlap-1");
+
+          // The newer one's ask for the page's bundle.
+          answers[2].onSuccess("restored-1");
+          answers[2].resolve();
+          await newer;
+
+          assert.equal(Hologram.historyId, "history-overlap-2");
+          assert.equal(Hologram.registryEpoch, 1);
+        });
+
+        it("leaves the reload to the newer one when the older one fails", async () => {
+          const failure = new Error("failed to decide");
+          const fitsStub = sinon
+            .stub(LiveReload, "snapshotFits")
+            .throws(failure);
+
+          seedSnapshot("history-overlap-5");
+          seedSnapshot("history-overlap-6");
+
+          try {
+            const older = Hologram.handlePopstateEvent({
+              state: "history-overlap-5",
+            });
+
+            await waitForEventLoop();
+
+            const newer = Hologram.handlePopstateEvent({
+              state: "history-overlap-6",
+            });
+
+            await waitForEventLoop();
+
+            answers[0].resolve("digest");
+
+            let raised = null;
+
+            try {
+              await older;
+            } catch (error) {
+              raised = error;
+            }
+
+            assert.equal(raised, failure);
+            sinon.assert.notCalled(reloadStub);
+
+            answers[1].reject(new Error("no answer"));
+            await waitForEventLoop();
+
+            answers[2].reject(new Error("no answer"));
+            await newer.catch(() => null);
+          } finally {
+            fitsStub.restore();
+          }
+        });
+
+        it("drops the older one's page while the newer one decides", async () => {
+          seedSnapshot("history-overlap-3");
+          seedSnapshot("history-overlap-4");
+
+          const older = Hologram.handlePopstateEvent({
+            state: "history-overlap-3",
+          });
+
+          await waitForEventLoop();
+
+          answers[0].reject(new Error("no answer"));
+          await waitForEventLoop();
+
+          const newer = Hologram.handlePopstateEvent({
+            state: "history-overlap-4",
+          });
+
+          await waitForEventLoop();
+
+          answers[1].onSuccess("older-page");
+
+          assert.isFalse(MountGate.requires("older-page"));
+
+          answers[1].reject(new Error("no answer"));
+          await older.catch(() => null);
+
+          answers[2].reject(new Error("no answer"));
+          await waitForEventLoop();
+
+          answers[3].reject(new Error("no answer"));
+          await newer.catch(() => null);
+        });
+      });
+
+      it("leaves a failed digest fetch to the navigation that took over", async () => {
+        fetchStub.callsFake((_pageModule, _onSuccess, onFail) => {
+          Hologram.registryEpoch += 1;
+          onFail();
+
+          return Promise.reject(new Error("Failed to send message"));
+        });
+
+        seedSnapshot("history-unmounted-6");
+
+        await Hologram.handlePopstateEvent({state: "history-unmounted-6"});
+
+        sinon.assert.notCalled(reloadStub);
+      });
+    });
+
+    // Entries of one page can differ only in their query string, and the first render can depend
+    // on it, so one rendered for another query string can't be kept.
+    describe("entry of the same page before the first render", () => {
+      const ownUrl = () =>
+        `${window.location.pathname}${window.location.search}`;
+
+      let originalHistoryId, originalPagePath, reloadStub, replaceStateStub;
+
+      beforeEach(() => {
+        originalHistoryId = Hologram.historyId;
+        originalPagePath = Hologram.pagePath;
+
+        Hologram.historyId = "history-same-page";
+        Hologram.pagePath = window.location.pathname;
+        Hologram.virtualDocument = null;
+        Hologram.documentUrl = `${ownUrl()}?rendered=for-another`;
+
+        reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+        replaceStateStub = sinon.stub(history, "replaceState");
+      });
+
+      afterEach(() => {
+        replaceStateStub.restore();
+        reloadStub.restore();
+
+        Hologram.documentUrl = null;
+        Hologram.historyId = originalHistoryId;
+        Hologram.pagePath = originalPagePath;
+        sessionStorage.clear();
+      });
+
+      it("reloads an entry with no state under another query string", async () => {
+        await Hologram.handlePopstateEvent({state: null});
+
+        sinon.assert.calledOnce(reloadStub);
+        sinon.assert.notCalled(replaceStateStub);
+      });
+
+      it("reloads an entry sharing the id under another query string", async () => {
+        await Hologram.handlePopstateEvent({state: "history-same-page"});
+
+        sinon.assert.calledOnce(reloadStub);
+      });
+
+      // The entry's snapshot may be the other query string's.
+      it("doesn't ask the next document to restore the shared id's snapshot", async () => {
+        const originalState = history.state;
+        replaceStateStub.restore();
+        history.replaceState("history-same-page", null);
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-same-page"});
+
+          assert.isFalse(Hologram.wasReloadedForHistoryEntry());
+        } finally {
+          history.replaceState(originalState, null);
+          replaceStateStub = sinon.stub(history, "replaceState");
+        }
+      });
+
+      it("keeps the document on a jump to a #fragment", async () => {
+        const originalState = history.state;
+        const originalUrl = window.location.href;
+        Hologram.documentUrl = ownUrl();
+        replaceStateStub.wrappedMethod.call(
+          history,
+          null,
+          "",
+          `${ownUrl()}#section`,
+        );
+
+        try {
+          await Hologram.handlePopstateEvent({state: null});
+
+          sinon.assert.notCalled(reloadStub);
+          sinon.assert.calledOnce(replaceStateStub);
+        } finally {
+          replaceStateStub.wrappedMethod.call(
+            history,
+            originalState,
+            "",
+            originalUrl,
+          );
+        }
+      });
+
+      it("leaves a document that has rendered to its own handling", async () => {
+        Hologram.virtualDocument = {sel: "html", data: {}, children: []};
+
+        await Hologram.handlePopstateEvent({state: null});
+
+        sinon.assert.notCalled(reloadStub);
+        sinon.assert.calledOnce(replaceStateStub);
+      });
+    });
+
     // The state a snapshot holds can carry values of struct types whose protocol implementations
     // only the chunks it was taken with have, so it is restored once they are in. A snapshot can be
     // older than the build that serves the app now, and its chunks are named by digest, so the
@@ -5626,7 +7061,11 @@ describe("Hologram", () => {
 
       // Filed under a history id of its own each time: the handler first saves the page being
       // left under the id it holds, which is the one the last restore went to.
-      const seedSnapshot = (historyId, snapshotPageModule = pageModule) => {
+      const seedSnapshot = (
+        historyId,
+        snapshotPageModule = pageModule,
+        scrollPosition = [0, 0],
+      ) => {
         const pageSnapshot = {
           chunkDigests: ["SNAPSHOT"],
           componentRegistryEntries: Type.map(),
@@ -5634,7 +7073,7 @@ describe("Hologram", () => {
           instanceId: "restored-instance",
           pageModule: snapshotPageModule,
           pageParams: Type.map(),
-          scrollPosition: [0, 0],
+          scrollPosition: scrollPosition,
           subscriptionReceipts: [],
         };
 
@@ -5775,7 +7214,7 @@ describe("Hologram", () => {
         await Hologram.handlePopstateEvent({state: "history-chunks-5"});
         await flushPromises();
 
-        IdentityTracker.observe("tag-2");
+        IdentityTracker.observe("2.tag-2");
         announce("SNAPSHOT");
         await flushPromises();
 
@@ -5874,6 +7313,70 @@ describe("Hologram", () => {
           assert.equal(Hologram.domEpoch, 1);
           assert.isFalse(Hologram.isMounting);
           assert.isFalse(Hologram.isPageShown);
+        } finally {
+          delete window.requestAnimationFrame;
+          delete globalThis.Hologram.assetManifest;
+          AssetPathRegistry.entries = assetPathEntries;
+          LiveReload.pageBundleDigests.delete(mountedModule.value);
+          Hologram.isMounting = false;
+          Hologram.isPageShown = false;
+          renderStub.restore();
+          scrollToStub.restore();
+          sseStartStub.restore();
+        }
+      });
+
+      // The restored page's own position is applied in the frame of its first render. A save
+      // before then, like the one on unload, is of the restored page, and the document's position
+      // is still the left page's.
+      it("saves the position the restored page is to be scrolled to, before its first render", async () => {
+        const mountedModule = Type.atom(
+          "Elixir.Hologram.Test.Fixtures.ScrolledFromSnapshot",
+        );
+
+        const assetPathEntries = AssetPathRegistry.entries;
+        const renderStub = sinon.stub(Hologram, "render");
+        const scrollToStub = sinon.stub(window, "scrollTo");
+        const sseStartStub = sinon.stub(Sse, "start");
+
+        let frame = null;
+        window.requestAnimationFrame = (callback) => (frame = callback);
+        globalThis.Hologram.assetManifest = {};
+
+        try {
+          ScriptRegistry.statuses.set("SNAPSHOT", "loaded");
+          seedSnapshot(
+            "history-scrolled-from-snapshot",
+            mountedModule,
+            [0, 640],
+          );
+
+          await Hologram.handlePopstateEvent({
+            state: "history-scrolled-from-snapshot",
+          });
+
+          await flushPromises();
+
+          announce("restored-1");
+          MountGate.settle();
+
+          assert.isNotNull(frame);
+
+          // The seeded record goes, so the record read below is the one the unload writes.
+          const snapshotKey =
+            "hologram_page_snapshot_history-scrolled-from-snapshot";
+
+          sessionStorage.removeItem(snapshotKey);
+
+          Hologram.handleBeforeunloadEvent();
+
+          const savedSnapshot = Deserializer.deserialize(
+            sessionStorage.getItem(snapshotKey),
+          );
+
+          assert.deepStrictEqual(savedSnapshot.scrollPosition, [0, 640]);
+
+          frame();
         } finally {
           delete window.requestAnimationFrame;
           delete globalThis.Hologram.assetManifest;
@@ -6417,6 +7920,42 @@ describe("Hologram", () => {
       });
 
       // No page has mounted in a document that is still starting.
+      it("leaves the stored ETS tables alone until they have been read", async () => {
+        const saveEtsStub = sinon.stub(Hologram, "saveEts");
+        Hologram.isEtsRestored = false;
+
+        try {
+          Hologram.handleBeforeunloadEvent();
+          sinon.assert.notCalled(saveEtsStub);
+
+          // The read is held open, so an unload during it would write over the stored tables.
+          let failRead;
+
+          Object.defineProperty(navigator, "storage", {
+            configurable: true,
+            value: {
+              getDirectory: () =>
+                new Promise((_resolve, reject) => (failRead = reject)),
+            },
+          });
+
+          const restoring = Hologram.restoreEts();
+          await waitForEventLoop();
+
+          Hologram.handleBeforeunloadEvent();
+          sinon.assert.notCalled(saveEtsStub);
+
+          failRead(new Error("no OPFS"));
+          await restoring;
+
+          Hologram.handleBeforeunloadEvent();
+          sinon.assert.calledOnce(saveEtsStub);
+        } finally {
+          Hologram.isEtsRestored = false;
+          saveEtsStub.restore();
+        }
+      });
+
       it("saves nothing on beforeunload before a page has mounted", () => {
         installOpfs();
         Hologram.historyId = "history-opfs-11";
@@ -6515,7 +8054,12 @@ describe("Hologram", () => {
       it("takes the id of the page on screen when it is under the page's path, whatever its query string", async () => {
         const originalState = history.state;
         const originalUrl = window.location.href;
-        history.pushState(null, "", `${window.location.pathname}?tab=reviews`);
+        replaceStateStub.wrappedMethod.call(
+          history,
+          null,
+          "",
+          `${window.location.pathname}?tab=reviews`,
+        );
 
         try {
           await Hologram.handlePopstateEvent({state: null});
@@ -6587,7 +8131,7 @@ describe("Hologram", () => {
       // Leaves the period the tests seed a snapshot with behind, as a logout would.
       const endPeriod = () => {
         const endedPeriod = IdentityTracker.period;
-        IdentityTracker.observe("tag-2");
+        IdentityTracker.observe("2.tag-2");
 
         return endedPeriod;
       };
@@ -6667,7 +8211,7 @@ describe("Hologram", () => {
           seedSnapshot("history-counts-1", {
             carriedCounts,
             identityPeriod: "a-period-of-another-document",
-            identityTag: "tag-1",
+            identityTag: "1.tag-1",
           });
 
           await Hologram.handlePopstateEvent({state: "history-counts-1"});
@@ -6691,7 +8235,7 @@ describe("Hologram", () => {
         it("are none for a snapshot an earlier build took", async () => {
           seedSnapshot("history-counts-3", {
             identityPeriod: "a-period-of-another-document",
-            identityTag: "tag-1",
+            identityTag: "1.tag-1",
           });
 
           await Hologram.handlePopstateEvent({state: "history-counts-3"});
@@ -6789,12 +8333,12 @@ describe("Hologram", () => {
       // The identity changed in this document and changed back, so a response that left before
       // the change can have put the old tag back: the tag is trusted no more.
       it("is passed over when another document took it and the identity changed here since", async () => {
-        IdentityTracker.observe("tag-2");
-        IdentityTracker.observe("tag-1");
+        IdentityTracker.observe("2.tag-2");
+        IdentityTracker.observe("1.tag-1");
 
         seedSnapshot("history-identity-10", {
           identityPeriod: "period-of-another-document",
-          identityTag: "tag-1",
+          identityTag: "1.tag-1",
         });
 
         await Hologram.handlePopstateEvent({state: "history-identity-10"});
@@ -6807,12 +8351,12 @@ describe("Hologram", () => {
       // Its page can hold what the identity in between put in it.
       it("is passed over when this document took it before the identity changed and changed back", async () => {
         const takenInPeriod = IdentityTracker.period;
-        IdentityTracker.observe("tag-2");
-        IdentityTracker.observe("tag-1");
+        IdentityTracker.observe("2.tag-2");
+        IdentityTracker.observe("1.tag-1");
 
         seedSnapshot("history-identity-11", {
           identityPeriod: takenInPeriod,
-          identityTag: "tag-1",
+          identityTag: "1.tag-1",
         });
 
         await Hologram.handlePopstateEvent({state: "history-identity-11"});
@@ -6837,12 +8381,17 @@ describe("Hologram", () => {
           identityPeriod: IdentityTracker.period,
         });
 
-        await Hologram.handlePopstateEvent({state: "history-identity-3"});
-        await flushPromises();
+        try {
+          await Hologram.handlePopstateEvent({state: "history-identity-3"});
+          await flushPromises();
 
-        assert.strictEqual(App.instanceId, "restored-instance");
-        assert.equal(Hologram.pageIdentityPeriod, IdentityTracker.period);
-        sinon.assert.notCalled(fetchPageStub);
+          assert.strictEqual(App.instanceId, "restored-instance");
+          assert.equal(Hologram.pageIdentityPeriod, IdentityTracker.period);
+          assert.equal(Sse.receiptsPeriod, IdentityTracker.period);
+          sinon.assert.notCalled(fetchPageStub);
+        } finally {
+          Sse.receiptsPeriod = null;
+        }
       });
 
       // An entry with no id is taken for the page on screen only under its path.
@@ -6879,12 +8428,49 @@ describe("Hologram", () => {
           const [_toParam, _onSuccess, onNotPage] =
             fetchPageStub.firstCall.args;
           onNotPage();
+          await flushPromises();
 
           sinon.assert.calledOnce(reloadStub);
           sinon.assert.notCalled(replaceStub);
         } finally {
           reloadStub.restore();
           replaceStub.restore();
+        }
+      });
+
+      it("waits for the store before reloading an entry the server answers with no page", async () => {
+        const reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+        let record;
+
+        try {
+          seedSnapshot("history-identity-5", {identityPeriod: endPeriod()});
+
+          await Hologram.handlePopstateEvent({state: "history-identity-5"});
+          await flushPromises();
+
+          const [_toParam, _onSuccess, onNotPage] =
+            fetchPageStub.firstCall.args;
+
+          Hologram.dataLayer = {
+            saved: () =>
+              new Promise((resolve) => {
+                record = resolve;
+              }),
+            stopped: () => false,
+          };
+
+          onNotPage();
+          await flushPromises();
+
+          sinon.assert.notCalled(reloadStub);
+
+          record();
+          await flushPromises();
+
+          sinon.assert.calledOnce(reloadStub);
+        } finally {
+          reloadStub.restore();
+          Hologram.dataLayer = null;
         }
       });
     });
@@ -6977,7 +8563,7 @@ describe("Hologram", () => {
 
   describe("isDocumentSnapshotRestorable()", () => {
     const snapshot = (fields = {}) => ({
-      identityTag: "tag-1",
+      identityTag: "1.tag-1",
       pageDigest: "page-1",
       runtimeDigest: null,
       ...fields,
@@ -6986,7 +8572,7 @@ describe("Hologram", () => {
     let originalInitialPageDigest;
 
     beforeEach(() => {
-      IdentityTracker.init("tag-1");
+      IdentityTracker.init("1.tag-1");
       originalInitialPageDigest = globalThis.Hologram.initialPageDigest;
     });
 
@@ -7003,7 +8589,7 @@ describe("Hologram", () => {
     it("passes over a snapshot taken for another identity", () => {
       assert.isFalse(
         Hologram.isDocumentSnapshotRestorable(
-          snapshot({identityTag: "tag-2"}),
+          snapshot({identityTag: "2.tag-2"}),
           true,
         ),
       );
@@ -7144,6 +8730,449 @@ describe("Hologram", () => {
 
       assert.equal(error.message, "my message");
       sinon.assert.notCalled(overlayShowStub);
+    });
+  });
+
+  // Back can arrive before the runtime has loaded, when only the document's inline script listens.
+  describe("listenForPopstate()", () => {
+    const shim = () => null;
+
+    let addStub, reloadStub, removeStub;
+
+    // The listener the document put up for popstate.
+    const onPopstate = () => {
+      const call = addStub
+        .getCalls()
+        .find((added) => added.args[0] === "popstate");
+
+      assert.isDefined(call);
+
+      return call.args[1];
+    };
+
+    beforeEach(() => {
+      addStub = sinon.stub(window, "addEventListener");
+      removeStub = sinon.stub(window, "removeEventListener");
+      reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+      globalThis.Hologram._popstateShim = shim;
+    });
+
+    afterEach(() => {
+      reloadStub.restore();
+      removeStub.restore();
+      addStub.restore();
+
+      delete globalThis.Hologram._documentState;
+      delete globalThis.Hologram._missedPopstate;
+      delete globalThis.Hologram._popstateShim;
+      Hologram.documentUrl = null;
+    });
+
+    it("remembers the URL the document was rendered for", () => {
+      Hologram.listenForPopstate();
+
+      assert.equal(
+        Hologram.documentUrl,
+        `${window.location.pathname}${window.location.search}`,
+      );
+    });
+
+    it("reloads again on a further Back, and leaves the rest to the next document", () => {
+      globalThis.Hologram._missedPopstate = true;
+
+      Hologram.listenForPopstate();
+
+      sinon.assert.neverCalledWith(
+        addStub,
+        "popstate",
+        Hologram.handlePopstateEvent,
+      );
+
+      onPopstate()();
+
+      sinon.assert.calledTwice(reloadStub);
+    });
+
+    // Another navigation can cancel the reload and leave this document in the cache.
+    it("reloads when the back/forward cache brings a document back that never booted", () => {
+      globalThis.Hologram._missedPopstate = true;
+
+      Hologram.listenForPopstate();
+
+      const onPageshow = addStub
+        .getCalls()
+        .find((call) => call.args[0] === "pageshow").args[1];
+
+      onPageshow({persisted: false});
+      sinon.assert.calledOnce(reloadStub);
+
+      onPageshow({persisted: true});
+      sinon.assert.calledTwice(reloadStub);
+    });
+
+    it("takes over from the inline script's listener", () => {
+      assert.isTrue(Hologram.listenForPopstate());
+
+      sinon.assert.calledOnceWithExactly(
+        addStub,
+        "popstate",
+        Hologram.handlePopstateEvent,
+      );
+
+      sinon.assert.calledOnceWithExactly(removeStub, "popstate", shim);
+      assert.notProperty(globalThis.Hologram, "_popstateShim");
+      sinon.assert.notCalled(reloadStub);
+    });
+
+    it("reloads when the browser moved to another entry before it", () => {
+      globalThis.Hologram._missedPopstate = true;
+
+      assert.isFalse(Hologram.listenForPopstate());
+
+      sinon.assert.calledOnce(reloadStub);
+    });
+
+    describe("into an entry", () => {
+      let originalState, originalUrl;
+
+      beforeEach(() => {
+        originalState = history.state;
+        originalUrl = window.location.href;
+        sessionStorage.clear();
+        globalThis.Hologram._missedPopstate = true;
+      });
+
+      afterEach(() => {
+        history.replaceState(originalState, null, originalUrl);
+        sessionStorage.clear();
+      });
+
+      it("of another id, noting it for the next document", () => {
+        globalThis.Hologram._documentState = "entry-of-the-document";
+        history.replaceState("entry-moved-to", null, "/search?tab=2");
+
+        Hologram.listenForPopstate();
+
+        sinon.assert.calledOnce(reloadStub);
+        assert.isTrue(Hologram.wasReloadedForHistoryEntry());
+      });
+
+      // The snapshot under the shared id can be the document's own entry's, of another query string.
+      it("sharing the document's id, without noting it", () => {
+        globalThis.Hologram._documentState = "entry-of-the-page";
+        history.replaceState("entry-of-the-page", null, "/search?tab=2");
+
+        Hologram.listenForPopstate();
+
+        sinon.assert.calledOnce(reloadStub);
+        assert.isFalse(Hologram.wasReloadedForHistoryEntry());
+      });
+
+      it("sharing the document's id, on a further Back", () => {
+        globalThis.Hologram._documentState = "entry-of-the-page";
+        history.replaceState("entry-moved-to", null, "/search?tab=2");
+
+        Hologram.listenForPopstate();
+        sessionStorage.clear();
+
+        history.replaceState("entry-of-the-page", null, "/search?tab=3");
+        onPopstate()();
+
+        sinon.assert.calledTwice(reloadStub);
+        assert.isFalse(Hologram.wasReloadedForHistoryEntry());
+      });
+    });
+
+    it("goes on in a document with no inline script", () => {
+      delete globalThis.Hologram._popstateShim;
+
+      assert.isTrue(Hologram.listenForPopstate());
+
+      sinon.assert.notCalled(removeStub);
+      sinon.assert.notCalled(reloadStub);
+    });
+  });
+
+  // The browser records the reload as a plain one, whose document renders the page afresh.
+  describe("reloadHistoryEntry() and wasReloadedForHistoryEntry()", () => {
+    let originalState, originalUrl, reloadStub;
+
+    beforeEach(() => {
+      originalState = history.state;
+      originalUrl = window.location.href;
+      reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+      sessionStorage.clear();
+    });
+
+    afterEach(() => {
+      reloadStub.restore();
+      history.replaceState(originalState, null, originalUrl);
+      sessionStorage.clear();
+    });
+
+    it("tells the next document, once, that it was reloaded into this entry", () => {
+      history.replaceState("entry-1", null);
+
+      Hologram.reloadHistoryEntry();
+
+      sinon.assert.calledOnce(reloadStub);
+      assert.isTrue(Hologram.wasReloadedForHistoryEntry());
+      assert.isFalse(Hologram.wasReloadedForHistoryEntry());
+    });
+
+    it("doesn't count for another entry", () => {
+      history.replaceState("entry-1", null);
+      Hologram.reloadHistoryEntry();
+
+      history.replaceState("entry-2", null);
+
+      assert.isFalse(Hologram.wasReloadedForHistoryEntry());
+    });
+
+    // The server answered the reload with a redirect, which keeps the entry's id.
+    it("doesn't count under another URL", () => {
+      history.replaceState("entry-1", null, "/before-redirect");
+      Hologram.reloadHistoryEntry();
+
+      history.replaceState("entry-1", null, "/after-redirect");
+
+      assert.isFalse(Hologram.wasReloadedForHistoryEntry());
+    });
+
+    it("doesn't count under another query string", () => {
+      history.replaceState("entry-1", null, "/page?tab=1");
+      Hologram.reloadHistoryEntry();
+
+      history.replaceState("entry-1", null, "/page?tab=2");
+
+      assert.isFalse(Hologram.wasReloadedForHistoryEntry());
+    });
+
+    it("notes nothing for an entry with no id", () => {
+      history.replaceState(null, null);
+
+      Hologram.reloadHistoryEntry();
+
+      sinon.assert.calledOnce(reloadStub);
+      assert.isNull(sessionStorage.getItem("hologram_history_reload"));
+    });
+
+    it("still reloads when storage is refused", () => {
+      history.replaceState("entry-1", null);
+
+      const setItemStub = sinon
+        .stub(window.Storage.prototype, "setItem")
+        .throws(new Error("refused"));
+
+      try {
+        Hologram.reloadHistoryEntry();
+      } finally {
+        setItemStub.restore();
+      }
+
+      sinon.assert.calledOnce(reloadStub);
+    });
+  });
+
+  // A reloaded document keeps the history entries before it, so Back can arrive while the chunks
+  // of the snapshot it is about to restore are still loading.
+  describe("mountDocument()", () => {
+    const digest = "DOCUMENTCHUNK";
+    const pageSnapshot = {chunkDigests: [digest]};
+
+    const announce = () => {
+      globalThis.Hologram.pendingScripts = [
+        {define: () => null, digest: digest},
+      ];
+
+      ScriptRegistry.defineLoaded({});
+    };
+
+    let mountStub, originalPagePath, requestChunksStub, restoreStub;
+
+    beforeEach(() => {
+      IdentityTracker.init("1.tag");
+      originalPagePath = Hologram.pagePath;
+      mountStub = sinon.stub(MountGate, "mountWhenReady");
+      requestChunksStub = sinon.stub(Hologram, "requestChunks");
+      restoreStub = sinon.stub(Hologram, "restoreDocumentSnapshot");
+    });
+
+    afterEach(() => {
+      restoreStub.restore();
+      requestChunksStub.restore();
+      mountStub.restore();
+
+      ScriptRegistry.statuses.clear();
+      MountGate.require([]);
+      MountGate.cancel();
+      sessionStorage.clear();
+
+      Hologram.pagePath = originalPagePath;
+      Hologram.domEpoch = 0;
+      Hologram.registryEpoch = 0;
+    });
+
+    it("restores the snapshot and mounts once its chunks are in", async () => {
+      const mounting = Hologram.mountDocument(pageSnapshot, 0);
+
+      sinon.assert.notCalled(restoreStub);
+
+      announce();
+      await mounting;
+
+      sinon.assert.calledOnceWithExactly(restoreStub, pageSnapshot);
+      sinon.assert.calledOnce(mountStub);
+    });
+
+    it("mounts from the rendered state when the identity changes while the chunks load", async () => {
+      const mounting = Hologram.mountDocument(pageSnapshot, 0);
+
+      IdentityTracker.observe("2.other");
+
+      announce();
+      await mounting;
+
+      sinon.assert.notCalled(restoreStub);
+      sinon.assert.calledOnce(mountStub);
+    });
+
+    it("mounts with no snapshot to restore", async () => {
+      await Hologram.mountDocument(null, 0);
+
+      sinon.assert.notCalled(restoreStub);
+      sinon.assert.calledOnce(mountStub);
+    });
+
+    it("leaves the document to a popstate that opened a navigation meanwhile", async () => {
+      const mounting = Hologram.mountDocument(pageSnapshot, 0);
+
+      Hologram.registryEpoch += 1;
+
+      announce();
+      await mounting;
+
+      sinon.assert.notCalled(restoreStub);
+      sinon.assert.notCalled(mountStub);
+    });
+
+    it("leaves the document to a popstate still deciding what to show", async () => {
+      const originalLiveReload = globalThis.Hologram.config.liveReload;
+      const pageModule = Type.atom("Elixir.Hologram.Test.Fixtures.Deciding");
+
+      IdentityTracker.init("1.tag-1");
+      globalThis.Hologram.config.liveReload = true;
+
+      sessionStorage.setItem(
+        "hologram_page_snapshot_history-deciding",
+        Serializer.serialize(
+          {
+            carriedCounts: [],
+            chunkDigests: [],
+            componentRegistryEntries: Type.map(),
+            identityPeriod: IdentityTracker.period,
+            instanceId: "restored-instance",
+            pageModule,
+            pageParams: Type.map(),
+            scrollPosition: [0, 0],
+            subscriptionReceipts: [],
+          },
+          "client",
+        ),
+      );
+
+      let answerDigest;
+
+      const fetchStub = sinon.stub(Client, "fetchPageDigest");
+
+      fetchStub.onFirstCall().returns(
+        new Promise((_resolve, reject) => {
+          answerDigest = reject;
+        }),
+      );
+
+      fetchStub.onSecondCall().resolves();
+
+      try {
+        const mounting = Hologram.mountDocument(pageSnapshot, 0);
+
+        const deciding = Hologram.handlePopstateEvent({
+          state: "history-deciding",
+        });
+
+        await waitForEventLoop();
+        sinon.assert.calledOnce(fetchStub);
+
+        announce();
+        await mounting;
+
+        sinon.assert.notCalled(restoreStub);
+        sinon.assert.notCalled(mountStub);
+
+        answerDigest(new Error("no answer"));
+        await deciding;
+      } finally {
+        fetchStub.restore();
+        globalThis.Hologram.config.liveReload = originalLiveReload;
+        clearIdentityTracker();
+      }
+    });
+
+    it("keeps what a popstate during the init requires", async () => {
+      const originalPageDigest = globalThis.Hologram.initialPageDigest;
+      globalThis.Hologram.initialPageDigest = "DOCUMENTPAGE";
+
+      try {
+        await Hologram.startDocument(async () => {
+          MountGate.require(["POPSTATEPAGE"]);
+          Hologram.registryEpoch += 1;
+        });
+
+        assert.isTrue(MountGate.requires("POPSTATEPAGE"));
+        assert.isFalse(MountGate.requires("DOCUMENTPAGE"));
+        sinon.assert.notCalled(mountStub);
+      } finally {
+        globalThis.Hologram.initialPageDigest = originalPageDigest;
+      }
+    });
+
+    it("doesn't mount a document its init is reloading", async () => {
+      await Hologram.startDocument(async () => false);
+
+      sinon.assert.notCalled(mountStub);
+    });
+
+    it("mounts after an init no popstate came in during", async () => {
+      await Hologram.startDocument(async () => null);
+
+      sinon.assert.calledOnce(mountStub);
+    });
+
+    // A jump to a #fragment shows the same page, so it has nothing to take over.
+    it("still mounts after a jump to a #fragment", async () => {
+      const originalState = history.state;
+      const originalUrl = window.location.href;
+      Hologram.pagePath = window.location.pathname;
+
+      let replaceStateStub = null;
+
+      try {
+        const mounting = Hologram.mountDocument(pageSnapshot, 0);
+
+        history.replaceState(null, "", `${window.location.pathname}#section`);
+        replaceStateStub = sinon.stub(history, "replaceState");
+
+        await Hologram.handlePopstateEvent({state: null});
+
+        announce();
+        await mounting;
+
+        sinon.assert.calledOnceWithExactly(restoreStub, pageSnapshot);
+        sinon.assert.calledOnce(mountStub);
+      } finally {
+        replaceStateStub?.restore();
+        history.replaceState(originalState, "", originalUrl);
+      }
     });
   });
 
@@ -8213,7 +10242,7 @@ describe("Hologram", () => {
 
     beforeEach(() => {
       instanceId = App.instanceId;
-      IdentityTracker.init("tag-1");
+      IdentityTracker.init("1.tag-1");
 
       originalBootFields = Object.fromEntries(
         bootFieldNames.map((name) => [name, globalThis.Hologram[name]]),
@@ -8300,7 +10329,7 @@ describe("Hologram", () => {
       );
 
     beforeEach(() => {
-      IdentityTracker.init("tag-1");
+      IdentityTracker.init("1.tag-1");
       ERTS.ets = {};
     });
 
@@ -8311,7 +10340,7 @@ describe("Hologram", () => {
     });
 
     it("takes in tables stored for the identity the document was rendered for", async () => {
-      store({identityTag: "tag-1", tables: tables});
+      store({identityTag: "1.tag-1", tables: tables});
 
       await Hologram.restoreEts();
 
@@ -8320,7 +10349,7 @@ describe("Hologram", () => {
 
     // They can hold another user's data.
     it("leaves the tables empty when they were stored for another identity", async () => {
-      store({identityTag: "tag-2", tables: tables});
+      store({identityTag: "2.tag-2", tables: tables});
 
       await Hologram.restoreEts();
 
@@ -8356,7 +10385,7 @@ describe("Hologram", () => {
     let consoleErrorStub;
 
     beforeEach(() => {
-      IdentityTracker.init("tag-1");
+      IdentityTracker.init("1.tag-1");
       ERTS.ets = tables;
       consoleErrorStub = sinon.stub(console, "error");
     });
@@ -8373,13 +10402,13 @@ describe("Hologram", () => {
 
       const record = storedRecord();
 
-      assert.equal(record.identityTag, "tag-1");
+      assert.equal(record.identityTag, "1.tag-1");
       assert.deepStrictEqual(record.tables, tables);
     });
 
     // The tables live for the whole document, so they can hold what both identities put in them.
     it("stamps the tables with no identity tag when the identity changed since the document was loaded", async () => {
-      IdentityTracker.observe("tag-2");
+      IdentityTracker.observe("2.tag-2");
 
       await Hologram.saveEts();
 

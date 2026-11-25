@@ -418,7 +418,7 @@ defmodule Hologram.RealtimeTest do
     assert instance_announce_topic("abc-uuid") == "hologram:announce:instance:abc-uuid"
   end
 
-  describe "maybe_announce_identity_change/2" do
+  describe "maybe_announce_identity_change/3" do
     test "broadcasts on the pre session's announce topic when session_id changes" do
       pre_session_id = setup_session_announce_subscription()
       post_session_id = "test-session-#{:erlang.unique_integer([:positive])}"
@@ -426,9 +426,9 @@ defmodule Hologram.RealtimeTest do
       pre = %Server{session_id: pre_session_id, user_id: 7}
       post = %Server{session_id: post_session_id, user_id: 7}
 
-      maybe_announce_identity_change(pre, post)
+      maybe_announce_identity_change(pre, post, "1.tag")
 
-      assert_receive {:identity_changed, ^post_session_id, 7}
+      assert_receive {:identity_changed, ^post_session_id, 7, "1.tag"}
     end
 
     test "broadcasts on the pre session's announce topic when user_id changes" do
@@ -436,9 +436,9 @@ defmodule Hologram.RealtimeTest do
       pre = %Server{session_id: session_id, user_id: nil}
       post = %Server{session_id: session_id, user_id: 7}
 
-      maybe_announce_identity_change(pre, post)
+      maybe_announce_identity_change(pre, post, "1.tag")
 
-      assert_receive {:identity_changed, ^session_id, 7}
+      assert_receive {:identity_changed, ^session_id, 7, "1.tag"}
     end
 
     test "broadcasts post identity when both session_id and user_id change" do
@@ -448,18 +448,18 @@ defmodule Hologram.RealtimeTest do
       pre = %Server{session_id: pre_session_id, user_id: 7}
       post = %Server{session_id: post_session_id, user_id: 8}
 
-      maybe_announce_identity_change(pre, post)
+      maybe_announce_identity_change(pre, post, "1.tag")
 
-      assert_receive {:identity_changed, ^post_session_id, 8}
+      assert_receive {:identity_changed, ^post_session_id, 8, "1.tag"}
     end
 
     test "emits no broadcast when nothing changed" do
       session_id = setup_session_announce_subscription()
       server = %Server{session_id: session_id, user_id: 7}
 
-      maybe_announce_identity_change(server, server)
+      maybe_announce_identity_change(server, server, "1.tag")
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _tag}
     end
 
     test "emits no broadcast when pre.session_id is nil even if user_id changes" do
@@ -468,9 +468,9 @@ defmodule Hologram.RealtimeTest do
       pre = %Server{session_id: nil, user_id: nil}
       post = %Server{session_id: nil, user_id: 7}
 
-      maybe_announce_identity_change(pre, post)
+      maybe_announce_identity_change(pre, post, "1.tag")
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _tag}
     end
   end
 

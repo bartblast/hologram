@@ -107,6 +107,16 @@ defmodule Hologram.UI.RuntimeTest do
                  globalThis.Hologram.dispatchAction = function(actionName, target, params) {
                    globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);
                  }
+
+                 globalThis.Hologram._documentState = history.state;
+
+                 globalThis.Hologram._popstateShim = (function(state, url) {
+                   return function(event) {
+                     globalThis.Hologram._missedPopstate = location.pathname + location.search !== url || (typeof event.state === "string" && event.state !== state);
+                   };
+                 })(history.state, location.pathname + location.search);
+
+                 addEventListener("popstate", globalThis.Hologram._popstateShim);
                </script>\
              """)
   end
@@ -132,6 +142,16 @@ defmodule Hologram.UI.RuntimeTest do
                  globalThis.Hologram.dispatchAction = function(actionName, target, params) {
                    globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);
                  }
+
+                 globalThis.Hologram._documentState = history.state;
+
+                 globalThis.Hologram._popstateShim = (function(state, url) {
+                   return function(event) {
+                     globalThis.Hologram._missedPopstate = location.pathname + location.search !== url || (typeof event.state === "string" && event.state !== state);
+                   };
+                 })(history.state, location.pathname + location.search);
+
+                 addEventListener("popstate", globalThis.Hologram._popstateShim);
                </script>\
              """)
   end

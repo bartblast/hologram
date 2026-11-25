@@ -2,6 +2,9 @@
 defmodule Hologram.Test.Fixtures.Controller.Module56 do
   use Hologram.Page
 
+  # Sets a user id the server refuses, which is what the tests check.
+  @dialyzer {:nowarn_function, authenticate: 2}
+
   alias Hologram.Test.Fixtures.LayoutFixture
 
   route "/hologram-test-fixtures-controller-module56"

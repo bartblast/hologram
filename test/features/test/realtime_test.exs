@@ -867,9 +867,14 @@ defmodule HologramFeatureTests.RealtimeTest do
       # the session's lone connection. The terminal (redirect) path announces the
       # identity change on the shared session topic, moving stationary tab A to
       # user 2 (and dropping its user-1 binding on the way).
-      tab_b
-      |> visit(Router.Helpers.page_path(Page21))
-      |> assert_text("External Page")
+      tab_b =
+        tab_b
+        |> visit(Router.Helpers.page_path(Page21))
+        |> assert_text("External Page")
+
+      # A browser's tabs share the cookie the re-auth set, but Wallaby's don't, so it's carried
+      # over. Tab A checks the identity the change names against its cookie before following it.
+      share_session_cookie(tab_a, tab_b)
 
       # Tab A drops its user-1 binding (tab B's connection is gone too), leaving it
       # the lone connection. Gate on the identity update landing before granting a

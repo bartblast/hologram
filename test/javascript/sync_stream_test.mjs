@@ -15,6 +15,7 @@ import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 import Replica from "../../assets/js/replica.mjs";
+import Sse from "../../assets/js/sse.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -78,6 +79,10 @@ describe("SyncStream", () => {
 
     globalThis.window = originalWindow;
 
+    SyncStream.awaitingIdentity = false;
+    SyncStream.awaitingPair = false;
+    SyncStream.followedTag = null;
+    SyncStream.heldSync = false;
     SyncStream.renderScheduled = false;
     SyncStream.rowsChangedSinceRender = false;
     SyncStream.rules = null;
@@ -407,6 +412,31 @@ describe("SyncStream", () => {
       }
     });
 
+    // What a tab that stops leading has to close (see DataLayer.followIdentity).
+    it("remembers whether it asked for sync", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      SyncStream.syncCursor = "place-1";
+
+      SyncStream.buildGreeting(pageModule);
+
+      assert.isTrue(SyncStream.heldSync);
+
+      Tabs.leader = false;
+
+      try {
+        SyncStream.buildGreeting(pageModule);
+      } finally {
+        Tabs.leader = true;
+      }
+
+      assert.isFalse(SyncStream.heldSync);
+    });
+
     // A first visit greets with no place right after the page filed the counts it was rendered
     // with.
     it("keeps a count the client can't count yet when it greets with no place", () => {
@@ -717,8 +747,7 @@ describe("SyncStream", () => {
       sinon.assert.notCalled(landing);
     });
 
-    // A follower reaches this through the group rather than through a stream, and the page-load
-    // half of a change of identity is posted to it exactly this way.
+    // A follower reaches this through the group rather than through a stream.
     it("starts over on a resync naming a change of identity", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
       LocalDatabase.syncCounts = {"MyApp.Tasks/total/": 42};
@@ -1514,9 +1543,383 @@ describe("SyncStream", () => {
     });
   });
 
+  describe("sync_identity event", () => {
+    const frame = {
+      actor_entity_id: "entity-2",
+      actor_user_id: "u2",
+      identity_tag: "2.tag-2",
+      user_row: {put_entity: {"MyApp.User": [{id: "entity-2"}]}},
+    };
+
+    let flushing, following, originalDataLayer, originalName, reconnecting;
+    let wasStarted;
+
+    beforeEach(() => {
+      originalDataLayer = Hologram.dataLayer;
+      originalName = Tabs.name;
+      wasStarted = Sse.isStarted;
+
+      following = sinon.stub().returns(false);
+      flushing = sinon.stub(Batches, "flush");
+      reconnecting = sinon.stub(Sse, "reconnect");
+
+      Hologram.dataLayer = {followIdentity: following};
+      Sse.isStarted = true;
+      Tabs.name = null;
+    });
+
+    afterEach(() => {
+      Hologram.dataLayer = originalDataLayer;
+      Sse.isStarted = wasStarted;
+      Tabs.name = originalName;
+    });
+
+    it("follows the identity the stream names", () => {
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      sinon.assert.calledOnceWithExactly(following, {
+        actorEntityId: "entity-2",
+        actorUserId: "u2",
+        identityTag: "2.tag-2",
+        userRow: frame.user_row,
+      });
+    });
+
+    // The event names no pair, and a new stream's handshake hands one to this tab alone.
+    it("opens a new stream when it moved a tab in no group to another user", () => {
+      following.returns(true);
+
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      sinon.assert.calledOnce(reconnecting);
+    });
+
+    it("opens no stream when it left the tab with the user it holds", () => {
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    // The move opens the stream once the tab knows whether it leads the new user's group.
+    it("opens no stream for a tab in a group", () => {
+      following.returns(true);
+      Tabs.name = "hologram.1.model.u1";
+
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    // That tab's move opens its stream.
+    it("opens no stream for a tab the follow took out of its group", () => {
+      following.callsFake(() => {
+        Tabs.name = null;
+
+        return true;
+      });
+
+      Tabs.name = "hologram.1.model.u1";
+
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    it("opens no stream before the page has", () => {
+      following.returns(true);
+      Sse.isStarted = false;
+
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    it("ends the wait a mount started", () => {
+      SyncStream.awaitingIdentity = true;
+
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      assert.isFalse(SyncStream.awaitingIdentity);
+    });
+
+    // What a wait held back can go now, under the pair the tab holds for the user it follows.
+    it("wakes the sender after following", () => {
+      eventSource.listeners.sync_identity({data: JSON.stringify(frame)});
+
+      assert.isTrue(flushing.calledAfter(following));
+    });
+  });
+
+  describe("frames while waiting to hear who the stream serves", () => {
+    const deltas = JSON.stringify({
+      applied_seq: null,
+      cursor: "place-old",
+      deltas: {},
+      model_hash: "a3f9c2",
+    });
+
+    const synced = JSON.stringify({
+      applied_seq: null,
+      cursor: "place-old",
+      model_hash: "a3f9c2",
+      scope: "all",
+    });
+
+    let persisting, telling;
+
+    beforeEach(() => {
+      persisting = sinon.stub(Durability, "persistFrame");
+      telling = sinon.stub(SyncStream, "tell");
+
+      SyncStream.awaitingIdentity = true;
+    });
+
+    it("drops a deltas frame of the previous session", () => {
+      eventSource.listeners.sync_deltas({data: deltas});
+
+      assert.isNull(SyncStream.syncCursor);
+      sinon.assert.notCalled(persisting);
+      sinon.assert.notCalled(telling);
+    });
+
+    it("drops a marker of the previous session", () => {
+      eventSource.listeners.synced({data: synced});
+
+      assert.isNull(SyncStream.syncCursor);
+      assert.isFalse(LocalDatabase.isAllSynced());
+      sinon.assert.notCalled(telling);
+    });
+
+    it("drops a start-over that isn't about an identity", () => {
+      const clearing = sinon.stub(Durability, "clear");
+
+      eventSource.listeners.sync_resync({
+        data: JSON.stringify({reason: "retention"}),
+      });
+
+      sinon.assert.notCalled(clearing);
+      sinon.assert.notCalled(telling);
+    });
+
+    it("still takes a stop", () => {
+      eventSource.listeners.sync_reload({
+        data: JSON.stringify({reason: "protocol_version"}),
+      });
+
+      assert.equal(SyncStream.stopReason, "protocol_version");
+    });
+
+    it("still takes new rules", () => {
+      const receiving = sinon.stub(SyncStream, "receiveFrame");
+
+      eventSource.listeners.sync_rules({data: JSON.stringify({rules: {}})});
+
+      sinon.assert.calledOnce(receiving);
+    });
+
+    // A server that doesn't name the identity it serves says nothing more than this.
+    it("ends the wait on an identity start-over naming no tag", () => {
+      sinon.stub(Durability, "clear");
+
+      eventSource.listeners.sync_resync({
+        data: JSON.stringify({reason: "identity"}),
+      });
+
+      assert.isFalse(SyncStream.awaitingIdentity);
+      sinon.assert.calledOnce(telling);
+    });
+
+    // It names no pair, and with none a send could only be refused.
+    it("goes on holding writes after an identity start-over naming no tag", () => {
+      SyncStream.awaitingPair = true;
+      sinon.stub(Durability, "clear");
+
+      eventSource.listeners.sync_resync({
+        data: JSON.stringify({reason: "identity"}),
+      });
+
+      assert.isFalse(SyncStream.awaitingIdentity);
+      assert.isTrue(SyncStream.awaitingPair);
+      assert.isTrue(SyncStream.holdsWrites());
+    });
+
+    it("takes frames again when a new stream opens", () => {
+      const replacement = {
+        addEventListener(type, listener) {
+          this.listeners[type] = listener;
+        },
+        listeners: {},
+      };
+
+      SyncStream.listen(replacement);
+      replacement.listeners.sync_deltas({data: deltas});
+
+      assert.isFalse(SyncStream.awaitingIdentity);
+      assert.equal(SyncStream.syncCursor, "place-old");
+    });
+
+    // A stream opened after the announcement never hears it, so it brings no pair.
+    it("goes on holding writes when a new stream opens", () => {
+      SyncStream.awaitingPair = true;
+
+      SyncStream.listen({addEventListener() {}});
+
+      assert.isFalse(SyncStream.awaitingIdentity);
+      assert.isTrue(SyncStream.awaitingPair);
+      assert.isTrue(SyncStream.holdsWrites());
+    });
+
+    it("goes on taking frames afterwards", () => {
+      SyncStream.awaitingIdentity = false;
+
+      eventSource.listeners.sync_deltas({data: deltas});
+
+      assert.equal(SyncStream.syncCursor, "place-old");
+    });
+  });
+
+  // A tab that moved to another user's group can still be served the session its last greeting
+  // asked for, until its next one closes it. What that session sends is the leader's to store.
+  describe("sync frames a tab that doesn't lead hears on its own stream", () => {
+    const deltas = JSON.stringify({
+      applied_seq: null,
+      cursor: "place-old",
+      deltas: {},
+      model_hash: "a3f9c2",
+    });
+
+    const synced = JSON.stringify({
+      applied_seq: null,
+      cursor: "place-old",
+      model_hash: "a3f9c2",
+      scope: "all",
+    });
+
+    let clearing, persisting, telling;
+
+    beforeEach(() => {
+      clearing = sinon.stub(Durability, "clear");
+      persisting = sinon.stub(Durability, "persistFrame");
+      telling = sinon.stub(SyncStream, "tell");
+    });
+
+    afterEach(() => {
+      Tabs.leader = true;
+      Tabs.takingLead = false;
+    });
+
+    const deliverAll = () => {
+      eventSource.listeners.sync_deltas({data: deltas});
+      eventSource.listeners.synced({data: synced});
+
+      eventSource.listeners.sync_resync({
+        data: JSON.stringify({reason: "retention"}),
+      });
+    };
+
+    it("are dropped while the tab follows", () => {
+      Tabs.leader = false;
+
+      deliverAll();
+
+      assert.isNull(SyncStream.syncCursor);
+      assert.isFalse(LocalDatabase.isAllSynced());
+      sinon.assert.notCalled(clearing);
+      sinon.assert.notCalled(persisting);
+      sinon.assert.notCalled(telling);
+    });
+
+    it("are dropped while the tab settles where its lead starts from", () => {
+      Tabs.takingLead = true;
+
+      deliverAll();
+
+      assert.isNull(SyncStream.syncCursor);
+      sinon.assert.notCalled(clearing);
+      sinon.assert.notCalled(persisting);
+      sinon.assert.notCalled(telling);
+    });
+
+    it("still let a stop through", () => {
+      Tabs.leader = false;
+
+      eventSource.listeners.sync_reload({
+        data: JSON.stringify({reason: "protocol_version"}),
+      });
+
+      assert.equal(SyncStream.stopReason, "protocol_version");
+    });
+  });
+
+  describe("an identity start-over for a change already followed", () => {
+    const envelope = (tag) =>
+      JSON.stringify({identity_tag: tag, reason: "identity"});
+
+    let clearing, telling;
+
+    beforeEach(() => {
+      clearing = sinon.stub(Durability, "clear");
+      telling = sinon.stub(SyncStream, "tell");
+
+      SyncStream.followedTag = "2.tag-2";
+      SyncStream.syncCursor = "place-after-follow";
+    });
+
+    it("leaves what the tab holds", () => {
+      eventSource.listeners.sync_resync({data: envelope("2.tag-2")});
+
+      assert.equal(SyncStream.syncCursor, "place-after-follow");
+      sinon.assert.notCalled(clearing);
+    });
+
+    it("isn't told to the group again", () => {
+      eventSource.listeners.sync_resync({data: envelope("2.tag-2")});
+
+      sinon.assert.notCalled(telling);
+    });
+
+    it("is passed over when another tab hands it on", () => {
+      const receiving = sinon.stub(SyncStream, "receiveFrame");
+
+      Tabs.receive({
+        event: "sync_resync",
+        frame: {identity_tag: "2.tag-2", reason: "identity"},
+        kind: "frame",
+      });
+
+      sinon.assert.notCalled(receiving);
+    });
+
+    it("is taken when it names another tag", () => {
+      eventSource.listeners.sync_resync({data: envelope("3.tag-3")});
+
+      assert.isNull(SyncStream.syncCursor);
+      sinon.assert.calledOnce(clearing);
+    });
+  });
+
   describe("holdsWrites()", () => {
     it("is false while the tab is served", () => {
       assert.isFalse(SyncStream.holdsWrites());
+    });
+
+    // Moved to another user by a page, with no pair to send under yet.
+    it("is true while waiting for a pair", () => {
+      SyncStream.awaitingPair = true;
+
+      assert.isTrue(SyncStream.holdsWrites());
+    });
+
+    // The store or the new user's group gave it one.
+    it("is false once the tab holds a pair again", () => {
+      SyncStream.awaitingPair = true;
+      Replica.adopt({id: "r-stored", token: "statement-stored"});
+
+      try {
+        assert.isFalse(SyncStream.holdsWrites());
+      } finally {
+        Replica.reset();
+      }
     });
 
     // The write endpoint refuses a batch built against another model.
