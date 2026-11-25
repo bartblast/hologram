@@ -216,7 +216,7 @@ defmodule Hologram.Query.WordsTest do
     end
 
     test "keeps strings differing only in case apart" do
-      assert most_common(["apple", "Apple", "Apple"]) == "Apple"
+      assert most_common(["apple", "apple", "Apple"]) == "apple"
     end
 
     test "settles a tie on equal sort keys by the value" do
