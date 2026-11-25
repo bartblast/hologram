@@ -1110,7 +1110,12 @@ describe("SyncStream", () => {
       globalThis.Hologram.sync = {
         model: {
           [TASK]: {
-            attributes: {id: "uuid", title: "string"},
+            attributes: {
+              id: "uuid",
+              server_created_seq: "integer",
+              server_updated_seq: "integer",
+              title: "string",
+            },
             relationships: {},
             serverOnly: [],
           },
@@ -1210,7 +1215,7 @@ describe("SyncStream", () => {
         }),
       });
 
-      assert.equal(
+      assert.strictEqual(
         LocalDatabase.baseRow(TASK, "t1").server_created_seq,
         9007199254740993n,
       );
