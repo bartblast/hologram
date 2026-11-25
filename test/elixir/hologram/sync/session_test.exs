@@ -3334,9 +3334,11 @@ defmodule Hologram.Sync.SessionTest do
         seq
       )
 
-      assert_receive {:sync_deltas, nil, [_first], nil, nil}
-      assert_receive {:sync_deltas, cursor, [_second], nil, ^seq}
-      assert cursor == cursor_at(seq)
+      assert_receive {:sync_deltas, first_cursor, [_first], _first_applied, first_final}
+      assert_receive {:sync_deltas, cursor, [_second], nil, final_seq}
+
+      assert {first_cursor, first_final} == {nil, nil}
+      assert {cursor, final_seq} == {cursor_at(seq), seq}
     end
 
     test "tells how far they are in a frame of their own when a batch has nothing for the client" do
