@@ -18,6 +18,10 @@ defmodule Hologram.Migration.Value.Loader do
   Returns the rows of the given entity type with the given ids, in the order given and leaving out
   an id no row holds, each with the related data the given tree of reads names (see
   `Hologram.Migration.Value.Evaluator.reads/1`).
+
+  Outside a transaction its reads come from one snapshot. Inside one, each read sees the database
+  as the caller's transaction does, so they agree only under REPEATABLE READ or locks keeping
+  writers off the tables read.
   """
   @spec load(%{(atom | {module, atom}) => map}, module, list(String.t()), %{
           module => %{atom => any}
