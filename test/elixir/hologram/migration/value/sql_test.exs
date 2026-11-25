@@ -310,12 +310,12 @@ defmodule Hologram.Migration.Value.SQLTest do
     end
 
     test "lists a literal under its own type, nested or not", %{target: target} do
-      term = {:coalesce, [{:name, [:title], :string}, {:value, :live, @state}]}
+      term = {:coalesce, [{:name, [:state], @state}, {:value, :live, @state}]}
 
-      assert enum_uses(%{term: term, type: :string}, MyApp.Trip, mapping(), %{
+      assert enum_uses(%{term: term, type: @state}, MyApp.Trip, mapping(), %{
                target
-               | name: :title,
-                 type: :string
+               | name: :state,
+                 opts: [values: [:draft, :live]]
              }) == [{"my_app_trip_state_$enum", "live"}]
     end
 
