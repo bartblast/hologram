@@ -498,7 +498,8 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     assert Checks.await_converged(client, member.id, 5_000) == :ok
     assert await(fn -> Client.final_seq(client) != nil end)
 
-    refute {nil, nil} in shown_tags(client)
+    # A limit below the fixture's tags leaves them unnumbered until it reaches them.
+    assert await(fn -> {nil, nil} not in shown_tags(client) end)
 
     send_frame(client, request_id(client), "sync_resync", %{reason: "retention"})
 
