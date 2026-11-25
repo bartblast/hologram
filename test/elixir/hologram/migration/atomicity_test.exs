@@ -4,13 +4,18 @@ defmodule Hologram.Migration.AtomicityTest do
   # before it left, and the file's transaction, which takes those earlier ops back when a
   # later one is refused - so a file with one bad op keeps none of its good ones.
   #
-  # PostgreSQL itself never refuses: every op the migration DSL can express is pre-flight
-  # checked, and the checks are total in the direction that matters - each refuses at least
-  # every row PostgreSQL would. A file that gets past pre-flight and then fails mid-apply is
-  # by construction a Hologram bug, not a scenario, so it is recorded here rather than
-  # tested. It WAS testable until the cast checks gained their range branches: an
-  # out-of-range numeric used to pass the syntax-only check and fail the cast, which is the
-  # state this suite reproduced before that was fixed.
+  # Where pre-flight can ask beforehand, PostgreSQL itself never refuses: the checks are total
+  # in the direction that matters - each refuses at least every row PostgreSQL would. A file
+  # that gets past those checks and then fails mid-apply is a Hologram bug, not a scenario,
+  # so it is recorded here rather than tested. It WAS testable until the cast checks gained
+  # their range branches: an out-of-range numeric used to pass the syntax-only check and fail
+  # the cast, which is the state this suite reproduced before that was fixed.
+  #
+  # A computed backfill is the exception: what it writes is known only once it runs, so
+  # PostgreSQL can refuse it mid-apply. An Elixir fn's page write can repeat the key of a
+  # unique index that stands, and a backfilled to-one can write an id no row of the target
+  # holds. The file still rolls back whole, by the same transaction; those refusals are
+  # tested in Hologram.Migration.BackfillTest, beside the fills that make them.
   #
   # The pre-flight has TWO moments. The transactional one runs op by op, so a file it
   # refuses has run the ops before the refused one, inside the transaction that takes them
