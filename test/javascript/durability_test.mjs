@@ -2935,7 +2935,11 @@ describe("Durability", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t2", title: "Carried"});
       LocalDatabase.markCarried("MyApp.Task", "t2");
 
+      const refilling = sinon.spy(LocalDatabase, "beginRefill");
+
       SyncStream.receiveFrame(event, frame);
+
+      sinon.assert.calledOnce(refilling);
 
       assert.deepStrictEqual(LocalDatabase.baseRow("MyApp.Task", "t2"), {
         id: "t2",
