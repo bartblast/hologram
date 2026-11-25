@@ -3800,10 +3800,12 @@ defmodule Hologram.Sync.SessionTest do
       send(session, {:live, whole_type_part()})
 
       assert_receive {:sync_deltas, first_cursor, [%{id: first_id, op: :patch_entity}], first_seq,
-                      _final_seq}
+                      _final_seq},
+                     1_000
 
       assert_receive {:sync_deltas, last_cursor, [%{id: last_id, op: :patch_entity}], last_seq,
-                      _final_seq}
+                      _final_seq},
+                     1_000
 
       # In id order, all under the session's number, and only the batch's last frame carries its
       # place.
