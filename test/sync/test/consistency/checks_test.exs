@@ -490,6 +490,30 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
                Checks.below_final([view], [created, elsewhere], @member, 20)
     end
 
+    test "judges a row a commit within the limit locked after the frame takes away" do
+      created = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 5,
+        min_seq: 5,
+        ops: ["create_tag t-1 t-1"],
+        state: tags_state(%{"t-1" => {5, 5}})
+      }
+
+      deleted = %{
+        created
+        | after_lock_at: 30,
+          committed_at: 31,
+          max_seq: 8,
+          min_seq: 8,
+          ops: ["delete_tag t-1"],
+          state: tags_state(%{})
+      }
+
+      assert [%{id: "t-1", problem: :missing}] =
+               Checks.below_final([view(10, 20, %{})], [created, deleted], @member, 20)
+    end
+
     test "judges a row a type-wide grant on its way can't let its user read" do
       created = %{
         after_lock_at: 0,

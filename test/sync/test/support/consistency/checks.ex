@@ -197,7 +197,11 @@ defmodule HologramSyncTests.Consistency.Checks do
   end
 
   defp type_missing_or_misnumbered(view, indexed, user_id, type, final_seq) do
-    case serial_floor(final_seq, indexed) do
+    # A commit holding a serial at or below the limit ended before the limit was published, so one
+    # locked after the frame arrived breaks the limit, and the row it would hide is judged.
+    locked_before = Enum.filter(indexed, fn {entry, _index} -> entry.after_lock_at < view.at end)
+
+    case serial_floor(final_seq, locked_before) do
       nil ->
         []
 
