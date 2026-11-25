@@ -11,6 +11,7 @@ defmodule Hologram.Migration.Value do
 
   alias Hologram.DB.Codec
   alias Hologram.Entity.Model
+  alias Hologram.Migration.FieldAccess
   alias Hologram.Migration.FieldAccess.Definitions
   alias Hologram.Migration.Value.Check
   alias Hologram.Migration.Value.Resolver
@@ -546,7 +547,7 @@ defmodule Hologram.Migration.Value do
          {:|>, meta, [left, {{:., _dot_meta, [receiver, :|>]}, call_meta, [right]} = target]},
          env
        ) do
-    if Macro.expand(receiver, env) == Kernel do
+    if FieldAccess.kernel?(receiver, env) do
       expanded_pipe({:|>, meta, [left, right]}, env)
     else
       {elem(target, 0), call_meta, [left, right]}
@@ -958,7 +959,7 @@ defmodule Hologram.Migration.Value do
 
         {{:., _dot_meta, [receiver, form]}, _meta, [pattern, _right]} = node, found
         when form in [:destructure, :match?] ->
-          if Macro.expand(receiver, env) == Kernel do
+          if FieldAccess.kernel?(receiver, env) do
             {node, Enum.concat(pattern_variables(pattern), found)}
           else
             {node, found}
@@ -1478,7 +1479,7 @@ defmodule Hologram.Migration.Value do
   # A pipe is the call Elixir expands it to, however it's spelled, but only Kernel's pipe expands:
   # a migration's own |> is a call whose right side is a value, and any other receiver stays read.
   defp unpiped_call({{:., _dot_meta, [receiver, :|>]}, meta, [left, right]} = node, env) do
-    if Macro.expand(receiver, env) == Kernel do
+    if FieldAccess.kernel?(receiver, env) do
       expanded_pipe({:|>, meta, [left, right]}, env)
     else
       node
@@ -1794,7 +1795,7 @@ defmodule Hologram.Migration.Value do
          env
        )
        when name in [:match?, :destructure] do
-    if Macro.expand(receiver, env) == Kernel,
+    if FieldAccess.kernel?(receiver, env),
       do: {form, meta, [guard_of(pattern), right]},
       else: node
   end

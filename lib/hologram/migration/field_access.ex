@@ -18,13 +18,6 @@ defmodule Hologram.Migration.FieldAccess do
   # the path. Their function arities take a plain value.
   @path_macros [get_and_update_in: 2, get_in: 1, pop_in: 1, put_in: 2, update_in: 2]
 
-  # Kernel as written, with or without the Elixir prefix, or as an op's arguments hold it,
-  # its alias expanded.
-  defguardp is_kernel(ast)
-            when ast == Kernel or
-                   (is_tuple(ast) and tuple_size(ast) == 3 and elem(ast, 0) == :__aliases__ and
-                      elem(ast, 2) in [[:Kernel], [:"Elixir", :Kernel]])
-
   @doc """
   Returns the quoted definition of the given kind - :def, :defp, :defmacro, :defmacrop,
   :defguard or :defguardp - with field access rewritten in its head and body (see
@@ -151,9 +144,11 @@ defmodule Hologram.Migration.FieldAccess do
       else: {:|>, meta, rewrite_pipe(left, right, env, splicing)}
   end
 
-  def rewrite({{:., _dot_meta, [kernel, :|>]} = form, meta, [left, right]}, env, splicing)
-      when is_kernel(kernel),
-      do: {form, meta, rewrite_pipe(left, right, env, splicing)}
+  def rewrite({{:., _dot_meta, [receiver, :|>]} = form, meta, [left, right]} = ast, env, splicing) do
+    if kernel?(receiver, env),
+      do: {form, meta, rewrite_pipe(left, right, env, splicing)},
+      else: rewrite_args(ast, env, splicing)
+  end
 
   def rewrite({name, meta, [path | args]} = ast, env, splicing)
       when is_atom(name) and is_list(meta) do
@@ -169,9 +164,13 @@ defmodule Hologram.Migration.FieldAccess do
     end
   end
 
-  def rewrite({{:., _dot_meta, [kernel, name]} = form, meta, [path | args]} = ast, env, splicing)
-      when is_kernel(kernel) and is_atom(name) do
-    if {name, length(args) + 1} in @path_macros,
+  def rewrite(
+        {{:., _dot_meta, [receiver, name]} = form, meta, [path | args]} = ast,
+        env,
+        splicing
+      )
+      when is_atom(name) do
+    if {name, length(args) + 1} in @path_macros and kernel?(receiver, env),
       do: {form, meta, [rewrite_path(path, env, splicing) | rewrite(args, env, splicing)]},
       else: rewrite_args(ast, env, splicing)
   end
@@ -186,6 +185,20 @@ defmodule Hologram.Migration.FieldAccess do
     do: Enum.map(list, &rewrite(&1, env, splicing))
 
   def rewrite(other, _env, _splicing), do: other
+
+  @doc """
+  Returns whether the given receiver of a remote call is Kernel, written with or without the
+  Elixir prefix, or as an alias the given env holds for it. Only a module name is expanded, since
+  expanding any other code runs its macros, which can raise on code that never runs.
+  """
+  @spec kernel?(Macro.t(), Macro.Env.t()) :: boolean
+  def kernel?(Kernel, _env), do: true
+
+  def kernel?({:__aliases__, _meta, parts} = receiver, env) do
+    Enum.all?(parts, &is_atom/1) and Macro.expand(receiver, env) == Kernel
+  end
+
+  def kernel?(_receiver, _env), do: false
 
   # The body as Elixir expands it, after a rescue, catch or after the body takes, wrapped in
   # the given call. An unquote fragment's value is a keyword list only once the definition
@@ -310,11 +323,23 @@ defmodule Hologram.Migration.FieldAccess do
     end
   end
 
-  defp rewrite_pipe(left, {{:., _dot_meta, [kernel, name]} = form, meta, args}, env, splicing)
-       when is_kernel(kernel) and is_atom(name) and is_list(args) do
-    if {name, length(args) + 1} in @path_macros,
-      do: [rewrite_path(left, env, splicing), {form, meta, rewrite(args, env, splicing)}],
-      else: [rewrite(left, env, splicing), {form, meta, rewrite(args, env, splicing)}]
+  defp rewrite_pipe(
+         left,
+         {{:., _dot_meta, [receiver, name]} = form, meta, args} = right,
+         env,
+         splicing
+       )
+       when is_atom(name) and is_list(args) do
+    cond do
+      not kernel?(receiver, env) ->
+        [rewrite(left, env, splicing), rewrite(right, env, splicing)]
+
+      {name, length(args) + 1} in @path_macros ->
+        [rewrite_path(left, env, splicing), {form, meta, rewrite(args, env, splicing)}]
+
+      true ->
+        [rewrite(left, env, splicing), {form, meta, rewrite(args, env, splicing)}]
+    end
   end
 
   defp rewrite_pipe(left, right, env, splicing),

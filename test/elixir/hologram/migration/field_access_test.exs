@@ -96,6 +96,25 @@ defmodule Hologram.Migration.FieldAccessTest do
       assert unchanged?("row.a.b |> Elixir.Kernel.put_in(1)")
     end
 
+    test "takes an alias of Kernel as Kernel, expanding only a module name" do
+      aliased = %{env() | aliases: [{K, Kernel}]}
+      ast = Code.string_to_quoted!("K.|>(row.a.b, put_in(1))")
+
+      assert rewrite(ast, aliased) == ast
+
+      for code <- ["row.a.b |> K.put_in(1)", "K.get_in(row.a.b)"] do
+        ast = Code.string_to_quoted!(code)
+
+        assert rewrite(ast, aliased) == ast
+      end
+
+      assert rewritten("K.get_in(row.a.b)") ==
+               "K.get_in(:erlang.map_get(:b, :erlang.map_get(:a, row)))"
+
+      assert rewritten("(1 |> 2).|>(row.a, f())") ==
+               "(1 |> 2).|>(:erlang.map_get(:a, row), f())"
+    end
+
     test "leaves a field of an unquote fragment's value to be decided once it is unquoted" do
       assert rewritten("unquote(value).name") ==
                "Hologram.Migration.FieldAccess.Definitions.__field__(unquote(value), :name)"

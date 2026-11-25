@@ -1651,6 +1651,13 @@ defmodule Hologram.Migration.ValueTest do
       assert module.__backfill_0__("a") == "A"
     end
 
+    test "keeps a pipe in a quote as data, whatever its receiver" do
+      {module, _value} =
+        elixir_op(~S"fn title -> title <> inspect(quote(do: (1 |> 2).|>(x, 3))) end")
+
+      assert module.__backfill_0__("a") =~ ~r/^a.*\|>/
+    end
+
     test "takes the arguments in the order written" do
       {module, value} = elixir_op(~s|fn last, first -> first <> " " <> last end|)
 
