@@ -108,9 +108,10 @@ defmodule Hologram.Migration do
         Offgrid.Stop |> filter(trip_id == ^id) |> most_common(currency)
       end
 
-  Inside a query, a module attribute is pinned (`^@x`). A call to a function the file imports or
-  the module defines is that function rather than a word of the same name, except inside
-  `query(...)`, which a module can't define as `query/1` beside a body using it.
+  Inside a query, a module attribute is pinned (`^@x`). When the outermost call is to a function the
+  file imports or the module defines, the body is Elixir and the call is that function rather than
+  a word of the same name. A call inside a query is always the word, however the file imports, and
+  `query(...)` always marks a query, since a module can't define `query/1` beside a body using it.
 
   Any other body is Elixir, and runs row by row:
 
