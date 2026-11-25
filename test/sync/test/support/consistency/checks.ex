@@ -6,9 +6,9 @@ defmodule HologramSyncTests.Consistency.Checks do
   # client received was one its user could read, with the values it carried, in a state the server
   # could have read it from, and every row its sets or a pair named one its user could read since
   # the connection opened. The third: a client told the numbers are final up to a limit holds every
-  # row its user could read throughout with a number at or below it, showing that number - so no
-  # list of its ordered by number skips one - and once the writes stop, the limit reaches the last
-  # commit.
+  # row its user could read throughout, and that no change still on its way names, with a number at
+  # or below it, showing that number - so no list of its ordered by number skips one - and once the
+  # writes stop, the limit reaches the last commit.
 
   alias HologramSyncTests.Consistency.Client
   alias HologramSyncTests.Consistency.Model
@@ -70,14 +70,21 @@ defmodule HologramSyncTests.Consistency.Checks do
   Each view names a limit per type: the one every type has, which the server tells only once it
   sent every change holding a serial at or below it, or a higher one a fill's marker gave its type,
   told once the fill sent every row of the type. A type still filling is judged by the first, so a
-  limit vouching for rows that haven't come yet shows up here. For each, the states in lock order
-  up to the first commit holding a serial above the limit are all the client's to know - the last
-  of them is the floor - while a commit after it may yet be on its way, whatever it changed. A row
-  of the type, with a created number at or below its limit, that its user could read in the floor
-  and in every state after it whose transaction got the commit lock before the frame arrived, so
-  that nothing still on its way could have taken it away, has to be in the view, showing that
-  number - and, when its updated number is the same in all those states and at or below the limit,
-  that one too.
+  limit vouching for rows that haven't come yet shows up here. Saves take their serials before the
+  commit lock, so they can lock out of serial order, and the server sends effects in serial order.
+  A commit holding a serial at or below the limit ended before the server told it, and so did
+  every commit that locked before it, so the state the last such commit in lock order left - the
+  floor - is the client's to know, save for what a commit holding a serial above the limit did,
+  which may yet be on its way. A row of the type, with a created number at or below its limit,
+  that its user could read in the floor and in every state after it whose transaction got the
+  commit lock before the frame arrived, so that nothing still on its way could have taken it away,
+  and that no commit holding a serial above the limit and locked before the frame arrived names,
+  along with what its access goes through, has to be in the view, showing that number - and, when
+  its updated number is the same in all those states and at or below the limit, that one too.
+
+  A commit is judged by its ops as a whole, so one holding serials on both sides of the limit
+  keeps the rows any of its ops names from being judged, even through the ops it took at or below
+  the limit.
 
   A number a view shows is one a reader finds, so it is always at or below its type's limit, and
   a type with none shows no number.
@@ -91,6 +98,30 @@ defmodule HologramSyncTests.Consistency.Checks do
     indexed = Enum.with_index(entries)
 
     Enum.flat_map(views, &view_problems(&1, indexed, user_id)) ++ not_final(entries, final_seq)
+  end
+
+  @doc """
+  Returns the ids of the given row and of the rows its access goes through - what its fields point
+  at, and what those point at in turn: a card's board and the board's space, a member's space and
+  user - across all the given history entries.
+  """
+  @spec related_ids(String.t(), list(map)) :: list(String.t())
+  def related_ids(row_id, entries) do
+    rows =
+      for entry <- entries,
+          {_type, by_id} <- entry.state.rows,
+          {id, fields} <- by_id,
+          reduce: %{} do
+        acc -> Map.update(acc, id, field_ids(fields), &MapSet.union(&1, field_ids(fields)))
+      end
+
+    hop = fn ids -> Enum.reduce(ids, ids, &MapSet.union(&2, Map.get(rows, &1, MapSet.new()))) end
+
+    [row_id]
+    |> MapSet.new()
+    |> hop.()
+    |> hop.()
+    |> MapSet.to_list()
   end
 
   @doc """
@@ -164,7 +195,7 @@ defmodule HologramSyncTests.Consistency.Checks do
   end
 
   defp type_missing_or_misnumbered(view, indexed, user_id, type, final_seq) do
-    case final_floor(final_seq, indexed) do
+    case serial_floor(final_seq, indexed) do
       nil ->
         []
 
@@ -181,6 +212,7 @@ defmodule HologramSyncTests.Consistency.Checks do
             readable_throughout?(window, user_id, type, id),
             problem = row_problem(view, window, type, id, created_seq, final_seq),
             problem != nil,
+            not touched_above?(indexed, view.at, final_seq, user_id, id),
             do:
               Map.merge(problem, %{
                 at: view.at,
@@ -190,6 +222,58 @@ defmodule HologramSyncTests.Consistency.Checks do
                 type: type
               })
     end
+  end
+
+  # What a commit holding a serial above the limit did may not have reached the client yet: the
+  # server sends effects in serial order, so one locked up to the floor - the floor's own commit can
+  # hold serials on both sides - may still be on its way, and the server reads what a gained access
+  # lets through from the live tables, so one locked after the floor can keep a row from coming
+  # until its own effect does. Every such commit that matters locked before the frame arrived, the
+  # floor's among them. When one names the row or what its access goes through, the client may
+  # rightly not hold the row yet. A type-wide grant or revoke names only the user.
+  defp touched_above?(indexed, at, final_seq, user_id, id) do
+    above =
+      for {entry, _index} <- indexed,
+          entry.after_lock_at < at and entry.max_seq != nil and entry.max_seq > final_seq,
+          do: entry
+
+    case above do
+      [] ->
+        false
+
+      above ->
+        names = related_ids(id, Enum.map(indexed, &elem(&1, 0)))
+
+        Enum.any?(above, &(names_any?(&1, names) or names_wide?(&1, user_id)))
+    end
+  end
+
+  @doc """
+  Tells whether any op of the given history entry names any of the given ids.
+  """
+  @spec names_any?(map, list(String.t())) :: boolean
+  def names_any?(entry, names) do
+    entry
+    |> Map.get(:ops, [])
+    |> Enum.any?(fn op -> Enum.any?(names, &String.contains?(op, &1)) end)
+  end
+
+  defp names_wide?(_entry, nil), do: false
+
+  defp names_wide?(entry, user_id) do
+    entry
+    |> Map.get(:ops, [])
+    |> Enum.any?(fn op ->
+      (String.starts_with?(op, "grant_wide ") or String.starts_with?(op, "revoke_wide ")) and
+        String.contains?(op, user_id)
+    end)
+  end
+
+  defp field_ids(fields) do
+    for {name, value} <- fields,
+        String.ends_with?(name, "_id") and is_binary(value),
+        into: MapSet.new(),
+        do: value
   end
 
   defp readable_throughout?(window, user_id, type, id) do
@@ -256,20 +340,6 @@ defmodule HologramSyncTests.Consistency.Checks do
     state
     |> Map.get(:seqs, %{})
     |> Map.get(type, %{})
-  end
-
-  # The position of the last state before the first commit holding a serial above the limit, or
-  # nil when the first commit holds one. A commit that logged nothing changed nothing to send.
-  defp final_floor(final_seq, indexed) do
-    final_prefix =
-      Enum.take_while(indexed, fn {entry, _index} ->
-        entry.max_seq == nil or entry.max_seq <= final_seq
-      end)
-
-    case List.last(final_prefix) do
-      nil -> nil
-      {_entry, index} -> index
-    end
   end
 
   defp candidates(record, indexed) do

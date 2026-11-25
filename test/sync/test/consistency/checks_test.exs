@@ -3,12 +3,14 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
 
   alias HologramSyncTests.Consistency.Checks
   alias HologramSyncTests.Consistency.Model
+  alias HologramSyncTests.Entities.Board
+  alias HologramSyncTests.Entities.Card
   alias HologramSyncTests.Entities.Space
   alias HologramSyncTests.Entities.SpaceMember
   alias HologramSyncTests.Entities.Tag
 
-  @member "member"
-  @space "space"
+  @member "u-1"
+  @space "s-1"
 
   # The member reads the space in the first state and loses it in the second, which commits at 16
   # with serial 101.
@@ -128,7 +130,7 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
     assert [%{record: ^record}] = Checks.leaks([record], entries, @member)
 
     assert Checks.leaks(
-             [%{record | named: [{SpaceMember, "member of member"}]}],
+             [%{record | named: [{SpaceMember, "member of #{@member}"}]}],
              entries,
              @member
            ) == []
@@ -286,9 +288,9 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
       assert Checks.below_final([view(9, 20, %{})], entries, @member, 12) == []
     end
 
-    # A commit holding a serial above the limit can still be on its way, so a row a commit after it
-    # created can be too, whatever its number.
-    test "judges no state past a commit holding a serial above the limit", %{
+    # Saves take their serials before the commit lock, so a commit holding a serial at or below the
+    # limit can lock after one holding a serial above it, and was sent all the same.
+    test "judges a row a commit locked after one above the limit created", %{
       entries: [created | _]
     } do
       ahead = %{
@@ -308,11 +310,237 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
       }
 
       entries = [created, ahead, behind]
+      view = view(10, 20, %{"t" => {5, 5}, "w" => {7, 7}})
 
-      assert Checks.below_final([view(10, 20, %{"t" => {5, 5}})], entries, @member, 20) == []
+      assert Checks.below_final([view], entries, @member, 20) == []
 
-      assert [%{id: "t", problem: :missing}] =
-               Checks.below_final([view(10, 20, %{})], entries, @member, 20)
+      assert [%{floor: 2, id: "w", problem: :missing, wanted: {7, 7}}] =
+               Checks.below_final([view(10, 20, %{"t" => {5, 5}})], entries, @member, 20)
+    end
+
+    test "judges a row when the first commit holds a serial above the limit" do
+      ahead = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 11,
+        min_seq: 11,
+        state: tags_state(%{"v" => {11, 11}})
+      }
+
+      behind = %{
+        after_lock_at: 2,
+        committed_at: 3,
+        max_seq: 10,
+        min_seq: 10,
+        state: tags_state(%{"v" => {11, 11}, "w" => {10, 10}})
+      }
+
+      assert [%{floor: 1, id: "w", problem: :missing}] =
+               Checks.below_final([view(10, 20, %{})], [ahead, behind], @member, 11)
+    end
+
+    # A row its user could read only from a later commit at or below the limit is judged from
+    # there, not from the commit that created it.
+    test "judges a row its user could read only once a later commit let them" do
+      created = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 5,
+        min_seq: 5,
+        state: numbered_space([])
+      }
+
+      joined = %{
+        after_lock_at: 2,
+        committed_at: 3,
+        max_seq: 7,
+        min_seq: 7,
+        ops: ["add_member m-1 #{@space} #{@member}"],
+        state: numbered_space([@member])
+      }
+
+      view = %{at: 20, finals: %{Space => 10}, rows: %{Space => %{}}}
+
+      assert [%{floor: 1, id: @space, problem: :missing, type: Space}] =
+               Checks.below_final([view], [created, joined], @member, 10)
+    end
+
+    # The server sends effects in serial order, so what a commit locked before the floor holding a
+    # serial above the limit changed may not have come yet.
+    test "passes a row a commit ahead of the floor above the limit let its user read" do
+      created = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 5,
+        min_seq: 5,
+        ops: ["create_space #{@space} space"],
+        state: numbered_space([])
+      }
+
+      joined = %{
+        after_lock_at: 2,
+        committed_at: 3,
+        max_seq: 20,
+        min_seq: 20,
+        ops: ["add_member m #{@space} #{@member}"],
+        state: numbered_space([@member])
+      }
+
+      floor = %{joined | after_lock_at: 4, committed_at: 5, max_seq: 7, min_seq: 7, ops: []}
+      view = %{at: 20, finals: %{Space => 10}, rows: %{Space => %{}}}
+
+      assert Checks.below_final([view], [created, joined, floor], @member, 20) == []
+    end
+
+    test "passes a row the floor's commit let its user read under a serial above the limit" do
+      created = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 5,
+        min_seq: 5,
+        ops: ["create_space #{@space} space"],
+        state: numbered_space([])
+      }
+
+      floor = %{
+        after_lock_at: 2,
+        committed_at: 3,
+        max_seq: 20,
+        min_seq: 7,
+        ops: ["rename Tag t name name 2", "add_member m #{@space} #{@member}"],
+        state: numbered_space([@member])
+      }
+
+      view = %{at: 20, finals: %{Space => 10}, rows: %{Space => %{}}}
+
+      assert Checks.below_final([view], [created, floor], @member, 20) == []
+    end
+
+    # The server reads what a gained access lets through from the live tables, so a commit locked
+    # after the floor holding a serial above the limit can keep a row from coming until its effect
+    # does - here a member joining the space the card's board is in.
+    test "passes a row a commit after the floor above the limit names the access of" do
+      assert Checks.below_final([card_view(20)], card_entries(2), @member, 20) == []
+    end
+
+    test "judges a row a commit above the limit locked after the frame names the access of" do
+      assert [%{id: "c-1", problem: :missing, type: Card}] =
+               Checks.below_final([card_view(20)], card_entries(20), @member, 20)
+    end
+
+    # A type-wide grant names no board, so it is matched by its user. Locked ahead of the floor
+    # under a serial above the limit, it may still be on its way.
+    test "passes a row a type-wide grant ahead of the floor above the limit lets its user read" do
+      created = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 5,
+        min_seq: 5,
+        ops: ["create_board b-1 #{@space} board false"],
+        state: card_state([])
+      }
+
+      grants = MapSet.new([{@member, :all}])
+
+      granted = %{
+        after_lock_at: 2,
+        committed_at: 4,
+        max_seq: 20,
+        min_seq: 20,
+        ops: ["grant_wide #{@member}"],
+        state: %{card_state([]) | grants: grants}
+      }
+
+      floor = %{
+        after_lock_at: 3,
+        committed_at: 5,
+        max_seq: 7,
+        min_seq: 7,
+        ops: ["create_tag t-1 t-1"],
+        state: %{card_state([]) | grants: grants}
+      }
+
+      view = %{at: 20, finals: %{Board => 10}, rows: %{Board => %{}}}
+
+      assert Checks.below_final([view], [created, granted, floor], @member, 20) == []
+    end
+
+    test "judges a row a commit above the limit names only its user beside" do
+      created = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 5,
+        min_seq: 5,
+        ops: ["create_space #{@space} space"],
+        state: numbered_space([@member])
+      }
+
+      elsewhere = %{
+        created
+        | after_lock_at: 2,
+          committed_at: 3,
+          max_seq: 20,
+          min_seq: 20,
+          ops: ["add_member m-2 s-2 #{@member}"]
+      }
+
+      view = %{at: 20, finals: %{Space => 10}, rows: %{Space => %{}}}
+
+      assert [%{id: @space, problem: :missing}] =
+               Checks.below_final([view], [created, elsewhere], @member, 20)
+    end
+
+    test "judges a row for a client with no user when a type-wide grant is on its way" do
+      created = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 5,
+        min_seq: 5,
+        ops: ["create_tag t-1 t-1"],
+        state: tags_state(%{"t-1" => {5, 5}})
+      }
+
+      granted = %{created | after_lock_at: 2, max_seq: 20, min_seq: 20, ops: ["grant_wide u-2"]}
+
+      assert [%{id: "t-1", problem: :missing}] =
+               Checks.below_final([view(10, 20, %{})], [created, granted], nil, 20)
+    end
+
+    # The updated number is judged from the floor, so a commit locked before it holding a serial
+    # above the limit, and changing something else, leaves it judged.
+    test "judges a row's updated number from the floor" do
+      created = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 5,
+        min_seq: 5,
+        state: tags_state(%{"t-1" => {5, 5}})
+      }
+
+      ahead =
+        Map.merge(created, %{
+          after_lock_at: 2,
+          max_seq: 20,
+          min_seq: 20,
+          ops: ["create_tag v-1 v-1"],
+          state: tags_state(%{"t-1" => {5, 5}, "v-1" => {20, 20}})
+        })
+
+      updated = %{
+        created
+        | after_lock_at: 4,
+          max_seq: 7,
+          min_seq: 7,
+          state: tags_state(%{"t-1" => {5, 7}, "v-1" => {20, 20}})
+      }
+
+      assert [%{id: "t-1", problem: :numbers, shown: {5, nil}, wanted: {5, 7}}] =
+               Checks.below_final(
+                 [view(10, 20, %{"t-1" => {5, nil}})],
+                 [created, ahead, updated],
+                 @member,
+                 20
+               )
     end
 
     test "flags a limit short of the last commit's serials once the writes stopped", %{
@@ -352,6 +580,46 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
       received_at: Keyword.fetch!(opts, :received_at),
       type: Space
     }
+  end
+
+  # A card created at 5 on a board in the space, whose user is a member, then a commit holding 20,
+  # locked at the given time, that has another user join the space.
+  defp card_entries(joined_at) do
+    created = %{
+      after_lock_at: 0,
+      committed_at: 1,
+      max_seq: 5,
+      min_seq: 5,
+      ops: ["create_card c-1 b-1 card"],
+      state: card_state([@member])
+    }
+
+    joined = %{
+      after_lock_at: joined_at,
+      committed_at: joined_at + 1,
+      max_seq: 20,
+      min_seq: 20,
+      ops: ["add_member m-2 #{@space} u-2"],
+      state: card_state([@member, "u-2"])
+    }
+
+    [created, joined]
+  end
+
+  defp card_view(at), do: %{at: at, finals: %{Card => 10}, rows: %{Card => %{}}}
+
+  defp card_state(members) do
+    members
+    |> numbered_space()
+    |> put_in([:rows, Board], %{"b-1" => %{"archived" => false, "space_id" => @space}})
+    |> put_in([:rows, Card], %{"c-1" => %{"board_id" => "b-1"}})
+    |> Map.put(:seqs, %{Board => %{"b-1" => {5, 5}}, Card => %{"c-1" => {5, 5}}})
+  end
+
+  defp numbered_space(members) do
+    %{"name" => "space"}
+    |> state(members)
+    |> Map.put(:seqs, %{Space => %{@space => {5, 5}}})
   end
 
   defp state(space, member_ids) do

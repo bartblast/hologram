@@ -7,6 +7,7 @@ defmodule HologramSyncTests.Consistency.Report do
   # client's events with the rows and pairs it received, and every problem - written to a file CI
   # keeps.
 
+  alias HologramSyncTests.Consistency.Checks
   alias HologramSyncTests.Consistency.Plan
 
   @shown 5
@@ -171,9 +172,10 @@ defmodule HologramSyncTests.Consistency.Report do
     {problem.client,
      "was told at #{problem.at} the numbers of #{inspect(problem.type)} are final up to " <>
        "#{problem.final_seq}, and #{shown}: #{problem.id} is numbered #{inspect(problem.wanted)} " <>
-       "and its user could read it from commit #{problem.floor}, the last of the commits in " <>
-       "lock order whose serials all lie at or below the limit, through every commit locked " <>
-       "before the frame arrived", problem.id}
+       "and its user could read it from commit #{problem.floor}, the last in lock order " <>
+       "holding a serial at or below the limit, through every commit locked before the frame " <>
+       "arrived, and no commit holding a serial above the limit, locked before the frame " <>
+       "arrived, named it or what its access goes through", problem.id}
   end
 
   defp describe_problem({:failure, failure}) do
@@ -215,11 +217,11 @@ defmodule HologramSyncTests.Consistency.Report do
   # or the client's user, which grants, removals and blocks name.
   defp commits_touching(row_id, client, outcome) do
     user_ids = if client && client.user_id, do: [client.user_id], else: []
-    related = related_ids(row_id, outcome.history.entries) ++ user_ids
+    related = Checks.related_ids(row_id, outcome.history.entries) ++ user_ids
 
     touching =
       for {entry, index} <- Enum.with_index(outcome.history.entries),
-          Enum.any?(entry.ops, fn op -> Enum.any?(related, &String.contains?(op, &1)) end),
+          Checks.names_any?(entry, related),
           do:
             "   commit #{index} (#{entry.writer}, seqs #{describe_seqs(entry)}, " <>
               "lock #{entry.after_lock_at}, " <>
@@ -234,31 +236,6 @@ defmodule HologramSyncTests.Consistency.Report do
   defp describe_seqs(%{min_seq: nil}), do: "none"
 
   defp describe_seqs(entry), do: "#{entry.min_seq}..#{entry.max_seq}"
-
-  defp related_ids(row_id, entries) do
-    rows =
-      for entry <- entries,
-          {_type, by_id} <- entry.state.rows,
-          {id, fields} <- by_id,
-          reduce: %{} do
-        acc -> Map.update(acc, id, field_ids(fields), &MapSet.union(&1, field_ids(fields)))
-      end
-
-    hop = fn ids -> Enum.reduce(ids, ids, &MapSet.union(&2, Map.get(rows, &1, MapSet.new()))) end
-
-    [row_id]
-    |> MapSet.new()
-    |> hop.()
-    |> hop.()
-    |> MapSet.to_list()
-  end
-
-  defp field_ids(fields) do
-    for {name, value} <- fields,
-        String.ends_with?(name, "_id") and is_binary(value),
-        into: MapSet.new(),
-        do: value
-  end
 
   defp timeline(nil), do: []
 
