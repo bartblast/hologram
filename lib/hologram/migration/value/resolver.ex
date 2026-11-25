@@ -90,8 +90,8 @@ defmodule Hologram.Migration.Value.Resolver do
   end
 
   @doc """
-  Returns whether PostgreSQL can store the given value, which the entity validator accepted, in a
-  column of its type.
+  Returns whether PostgreSQL can store the given value, which `of_type?/2` accepted, in a column of
+  its type.
   """
   @spec storable?(any) :: boolean
   def storable?(%Date{} = date) do
@@ -122,7 +122,60 @@ defmodule Hologram.Migration.Value.Resolver do
 
   def fits_type?(_value, :enum), do: false
 
-  def fits_type?(value, type), do: Validator.attribute_value_valid?(value, type)
+  def fits_type?(value, type), do: of_type?(value, type)
+
+  @doc """
+  Returns whether the given value is of the given attribute type, other than an enum, with a date,
+  datetime or time asked of the calendar it names. Unlike the entity validator, it leaves out what a column can
+  store, which `storable?/1` answers, so a refusal can tell a value of the wrong type from one the
+  database can't hold.
+  """
+  @spec of_type?(any, atom) :: boolean
+  def of_type?(%Date{calendar: calendar, year: year, month: month, day: day}, :date)
+      when is_integer(year) and is_integer(month) and is_integer(day) do
+    calendar.valid_date?(year, month, day)
+  end
+
+  def of_type?(
+        %DateTime{
+          calendar: calendar,
+          year: year,
+          month: month,
+          day: day,
+          hour: hour,
+          minute: minute,
+          second: second,
+          microsecond: {microsecond_amount, microsecond_precision} = microsecond
+        },
+        :datetime
+      )
+      when is_integer(year) and is_integer(month) and is_integer(day) and is_integer(hour) and
+             is_integer(minute) and is_integer(second) and is_integer(microsecond_amount) and
+             is_integer(microsecond_precision) do
+    calendar.valid_date?(year, month, day) and
+      calendar.valid_time?(hour, minute, second, microsecond)
+  end
+
+  def of_type?(
+        %Time{
+          calendar: calendar,
+          hour: hour,
+          minute: minute,
+          second: second,
+          microsecond: {microsecond_amount, microsecond_precision} = microsecond
+        },
+        :time
+      )
+      when is_integer(hour) and is_integer(minute) and is_integer(second) and
+             is_integer(microsecond_amount) and is_integer(microsecond_precision) do
+    calendar.valid_time?(hour, minute, second, microsecond)
+  end
+
+  def of_type?(_value, type) when type in @time_types, do: false
+
+  def of_type?(value, :string), do: is_binary(value) and String.valid?(value)
+
+  def of_type?(value, type), do: Validator.attribute_value_valid?(value, type)
 
   defp all_literal?({:value, _value}), do: true
 
@@ -664,14 +717,12 @@ defmodule Hologram.Migration.Value.Resolver do
          type
        )
        when is_integer(std_offset) and is_integer(utc_offset) do
-    Validator.attribute_value_valid?(value, type)
+    of_type?(value, type)
   end
 
   defp well_formed?(%DateTime{}, _type), do: false
 
-  defp well_formed?(%{calendar: Calendar.ISO} = value, type) do
-    Validator.attribute_value_valid?(value, type)
-  end
+  defp well_formed?(%{calendar: Calendar.ISO} = value, type), do: of_type?(value, type)
 
   defp well_formed?(_value, _type), do: false
 end

@@ -173,7 +173,7 @@ defmodule Hologram.Migration.Value.Check do
     # The rules compare the value with the bound, which runs calendar functions the checks before
     # don't, and one value in ISO makes the comparison convert the bound.
     usable_calendar?(calendar, struct) and integer_offsets?(bound) and
-      Validator.attribute_value_valid?(bound, type) and
+      Resolver.of_type?(bound, type) and
       struct.compare(bound, Map.fetch!(@iso_values, struct)) in [:eq, :gt, :lt]
   catch
     # A declared bound can name any module as its calendar, so one that fails can't be compared.
