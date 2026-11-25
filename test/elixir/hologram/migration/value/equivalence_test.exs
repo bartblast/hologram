@@ -1,7 +1,7 @@
 defmodule Hologram.Migration.Value.EquivalenceTest do
   # SQL and Elixir have to give the same value for every row: a fill runs one, and a write queued
-  # from before the migration runs the other. Each case computes a backfill both ways over the
-  # same rows, on a real database.
+  # from before the migration will run the other, once queued writes replay (#951). Each case
+  # computes a backfill both ways over the same rows, on a real database.
   #
   # async: false - every module of the scratch tier opens raw sessions beside its scratch
   # connection.
