@@ -54,6 +54,12 @@ defmodule Hologram.Migration.Value.Check do
   about only in a file with a cut: there a value that would have arrived with its type no longer
   does.
 
+  Validates as well that the value an added column is filled with is one its type holds there: a
+  file that adds a member with a backfill and then deletes that value from its type in the same
+  chunk creates the type without it, so the fill would fail on every row. A tightening's backfill
+  has a chunk of its own, and a declared default its type doesn't hold yet is asked about where it
+  fills rows (see Hologram.DB.Preflight.check_fill!/1).
+
   Raises Hologram.CompileError naming the column or the fill's line, and the value.
   """
   @spec validate_enum_uses!(list(%{atom => any}), boolean) :: :ok
@@ -62,6 +68,7 @@ defmodule Hologram.Migration.Value.Check do
       if cut?, do: physical_ops, else: Enum.reject(physical_ops, &Map.has_key?(&1, :fill))
 
     _added = Enum.reduce(checked, MapSet.new(), &track_enum_values/2)
+    _held = Enum.reduce(physical_ops, %{}, &track_held_values/2)
 
     :ok
   end
@@ -447,6 +454,59 @@ defmodule Hologram.Migration.Value.Check do
   end
 
   defp track_enum_values(_op, added), do: added
+
+  # The values of each enum type the file creates or rebuilds, as the ops so far leave them.
+  defp track_held_values(%{op: kind, enum_type: type, values: values}, held)
+       when kind in [:create_enum_type, :rebuild_enum_type] do
+    Map.put(held, type, values)
+  end
+
+  defp track_held_values(%{op: :add_enum_value, enum_type: type, value: value}, held) do
+    update_held(held, type, &[value | &1])
+  end
+
+  defp track_held_values(%{op: :rename_enum_value, enum_type: type, from: from, to: to}, held) do
+    update_held(held, type, fn values -> Enum.map(values, &if(&1 == from, do: to, else: &1)) end)
+  end
+
+  defp track_held_values(%{op: :rename_enum_type, from: from, to: to}, held) do
+    case Map.pop(held, from) do
+      {nil, held} -> held
+      {values, held} -> Map.put(held, to, values)
+    end
+  end
+
+  defp track_held_values(%{op: :drop_enum_type, enum_type: type}, held),
+    do: Map.delete(held, type)
+
+  defp track_held_values(%{op: :add_column, backfill: value} = op, held) do
+    validate_held!(held, op.definition.type, value, op)
+  end
+
+  defp track_held_values(_op, held), do: held
+
+  defp update_held(held, type, fun) do
+    if Map.has_key?(held, type), do: Map.update!(held, type, fun), else: held
+  end
+
+  defp validate_held!(held, type, value, op) do
+    case Map.fetch(held, type) do
+      {:ok, values} when is_binary(value) ->
+        if value not in values do
+          raise Hologram.CompileError,
+            message:
+              ~s(the value #{printed(value)} filling column "#{op.column}" on table ) <>
+                ~s("#{op.table}" is an enum value this file deletes from its type, which no ) <>
+                "longer holds it where the fill runs, so the fill would fail on every row - " <>
+                "fill with a value the type keeps, or keep the value"
+        end
+
+        held
+
+      _unknown_or_not_enum ->
+        held
+    end
+  end
 
   defp unfit_rule(type, opts) do
     Enum.find(opts, &(not rule_fits?(&1, type)))

@@ -929,6 +929,108 @@ defmodule Hologram.Migration.RendererTest do
     end
   end
 
+  describe "render/2, a constant fill of an enum value the file deletes" do
+    setup do
+      [pre_model: model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})]
+    end
+
+    defp filled_phase(values) do
+      %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :phase,
+        type: :enum,
+        opts: [values: values, backfill: :live],
+        line: 5
+      }
+    end
+
+    defp phase_value_op(kind, value) do
+      %{op: kind, entity: MyApp.Task, attribute: :phase, value: value, opts: [], line: 6}
+    end
+
+    test "refuses a backfill of an added member whose value the file deletes after it", %{
+      pre_model: pre_model
+    } do
+      ops = [filled_phase([:draft, :live]), phase_value_op(:delete_enum_value, :live)]
+
+      error = assert_raise Hologram.CompileError, fn -> render(ops, pre_model) end
+
+      assert error.message ==
+               ~s(the value "live" filling column "phase" on table "my_app_task" is an enum ) <>
+                 "value this file deletes from its type, which no longer holds it where the " <>
+                 "fill runs, so the fill would fail on every row - fill with a value the type " <>
+                 "keeps, or keep the value"
+    end
+
+    test "leaves a tightening's default to where it fills rows, after the file rebuilds its type" do
+      pre_model =
+        model(%{
+          MyApp.Task => %{
+            attributes: [
+              {:grade, :enum, [optional: true, values: [:a, :b]]},
+              {:seats, :integer, [optional: true]}
+            ]
+          }
+        })
+
+      ops = [
+        %{op: :delete_enum_value, entity: MyApp.Task, attribute: :grade, value: :b, line: 2},
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          changes: [optional: false, default: :fresh],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :seats, to: :places, line: 4},
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :grade,
+          value: :fresh,
+          opts: [],
+          line: 5
+        }
+      ]
+
+      %{transactional: rendered} = render(ops, pre_model)
+
+      assert %{default_held: false, fill: "fresh"} =
+               Enum.find(rendered, &(&1.op == :alter_column and &1.column == "grade"))
+    end
+
+    test "keeps a backfill whose value the file deletes and adds back", %{pre_model: pre_model} do
+      ops = [
+        filled_phase([:draft, :live]),
+        phase_value_op(:delete_enum_value, :live),
+        phase_value_op(:add_enum_value, :live)
+      ]
+
+      assert [%{op: :create_enum_type, values: values}, %{op: :add_column, backfill: "live"}] =
+               render(ops, pre_model).transactional
+
+      assert "live" in values
+    end
+
+    test "keeps a backfill whose value the file renames after it", %{pre_model: pre_model} do
+      ops = [
+        filled_phase([:draft, :live]),
+        %{
+          op: :rename_enum_value,
+          entity: MyApp.Task,
+          attribute: :phase,
+          from: :live,
+          to: :on,
+          line: 6
+        }
+      ]
+
+      assert [_create, %{op: :add_column, backfill: "live"}, %{op: :rename_enum_value}] =
+               render(ops, pre_model).transactional
+    end
+  end
+
   describe "render/2, a fill using an enum value the file adds" do
     setup do
       pre_model =
