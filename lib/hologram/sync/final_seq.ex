@@ -57,15 +57,19 @@ defmodule Hologram.Sync.FinalSeq do
   end
 
   @doc """
-  Runs the function with the limit pinned at the one published now, or with the given one, and
-  restores what was pinned before once it returns or raises. A pin already set is kept by the
-  one-argument form, so a pinned render calling another keeps one limit throughout.
+  Runs the function with the limit pinned at the one published now, and restores what was pinned
+  before once it returns or raises. A pin already set is kept, so a pinned render calling another
+  keeps one limit throughout.
   """
   @spec with_pinned((-> result)) :: result when result: any
   def with_pinned(fun) do
     with_pinned(current(), fun)
   end
 
+  @doc """
+  Runs the function with the limit pinned at the given one, and restores what was pinned before
+  once it returns or raises.
+  """
   @spec with_pinned(non_neg_integer, (-> result)) :: result when result: any
   def with_pinned(seq, fun) when is_integer(seq) and seq >= 0 do
     previous = Process.put(@pin_key, seq)
