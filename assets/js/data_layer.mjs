@@ -85,6 +85,17 @@ export default class DataLayer {
   // tab follows one (see catchUpIdentity).
   static caughtUpTag = null;
 
+  // Made public to make tests easier
+  //
+  // How long a reply that names an identity this tab doesn't follow gives the stream to tell the
+  // tab of it before a new one is opened (see catchUpIdentity).
+  static CATCH_UP_DELAY_MS = 500;
+
+  // Made public to make tests easier
+  //
+  // The catch-up waiting out CATCH_UP_DELAY_MS, if any.
+  static catchUpTimer = null;
+
   // Based on run_query!/4
   //
   // Answers the given normalized term a derived field of the given module is defined by, for the
@@ -210,25 +221,28 @@ export default class DataLayer {
   // started listening just after the change was told, never hears of it and goes on serving the
   // previous user. When the stream told this tab first, the tags match and nothing is done.
   //
+  // The reply and the stream's word on the change race each other, and the reply usually wins, so
+  // the stream gets a moment to tell the tab before it's given up on. A new stream throws away the
+  // sync session and starts another, and it takes the connection a following request would have
+  // gone over. What's checked once the moment is over is the identity of the latest reply then.
+  //
   // Once per tag, until a handshake names a tag or the tab follows one: replies that land while the
   // handshake is on its way would each open another stream and throw away the one about to open,
   // and a handshake that names no tag follows nothing. A tab already waiting to hear who it serves
   // has a new stream coming.
   static catchUpIdentity() {
-    const tag = IdentityTracker.tag;
-
-    if (
-      !Sse.isStarted ||
-      tag === null ||
-      tag === SyncStream.followedTag ||
-      tag === $.caughtUpTag ||
-      SyncStream.awaitingIdentity
-    ) {
+    if ($.catchUpTimer !== null || !$.#needsCatchUp()) {
       return;
     }
 
-    $.caughtUpTag = tag;
-    Sse.reconnect();
+    $.catchUpTimer = setTimeout(() => {
+      $.catchUpTimer = null;
+
+      if ($.#needsCatchUp()) {
+        $.caughtUpTag = IdentityTracker.tag;
+        Sse.reconnect();
+      }
+    }, $.CATCH_UP_DELAY_MS);
   }
 
   // Sealed BEFORE the render that follows an action, so the one frame that follows shows the
@@ -1137,6 +1151,20 @@ export default class DataLayer {
 
       Sse.reconnect();
     }
+  }
+
+  // Whether the tab holds a reply's identity no stream has told it of, nor is about to (see
+  // catchUpIdentity).
+  static #needsCatchUp() {
+    const tag = IdentityTracker.tag;
+
+    return (
+      Sse.isStarted &&
+      tag !== null &&
+      tag !== SyncStream.followedTag &&
+      tag !== $.caughtUpTag &&
+      !SyncStream.awaitingIdentity
+    );
   }
 
   // Whether a new stream was opened to hear who the session serves (see catchUpIdentity). Nothing

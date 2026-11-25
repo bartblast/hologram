@@ -1242,9 +1242,17 @@ describe("DataLayer", () => {
   });
 
   describe("catchUpIdentity()", () => {
-    let reconnecting, wasStarted;
+    let reconnecting, timers, wasStarted;
+
+    // Runs a catch-up, then lets the stream's moment to tell the tab pass.
+    const catchUp = () => {
+      DataLayer.catchUpIdentity();
+      timers.tick(DataLayer.CATCH_UP_DELAY_MS);
+    };
 
     beforeEach(() => {
+      timers = sinon.useFakeTimers({toFake: ["setTimeout", "clearTimeout"]});
+
       wasStarted = Sse.isStarted;
       Sse.isStarted = true;
 
@@ -1265,6 +1273,9 @@ describe("DataLayer", () => {
     });
 
     afterEach(() => {
+      clearTimeout(DataLayer.catchUpTimer);
+      DataLayer.catchUpTimer = null;
+
       Sse.isStarted = wasStarted;
 
       IdentityTracker.documentPeriod = null;
@@ -1287,23 +1298,56 @@ describe("DataLayer", () => {
     });
 
     it("opens a new stream for an identity the tab doesn't follow", () => {
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       sinon.assert.calledOnce(reconnecting);
     });
 
     // The reply names only the tag: the handshake names who the session serves.
     it("follows nothing itself", () => {
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       assert.equal(SyncStream.followedTag, "1.tag-1");
       assert.equal(LocalDatabase.actorUserId, "u1");
     });
 
+    it("gives the stream a moment to tell the tab of the identity", () => {
+      DataLayer.catchUpIdentity();
+      timers.tick(DataLayer.CATCH_UP_DELAY_MS - 1);
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    // The reply usually lands before the stream's word on the change, which a new stream would only
+    // repeat.
+    it("leaves the stream alone when it tells the tab of the identity meanwhile", () => {
+      DataLayer.catchUpIdentity();
+
+      DataLayer.followIdentity({
+        actorEntityId: "entity-2",
+        actorUserId: "u2",
+        identityTag: "2.tag-2",
+      });
+
+      timers.tick(DataLayer.CATCH_UP_DELAY_MS);
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    it("catches up with the identity of the latest reply once the moment is over", () => {
+      DataLayer.catchUpIdentity();
+      IdentityTracker.observe("3.tag-3");
+      DataLayer.catchUpIdentity();
+      timers.tick(DataLayer.CATCH_UP_DELAY_MS);
+
+      sinon.assert.calledOnce(reconnecting);
+      assert.equal(DataLayer.caughtUpTag, "3.tag-3");
+    });
+
     it("leaves the stream alone for the identity the tab follows", () => {
       SyncStream.followedTag = "2.tag-2";
 
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       sinon.assert.notCalled(reconnecting);
     });
@@ -1311,7 +1355,7 @@ describe("DataLayer", () => {
     it("opens no stream before the page has", () => {
       Sse.isStarted = false;
 
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       sinon.assert.notCalled(reconnecting);
     });
@@ -1319,7 +1363,7 @@ describe("DataLayer", () => {
     it("opens no stream while no identity is known", () => {
       IdentityTracker.tag = null;
 
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       sinon.assert.notCalled(reconnecting);
     });
@@ -1328,7 +1372,7 @@ describe("DataLayer", () => {
     it("opens no stream for a tab waiting to hear who it serves", () => {
       SyncStream.awaitingIdentity = true;
 
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       sinon.assert.notCalled(reconnecting);
     });
@@ -1336,23 +1380,23 @@ describe("DataLayer", () => {
     // A reply that lands while the handshake is on its way would throw that handshake away, and
     // one that names no tag follows nothing.
     it("opens one stream per identity", () => {
-      DataLayer.catchUpIdentity();
-      DataLayer.catchUpIdentity();
+      catchUp();
+      catchUp();
 
       sinon.assert.calledOnce(reconnecting);
     });
 
     it("opens another stream for the next identity", () => {
-      DataLayer.catchUpIdentity();
+      catchUp();
       IdentityTracker.observe("3.tag-3");
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       sinon.assert.calledTwice(reconnecting);
     });
 
     // A cookie set back brings an earlier tag back, stamp and all.
     it("catches up with a tag again once the tab has followed another", () => {
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       DataLayer.followIdentity({
         actorEntityId: "entity-3",
@@ -1361,7 +1405,7 @@ describe("DataLayer", () => {
       });
 
       IdentityTracker.tag = "2.tag-2";
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       sinon.assert.calledTwice(reconnecting);
     });
@@ -1369,7 +1413,7 @@ describe("DataLayer", () => {
     // An older cookie set back while the handshake was on its way names the tag the tab follows,
     // and a later reply can bring the newer one back.
     it("catches up with a tag again once a handshake names the one the tab follows", () => {
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       IdentityTracker.tag = "1.tag-1";
 
@@ -1381,14 +1425,14 @@ describe("DataLayer", () => {
       });
 
       IdentityTracker.tag = "2.tag-2";
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       sinon.assert.calledTwice(reconnecting);
     });
 
     // Without a tag the handshake follows nothing, and a stream per reply would follow nothing too.
     it("waits for a handshake that names a tag", () => {
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       DataLayer.takeHandshake({
         actorEntityId: "entity-1",
@@ -1397,14 +1441,14 @@ describe("DataLayer", () => {
         replica: null,
       });
 
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       sinon.assert.calledOnce(reconnecting);
     });
 
     // Its handshake names the new user, and the tab follows it there.
     it("is answered by the handshake's follow", () => {
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       DataLayer.takeHandshake({
         actorEntityId: "entity-2",
@@ -1413,7 +1457,7 @@ describe("DataLayer", () => {
         replica: {id: "replica-2", token: "token-2"},
       });
 
-      DataLayer.catchUpIdentity();
+      catchUp();
 
       sinon.assert.calledOnce(reconnecting);
       assert.equal(LocalDatabase.actorUserId, "u2");
