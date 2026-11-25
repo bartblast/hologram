@@ -192,7 +192,7 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
     reads = Evaluator.reads(resolved.term)
     loaded = Loader.load(reads, MyApp.Trip, ids, mapping)
 
-    assert length(loaded) == length(ids)
+    assert Enum.map(loaded, & &1.id) == ids
 
     for row <- loaded do
       assert {inspect(term), row.id, Evaluator.evaluate(resolved.term, row)} ==
