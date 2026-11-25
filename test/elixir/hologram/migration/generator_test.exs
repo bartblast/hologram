@@ -950,7 +950,7 @@ defmodule Hologram.Migration.GeneratorTest do
         #   add_attribute :title, :string, backfill: <value or expression>  - existing rows receive it, once, computed from each row when it names the row's fields
         #   add_attribute :title, :string, backfill: fn field -> <query words> end  - the same, in one update
         #   add_attribute :title, :string, backfill: fn field -> <Elixir> end  - the same, run row by row
-        #   add_attribute :title, :string, default: <value>  - every row created without one, from now on
+        #   add_attribute :title, :string, default: <value>  - existing rows receive it, and so does every row created without one from now on
         #   add_attribute :title, :string, optional: true  - existing rows stay empty
         resolve! :fill, attributes: [:title]
       end

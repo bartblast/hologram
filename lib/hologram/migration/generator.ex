@@ -211,7 +211,10 @@ defmodule Hologram.Migration.Generator do
     default_lines =
       if opts[:unique] == true,
         do: [],
-        else: ["#{call}, default: <value>  - every row created without one, from now on"]
+        else: [
+          "#{call}, default: <value>  - existing rows receive it, and so does every row " <>
+            "created without one from now on"
+        ]
 
     call
     |> backfill_lines("<value or expression>", "existing rows")
