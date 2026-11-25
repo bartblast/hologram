@@ -1622,6 +1622,37 @@ describe("Durability", () => {
       assert.deepStrictEqual(await readAll("queue"), []);
     });
 
+    // The earlier one was filed for the group the tab has left, and its failure is that group's,
+    // which ends no write of the group the tab is in now.
+    it("stores a batch of the tab's new visit behind one of its last visit that aborted", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await Durability.open();
+      await Durability.load();
+
+      let visit = "visit-left";
+
+      sinon.stub(Tabs, "visit").get(() => visit);
+      sinon.stub(Tabs, "isVisit").callsFake((given) => given === visit);
+
+      const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+      const first = Durability.fileBatch(unfiledBatch());
+
+      visit = "visit-joined";
+
+      const later = unfiledBatch();
+      const second = Durability.fileBatch(later);
+
+      starting.firstCall.returnValue.abort();
+
+      assert.isFalse(await first);
+      assert.isTrue(await second);
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [later.seq],
+      );
+    });
+
     // Waiting for the first to settle before starting the next would leave the next one out of the
     // store, and it would go out alone while the first waits there for a later page load.
     it("stores every filing in line when the tab lets go of the store", async () => {

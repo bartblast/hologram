@@ -343,9 +343,13 @@ export default class Durability {
     //
     // This transaction starts only once the earlier one has finished, but the event saying how can
     // still be on its way. Reading again keeps this one open until it arrives.
+    //
+    // Only a filing of the same visit to a group takes this one down with it. One made for a group
+    // the tab has since left fails that group (see #write), and the new group's next filing is
+    // this one.
     const stored = await Durability.#write([META, QUEUE], (transaction) => {
       const earlier = Durability.#lastFiling;
-      const filing = {aborted: false, done: false};
+      const filing = {aborted: false, done: false, visit: Tabs.visit};
 
       Durability.#lastFiling = filing;
 
@@ -371,7 +375,7 @@ export default class Durability {
             return;
           }
 
-          if (earlier?.aborted) {
+          if (earlier?.aborted && earlier.visit === filing.visit) {
             transaction.abort();
 
             return;
