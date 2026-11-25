@@ -15,7 +15,7 @@ defmodule App1.MixProject do
       {:bandit, "~> 1.5"},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "119b0a280bdbf22266ee9f1e9d9ab8671283e9d3"},
+       ref: "ef4377c3de50df38999ded315916ae2df5b11a5c"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
       {:wallaby, "~> 0.30", only: :test}
