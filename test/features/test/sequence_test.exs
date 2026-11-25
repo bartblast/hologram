@@ -7,6 +7,7 @@ defmodule HologramFeatureTests.SequenceTest do
 
   alias Hologram.DB
   alias Hologram.DB.Connection
+  alias Hologram.DB.Mapper
   alias Hologram.Query
   alias HologramFeatureTests.Entities.Notice
   alias HologramFeatureTests.SequencePage
@@ -114,11 +115,16 @@ defmodule HologramFeatureTests.SequenceTest do
 
     held = hold_save("held")
 
-    create_notice("after")
+    after_notice = create_notice("after")
 
-    session
-    |> await_local_read("Show view", "view", "first | first | first | first | after, first")
-    |> await_durable_writes()
+    stored =
+      session
+      |> await_local_read("Show view", "view", "first | first | first | first | after, first")
+      |> await_durable_writes()
+
+    assert stored_waiting_created_seq(stored, after_notice) == raw_created_seq(after_notice)
+
+    stored
     |> reload()
     |> await_page_mount(SequencePage)
     |> assert_text(css("#view"), "first | first | first | first | after, first")
@@ -168,6 +174,53 @@ defmodule HologramFeatureTests.SequenceTest do
     send(task.pid, :release)
 
     assert {:ok, :ok} = Task.await(task)
+  end
+
+  # The created number the stored record of the given notice keeps waiting beside it, or nil.
+  defp stored_waiting_created_seq(session, notice) do
+    script = """
+    return indexedDB.databases().then((databases) => new Promise((resolve, reject) => {
+      const name = databases
+        .map((database) => database.name)
+        .find((name) => name.startsWith("hologram."));
+
+      const opening = indexedDB.open(name);
+
+      opening.onerror = () => reject(opening.error);
+
+      opening.onsuccess = () => {
+        const db = opening.result;
+
+        const reading = db
+          .transaction("entities")
+          .objectStore("entities")
+          .get(["#{inspect(Notice)}", "#{notice.id}"]);
+
+        reading.onerror = () => reject(reading.error);
+
+        reading.onsuccess = () => {
+          db.close();
+          resolve(reading.result?.waiting?.numbers?.server_created_seq ?? null);
+        };
+      };
+    }));
+    """
+
+    session
+    |> script_result(script)
+    |> then(&if(is_binary(&1), do: String.to_integer(&1), else: &1))
+  end
+
+  # The notice's created number as the table holds it, which a server read masks while it waits.
+  defp raw_created_seq(notice) do
+    {:ok, %{rows: [[seq]]}} =
+      Connection.query(
+        ~s(SELECT "server_created_seq" FROM "hologram_data"."#{Mapper.table_name(Notice)}" ) <>
+          ~s(WHERE "id"::text = $1),
+        [notice.id]
+      )
+
+    seq
   end
 
   defp read_notice(title) do
