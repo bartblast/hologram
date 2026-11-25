@@ -159,6 +159,7 @@ defmodule Hologram.Migration do
   alias Hologram.Migration.FieldAccess.Definitions
   alias Hologram.Migration.Loader
   alias Hologram.Migration.Value
+  alias Hologram.Query.Expression
 
   # A migration module's file name is its version - 14 UTC timestamp digits, nothing else.
   @file_name_regex ~r/^\d{14}\.ex$/
@@ -606,6 +607,15 @@ defmodule Hologram.Migration do
        ),
        do: ast
 
+  # Every alias in the op names what it names where the op is written, so one the op's own code
+  # declares would apply too late, where Elixir runs the code.
+  defp expand_code_aliases({form, _meta, args} = node, env, splicing)
+       when form in [:alias, :require] and is_list(args) do
+    refuse_alias_declaration!(node, env)
+
+    expand_call_aliases(node, env, splicing)
+  end
+
   defp expand_code_aliases({:__aliases__, _meta, _segments} = alias_ast, env, _splicing) do
     Macro.expand(alias_ast, env)
   end
@@ -641,10 +651,37 @@ defmodule Hologram.Migration do
   end
 
   # Code only the compiler can tell runs gets its aliases marked, which holds whether it's code
-  # or data.
+  # or data, and an alias it declares refused, since it may run.
   defp expand_quote_code(code, env, true, splicing), do: expand_code_aliases(code, env, splicing)
 
-  defp expand_quote_code(code, env, :unknown, _splicing), do: mark_aliases(code, env)
+  defp expand_quote_code(code, env, :unknown, _splicing) do
+    Macro.prewalk(code, &refuse_alias_declaration!(&1, env))
+
+    mark_aliases(code, env)
+  end
+
+  # A require's options that aren't written out may hold as:.
+  defp refuse_alias_declaration!({form, _meta, args} = node, env)
+       when form in [:alias, :require] and is_list(args) do
+    declares? =
+      case {form, args} do
+        {:alias, _args} -> true
+        {:require, [_module, opts]} -> not Keyword.keyword?(opts) or Keyword.has_key?(opts, :as)
+        {:require, _args} -> false
+      end
+
+    if declares? do
+      Expression.compile_error!(
+        "an op can't declare an alias inside its code - put the #{form} at the top of the module",
+        node,
+        env
+      )
+    end
+
+    node
+  end
+
+  defp refuse_alias_declaration!(node, _env), do: node
 
   # Marks each alias in the given code with what it names in the given environment, as a quote
   # marks the aliases it holds: false when no alias of the environment applies. One marked

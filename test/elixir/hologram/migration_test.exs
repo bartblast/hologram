@@ -454,6 +454,67 @@ defmodule Hologram.MigrationTest do
       end
     end
 
+    test "refuses an alias the op's code declares" do
+      pin = &"backfill: fn title -> coalesce(title, ^#{&1}) end"
+      declared = ~s[alias String, as: Lib; Lib.reverse("abc")]
+
+      for {option, form} <- [
+            {pin.("(#{declared})"), :alias},
+            {pin.(~s[(alias String; Lib.reverse("abc"))]), :alias},
+            {pin.(~s[(alias String.{Chars}; Lib.reverse("abc"))]), :alias},
+            {pin.(~s[(require String, as: Lib; Lib.reverse("abc"))]), :require},
+            # Options not written out may hold as:.
+            {pin.(~s[(require String, @o; Lib.reverse("abc"))]), :require},
+            {pin.("inspect(quote(do: unquote((#{declared}))))"), :alias},
+            {pin.("inspect(quote(bind_quoted: [x: (#{declared})], do: x))"), :alias},
+            # Options only the compiler can read may let the unquote run.
+            {pin.("inspect(quote(@opts, do: unquote((#{declared}))))"), :alias},
+            {"backfill: fn title -> (alias String, as: Lib; Lib.reverse(title)) end", :alias},
+            {"default: (#{declared})", :alias}
+          ] do
+        body = """
+        @o [as: Lib]
+        @opts []
+        alias Enum, as: Lib
+        change_entity MyApp.Task do
+          add_attribute :first, :string, #{option}
+        end
+        """
+
+        error =
+          assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+        assert error.message ==
+                 "an op can't declare an alias inside its code - put the #{form} at the top of " <>
+                   "the module"
+
+        assert error.line == 8
+      end
+    end
+
+    test "keeps a require that declares no alias, and what only looks like an alias" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :first, :string,
+          backfill: fn title -> coalesce(title, ^(require Integer; inspect(Integer.is_even(2)))) end
+
+        add_attribute :second, :string,
+          backfill: fn title -> coalesce(title, ^inspect(quote(do: alias(String, as: Lib)))) end
+
+        add_attribute :third, :string, default: (alias = "a"; alias)
+        add_attribute :fourth, :string, default: inspect(%{alias: 1}.alias)
+
+        add_attribute :fifth, :string,
+          backfill: fn title -> coalesce(title, ^(require Integer, warn: false; "a")) end
+      end
+      """
+
+      module = compile_migration("20260813091523", body)
+
+      assert [%{op: :add_attribute} | _rest] = ops = module.__hologram_migration__().ops
+      assert length(ops) == 5
+    end
+
     test "refuses a call to the migration's macro in an op" do
       macros = """
       defmacrop same(x), do: quote(do: unquote(x) == @o)
