@@ -1065,16 +1065,17 @@ defmodule Hologram.Sync.LiveTest do
       unsent_seq = log_batch(project, 2_000, "replica_b", 3)
       log_batch(project, 2_001, "replica_c", 5)
       batch_seq = log_batch(project, 2_002, "replica_a", 8)
+      log_batch(project, 2_003, "replica_d", 9)
 
       effect =
         effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}, seq: batch_seq)
 
       Sessions.register(context.alice)
 
-      route([effect], @place, {batch_seq - 1, [{unsent_seq, unsent_seq}]})
+      route([effect], @place, {batch_seq, [{unsent_seq, unsent_seq}]})
 
       assert_received {:live, part}
-      assert part.overtaking_seqs == %{"replica_a" => 8, "replica_b" => 3}
+      assert part.overtaking_seqs == %{"replica_b" => 3, "replica_d" => 9}
     end
 
     # No client checks permissions, so no row carries a verdict, and a change only a verdict reads
