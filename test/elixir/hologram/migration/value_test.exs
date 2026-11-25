@@ -1784,6 +1784,51 @@ defmodule Hologram.Migration.ValueTest do
       assert module.__backfill_0__("a") == "^valuea"
     end
 
+    test "keeps an alias inside a quote as written" do
+      {module, _value} =
+        elixir_op(
+          ~s|fn t -> Macro.to_string(quote(do: Short.x())) <> t end|,
+          "alias MyApp.Short"
+        )
+
+      assert module.__backfill_0__("a") == "Short.x()a"
+    end
+
+    test "binds an alias inside a quote where the op is written" do
+      module =
+        compiled("""
+        alias MyApp.Short
+
+        change_entity MyApp.Trip do
+          add_attribute :value, :string,
+            backfill: fn t -> inspect(Keyword.get(elem(quote(do: Short), 1), :alias)) <> t end
+        end
+
+        alias MyApp.Long.Short
+
+        delete_entity Short
+        """)
+
+      assert module.__backfill_0__("a") == "MyApp.Shorta"
+    end
+
+    test "marks an alias inside a quote that no alias applies to as unaliased" do
+      {module, _value} =
+        elixir_op(~s|fn t -> inspect(Keyword.get(elem(quote(do: Nope), 1), :alias)) <> t end|)
+
+      assert module.__backfill_0__("a") == "falsea"
+    end
+
+    test "keeps an alias inside a quote of a pinned value as written, expanding what it unquotes" do
+      {_module, value} =
+        elixir_op(
+          ~s|fn t -> coalesce(t, ^Macro.to_string(quote(do: Short.x(unquote(Short))))) end|,
+          "alias MyApp.Short"
+        )
+
+      assert %Value{term: {:coalesce, [_t, {:value, "Short.x(MyApp.Short)"}]}} = value
+    end
+
     test "refuses split and at, naming the Elixir function" do
       assert refusal(~s|fn title -> String.trim(split(title, ",")) end|) =~ "write String.split/2"
       assert refusal(~s|fn title -> String.trim(at(title, 0)) end|) =~ "write Enum.at/2"

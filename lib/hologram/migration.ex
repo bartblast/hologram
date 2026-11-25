@@ -590,18 +590,77 @@ defmodule Hologram.Migration do
   # otherwise change what an earlier op names. The expansion runs as though inside that
   # function, so naming an entity type is a runtime reference, as it would be written there,
   # rather than a compile-time dependency that recompiles the migration whenever the entity
-  # module changes.
+  # module changes. A quote's code is data, so an alias in it stays as written, and carries what
+  # it names where the op is written, as a quote there would mark it (see
+  # Value.map_reduce_quote/5).
   defp expand_aliases(quoted, caller) do
-    function_env = %{caller | function: {:__hologram_migration__, 0}}
+    expand_code_aliases(quoted, %{caller | function: {:__hologram_migration__, 0}}, true)
+  end
 
-    Macro.prewalk(quoted, fn
-      # One headed by an attribute is left to the compiler: the head reads a snapshot that
-      # isn't set while the op expands.
-      {:__aliases__, _meta, [{:@, _attribute_meta, _args} | _rest]} = alias_ast ->
-        alias_ast
+  # One headed by an attribute is left to the compiler: the head reads a snapshot that isn't set
+  # while the op expands.
+  defp expand_code_aliases(
+         {:__aliases__, _meta, [{:@, _attribute_meta, _args} | _rest]} = ast,
+         _env,
+         _splicing
+       ),
+       do: ast
 
-      {:__aliases__, _meta, _segments} = alias_ast ->
-        Macro.expand(alias_ast, function_env)
+  defp expand_code_aliases({:__aliases__, _meta, _segments} = alias_ast, env, _splicing) do
+    Macro.expand(alias_ast, env)
+  end
+
+  defp expand_code_aliases({form, _meta, _args} = node, env, splicing)
+       when form in [:quote, :|>] or is_tuple(form) do
+    expand_code = fn code, nil, runs, code_splicing ->
+      {expand_quote_code(code, env, runs, code_splicing), nil}
+    end
+
+    case Value.map_reduce_quote(node, env, splicing, nil, expand_code) do
+      {:ok, node, nil} -> mark_aliases(node, env)
+      :error -> expand_call_aliases(node, env, splicing)
+    end
+  end
+
+  defp expand_code_aliases({_form, _meta, _args} = node, env, splicing) do
+    expand_call_aliases(node, env, splicing)
+  end
+
+  defp expand_code_aliases({left, right}, env, splicing) do
+    {expand_code_aliases(left, env, splicing), expand_code_aliases(right, env, splicing)}
+  end
+
+  defp expand_code_aliases(list, env, splicing) when is_list(list) do
+    Enum.map(list, &expand_code_aliases(&1, env, splicing))
+  end
+
+  defp expand_code_aliases(other, _env, _splicing), do: other
+
+  defp expand_call_aliases({form, meta, args}, env, splicing) do
+    {expand_code_aliases(form, env, splicing), meta, expand_code_aliases(args, env, splicing)}
+  end
+
+  # Code only the compiler can tell runs gets its aliases marked, which holds whether it's code
+  # or data.
+  defp expand_quote_code(code, env, true, splicing), do: expand_code_aliases(code, env, splicing)
+
+  defp expand_quote_code(code, env, :unknown, _splicing), do: mark_aliases(code, env)
+
+  # Marks each alias in the given code with what it names in the given environment, as a quote
+  # marks the aliases it holds: false when no alias of the environment applies. One marked
+  # already, like by a quote of a macro writing the op, keeps its mark.
+  defp mark_aliases(code, env) do
+    Macro.prewalk(code, fn
+      {:__aliases__, meta, [head | _rest] = segments} = alias_ast
+      when is_atom(head) and head != Elixir ->
+        mark =
+          cond do
+            Keyword.has_key?(meta, :alias) -> meta[:alias]
+            Macro.Env.fetch_alias(env, head) == :error -> false
+            true -> Macro.expand(alias_ast, env)
+          end
+
+        {:__aliases__, Keyword.put(meta, :alias, mark), segments}
 
       node ->
         node
