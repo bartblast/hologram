@@ -655,6 +655,12 @@ export default class Batches {
           // start, it would never get to switch to the pair the next handshake hands.
           await Batches.#takeUpWhileHeld();
 
+          // The tab can have followed another user during that read, and that user's batches wait
+          // in the queue: the flush the move started found this sender busy.
+          if (!Batches.pending.includes(batch)) {
+            continue;
+          }
+
           if (!batch.switchedPair || Batches.#retryFor !== batch) {
             Batches.#scheduleRetry(batch.switchedPair ? batch : null);
           }

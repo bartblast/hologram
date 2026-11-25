@@ -1940,6 +1940,32 @@ describe("Batches", () => {
         assert.deepStrictEqual(Batches.pending, []);
       });
 
+      // The flush the move started found the sender busy, so nothing else sends the new user's.
+      it("sends the next user's batches when the tab follows that user during the read", async () => {
+        LocalDatabase.actorUserId = "u1";
+        sealed(creating("t1", "first"));
+
+        sendStub.onFirstCall().resolves({httpStatus: 503, status: "failed"});
+        sendStub.onSecondCall().resolves(confirmed());
+
+        let next = null;
+
+        sinon.stub(Durability, "queuedBatches").callsFake(async () => {
+          if (sendStub.calledOnce && next === null) {
+            LocalDatabase.actorUserId = "u2";
+            Batches.releaseForeign("u2");
+            next = sealed(creating("t2", "second"));
+          }
+
+          return [];
+        });
+
+        await Batches.flush();
+
+        sinon.assert.calledTwice(sendStub);
+        assert.strictEqual(sendStub.secondCall.args[0], next);
+      });
+
       // One tick per retry rather than one tick for all: a retry scheduled DURING a tick, at the
       // same instant, waits for the next one - so each tick is one try, and the attempt count is
       // read after each.
