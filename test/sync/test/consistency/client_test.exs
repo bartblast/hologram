@@ -519,6 +519,7 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     Client.connect(client)
     assert Checks.await_converged(client, member.id, 5_000) == :ok
     assert await(fn -> Client.final_seq(client) != nil end)
+    assert await(fn -> {nil, nil} not in shown_tags(client) end)
 
     Client.cut(client)
 
@@ -541,13 +542,15 @@ defmodule HologramSyncTests.Consistency.ClientTest do
              &(&1.kind == :reload and &1.from == :store and &1.final_seq == stored_final)
            )
 
-    # A number above the stored limit waits again after the reload, so only rows at or below it
-    # come back as shown.
+    # A number above the stored limit waits again after the reload, and one still waiting can be
+    # filed once a higher limit comes, so only rows numbered at or below it come back as shown.
     kept =
       for {id, {created_seq, updated_seq} = numbers} <- shown.rows[Tag],
-          Enum.all?([created_seq, updated_seq], &(&1 == nil or &1 <= stored_final)),
+          Enum.all?([created_seq, updated_seq], &(&1 != nil and &1 <= stored_final)),
           into: %{},
           do: {id, numbers}
+
+    assert kept != %{}
 
     after_reload = last_view(client)
 
