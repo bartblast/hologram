@@ -195,7 +195,7 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
     assert Enum.map(loaded, & &1.id) == ids
 
     for row <- loaded do
-      assert {inspect(term), row.id, Evaluator.evaluate(resolved.term, row)} ==
+      assert {inspect(term), row.id, Evaluator.evaluate(resolved.term, row)} ===
                {inspect(term), row.id, from_sql[row.id]}
     end
   end
