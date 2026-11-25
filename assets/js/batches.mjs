@@ -1025,6 +1025,10 @@ export default class Batches {
   // settles, unless its owner is signed in again by then and took it back (see #filingAside).
   static #putAside(batches) {
     for (const batch of batches) {
+      // The retry that would end its wait reaches only the batches the tab sends, and its owner is
+      // back in another session, which the newest pair can cure.
+      batch.switchedPair = false;
+
       if (batch.filed !== true && !Batches.#asideOrder.has(batch)) {
         Batches.#asideOrder.set(batch, Batches.#asideCount++);
       }

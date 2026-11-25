@@ -2211,6 +2211,22 @@ describe("Batches", () => {
         assert.equal(Replica.id, "r-fresh");
         assert.isTrue(reconnecting.calledOnce);
       });
+
+      // Its owner signs in again in another session, which the newest pair can cure.
+      it("may switch again once it comes back from being put aside", async () => {
+        const batch = sealed(creating("t1", "first"));
+
+        await Batches.flush();
+
+        Batches.releaseForeign("u2");
+
+        await timers.tickAsync(60_000);
+
+        Batches.releaseForeign(batch.actorUserId);
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.isFalse(batch.switchedPair);
+      });
     });
 
     // The pair's twin: a dropped connection says nothing about who this client is, so what it is
