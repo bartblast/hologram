@@ -400,12 +400,13 @@ defmodule HologramSyncTests.Consistency.Run do
   # The row's own number, read as stored, rather than the last serial handed out: a save that took
   # one after it and rolled back leaves no entry for the dispatcher to reach.
   defp warm_up_log do
-    create!(Tag, name: "warm-up")
+    # Picked by its id: a run stopped before the truncate leaves its own warm-up row behind.
+    warm_up = create!(Tag, name: "warm-up")
 
     %{rows: [[serial]]} =
       DB.sql!(
-        ~s(SELECT "server_created_seq" FROM "hologram_data"."#{DB.table_name(Tag)}" ) <>
-          ~s(WHERE "name" = 'warm-up')
+        ~s(SELECT "server_created_seq" FROM "hologram_data"."#{DB.table_name(Tag)}" WHERE "id"::text = $1),
+        [warm_up.id]
       )
 
     if await(fn -> read_seq() >= serial end, @read_ms) == :timeout do
