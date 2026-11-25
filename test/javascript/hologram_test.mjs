@@ -3769,6 +3769,7 @@ describe("Hologram", () => {
 
         sinon.assert.calledOnceWithExactly(pushStateStub, null, null, url);
         sinon.assert.calledOnce(reloadStub);
+        sinon.assert.callOrder(pushStateStub, reloadStub);
         assert.deepStrictEqual(assignedUrls, []);
       });
 
@@ -3784,6 +3785,7 @@ describe("Hologram", () => {
 
         sinon.assert.calledOnceWithExactly(pushStateStub, null, null, url);
         sinon.assert.calledOnce(reloadStub);
+        sinon.assert.callOrder(pushStateStub, reloadStub);
         assert.deepStrictEqual(assignedUrls, []);
       });
 
@@ -3809,6 +3811,7 @@ describe("Hologram", () => {
         );
 
         sinon.assert.calledOnce(reloadStub);
+        sinon.assert.callOrder(replaceStateStub, reloadStub);
         sinon.assert.notCalled(pushStateStub);
         sinon.assert.notCalled(replaceLocationStub);
       });
@@ -4784,6 +4787,7 @@ describe("Hologram", () => {
           );
 
           sinon.assert.calledOnce(reloading);
+          sinon.assert.callOrder(writingEntry, reloading);
           sinon.assert.notCalled(replaceLocationStub);
         } finally {
           writingEntry.restore();
