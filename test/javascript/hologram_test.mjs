@@ -6793,9 +6793,15 @@ describe("Hologram", () => {
           await older;
 
           assert.equal(Hologram.registryEpoch, 1);
+          assert.notEqual(Hologram.historyId, "history-overlap-1");
 
-          answers[2].reject(new Error("no answer"));
-          await newer.catch(() => null);
+          // The newer one's ask for the page's bundle.
+          answers[2].onSuccess("restored-1");
+          answers[2].resolve();
+          await newer;
+
+          assert.equal(Hologram.historyId, "history-overlap-2");
+          assert.equal(Hologram.registryEpoch, 1);
         });
 
         it("leaves the reload to the newer one when the older one fails", async () => {
