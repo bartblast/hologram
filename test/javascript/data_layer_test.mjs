@@ -1028,12 +1028,12 @@ describe("DataLayer", () => {
     it("files a user id no user entity can have beside no entity id", () => {
       DataLayer.ingestMountData({
         actorEntityId: null,
-        actorUserId: 7,
+        actorUserId: "i7",
         syncRows: {},
       });
 
       assert.isNull(LocalDatabase.actorEntityId);
-      assert.equal(LocalDatabase.actorUserId, 7);
+      assert.equal(LocalDatabase.actorUserId, "i7");
     });
 
     it("keeps the counts an earlier page carried", () => {
