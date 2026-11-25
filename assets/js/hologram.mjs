@@ -2923,7 +2923,13 @@ export default class Hologram {
 
   // Mounts the page once the scripts it requires are loaded (see MountGate): at once when they
   // are, and otherwise when the last of them announces itself.
+  //
+  // The navigation is the one under way now, which the mount closes. One the visitor began while
+  // the scripts loaded takes over from it, so a page asked for again for the user signed in since
+  // doesn't replace the page that navigation asked for.
   static #mountWhenReady(isPageModuleRegistered) {
+    const navigation = $.navigationCount;
+
     MountGate.mountWhenReady(() => {
       if ($.#isMountOfPreviousUser()) {
         $.#loadHistoryEntryPage(
@@ -2933,7 +2939,7 @@ export default class Hologram {
             pageParams: $.#mountData?.pageParams ?? $.#pageParams,
           },
           Math.max($.domEpoch, $.registryEpoch),
-          $.navigationCount,
+          navigation,
         );
 
         return;

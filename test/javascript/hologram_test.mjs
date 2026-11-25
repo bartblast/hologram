@@ -5184,6 +5184,25 @@ describe("Hologram", () => {
           assert.deepStrictEqual(assignedUrls, []);
         });
 
+        // The visitor asked for another page meanwhile, which takes over from this one's.
+        it("leaves the page asked for meanwhile to its own request", async () => {
+          await showPage("stale-7");
+
+          const loading = sinon.stub(Hologram, "loadNewPage");
+
+          try {
+            IdentityTracker.observe("2.tag-2");
+            Hologram.navigationCount += 1;
+            bundleArrives("stale-7");
+
+            await fetchPageStub.lastCall.args[1]({identityPeriod: null});
+
+            sinon.assert.notCalled(loading);
+          } finally {
+            loading.restore();
+          }
+        });
+
         it("mounts a page of an ended period for the user the tab holds", async () => {
           dataLayer.holdsOtherUser.returns(false);
 
