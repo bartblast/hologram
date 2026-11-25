@@ -249,7 +249,8 @@ defmodule HologramSyncTests.Consistency.Checks do
             readable_throughout?(window, user_id, type, id),
             problem = row_problem(view, window, type, id, created_seq, final_seq),
             problem != nil,
-            not touched_above?(indexed, view.at, final_seq, user_id, type, id),
+            wrong_created?(problem, created_seq) or
+              not touched_above?(indexed, view.at, final_seq, user_id, type, id),
             do:
               Map.merge(problem, %{
                 at: view.at,
@@ -320,6 +321,13 @@ defmodule HologramSyncTests.Consistency.Checks do
   defp readable_throughout?(window, user_id, type, id) do
     Enum.all?(window, fn {entry, _index} -> Model.readable?(entry.state, user_id, type, id) end)
   end
+
+  # A row's created number never changes once it's at or below the limit, so no commit still on its
+  # way excuses one shown with another.
+  defp wrong_created?(%{problem: :numbers, shown: {shown_seq, _updated_seq}}, created_seq),
+    do: shown_seq != nil and shown_seq != created_seq
+
+  defp wrong_created?(_problem, _created_seq), do: false
 
   defp row_problem(view, window, type, id, created_seq, final_seq) do
     shown = get_in(view.rows, [type, id])

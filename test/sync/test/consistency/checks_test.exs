@@ -419,6 +419,38 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
       assert Checks.below_final([view], [created, joined, floor], @member, 20) == []
     end
 
+    # A row's created number is set once it's at or below the limit, so no commit on its way changes
+    # what it should show.
+    test "flags a row shown with another created number though a commit on its way names it" do
+      created = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 5,
+        min_seq: 5,
+        ops: ["create_space #{@space} space"],
+        state: numbered_space([@member])
+      }
+
+      renamed = %{
+        created
+        | after_lock_at: 2,
+          committed_at: 3,
+          max_seq: 20,
+          min_seq: 20,
+          ops: ["rename Space #{@space} name name 2"]
+      }
+
+      floor = %{renamed | after_lock_at: 4, committed_at: 5, max_seq: 7, min_seq: 7, ops: []}
+      view = %{at: 20, finals: %{Space => 10}, rows: %{Space => %{@space => {6, nil}}}}
+
+      assert [%{id: @space, problem: :numbers, shown: {6, nil}, type: Space}] =
+               Checks.below_final([view], [created, renamed, floor], @member, 20)
+
+      waiting = %{view | rows: %{Space => %{}}}
+
+      assert Checks.below_final([waiting], [created, renamed, floor], @member, 20) == []
+    end
+
     test "passes a row the floor's commit let its user read under a serial above the limit" do
       created = %{
         after_lock_at: 0,
