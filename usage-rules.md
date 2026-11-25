@@ -236,7 +236,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Write: `put_session(server, :key, value)`.
 - Delete: `delete_session(server, :key)`.
 - Session keys must be atoms or strings (atoms are converted to strings, so `:locale` and `"locale"` address the same value).
-- `put_session` and `delete_session` raise for Hologram's own keys, `:hologram_csrf_token`, `:hologram_session_id` and `:hologram_user_id`.
+- `put_session` and `delete_session` raise for Hologram's own keys, `:hologram_csrf_token`, `:hologram_identity_stamp`, `:hologram_session_id` and `:hologram_user_id`.
 - Sessions can store any Elixir data type (maps, lists, tuples, etc.).
 - Record the logged-in user with `put_user_id/2`, not a session key of your own. Hologram knows the user only through it, for the Back/forward check and realtime subscriptions.
 - Session data cannot be read by client-side code. Use cookies if you need client-side access.
