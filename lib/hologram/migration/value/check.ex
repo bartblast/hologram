@@ -169,12 +169,13 @@ defmodule Hologram.Migration.Value.Check do
   defp byte_refusal(_value, _op, _later_ops, _next_model, _final_model), do: nil
 
   # A declaration may bound a date or time in another calendar, so a bound needs only a calendar
-  # the comparison can run on: a real one, with the day starting when ISO's does.
+  # the comparison can run on: a real one, with the day starting when ISO's does for a date or
+  # datetime, which compare by their ISO days. Times compare by their day fraction alone.
   defp comparable_bound?(%{__struct__: struct, calendar: calendar} = bound, type)
        when struct in [Date, DateTime, Time] do
     # The rules compare the value with the bound, which runs calendar functions the checks before
     # don't, and one value in ISO makes the comparison convert the bound.
-    usable_calendar?(calendar) and integer_offsets?(bound) and
+    usable_calendar?(calendar, struct) and integer_offsets?(bound) and
       Validator.attribute_value_valid?(bound, type) and
       struct.compare(bound, Map.fetch!(@iso_values, struct)) in [:eq, :gt, :lt]
   catch
@@ -457,12 +458,16 @@ defmodule Hologram.Migration.Value.Check do
     Enum.find(opts, &(not rule_fits?(&1, type)))
   end
 
-  defp usable_calendar?(calendar) do
+  defp usable_calendar?(calendar, struct) do
     is_atom(calendar) and Code.ensure_loaded?(calendar) and
       function_exported?(calendar, :valid_date?, 3) and
       function_exported?(calendar, :valid_time?, 4) and
       function_exported?(calendar, :naive_datetime_to_iso_days, 7) and
-      function_exported?(calendar, :day_rollover_relative_to_midnight_utc, 0) and
+      (struct == Time or iso_day_rollover?(calendar))
+  end
+
+  defp iso_day_rollover?(calendar) do
+    function_exported?(calendar, :day_rollover_relative_to_midnight_utc, 0) and
       calendar.day_rollover_relative_to_midnight_utc() ==
         Calendar.ISO.day_rollover_relative_to_midnight_utc()
   end

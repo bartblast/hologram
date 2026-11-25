@@ -1,3 +1,19 @@
+defmodule Hologram.Migration.Value.CheckTest.ShiftedDayCalendar do
+  @moduledoc false
+
+  # Calendar.ISO with its day starting at another hour: dates and datetimes don't convert to ISO,
+  # but times compare with ISO's by their day fraction.
+  @spec day_rollover_relative_to_midnight_utc :: {pos_integer, pos_integer}
+  def day_rollover_relative_to_midnight_utc, do: {1, 2}
+
+  defdelegate naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond),
+    to: Calendar.ISO
+
+  defdelegate time_to_day_fraction(hour, minute, second, microsecond), to: Calendar.ISO
+  defdelegate valid_date?(year, month, day), to: Calendar.ISO
+  defdelegate valid_time?(hour, minute, second, microsecond), to: Calendar.ISO
+end
+
 defmodule Hologram.Migration.Value.CheckTest.OtherCalendar do
   @moduledoc false
 
@@ -738,6 +754,20 @@ defmodule Hologram.Migration.Value.CheckTest do
       bound = %{~D[2020-01-01] | calendar: Hologram.Migration.Value.CheckTest.OtherCalendar}
 
       assert check(add_attribute(:date, min: bound, backfill: ~D[2026-01-01])) == :ok
+    end
+
+    test "holds a value to a time bound in a calendar whose day starts at another hour" do
+      bound = %{~T[10:00:00] | calendar: Value.CheckTest.ShiftedDayCalendar}
+
+      assert check(add_attribute(:time, max: bound, backfill: ~T[09:00:00])) == :ok
+
+      assert refusal(add_attribute(:time, max: bound, backfill: ~T[11:00:00])) =~
+               ":time must be at most"
+
+      date_bound = %{~D[2020-01-01] | calendar: Value.CheckTest.ShiftedDayCalendar}
+
+      assert refusal(add_attribute(:date, min: date_bound, backfill: ~D[2026-01-01])) =~
+               "which a :date attribute can't take"
     end
 
     test "takes a default beside a bound whose calendar fails, leaving the bound to the declaration" do
