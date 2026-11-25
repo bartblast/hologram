@@ -561,7 +561,7 @@ defmodule Hologram.Migration.DiffTest do
       replayed = model(%{MyApp.Task => %{attributes: [{:ratio, :integer, [default: 1]}]}})
       current = model(%{MyApp.Task => %{attributes: [{:ratio, :float, [default: 1.0]}]}})
 
-      assert diff(replayed, current) == %{
+      assert diff(replayed, current) === %{
                ops: [
                  %{
                    op: :change_attribute,
@@ -578,7 +578,7 @@ defmodule Hologram.Migration.DiffTest do
       replayed = model(%{MyApp.Task => %{attributes: [{:ratio, :float, [default: 1.0]}]}})
       current = model(%{MyApp.Task => %{attributes: [{:ratio, :integer, [default: 1]}]}})
 
-      assert diff(replayed, current) == %{
+      assert diff(replayed, current) === %{
                ops: [
                  %{
                    op: :change_attribute,
