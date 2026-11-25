@@ -821,8 +821,9 @@ defmodule HologramSyncTests.Consistency.Client do
     end
   end
 
-  # Kept only when the client holds a limit for some type, and only when it differs from the last
-  # one kept: the checks judge each by the rows readable when its frame arrived.
+  # Kept only when the client holds a limit for some type or shows a number anyway, and only when it
+  # differs from the last one kept: the checks judge each by the rows readable when its frame
+  # arrived.
   defp keep_view(state, received_at) do
     view = %{at: received_at, finals: finals(state), rows: shown_numbers(state)}
 
@@ -831,8 +832,16 @@ defmodule HologramSyncTests.Consistency.Client do
         state
 
       _changed ->
-        if view.finals == %{}, do: state, else: %{state | views: [view | state.views]}
+        if view.finals == %{} and not shows_number?(view),
+          do: state,
+          else: %{state | views: [view | state.views]}
     end
+  end
+
+  defp shows_number?(view) do
+    Enum.any?(view.rows, fn {_type, rows} ->
+      Enum.any?(rows, fn {_id, numbers} -> numbers != {nil, nil} end)
+    end)
   end
 
   defp finals(state) do
