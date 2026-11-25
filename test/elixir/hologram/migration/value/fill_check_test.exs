@@ -74,6 +74,18 @@ defmodule Hologram.Migration.Value.FillCheckTest do
         assert result == {:error, {[[1]], [[nil]], [[0]]}}
       end)
     end
+
+    test "raise the database's own error when the table can't be created", %{scratch: scratch} do
+      route(scratch, fn ->
+        Connection.transaction(fn ->
+          create_filled_ids!()
+
+          assert_raise Postgrex.Error, ~r/already exists/, fn -> create_filled_ids!() end
+
+          Connection.rollback(:done)
+        end)
+      end)
+    end
   end
 
   describe "check!/2" do

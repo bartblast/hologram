@@ -90,6 +90,9 @@ defmodule Hologram.Migration.Value.FillCheck do
         raise "a backfill filling the rows holding nil needs a temporary table, which this " <>
                 "database role may not create - run GRANT TEMPORARY ON DATABASE <database> TO " <>
                 "<role>"
+
+      {:error, error} ->
+        raise error
     end
   end
 
