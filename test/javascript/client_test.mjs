@@ -444,6 +444,46 @@ describe("Client", () => {
       assert.equal(IdentityTracker.tag, "6.other");
     });
 
+    // The lookup under way can have been answered before the change the reply came from.
+    it("asks once more for a reply that names a tag while it asks", async () => {
+      let answer;
+
+      asking.onFirstCall().returns(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+
+      asking.resolves("5.other");
+
+      const first = Client.settleIdentity();
+      const second = Client.settleIdentity("5.other");
+
+      answer("5.tag");
+      await Promise.all([first, second]);
+
+      sinon.assert.calledTwice(asking);
+      assert.equal(IdentityTracker.tag, "5.other");
+    });
+
+    it("asks no more for a reply that names the tag the answer brought", async () => {
+      let answer;
+
+      asking.onFirstCall().returns(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+
+      const first = Client.settleIdentity();
+      const second = Client.settleIdentity("6.other");
+
+      answer("6.other");
+      await Promise.all([first, second]);
+
+      sinon.assert.calledOnce(asking);
+    });
+
     it("asks anew once the last round is over", async () => {
       asking.resolves("6.other");
 
@@ -1051,7 +1091,7 @@ describe("Client", () => {
       await Client.sendCommand(command);
 
       assert.equal(IdentityTracker.tag, "2.tag-2");
-      sinon.assert.calledOnce(settling);
+      sinon.assert.calledOnceWithExactly(settling, "1.tag-1");
     });
 
     // A command turned away can still be where the client learns the identity changed.

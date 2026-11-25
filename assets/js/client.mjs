@@ -21,6 +21,9 @@ export default class Client {
 
   static #identitySettling = null;
 
+  // The tag the last reply that joined a settlement under way named (see settleIdentity).
+  static #namedWhileSettling = null;
+
   // Deps: [:maps.get/2]
   static buildCommandPayload(command) {
     const target = Erlang_Maps["get/2"](Type.atom("target"), command);
@@ -159,8 +162,18 @@ export default class Client {
   // twice. An answer older than what the client knows can be a cookie that hasn't caught up with a
   // login yet, so it's asked again after a while. Once the delays run out the answer is believed:
   // the cookie this browser holds is what the next request will be served under.
-  static settleIdentity() {
-    $.#identitySettling ??= $.#askForIdentity().finally(() => {
+  //
+  // Callers that overlap share one settlement. A reply that names a tag joins it too, but the
+  // lookup under way can have been answered before the change that reply came from, so once it
+  // ends, the server is asked once more unless the tab now holds that tag.
+  static settleIdentity(namedTag = null) {
+    if ($.#identitySettling !== null) {
+      $.#namedWhileSettling = namedTag ?? $.#namedWhileSettling;
+
+      return $.#identitySettling;
+    }
+
+    $.#identitySettling = $.#settle().finally(() => {
       $.#identitySettling = null;
     });
 
@@ -252,7 +265,9 @@ export default class Client {
 
     // Not awaited: what the reply carries doesn't wait for the server's answer.
     const settling =
-      period === IdentityTracker.SUPERSEDED ? $.settleIdentity() : null;
+      period === IdentityTracker.SUPERSEDED
+        ? $.settleIdentity(response.headers.get(IdentityTracker.HEADER))
+        : null;
 
     return {period, settling};
   }
@@ -341,6 +356,20 @@ export default class Client {
     } finally {
       if (identity !== null) {
         $.catchUpIdentity(identity);
+      }
+    }
+  }
+
+  static async #settle() {
+    await $.#askForIdentity();
+
+    while ($.#namedWhileSettling !== null) {
+      const named = $.#namedWhileSettling;
+
+      $.#namedWhileSettling = null;
+
+      if (IdentityTracker.tag !== named) {
+        await $.#askForIdentity();
       }
     }
   }
