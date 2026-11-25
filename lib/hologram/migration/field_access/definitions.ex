@@ -93,32 +93,35 @@ defmodule Hologram.Migration.FieldAccess.Definitions do
   """
   @spec guard?(module, {atom, non_neg_integer}) :: boolean
   def guard?(module, call) do
-    definition = Module.get_definition(module, call)
-
-    match?({:v1, _kind, _meta, [_clause]}, definition) and
-      {call, definition} in Module.get_attribute(module, @guards_attribute, [])
+    module
+    |> Module.get_attribute(@guards_attribute, [])
+    |> Enum.any?(
+      &(List.keymember?(&1, call, 0) and Enum.all?(&1, fn record -> kept?(module, record) end))
+    )
   end
 
-  # The guard is recorded with its definition where the module body runs, as it's defined, so one
+  # The guard is recorded with its definitions where the module body runs, as it's defined, so one
   # in a branch that doesn't run, or one a macro has since replaced, can't vouch for another macro
   # of its name. A guard made overridable counts as replaced, and one whose name is unquoted isn't
-  # recorded: both are refused like any other macro. Each arity its defaults give is recorded.
+  # recorded: both are refused like any other macro. The arities its defaults give are recorded
+  # together, as a shorter one calls the full one, so replacing any of them refuses them all.
   defp define_guard(kind, guard, env) do
     records =
       for call <- guard_calls(guard) do
         quote do
-          Module.put_attribute(
-            __MODULE__,
-            unquote(@guards_attribute),
-            {unquote(call), Module.get_definition(__MODULE__, unquote(call))}
-          )
+          {unquote(call), Module.get_definition(__MODULE__, unquote(call))}
         end
       end
 
     quote do
       unquote(FieldAccess.define(kind, env, guard))
-      unquote_splicing(records)
+      Module.put_attribute(__MODULE__, unquote(@guards_attribute), unquote(records))
     end
+  end
+
+  defp kept?(module, {call, definition}) do
+    match?({:v1, _kind, _meta, [_clause]}, definition) and
+      Module.get_definition(module, call) == definition
   end
 
   defp guard_calls({:when, _meta, [{name, _call_meta, args}, _body]})

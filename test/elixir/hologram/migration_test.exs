@@ -567,6 +567,26 @@ defmodule Hologram.MigrationTest do
       end
     end
 
+    test "refuses a guard's shorter arity once a macro replaced its full one" do
+      body = """
+      @o "1"
+      defguardp g(x, y \\\\ "1") when x == y
+      defoverridable g: 2
+      defmacrop g(_x, _y), do: quote(do: @o)
+
+      change_entity MyApp.Task do
+        add_attribute :first, :string, default: if(g("1"), do: "y", else: "n")
+      end
+      """
+
+      error =
+        assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+      assert error.message ==
+               "a migration op can't call the migration's macro g/1 - make it a defp, or " <>
+                 "a defguardp in a guard"
+    end
+
     test "accepts a guard of the migration and a quoted call to its macro in an op" do
       module =
         compile_migration("20260813091522", """
