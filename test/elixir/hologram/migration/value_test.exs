@@ -1777,6 +1777,13 @@ defmodule Hologram.Migration.ValueTest do
                "gets the row's values as its arguments, so it pins nothing"
     end
 
+    test "takes a pin inside a quote as data" do
+      {module, _value} =
+        elixir_op(~s|fn title -> Macro.to_string(quote(do: ^value)) <> title end|)
+
+      assert module.__backfill_0__("a") == "^valuea"
+    end
+
     test "refuses split and at, naming the Elixir function" do
       assert refusal(~s|fn title -> String.trim(split(title, ",")) end|) =~ "write String.split/2"
       assert refusal(~s|fn title -> String.trim(at(title, 0)) end|) =~ "write Enum.at/2"

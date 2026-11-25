@@ -1398,7 +1398,7 @@ defmodule Hologram.Migration.Value do
     validate_no_own_macros!(reading, module, scope)
     validate_no_words!(reading, module, scope)
 
-    if pin_outside_pattern?(reading.body, reading.env) do
+    if pin_outside_pattern?(run_code(reading.body, reading.env, :may_run), reading.env) do
       compile_error!(
         "an Elixir backfill fn gets the row's values as its arguments, so it pins nothing, " <>
           "got: #{Macro.to_string(reading.body)} - read the argument by name, and a module " <>
