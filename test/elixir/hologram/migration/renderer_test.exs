@@ -912,14 +912,13 @@ defmodule Hologram.Migration.RendererTest do
 
     test "leaves a delete and an add of different names in one chunk", %{pre_model: pre_model} do
       ops = [
-        delete(:delete_attribute, :title),
-        add_member(:add_attribute, :subtitle, :string, optional: true)
+        add_member(:add_attribute, :subtitle, :string, optional: true),
+        delete(:delete_attribute, :title)
       ]
 
-      kinds = op_kinds(render(ops, pre_model).transactional)
-
-      assert :add_column in kinds
-      assert :drop_column in kinds
+      # One chunk's diff drops before it adds, while chunks apart would keep the add first.
+      assert op_kinds(render(ops, pre_model).transactional) ==
+               List.duplicate(:drop_column, 3) ++ List.duplicate(:add_column, 3)
     end
   end
 
