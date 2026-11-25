@@ -88,6 +88,11 @@ defmodule Hologram.Sync.DispatcherTest do
   end
 
   # A serial a save still running took, which it fills once it commits.
+  # The range from first to last with the given seq in it taken out, as ranges in order.
+  defp without_seq(first, last, seq) do
+    Enum.reject([{first, seq - 1}, {seq + 1, last}], fn {from, to} -> from > to end)
+  end
+
   defp take_serial do
     {:ok, %Postgrex.Result{rows: [[seq]]}} = Connection.query("SELECT #{Oplog.next_seq_sql()}")
 
@@ -524,7 +529,8 @@ defmodule Hologram.Sync.DispatcherTest do
       seed(202, @entity_id, skipped_seq)
       wake(dispatcher)
 
-      assert_receive {:sent, {^last_seq, []}}, 1_000
+      assert_receive {:sent, {^last_seq, still_skipped}}, 1_000
+      assert still_skipped == without_seq(first_seq + 1, last_seq - 1, skipped_seq)
 
       settle(dispatcher)
     end
@@ -614,7 +620,10 @@ defmodule Hologram.Sync.DispatcherTest do
       dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
 
       assert_receive {:dispatched, [%{tx: 200}, %{tx: 201}], {0, 0, 0}}, 1_000
-      assert :sys.get_state(dispatcher).unsent == [{skipped_seq, skipped_seq}]
+
+      # Everything between the two rows read, as tests running alongside take serials too.
+      assert :sys.get_state(dispatcher).unsent == [{first_seq + 1, last_seq - 1}]
+      assert skipped_seq in (first_seq + 1)..(last_seq - 1)
 
       :sys.replace_state(dispatcher, &%{&1 | advance: sandbox_advance(high: last_seq)})
       wake(dispatcher)
