@@ -733,10 +733,19 @@ export default class DataLayer {
   ) {
     // This stream's server side has moved to an identity this tab can't take for the latest, so
     // what it sends from here on may not be for the user the tab holds. A new stream is opened
-    // under the session as it stands, once the server has said who that is.
+    // under the session as it stands, once the server has said who that is. Unless one was opened
+    // in the meantime, say for a page mounted while the question was out: it was opened under a
+    // session at least as new as the one asked about.
     if (IdentityTracker.isBehind(identityTag)) {
+      const run = Sse.runId;
+
       SyncStream.awaitingIdentity = true;
-      Client.settleIdentity().then(() => Sse.reconnect());
+
+      Client.settleIdentity().then(() => {
+        if (Sse.runId === run) {
+          Sse.reconnect();
+        }
+      });
 
       return false;
     }

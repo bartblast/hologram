@@ -2533,6 +2533,19 @@ describe("DataLayer", () => {
         sinon.assert.calledOnce(reconnecting);
       });
 
+      // A page mounted while the question was out, say, and its stream serves the session as it
+      // stands.
+      it("opens none once another stream was opened in the meantime", async () => {
+        takeBehind();
+
+        Sse.runId += 1;
+
+        await settling.firstCall.returnValue;
+        await Promise.resolve();
+
+        sinon.assert.notCalled(reconnecting);
+      });
+
       it("keeps the user it follows", () => {
         takeBehind();
 
