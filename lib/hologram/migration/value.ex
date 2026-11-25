@@ -438,7 +438,8 @@ defmodule Hologram.Migration.Value do
     for op <- ops,
         %{__struct__: __MODULE__} = value <- op_backfills(op),
         not (valid_top_term?(Map.get(value, :term), module) and
-               valid_args?(Map.get(value, :args, []))) do
+               valid_args?(Map.get(value, :args, [])) and
+               function_args_match?(Map.get(value, :term), Map.get(value, :args, []))) do
       raise Hologram.CompileError,
         message:
           "a backfill holds a computed value that wasn't written as a backfill expression - " <>
@@ -1487,6 +1488,12 @@ defmodule Hologram.Migration.Value do
   end
 
   defp unpiped_call(node, _env), do: node
+
+  # The resolver checks a value's args, and a function term runs on its own, so they must agree.
+  defp function_args_match?({:function, _module, _function, term_args}, args),
+    do: term_args == args
+
+  defp function_args_match?(_term, _args), do: true
 
   defp valid_args?(args),
     do: is_list(args) and not List.improper?(args) and Enum.all?(args, &is_atom/1)

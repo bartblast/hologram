@@ -372,6 +372,28 @@ defmodule Hologram.Migration.ValueTest do
              ) == :ok
     end
 
+    test "refuses a function term whose arguments differ from the value's" do
+      module =
+        compile_migration("20260813091522", """
+        def __backfill_0__(id), do: id
+
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: "x"
+        end
+        """)
+
+      op = function_op(module)
+      value = %Value{args: [:title], term: {:function, module, :__backfill_0__, [:id]}}
+
+      assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
+        Value.validate_ops!(
+          [%{op | opts: [backfill: value]}],
+          "app/migrations/20260813091522.ex",
+          module
+        )
+      end
+    end
+
     test "refuses a function nested inside another word" do
       module =
         compile_migration("20260813091522", """
