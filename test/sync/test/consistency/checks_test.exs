@@ -234,6 +234,14 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
       assert Checks.below_final([view(5, 30, %{"t" => {5, 5}})], entries, @member, 9) == []
     end
 
+    # The row goes out as soon as its save commits, while its number waits for the limit.
+    test "passes a row shown with its number still held back above the view's limit",
+         %{entries: entries} do
+      view = view(5, 30, %{"t" => {5, 5}, "u" => {nil, nil}})
+
+      assert Checks.below_final([view], entries, @member, 9) == []
+    end
+
     test "flags a row showing a number above the view's limit", %{entries: entries} do
       view = %{
         view(5, 20, %{"t" => {5, 5}})
