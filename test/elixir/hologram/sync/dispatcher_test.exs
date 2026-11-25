@@ -1082,11 +1082,12 @@ defmodule Hologram.Sync.DispatcherTest do
     test "warns when one holds the final limit back for over a minute" do
       dispatcher = start_dispatcher!(advance: sandbox_advance(running: ["-1/123"]))
 
-      since = System.monotonic_time(:millisecond) - @prepared_warning_ms
-      :sys.replace_state(dispatcher, &%{&1 | prepared_since: since})
-
+      # A recheck can run as soon as the state is backdated, so the capture starts first.
       log =
         capture_log(fn ->
+          since = System.monotonic_time(:millisecond) - @prepared_warning_ms
+          :sys.replace_state(dispatcher, &%{&1 | prepared_since: since})
+
           wake(dispatcher)
           :sys.get_state(dispatcher)
         end)
@@ -1099,11 +1100,11 @@ defmodule Hologram.Sync.DispatcherTest do
     test "warns once while the same stretch lasts" do
       dispatcher = start_dispatcher!(advance: sandbox_advance(running: ["-1/123"]))
 
-      since = System.monotonic_time(:millisecond) - @prepared_warning_ms
-      :sys.replace_state(dispatcher, &%{&1 | prepared_since: since})
-
       first_log =
         capture_log(fn ->
+          since = System.monotonic_time(:millisecond) - @prepared_warning_ms
+          :sys.replace_state(dispatcher, &%{&1 | prepared_since: since})
+
           wake(dispatcher)
           :sys.get_state(dispatcher)
         end)
