@@ -2308,14 +2308,11 @@ defmodule Hologram.Migration.BackfillTest do
 
         assert apply_file([tighten_title(value)], create, first_model) == :ok
 
-        {:ok, %{rows: [[total, wrong]]}} =
-          Connection.query(
-            ~s|SELECT COUNT(*), COUNT(*) FILTER (WHERE "title" IS DISTINCT FROM upper("code")) | <>
-              ~s|FROM "hologram_data"."my_app_task"|
-          )
+        {:ok, %{rows: rows}} =
+          Connection.query(~s|SELECT "code", "title" FROM "hologram_data"."my_app_task"|)
 
-        assert total == 1005
-        assert wrong == 0
+        assert length(rows) == 1005
+        assert Enum.all?(rows, fn [code, title] -> title == String.upcase(code) end)
         assert_keys("title")
         refute nullable?("title")
         assert applied_versions() == MapSet.new(["20260813091522", "20260813142237"])
