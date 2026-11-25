@@ -515,7 +515,11 @@ defmodule Hologram.Sync.DispatcherTest do
 
       dispatcher = start_dispatcher!(advance: sandbox_advance(high: first_seq), cursor: {0, 0, 0})
 
-      assert_receive {:sent, {^last_seq, [{^skipped_seq, ^skipped_seq}]}}, 1_000
+      # Tests running alongside take serials from the same sequence, so the range passed over is
+      # everything between the two rows read, the serial taken here among it.
+      assert_receive {:sent, {^last_seq, skipped}}, 1_000
+      assert skipped == [{first_seq + 1, last_seq - 1}]
+      assert skipped_seq in (first_seq + 1)..(last_seq - 1)
 
       seed(202, @entity_id, skipped_seq)
       wake(dispatcher)
