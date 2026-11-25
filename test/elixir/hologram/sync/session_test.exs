@@ -1532,11 +1532,11 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(gap: [pair_effect(:add_relationship, parent, added, 301)])
 
-      assert_receive {:sync_deltas, first_cursor, [_first], _seq, _final_seq}
-      assert first_cursor == nil
+      assert_receive {:sync_deltas, first_cursor, [_first], _seq, first_final}
+      assert {first_cursor, first_final} == {nil, nil}
 
-      assert_receive {:sync_deltas, last_cursor, [_last], _seq, _final_seq}
-      assert last_cursor == cursor_at(301)
+      assert_receive {:sync_deltas, last_cursor, [_last], _seq, last_final}
+      assert {last_cursor, last_final} == {cursor_at(301), 301}
     end
   end
 
