@@ -1491,6 +1491,8 @@ export default class Durability {
 
     Durability.inFlight += 1;
 
+    const visit = Tabs.visit;
+
     try {
       const transaction = Durability.#db.transaction(storeNames, "readwrite", {
         durability: "relaxed",
@@ -1502,6 +1504,12 @@ export default class Durability {
 
       return true;
     } catch (error) {
+      // Made on a visit to a group this tab has since left. Its failure is no reason to end the
+      // group the tab is in now: a store that really failed fails that group's own next write.
+      if (visit !== null && !Tabs.isVisit(visit)) {
+        return false;
+      }
+
       Durability.#fail(`write failed (${error})`);
 
       return false;

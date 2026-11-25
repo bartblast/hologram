@@ -1546,6 +1546,25 @@ describe("Durability", () => {
         assert.deepStrictEqual(await readAll("queue"), []);
       });
 
+      // The tab joined another group while the write ran.
+      it("leaves the store to the group of the tab's new visit", async () => {
+        const losing = sinon.stub(Tabs, "storeLost");
+
+        await Durability.open();
+        await Durability.load();
+
+        sinon.stub(Tabs, "visit").get(() => "visit-left");
+
+        const opening = sinon.spy(FDBDatabase.prototype, "transaction");
+        const filing = Durability.fileBatch(unfiledBatch());
+
+        opening.lastCall.returnValue.abort();
+
+        assert.isFalse(await filing);
+        assert.notEqual(Durability.mode, "memory");
+        sinon.assert.notCalled(losing);
+      });
+
       it("answers not with nowhere to file it", async () => {
         assert.isFalse(await Durability.fileBatch(unfiledBatch()));
       });

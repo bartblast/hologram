@@ -342,6 +342,11 @@ export default class Tabs {
     return Tabs.isVisit(visit) ? visit : null;
   }
 
+  // The visit to a group this tab is on, or null outside one (see isVisit).
+  static get visit() {
+    return Tabs.#token;
+  }
+
   // Whether the given visit to a group is the one this tab is on (see move).
   static isVisit(visit) {
     return visit !== null && Tabs.#token === visit;
