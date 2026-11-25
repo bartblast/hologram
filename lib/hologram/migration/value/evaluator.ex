@@ -14,10 +14,16 @@ defmodule Hologram.Migration.Value.Evaluator do
   alias Hologram.Migration.Value.Resolver
   alias Hologram.Query.Words
 
+  @typedoc """
+  A row as the evaluator takes it: its fields and to-ones under atoms, and the rows referencing it
+  under `{type, relationship}` (see the module comment).
+  """
+  @type row :: %{optional(atom | {module, atom}) => any}
+
   @doc """
   Returns the value the given resolved term computes for the given row.
   """
-  @spec evaluate(Resolver.resolved(), %{atom => any}) :: any
+  @spec evaluate(Resolver.resolved(), row) :: any
   def evaluate({:function, module, function, args}, row) do
     apply(module, function, Enum.map(args, &Map.get(row, &1)))
   end

@@ -9,6 +9,7 @@ defmodule Hologram.Migration.Value.Loader do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
+  alias Hologram.Migration.Value.Evaluator
 
   @system_columns Enum.map(Entity.system_attributes(), fn {name, _type, _opts} ->
                     Atom.to_string(name)
@@ -26,7 +27,7 @@ defmodule Hologram.Migration.Value.Loader do
   @spec load(%{(atom | {module, atom}) => map}, module, list(String.t()), %{
           module => %{atom => any}
         }) ::
-          list(%{atom => any})
+          list(Evaluator.row())
   def load(reads, entity_type, ids, mapping) do
     # The rows come back keyed by the dashed spelling, which a compact id has to take to find its
     # row.
