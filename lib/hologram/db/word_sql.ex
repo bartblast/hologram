@@ -45,8 +45,9 @@ defmodule Hologram.DB.WordSQL do
 
   @doc """
   Returns the SQL of the value appearing most often among the given source's rows, a `FROM` clause
-  through its `WHERE`, skipping NULL and NULL when none is left. A tie goes to the smallest value,
-  by the given sort key column and then the value, or by the value alone given nil.
+  through its `WHERE`, skipping NULL and NULL when none is left. The NULL skip joins the `WHERE` by
+  `AND`, so a condition holding a top-level `OR` goes in parentheses. A tie goes to the smallest
+  value, by the given sort key column and then the value, or by the value alone given nil.
 
   Rows group by the value alone: an upgrade can change the key computed for a value, so rows
   written on either side of it hold one value under two keys, and they still count as one.
