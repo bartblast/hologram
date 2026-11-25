@@ -1604,7 +1604,11 @@ defmodule Hologram.Sync.SessionTest do
 
       {:messages, messages} = Process.info(self(), :messages)
       times = for {:asked, at} <- messages, do: at
-      gaps = times |> Enum.chunk_every(2, 1, :discard) |> Enum.map(fn [a, b] -> b - a end)
+
+      gaps =
+        times
+        |> Enum.chunk_every(2, 1, :discard)
+        |> Enum.map(fn [a, b] -> b - a end)
 
       # The first wait is 10 ms and each one after doubles it, and a timer never fires early.
       assert length(gaps) >= 2
@@ -3242,9 +3246,36 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(edge: 200)
 
-      assert_receive {:sync_deltas, nil, [%{op: :put_entity} | _rows], _applied_seq, nil}
-      assert_receive {:sync_synced, {:types, [Module2], _applied_seq}, nil, 200}
-      assert_receive {:sync_synced, :all, _cursor, 200}
+      frames = frames_through_all()
+
+      rows =
+        Enum.find_index(frames, fn frame ->
+          match?({:sync_deltas, nil, [%{op: :put_entity} | _rows], _applied_seq, nil}, frame)
+        end)
+
+      marker =
+        Enum.find_index(frames, fn frame ->
+          match?({:sync_synced, {:types, [Module2], _applied_seq}, nil, 200}, frame)
+        end)
+
+      assert is_integer(rows) and is_integer(marker) and rows < marker
+      assert {:sync_synced, :all, _cursor, 200} = List.last(frames)
+    end
+
+    # The chunks and markers the session sends, in the order it sent them, through the fill's end.
+    defp frames_through_all(frames \\ []) do
+      receive do
+        {:sync_deltas, _cursor, _deltas, _applied_seq, _final_seq} = frame ->
+          frames_through_all([frame | frames])
+
+        {:sync_synced, :all, _cursor, _final_seq} = frame ->
+          Enum.reverse([frame | frames])
+
+        {:sync_synced, _scope, _cursor, _final_seq} = frame ->
+          frames_through_all([frame | frames])
+      after
+        1_000 -> flunk("the session never ended the fill")
+      end
     end
 
     # A round publishes its limit before it lists the sessions to tell, so one joining after the
