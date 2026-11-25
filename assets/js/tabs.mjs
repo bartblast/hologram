@@ -829,9 +829,14 @@ export default class Tabs {
       return;
     }
 
-    // How far the numbers are final comes with the place, since it is a claim about the same rows.
     if (SyncStream.syncCursor === null && message.cursor !== null) {
       SyncStream.syncCursor = message.cursor;
+    }
+
+    // How far the numbers are final comes with the place, since it is a claim about the same rows -
+    // taken by a tab at that place already too, as a marker naming no place can have moved the
+    // point there since this tab last heard one.
+    if (message.cursor !== null && message.cursor === SyncStream.syncCursor) {
       LocalDatabase.raiseFinal(message.finalSeq);
     }
 

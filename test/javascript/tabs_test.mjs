@@ -1905,7 +1905,23 @@ describe("Tabs", () => {
       assert.equal(LocalDatabase.finalSeq(), 12);
     });
 
-    it("leaves the final point alone with a place it already holds", () => {
+    it("takes a higher final point with the place it already holds", () => {
+      SyncStream.syncCursor = "place-1";
+      LocalDatabase.raiseFinal(5);
+
+      Tabs.receive({
+        cursor: "place-1",
+        finalSeq: 12,
+        kind: "state",
+        replica: {id: null, token: null},
+        completeness: {all: false, types: []},
+        synced: [],
+      });
+
+      assert.equal(LocalDatabase.finalSeq(), 12);
+    });
+
+    it("leaves the final point alone with another place it already holds", () => {
       SyncStream.syncCursor = "place-2";
 
       Tabs.receive({
