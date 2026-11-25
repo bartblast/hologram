@@ -268,6 +268,17 @@ defmodule Hologram.Migration.Value.LoaderTest do
       end)
     end
 
+    test "finds the row of an id spelled without dashes", %{scratch: scratch} do
+      route(scratch, fn ->
+        mapping = prepare()
+        id = insert("my_app_trip", %{"title" => "a"})
+
+        rows = load(%{}, MyApp.Trip, [String.replace(id, "-", "")], mapping)
+
+        assert Enum.map(rows, & &1.id) == [id]
+      end)
+    end
+
     test "gives nothing for no ids", %{scratch: scratch} do
       route(scratch, fn ->
         mapping = prepare()

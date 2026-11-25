@@ -24,6 +24,10 @@ defmodule Hologram.Migration.Value.Loader do
         }) ::
           list(%{atom => any})
   def load(reads, entity_type, ids, mapping) do
+    # The rows come back keyed by the dashed spelling, which a compact id has to take to find its
+    # row.
+    ids = Enum.map(ids, &Codec.decode(Codec.encode(&1, :uuid), :uuid))
+
     # One snapshot where the caller isn't in a transaction already, since a load is several
     # statements that have to agree.
     {:ok, rows} =
