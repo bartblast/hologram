@@ -35,6 +35,82 @@ defmodule Hologram.Query.WordsTest do
     test "is empty for a module attribute named like a word, which is the surrounding code's" do
       assert backfill_only_hint(Code.string_to_quoted!("foo(@split(a))")) == ""
     end
+
+    test "is empty for a word a quote holds as data" do
+      assert backfill_only_hint(Code.string_to_quoted!(~s[foo(quote(do: split(a, " ")))])) == ""
+    end
+
+    test "finds a word a quote unquotes" do
+      ast = Code.string_to_quoted!(~s[foo(quote(do: bar(unquote(split(a, " ")))))])
+
+      assert backfill_only_hint(ast) ==
+               " - if you meant the query word split, it works only in a migration's backfill: for now"
+    end
+
+    test "is empty for an unquote a quote with unquote: false holds as data" do
+      ast = Code.string_to_quoted!(~s[foo(quote(unquote: false, do: unquote(split(a, " "))))])
+
+      assert backfill_only_hint(ast) == ""
+    end
+
+    test "is empty for an unquote a quote with bind_quoted: holds as data" do
+      ast =
+        Code.string_to_quoted!(~s|foo(quote(bind_quoted: [x: 1], do: unquote(split(a, " "))))|)
+
+      assert backfill_only_hint(ast) == ""
+    end
+
+    test "is empty for an unquote in the body of a nested quote" do
+      ast = Code.string_to_quoted!(~s[foo(quote(do: quote(do: unquote(split(a, " ")))))])
+
+      assert backfill_only_hint(ast) == ""
+    end
+
+    test "finds a word unquoted in the separate options of a nested quote" do
+      ast =
+        Code.string_to_quoted!(
+          ~s|foo(quote(do: quote([bind_quoted: [x: unquote(split(a, " "))]], do: x)))|
+        )
+
+      assert backfill_only_hint(ast) ==
+               " - if you meant the query word split, it works only in a migration's backfill: for now"
+    end
+
+    test "is empty for a word piped into an unquote, which a quote holds as data" do
+      ast = Code.string_to_quoted!(~s[foo(quote(do: split(a, " ") |> unquote()))])
+
+      assert backfill_only_hint(ast) == ""
+    end
+
+    test "is empty for a word in a body piped into a quote" do
+      for source <- [
+            ~s{foo([do: split(a, " ")] |> quote())},
+            ~s{foo([] |> quote(do: split(a, " ")))}
+          ] do
+        assert backfill_only_hint(Code.string_to_quoted!(source)) == ""
+      end
+    end
+
+    test "finds a word in the options piped into a quote" do
+      ast = Code.string_to_quoted!(~s{foo([bind_quoted: [x: at(a, 0)]] |> quote(do: x))})
+
+      assert backfill_only_hint(ast) ==
+               " - if you meant the query word at, it works only in a migration's backfill: for now"
+    end
+
+    test "finds a word unquoted as the name of a remote call" do
+      ast = Code.string_to_quoted!(~s[foo(quote(do: String.unquote(split(a, " "))(b)))])
+
+      assert backfill_only_hint(ast) ==
+               " - if you meant the query word split, it works only in a migration's backfill: for now"
+    end
+
+    test "finds a word in the options of a quote" do
+      ast = Code.string_to_quoted!(~s|foo(quote(bind_quoted: [x: at(a, 0)], do: x))|)
+
+      assert backfill_only_hint(ast) ==
+               " - if you meant the query word at, it works only in a migration's backfill: for now"
+    end
   end
 
   describe "add_backfill_only_hint/2" do

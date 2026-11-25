@@ -40,7 +40,7 @@ defmodule Hologram.Query.Words do
   Returns what to add to a refusal of the given query expression when it calls something named
   like a word that works only in a migration's `backfill:` for now, or an empty string when it
   doesn't. A pinned expression and a module attribute are the surrounding code's, so their calls
-  aren't words.
+  aren't words, and neither is what a quote holds as data.
   """
   @spec backfill_only_hint(Macro.t()) :: String.t()
   def backfill_only_hint(ast) do
@@ -51,6 +51,12 @@ defmodule Hologram.Query.Words do
 
         {:@, _meta, _args}, word ->
           {nil, word}
+
+        {:quote, _meta, args}, word when is_list(args) ->
+          {quote_code(args), word}
+
+        {:|>, _meta, [left, {:quote, _quote_meta, args}]}, word when is_list(args) ->
+          {quote_code([left | args]), word}
 
         {name, _meta, args} = node, nil when name in @backfill_only_words and is_list(args) ->
           {node, name}
@@ -127,4 +133,58 @@ defmodule Hologram.Query.Words do
   end
 
   defp finish_chunk(chunk), do: {:cont, chunk, []}
+
+  # A quote runs its options and what it unquotes, and holds the rest of its body as data. With
+  # separate options, Elixir ignores any beside the do. An unquote it may run counts, so a word in
+  # one isn't missed.
+  defp quote_code(args) do
+    {options, body} =
+      case args do
+        [options, block] -> {options, if(Keyword.keyword?(block), do: block[:do])}
+        [single] -> if Keyword.keyword?(single), do: pop_do(single), else: {single, nil}
+        _other -> {[], nil}
+      end
+
+    options_code = if Keyword.keyword?(options), do: Keyword.values(options), else: [options]
+
+    if unquotes?(options), do: [unquoted(body) | options_code], else: options_code
+  end
+
+  defp pop_do(options) do
+    {body, rest} = Keyword.pop(options, :do)
+
+    {rest, body}
+  end
+
+  defp unquotes?(options) do
+    if Keyword.keyword?(options) do
+      Keyword.get(options, :unquote, not Keyword.has_key?(options, :bind_quoted)) != false
+    else
+      true
+    end
+  end
+
+  # A nested quote keeps its body's unquotes for itself, but the unquotes in its separate options
+  # are the enclosing quote's.
+  defp unquoted(body) do
+    {_body, code} =
+      Macro.prewalk(body, [], fn
+        {:quote, _meta, [options, _block]}, code ->
+          {options, code}
+
+        {:quote, _meta, args}, code when is_list(args) ->
+          {nil, code}
+
+        {form, _meta, [expr]}, code when form in [:unquote, :unquote_splicing] ->
+          {nil, [expr | code]}
+
+        {{:., _dot_meta, [receiver, :unquote]}, _meta, [expr]}, code ->
+          {receiver, [expr | code]}
+
+        node, code ->
+          {node, code}
+      end)
+
+    Enum.reverse(code)
+  end
 end
