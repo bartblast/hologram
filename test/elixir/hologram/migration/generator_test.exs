@@ -413,6 +413,73 @@ defmodule Hologram.Migration.GeneratorTest do
       end
     end
 
+    # A delete can't go above the fills, since the block's own backfill can read what it takes
+    # away, so the note says where to write it when another block's backfill needs it.
+    @tag :database
+    test "notes a delete ending a required cycle that another block's fill a backfill answers needs" do
+      opts = opts!("backfilled_cross_block_cycle_delete")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Alpha
+           create_entity MyApp.Beta
+           create_entity MyApp.Place
+
+           change_entity MyApp.Alpha do
+             add_relationship :b, MyApp.Beta, optional: true
+           end
+
+           change_entity MyApp.Beta do
+             add_relationship :a, MyApp.Alpha
+             add_relationship :place, MyApp.Place, optional: true
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Alpha => %{relationships: [{:b, MyApp.Beta, []}]},
+          MyApp.Beta => %{relationships: [{:place, MyApp.Place, []}]},
+          MyApp.Place => %{}
+        })
+
+      assert {:ok, path, 2} = generate(migrations, current, @timestamp, opts)
+
+      written = File.read!(path)
+
+      assert written =~
+               "    # If one of these ends a cycle of required to-ones that a backfill above needs, " <>
+                 "write it in a change_entity block of its own above that backfill, with the " <>
+                 "delete_unique lines naming it - unless this block's backfill reads what it " <>
+                 "takes away:\n" <>
+                 "    #   delete_relationship :a\n"
+
+      # Following the note: the delete moves to a block of its own above Alpha's.
+      answered =
+        written
+        |> String.replace(~r/^    delete_relationship :a\n/m, "")
+        |> String.replace(
+          "  change_entity MyApp.Alpha do",
+          "  change_entity MyApp.Beta do\n    delete_relationship :a\n  end\n\n  change_entity MyApp.Alpha do"
+        )
+        |> String.replace(
+          ~r/^( *)resolve! :fill, attributes: \[:(b|place)\]$/m,
+          "\\1change_relationship :\\2, optional: false, backfill: ^\"01900000-0000-7000-8000-000000000000\""
+        )
+
+      refute answered =~ ~r/^ *resolve!/m
+
+      File.write!(path, answered)
+      Code.compile_file(path)
+
+      [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+      history = Enum.concat(migrations, [migration])
+
+      assert generate(history, current, @timestamp, opts) == :nothing_to_do
+    end
+
     @tag :database
     test "formats the file with the given formatter" do
       opts =
@@ -917,6 +984,64 @@ defmodule Hologram.Migration.GeneratorTest do
       assert beta_question =~ "change_relationship :g, type: MyApp.Gamma"
       assert beta_question =~ "change_relationship :e, unique: true"
       assert beta_question =~ "delete_relationship :f"
+    end
+
+    test "notes the lines that can end a required to-one in the fill questions below another block's fill" do
+      fill = fn entity, name ->
+        %{
+          kind: :fill,
+          entity: entity,
+          attributes: [name],
+          members: [{:change_attribute, name, [optional: false]}],
+          withheld_ops: []
+        }
+      end
+
+      plan = %{
+        ops: [
+          %{op: :delete_relationship, entity: MyApp.Alpha, name: :z},
+          %{op: :delete_relationship, entity: MyApp.Beta, name: :a},
+          %{
+            op: :change_relationship,
+            entity: MyApp.Beta,
+            name: :d,
+            changes: [type: [MyApp.Alpha]]
+          },
+          %{op: :change_relationship, entity: MyApp.Beta, name: :e, changes: [unique: true]},
+          %{op: :change_relationship, entity: MyApp.Beta, name: :g, changes: [type: MyApp.Gamma]},
+          %{op: :delete_attribute, entity: MyApp.Beta, name: :note}
+        ],
+        questions: [
+          fill.(MyApp.Alpha, :title),
+          fill.(MyApp.Beta, :rank),
+          %{
+            kind: :relationships,
+            entity: MyApp.Beta,
+            deleted: [:owner],
+            added: [:author],
+            hints: [],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      [_before_questions, alpha_question, beta_question, _rename_question] =
+        plan
+        |> render(@module)
+        |> String.split("# RESOLVE:")
+
+      refute alpha_question =~ "If one of these"
+
+      assert beta_question =~
+               "    # If one of these ends a cycle of required to-ones that a backfill above needs, " <>
+                 "write it in a change_entity block of its own above that backfill, with the " <>
+                 "delete_unique lines naming it - unless this block's backfill reads what it " <>
+                 "takes away:\n" <>
+                 "    #   delete_relationship :a\n" <>
+                 "    #   change_relationship :d, type: [MyApp.Alpha]\n" <>
+                 "    #   change_relationship :g, type: MyApp.Gamma\n" <>
+                 "    #   your answer to the relationships question\n" <>
+                 "    resolve! :fill, attributes: [:rank]\n"
     end
 
     test "writes a tightening beside a type change as two ops when it backfills" do

@@ -283,7 +283,8 @@ defmodule Hologram.Migration.Generator do
   # applies apart from the ops around it, so the ops above it have to stand without the ones
   # below: the blocks asking for a fill come after the others, and the changes that can end a
   # cycle of required to-ones go to blocks of their own above all of them, since another block's
-  # fill can need one.
+  # fill can need one. The lines that can end one but have to stay, and the rename answers, get
+  # a note in the fill questions of the blocks below another block's fill.
   defp group_sections(plan) do
     {entity_ops, flat_ops} = Enum.split_with(plan.ops, &block_op?/1)
     {renames, other_flat_ops} = Enum.split_with(flat_ops, &(&1.op == :rename_entity))
@@ -306,10 +307,13 @@ defmodule Hologram.Migration.Generator do
 
     {edge_blocks, answered_blocks} =
       fill_blocks
-      |> Enum.map(fn {:block, entity_type, ops, questions} ->
+      |> Enum.with_index()
+      |> Enum.map(fn {{:block, entity_type, ops, questions}, index} ->
         {edge_changes, later_ops} = Enum.split_with(ops, &ends_required_edge?/1)
+        answered_block = {:block, entity_type, later_ops, questions}
 
-        {{:block, entity_type, edge_changes, []}, {:block, entity_type, later_ops, questions}}
+        {{:block, entity_type, edge_changes, []},
+         if(index > 0, do: note_cycle_lines(answered_block), else: answered_block)}
       end)
       |> Enum.unzip()
 
@@ -319,6 +323,35 @@ defmodule Hologram.Migration.Generator do
       Enum.reject(edge_blocks, &match?({:block, _entity_type, [], _questions}, &1)) ++
       answered_blocks ++ Enum.map(other_flat_ops, &{:flat, &1})
   end
+
+  # The lines left below the block's own fill that can still end a required to-one, written in the
+  # fill question as a note to move one above the backfills when another block's needs it.
+  defp note_cycle_lines({:block, entity_type, ops, questions}) do
+    cycle_lines =
+      ops
+      |> Enum.filter(&may_end_required_edge?/1)
+      |> Enum.map(&render_op/1)
+
+    rename_lines =
+      if Enum.any?(questions, &(&1.kind == :relationships)),
+        do: ["your answer to the relationships question"],
+        else: []
+
+    questions =
+      Enum.map(questions, fn
+        %{kind: :fill} = question -> Map.put(question, :cycle_lines, cycle_lines ++ rename_lines)
+        question -> question
+      end)
+
+    {:block, entity_type, ops, questions}
+  end
+
+  defp may_end_required_edge?(%{op: :delete_relationship}), do: true
+
+  defp may_end_required_edge?(%{op: :change_relationship, changes: changes}),
+    do: Keyword.has_key?(changes, :type)
+
+  defp may_end_required_edge?(_op), do: false
 
   defp indent(text) do
     text
@@ -618,7 +651,7 @@ defmodule Hologram.Migration.Generator do
       |> fill_entries()
       |> Enum.map(&"  #{&1}")
 
-    render_comment_block(fact_lines ++ api_lines, question)
+    render_comment_block(fact_lines ++ api_lines ++ cycle_note(question), question)
   end
 
   defp render_question(%{kind: :user_entity} = question, _ops) do
@@ -655,6 +688,17 @@ defmodule Hologram.Migration.Generator do
       question
     )
   end
+
+  defp cycle_note(%{cycle_lines: [_line | _lines] = lines}) do
+    [
+      "If one of these ends a cycle of required to-ones that a backfill above needs, write it " <>
+        "in a change_entity block of its own above that backfill, with the delete_unique lines " <>
+        "naming it - unless this block's backfill reads what it takes away:"
+      | Enum.map(lines, &"  #{&1}")
+    ]
+  end
+
+  defp cycle_note(_question), do: []
 
   defp render_comment_block(lines, question) do
     lines
