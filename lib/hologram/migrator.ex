@@ -1320,6 +1320,14 @@ defmodule Hologram.Migrator do
       ])
   end
 
+  # A backfill of an added column writes every row of the table, as a fill does.
+  defp follow_index(
+         %{op: :add_column, table: table, backfill: _value},
+         %{removed?: false, table: table} = walked
+       ) do
+    {:cont, %{walked | written?: true}}
+  end
+
   defp follow_index(
          %{op: :alter_column, table: table} = op,
          %{removed?: false, table: table} = walked

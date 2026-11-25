@@ -1402,6 +1402,60 @@ defmodule Hologram.Migration.IndexRecoveryTest do
       end)
     end
 
+    # The added column's constant backfill writes every row of the table, as a fill does.
+    test "refuses a pending type change on the table of a missing index whose key repeats " <>
+           "when a later constant backfill of an added column writes the table and a unique " <>
+           "index comes back",
+         %{chain: chain, model: model, scratch: scratch} do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      constant_add =
+        migration("20260813091526", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :label,
+            type: :string,
+            opts: [backfill: "none"],
+            line: 3
+          }
+        ])
+
+      swap =
+        migration("20260813091527", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: false],
+            line: 3
+          },
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [unique: true],
+            line: 4
+          }
+        ])
+
+      pending = [@change_amount_type, constant_add, swap]
+      post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("taken")
+        insert_task("taken")
+
+        assert_error RuntimeError, @invalid_slug_msg, fn ->
+          run(Enum.concat(extra_chain, pending), post_model, @context)
+        end
+
+        refute "20260813091525" in applied_versions()
+        assert index_validity(@slug_index) == false
+      end)
+    end
+
     # The later file only renames the index, so it survives the pending files.
     test "refuses a pending type change on the table of a missing index whose key repeats " <>
            "when a later pending file renames the index",
