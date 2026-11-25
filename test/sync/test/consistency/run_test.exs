@@ -41,6 +41,15 @@ defmodule HologramSyncTests.Consistency.RunTest do
     told = List.insert_at(events, 3, resync)
 
     refute Run.missed_resync?(%{events: told, schedule: @schedule})
+
+    # The server checks the place's log before the gap, so a start over for that answers it too.
+    retention = %{resync | reason: "retention"}
+
+    refute Run.missed_resync?(%{
+             events: List.insert_at(events, 3, retention),
+             schedule: @schedule
+           })
+
     # A start over told before the cut was owed to an earlier connection, and one told on a later
     # place than the return's to a client the return had already caught up.
     assert Run.missed_resync?(%{events: [resync | events], schedule: @schedule})

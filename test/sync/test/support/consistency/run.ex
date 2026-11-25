@@ -329,7 +329,9 @@ defmodule HologramSyncTests.Consistency.Run do
   end
 
   # A client away until the writers were done has to have been told to start over when its gap
-  # outgrew a replay - counted from the place it came back with, in the log as it stands.
+  # outgrew a replay - counted from the place it came back with, in the log as it stands. The
+  # server checks the place's log, rules and types before the gap, so a start over for any reason
+  # answers it.
   @doc false
   # The client's return is the first connect after its cut: nothing reconnects it while it's away,
   # and a reconnect of its own, or the run's last connect, comes later, from a later place. What
@@ -340,7 +342,7 @@ defmodule HologramSyncTests.Consistency.Run do
     with true <- :await_writers in report.schedule,
          {connect, after_return} <- return(report.events) do
       gap_too_large?(connect) and
-        "gap_too_large" not in resync_reasons(after_return, connect.cursor)
+        resync_reasons(after_return, connect.cursor) == []
     else
       _no_return -> false
     end
