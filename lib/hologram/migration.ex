@@ -110,7 +110,7 @@ defmodule Hologram.Migration do
 
   Inside a query, a module attribute is pinned (`^@x`). When the outermost call is to a function the
   file imports or the module defines, the body is Elixir and the call is that function rather than
-  a word of the same name. A call inside a query is always the word, however the file imports, and
+  a word of the same name. A word inside a query stays the word, whatever the file imports, and
   `query(...)` always marks a query, since a module can't define `query/1` beside a body using it.
 
   Any other body is Elixir, and runs row by row:
