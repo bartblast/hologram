@@ -9,6 +9,8 @@ defmodule Hologram.Sync.ReadEdgeTest do
 
   alias Hologram.Sync.ReadEdge
 
+  @log_id "00112233445566778899aabbccddeeff"
+
   defp start_read_edge! do
     start_supervised!(ReadEdge)
   end
@@ -20,21 +22,69 @@ defmodule Hologram.Sync.ReadEdgeTest do
   end
 
   describe "put/2" do
-    test "records how far the log has been read" do
+    test "records the place the log has been read up to, in the log it is in" do
       read_edge = start_read_edge!()
 
-      :ok = put(read_edge, 4_216)
+      :ok = put(read_edge, {{4_216, 801, 1_700_000_000_000_000}, @log_id})
 
-      assert get(read_edge) == 4_216
+      assert get(read_edge) == {{4_216, 801, 1_700_000_000_000_000}, @log_id}
     end
 
     test "keeps only where reading got to last" do
       read_edge = start_read_edge!()
 
-      :ok = put(read_edge, 4_216)
-      :ok = put(read_edge, 4_217)
+      :ok = put(read_edge, {{4_216, 801, 1_700_000_000_000_000}, @log_id})
+      :ok = put(read_edge, {{4_217, 802, 1_700_000_000_000_001}, @log_id})
 
-      assert get(read_edge) == 4_217
+      assert get(read_edge) == {{4_217, 802, 1_700_000_000_000_001}, @log_id}
+    end
+
+    test "forgets the place once what was read is found lost" do
+      read_edge = start_read_edge!()
+
+      :ok = put(read_edge, {{4_216, 801, 1_700_000_000_000_000}, @log_id})
+      :ok = put(read_edge, nil)
+
+      assert get(read_edge) == nil
+    end
+  end
+
+  describe "lose/2" do
+    test "forgets the place and notes the recovery under the log id the loss was found under" do
+      read_edge = start_read_edge!()
+
+      :ok = put(read_edge, {{4_216, 801, 1_700_000_000_000_000}, @log_id})
+      :ok = lose(read_edge, @log_id)
+
+      assert get(read_edge) == nil
+      assert recovery(read_edge) == {:recovering, @log_id}
+    end
+
+    test "notes a recovery with no id to move when the id had moved already" do
+      read_edge = start_read_edge!()
+
+      :ok = lose(read_edge, nil)
+
+      assert recovery(read_edge) == {:recovering, nil}
+    end
+  end
+
+  describe "recovered/1" do
+    test "takes the recovery away and keeps the place put since" do
+      read_edge = start_read_edge!()
+
+      :ok = lose(read_edge, @log_id)
+      :ok = put(read_edge, {{4_217, 802, 1_700_000_000_000_001}, @log_id})
+      :ok = recovered(read_edge)
+
+      assert recovery(read_edge) == nil
+      assert get(read_edge) == {{4_217, 802, 1_700_000_000_000_001}, @log_id}
+    end
+  end
+
+  describe "recovery/1" do
+    test "has no recovery under way before the first loss" do
+      assert recovery(start_read_edge!()) == nil
     end
   end
 

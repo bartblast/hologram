@@ -805,6 +805,7 @@ defmodule Hologram.Policy.Validator do
     stored_clauses = Policy.stored_spelling(clauses)
 
     validate_server_only_predicates!(entity_type, {operation, name}, stored_clauses, where)
+    validate_sequence_predicates!(stored_clauses, where)
 
     clauses
     |> Policy.new_row_checks()
@@ -926,6 +927,26 @@ defmodule Hologram.Policy.Validator do
     end
 
     :ok
+  end
+
+  # No rule reads a sequence number, whatever its operation. A browser and the server read one
+  # differently until it's final, so they'd answer the rule differently, and a write moving it names
+  # no attribute the search for the rows a rule depends on could follow. What a derived field reads
+  # is left to Hologram.Entity.Derived.Validator, which sees it resolved.
+  defp validate_sequence_predicates!(clauses, where) do
+    clauses
+    |> Stage.predicate_references()
+    |> Enum.each(&validate_sequence_reference!(&1, where))
+  end
+
+  defp validate_sequence_reference!({relationship_names, name}, where) do
+    if Entity.sequence_attribute?(name) do
+      spelled = server_only_spelling(List.insert_at(relationship_names, -1, name))
+
+      raise Hologram.CompileError,
+        message:
+          "invalid predicate #{spelled} for #{where} - #{spelled} is a sequence number. A browser and the server can read one differently until it's final, so no rule can depend on it. A rule about time can read server_created_at or server_updated_at"
+    end
   end
 
   # Read predicates may reference server-only attributes: a client answers one as unknown, and the

@@ -10,7 +10,7 @@ defmodule Hologram.Sync.Verdicts do
   # the row moving at all - a task deletable while its board has no cards stops being so the moment
   # a card is added - so the session keeps what it last told, and tells only what changed: of the
   # verdicts a batch's recheck read for the rows it may have moved them of (see
-  # `Hologram.Sync.Live.parts/5`), and of the ones worked out for the rows it holds of a type read
+  # `Hologram.Sync.Live.parts/7`), and of the ones worked out for the rows it holds of a type read
   # again whole.
   #
   # The bookkeeping is kept here, apart from the session that holds it, so what is told when can be
@@ -22,7 +22,7 @@ defmodule Hologram.Sync.Verdicts do
   @doc """
   Returns the given rows' verdicts, `{row, verdicts}`, that differ from what was told, in the order
   given - for verdicts already worked out, as a batch's recheck works them out (see
-  `Hologram.Sync.Live.parts/5`).
+  `Hologram.Sync.Live.parts/7`).
   """
   @spec moved(list({struct, map}), %{String.t() => map}) :: list({struct, map})
   def moved(row_verdicts, told) do

@@ -72,8 +72,8 @@ defmodule Hologram.DB.IndexPlan.PlannerTest do
     {:ok, _result} =
       Connection.query("""
       INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-        ("id", "a", "c", "c_$sort", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-      SELECT gen_random_uuid(), false, 'a' || i, 'a' || i, now(), now(), now(), now(), '{}'
+        ("id", "a", "c", "c_$sort", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+      SELECT gen_random_uuid(), false, 'a' || i, 'a' || i, now(), now(), 0, now(), 0, now(), '{}'
       FROM generate_series(1, 1000) AS i
       """)
 

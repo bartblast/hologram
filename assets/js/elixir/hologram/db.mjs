@@ -672,7 +672,9 @@ function storedEntity(entity, entityType, stamp) {
     [Type.atom("__meta__"), metadata],
     [Type.atom("created_at"), timestamp],
     [Type.atom("server_created_at"), Type.nil()],
+    [Type.atom("server_created_seq"), Type.nil()],
     [Type.atom("server_updated_at"), Type.nil()],
+    [Type.atom("server_updated_seq"), Type.nil()],
     [Type.atom("updated_at"), timestamp],
   ]) {
     stored.data[Type.encodeMapKey(key)] = [key, value];

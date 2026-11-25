@@ -2711,7 +2711,7 @@ defmodule Hologram.AuthTest do
       Context.with_actor(actor.id, fn -> grant_role(user, :owner, resource, trust: true) end)
 
       assert [%{actor_id: actor_id, data: %{"granted_by_id" => nil}}] =
-               Oplog.read_type_after(RoleGrant, 0, 0, %{"user_id" => user.id})
+               Oplog.read_type_after(RoleGrant, 0, %{"user_id" => user.id})
 
       assert actor_id == actor.id
     end

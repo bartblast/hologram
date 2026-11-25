@@ -676,7 +676,12 @@ export default class Durability {
   // `factRemovals` are pairs to take out of stored sets, leaving the rest of each record as stored
   // (see `LocalDatabase.takeStoredFactRemovals`). Read after the frame's own puts, which a
   // transaction runs in order, so a record this frame wrote is judged as written.
-  static persistFrame(records, cursor, factRemovals = []) {
+  //
+  // How far the numbers are final goes down with the place, and only with it: a frame naming no
+  // place can come mid-fill, when the rows of a type still to come are not yet stored, and the
+  // point a reload takes up has to hold for every row stored beside it. A point written with an
+  // earlier place is lower, which holds back more numbers than it needs to and nothing else.
+  static persistFrame(records, cursor, factRemovals = [], finalSeq = null) {
     return Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);
       const meta = transaction.objectStore(META);
@@ -698,6 +703,7 @@ export default class Durability {
         // what lets a client cut off mid-fill come back asking for what it can still honour.
         if (cursor !== null) {
           meta.put(cursor, "cursor");
+          Durability.#putFinal(meta, finalSeq);
         }
       });
 
@@ -818,6 +824,7 @@ export default class Durability {
   // restore refuses them. Answers the stored place, with every stored record, or with
   // `records: null` when the place is the given one or there is none - and the user the store
   // belongs to, since one store serves every user of the browser, each in a group of their own.
+  // The records come with how far the numbers they hold are final, which is written with the place.
   //
   // With the rows comes what the queue records as landed, batch by batch: a stored frame can
   // have landed a batch this tab holds unlanded, and promoted again over rows that already hold
@@ -848,9 +855,11 @@ export default class Durability {
         // Requests on one transaction answer in the order they were made, so the owner is in by the
         // time the place's callback runs.
         const owned = meta.get("actorUserId");
+        const final = meta.get("finalSeq");
         const stored = meta.get("cursor");
 
         owned.onerror = () => reject(owned.error);
+        final.onerror = () => reject(final.error);
         stored.onerror = () => reject(stored.error);
 
         stored.onsuccess = () => {
@@ -871,6 +880,7 @@ export default class Durability {
               ([records, queued]) =>
                 resolve({
                   cursor: place,
+                  finalSeq: final.result ?? null,
                   // A record can predate the marks (see Batch#record).
                   landed: (queued ?? []).map(({landed, seq}) => ({
                     landed: landed ?? [],
@@ -925,7 +935,7 @@ export default class Durability {
   // lacks says nothing about this tab's rows, so the tab keeps its place and works from memory.
   // Over this user's store it takes up the current claim, since it leaves the store matching this
   // tab, or starts over from it.
-  static async repair(records, cursor) {
+  static async repair(records, cursor, finalSeq = null) {
     let placeless = false;
 
     await Durability.#write([ENTITIES, META], (transaction) => {
@@ -957,6 +967,7 @@ export default class Durability {
             }
 
             meta.put(cursor, "cursor");
+            Durability.#putFinal(meta, finalSeq);
             Durability.#putClock(meta);
           };
         },
@@ -1057,7 +1068,7 @@ export default class Durability {
     const storedPair = loaded.replicas[Durability.#ownerKey(owner)] ?? null;
 
     if (takesRows) {
-      LocalDatabase.restore(loaded.records);
+      LocalDatabase.restore(loaded.records, loaded.finalSeq);
     }
 
     // A page load offers a fresh pair and a browser already holding one for this user ignores it -
@@ -1311,7 +1322,7 @@ export default class Durability {
     }
   }
 
-  // Everything the previous page load left, in one read - the six things `meta` holds and every
+  // Everything the previous page load left, in one read - what `meta` holds, the queue and every
   // row record. Absences are normalized here rather than at every reader: a key nothing was ever
   // written under reads as undefined, and "nothing stored" is a state restore has to reason about.
   static async #read() {
@@ -1334,6 +1345,7 @@ export default class Durability {
       claim,
       clock,
       cursor,
+      finalSeq,
       queued,
       records,
       storedPairKeys,
@@ -1344,6 +1356,7 @@ export default class Durability {
       Durability.#request(meta.get("claim")),
       Durability.#request(meta.get("clock")),
       Durability.#request(meta.get("cursor")),
+      Durability.#request(meta.get("finalSeq")),
       Durability.#request(queue.getAll()),
       Durability.#request(entities.getAll()),
       Durability.#request(meta.getAllKeys(pairKeys)),
@@ -1356,6 +1369,7 @@ export default class Durability {
       claim: claim ?? null,
       clock: clock ?? 0,
       cursor: cursor ?? null,
+      finalSeq: finalSeq ?? null,
       queue: queued ?? [],
       records: records ?? [],
       replicas: Object.fromEntries(
@@ -1556,6 +1570,17 @@ export default class Durability {
   static #wipe(transaction) {
     transaction.objectStore(ENTITIES).clear();
     transaction.objectStore(META).delete("cursor");
+    transaction.objectStore(META).delete("finalSeq");
+  }
+
+  // A place told with no final point - a server of a build from before it, or a point forgotten
+  // since - takes away the one stored with an earlier place.
+  static #putFinal(meta, finalSeq) {
+    if (finalSeq === null) {
+      meta.delete("finalSeq");
+    } else {
+      meta.put(finalSeq, "finalSeq");
+    }
   }
 
   // Every write goes through here, so there is one place that counts what is in flight and one

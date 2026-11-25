@@ -39,7 +39,9 @@ export default class Model {
     "created_at",
     "id",
     "server_created_at",
+    "server_created_seq",
     "server_updated_at",
+    "server_updated_seq",
     "updated_at",
   ];
 

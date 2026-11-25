@@ -239,6 +239,7 @@ export default class SyncStream {
         LocalDatabase.records(written),
         frame.cursor,
         LocalDatabase.takeStoredFactRemovals(),
+        LocalDatabase.finalSeq(),
       );
 
       $.tell("sync_deltas", frame, stored);
@@ -309,6 +310,7 @@ export default class SyncStream {
               LocalDatabase.records(written ?? []),
               frame.cursor || null,
               factRemovals,
+              LocalDatabase.finalSeq(),
             )
           : null;
 
@@ -389,6 +391,11 @@ export default class SyncStream {
 
         const written = Deltas.apply(frame.deltas);
 
+        // How far the numbers are final once this frame's rows are in, which only its batch's last
+        // frame says: its numbers are split against the point the frames before it reached, so a
+        // number the frame itself makes final waits for it here, a moment.
+        LocalDatabase.raiseFinal(frame.final_seq);
+
         // What this client's own pending writes are worth against what just arrived: every batch
         // up to the number the frame names has been applied, so its writes on these rows are in
         // the base now and the fold has to stop putting them on top.
@@ -459,6 +466,13 @@ export default class SyncStream {
           $.rowsChangedSinceRender = true;
         } else {
           LocalDatabase.beginRefill({hadPlace: $.syncCursor !== null});
+
+          // A refill keeps how far the numbers are final, since the rows below the point stay held
+          // until its markers say which go - unless the log they came from is gone, or the place
+          // naming it can't be read: a log claimed again numbers its saves from the start.
+          if (frame.reason === "retention" || frame.reason === "cursor") {
+            LocalDatabase.forgetFinal();
+          }
         }
 
         $.syncCursor = null;
@@ -498,6 +512,17 @@ export default class SyncStream {
         // What a frame relayed to this tab left, which only the tab storing that frame takes. Kept,
         // it could take out a pair told again since (see LocalDatabase.takeStoredFactRemovals).
         LocalDatabase.takeStoredFactRemovals();
+
+        // Ahead of the sweep, which goes by the rows rather than their numbers. A fill's marker
+        // carries its edge, which a type's rows reach once its marker arrives, and only that
+        // type's: the rows of a type still to come arrive in no number order, so one at or below
+        // the edge can still follow a higher one. The marker ending the fill makes it every
+        // type's.
+        if (frame.scope === "types") {
+          LocalDatabase.raiseTypeFinal(frame.types, frame.final_seq);
+        } else {
+          LocalDatabase.raiseFinal(frame.final_seq);
+        }
 
         if (frame.cursor) {
           $.syncCursor = frame.cursor;

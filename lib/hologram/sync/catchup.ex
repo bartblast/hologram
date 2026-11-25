@@ -10,7 +10,7 @@ defmodule Hologram.Sync.Catchup do
   #
   # Six doors lead to that fallback, and each is a thing that cannot usefully be answered rather
   # than a thing that went wrong: a place that cannot be read, a place judged under other rules, a
-  # place filled with other entity types, a place predating the log, a gap too big to be worth
+  # place filled with other entity types, a place the log no longer holds, a gap too big to be worth
   # replaying, and a gap spanning a change of model. All of them are decided before a single ROW is
   # looked at - the effects name which rows to read, and none is read here.
   #
@@ -89,13 +89,14 @@ defmodule Hologram.Sync.Catchup do
   """
   @spec check(term, String.t(), String.t()) :: :ok | {:full_resync, atom}
   def check(cursor, policy_hash, types_hash) do
-    with {:ok, tx, seq, cursor_policy_hash, cursor_types_hash} <- decode_place(cursor),
+    with {:ok, {seq, _tx, _at} = place, log_id, cursor_policy_hash, cursor_types_hash} <-
+           decode_place(cursor),
          :ok <- check_rules(cursor_policy_hash, policy_hash),
          :ok <- check_types(cursor_types_hash, types_hash),
-         :ok <- check_retention(tx, seq) do
+         :ok <- check_retention(place, log_id) do
       limit = gap_limit()
 
-      case Oplog.count_after(tx, seq, limit + 1, Model.hash()) do
+      case Oplog.count_after(seq, limit + 1, Model.hash()) do
         {count, _other_model?} when count > limit -> {:full_resync, :gap_too_large}
         {_count, true} -> {:full_resync, :model_hash}
         {_count, false} -> :ok
@@ -104,43 +105,33 @@ defmodule Hologram.Sync.Catchup do
   end
 
   @doc """
-  Returns the effects written since the given cursor, without their payloads (see
-  `Hologram.DB.Oplog.read_after/3`), and the edge below which every transaction had finished
-  before they were read (see `Hologram.DB.Oplog.current_xmin/0`) - or why everything must be sent
-  again: a cursor judged under rules other than the given policy hash's (see
-  `Hologram.Policy.hash/0`), and one filled with entity types other than the given types hash's (see
-  `Hologram.Sync.Cursor.types_hash/3`), among the reasons.
+  Returns the effects written since the given cursor, in seq order and without their payloads (see
+  `Hologram.DB.Oplog.read_after/2`) - or why everything must be sent again: a cursor judged under
+  rules other than the given policy hash's (see `Hologram.Policy.hash/0`), and one filled with
+  entity types other than the given types hash's (see `Hologram.Sync.Cursor.types_hash/3`), among
+  the reasons.
 
   What comes back names WHICH rows moved, never what they now hold - the values come from reading
   those rows as they stand. That is what makes the log safe to read as history: its order is not
   commit order, so folding it would build a past that never happened, while using it as an index
   of ids cannot.
 
-  The edge is what a place the catch-up hands over may reach. The log's order is by transaction id,
-  not by commit, so a transaction below an effect the read returned can still have been open then,
-  and commit after: a place past it would have a client cut off right then come back past changes
-  it never got. Every effect of a transaction below the edge is among the ones returned.
+  Read it after the final limit the catch-up's places may reach (see `Hologram.Sync.FinalLimit`).
+  A save with an entry above the limit can still have been running when the effects were read, and
+  commit after, so a place past the limit would have a client cut off right then come back past
+  changes it never got. Every effect at or below the limit is among the ones returned.
   """
   @spec gap(term, Hologram.Server.identity_id() | nil, String.t(), String.t()) ::
-          {:ok, list(map), non_neg_integer} | {:full_resync, atom}
+          {:ok, list(map)} | {:full_resync, atom}
   def gap(cursor, _actor_user_id, policy_hash, types_hash) do
-    with {:ok, tx, seq, cursor_policy_hash, cursor_types_hash} <- decode_place(cursor),
+    with {:ok, {seq, _tx, _at} = place, log_id, cursor_policy_hash, cursor_types_hash} <-
+           decode_place(cursor),
          :ok <- check_rules(cursor_policy_hash, policy_hash),
          :ok <- check_types(cursor_types_hash, types_hash),
-         :ok <- check_retention(tx, seq) do
-      read_gap(tx, seq)
-    end
-  end
-
-  # The edge is read first: a transaction it counts as finished had finished before the effects were
-  # read, so the read holds what it wrote.
-  defp read_gap(tx, seq) do
-    edge = Oplog.current_xmin()
-
-    effects = Oplog.read_after(tx, seq, gap_limit() + 1)
-
-    with {:ok, effects} <- check_size(effects) do
-      {:ok, effects, edge}
+         :ok <- check_retention(place, log_id) do
+      seq
+      |> Oplog.read_after(gap_limit() + 1)
+      |> check_size()
     end
   end
 
@@ -185,23 +176,26 @@ defmodule Hologram.Sync.Catchup do
 
   defp check_types(_cursor_types_hash, _types_hash), do: {:full_resync, :synced_types}
 
-  # The cursor came from a frame, so the effect it names was written. If the oldest effect still
-  # held is NEWER than that, the cursor predates the log and what it names cannot be told. If the
-  # oldest is at or below it, the log speaks for the whole gap.
-  #
-  # A log holding nothing cannot say either way, so it says the honest thing.
-  defp check_retention(tx, seq) do
-    case Oplog.oldest_place() do
-      nil -> {:full_resync, :retention}
-      oldest when oldest <= {tx, seq} -> :ok
-      _predates_log -> {:full_resync, :retention}
+  # The cursor came from a frame, so the entry it names was written, in the log it names. A log of
+  # another id is one a dropped database was claimed again with, whose serials start over. And an
+  # entry no longer there, or another one at its seq, is a place the log no longer speaks for: the
+  # entry was pruned, or the server lost its commit, and the serials above it went to other saves.
+  # The place before the first entry names none (see `Hologram.DB.Oplog.place/1`).
+  defp check_retention(place, log_id) do
+    if log_id == Oplog.log_id() and Oplog.holds_place?(place) do
+      :ok
+    else
+      {:full_resync, :retention}
     end
   end
 
   defp decode_place(cursor) do
     case Cursor.decode(cursor) do
-      {:ok, tx, seq, policy_hash, types_hash} -> {:ok, tx, seq, policy_hash, types_hash}
-      :error -> {:full_resync, :cursor}
+      {:ok, place, log_id, policy_hash, types_hash} ->
+        {:ok, place, log_id, policy_hash, types_hash}
+
+      :error ->
+        {:full_resync, :cursor}
     end
   end
 end

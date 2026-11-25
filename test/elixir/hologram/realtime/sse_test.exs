@@ -504,7 +504,7 @@ defmodule Hologram.Realtime.SSETest do
     end
 
     defp connection do
-      %{applied_seq: 3, fill_place: {200, 0}, replica_id: nil}
+      %{applied_seq: 3, replica_id: nil}
     end
 
     # What the places the session hands over are stamped with, beside the rules.
@@ -525,7 +525,6 @@ defmodule Hologram.Realtime.SSETest do
       opts = sync_session_opts(nil, MyApp.Page, @policy_hash, sync_start(nil), connection())
 
       assert opts[:applied_seq] == 3
-      assert opts[:fill_place] == {200, 0}
       assert opts[:replica_id] == nil
     end
 

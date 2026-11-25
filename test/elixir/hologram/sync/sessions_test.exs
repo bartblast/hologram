@@ -33,6 +33,22 @@ defmodule Hologram.Sync.SessionsTest do
     pid
   end
 
+  describe "cut_all/1" do
+    test "cuts every session on the node with the reason given" do
+      first = start_session(@user_id)
+      second = start_session(nil)
+
+      assert cut_all(:why) == :ok
+
+      assert {:messages, [{:cut, :why}]} = Process.info(first, :messages)
+      assert {:messages, [{:cut, :why}]} = Process.info(second, :messages)
+    end
+
+    test "cuts nothing on a node with no sessions" do
+      assert cut_all(:why) == :ok
+    end
+  end
+
   describe "list/0" do
     test "lists nothing on a node with no sessions" do
       assert list() == []

@@ -20,9 +20,9 @@ defmodule Hologram.DB.SQLQueryTest do
 
   @id "0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6a"
 
-  @insert_given_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions") VALUES ($1, now(), now(), now(), now(), '{}')|
+  @insert_given_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions") VALUES ($1, now(), now(), 0, now(), 0, now(), '{}')|
 
-  @insert_returning_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions") VALUES (gen_random_uuid(), now(), now(), now(), now(), '{}') RETURNING "id"|
+  @insert_returning_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions") VALUES (gen_random_uuid(), now(), now(), 0, now(), 0, now(), '{}') RETURNING "id"|
 
   @lock_by_id_sql ~s|SELECT "id" FROM "hologram_data"."test_fixtures_entity_module1" WHERE "id" = $1 FOR UPDATE|
 

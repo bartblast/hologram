@@ -342,7 +342,7 @@ defmodule Hologram.DB.WriterTest do
       entity = Module2.new(public: true)
 
       assert {:ok, %Module2{created_at: %DateTime{}} = stamped_entity} = create(entity)
-      assert DB.read(Module2, entity.id) == stamped_entity
+      assert unnumbered(DB.read(Module2, entity.id)) == stamped_entity
     end
 
     test "joins the enclosing transaction" do

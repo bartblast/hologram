@@ -94,6 +94,18 @@ defmodule Hologram.DB.EntityOperationsContentionTest do
     route(session, fun)
   end
 
+  defp oplog_seqs(scratch, op, entity) do
+    statement =
+      ~s|SELECT "seq" FROM "hologram_system"."oplog" WHERE "op" = $1 AND "entity_id" = $2|
+
+    {:ok, %Postgrex.Result{rows: rows}} =
+      route(scratch, fn ->
+        Connection.query(statement, [op, Codec.encode(entity.id, :uuid)])
+      end)
+
+    List.flatten(rows)
+  end
+
   defp qualified_join_table do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(join_table())}"
   end
@@ -123,6 +135,45 @@ defmodule Hologram.DB.EntityOperationsContentionTest do
     route(scratch, fn -> SchemaReconciler.reconcile(DB.reconciliation_context()) end)
 
     :ok
+  end
+
+  test "an update that waited for a row's lock takes a serial above the write it waited for", %{
+    scratch: scratch,
+    scratch_opts: scratch_opts
+  } do
+    target = create_target(scratch)
+
+    # The holder has written the row and goes on to write it again once the other update waits, so
+    # the serial the waiting update took before it blocked is below the holder's last one.
+    holder =
+      start_holder(
+        scratch_opts,
+        fn -> :ok = EntityOperations.update(Module2, target.id, c: "held") end,
+        fn -> :ok = EntityOperations.update(Module2, target.id, c: "held again") end,
+        self()
+      )
+
+    assert_receive :holding, 5_000
+
+    waiter =
+      start_write(scratch_opts, fn -> EntityOperations.update(Module2, target.id, c: "waited") end)
+
+    wait_for_blocked_sessions(scratch_opts, 1)
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+    assert Task.await(waiter) == :ok
+
+    stored = route(scratch, fn -> EntityOperations.get(Module2, target.id) end)
+
+    patch_seqs =
+      scratch
+      |> oplog_seqs("patch_entity", target)
+      |> Enum.sort()
+
+    assert stored.c == "waited"
+    assert length(patch_seqs) == 3
+    assert stored.server_updated_seq == List.last(patch_seqs)
   end
 
   test "a delete takes with it an edge added from the row while it waited", %{

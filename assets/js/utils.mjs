@@ -1,6 +1,10 @@
 "use strict";
 
 export default class Utils {
+  // The millisecond and counter of the last UUID uuidv7/0 returned.
+  static #uuidv7LastMs = -1;
+  static #uuidv7Counter = 0;
+
   static capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
   }
@@ -86,11 +90,28 @@ export default class Utils {
     });
   }
 
+  // Each call's UUID sorts after the one before it, even within a millisecond: the 12 bits after
+  // the version hold a counter that starts at a random value below 2048 each new millisecond and
+  // counts up within it, and once it runs out the timestamp moves on to the next millisecond
+  // (RFC 9562, section 6.2, method 1). The rows a client creates then keep their order by id.
   static uuidv7() {
     const bytes = new Uint8Array(16);
     crypto.getRandomValues(bytes);
 
-    const unixMs = Date.now();
+    const now = Date.now();
+
+    if (now > Utils.#uuidv7LastMs) {
+      Utils.#uuidv7LastMs = now;
+      Utils.#uuidv7Counter = ((bytes[6] & 0x07) << 8) | bytes[7];
+    } else if (Utils.#uuidv7Counter < 0xfff) {
+      Utils.#uuidv7Counter += 1;
+    } else {
+      Utils.#uuidv7LastMs += 1;
+      Utils.#uuidv7Counter = ((bytes[6] & 0x07) << 8) | bytes[7];
+    }
+
+    const unixMs = Utils.#uuidv7LastMs;
+    const counter = Utils.#uuidv7Counter;
 
     bytes[0] = Math.floor(unixMs / 2 ** 40) % 256;
     bytes[1] = Math.floor(unixMs / 2 ** 32) % 256;
@@ -99,8 +120,9 @@ export default class Utils {
     bytes[4] = Math.floor(unixMs / 2 ** 8) % 256;
     bytes[5] = unixMs % 256;
 
-    // Version 7 in the high nibble, keeping 4 random bits in the low nibble
-    bytes[6] = 0x70 | (bytes[6] & 0x0f);
+    // Version 7 in the high nibble, then the counter's 12 bits
+    bytes[6] = 0x70 | (counter >> 8);
+    bytes[7] = counter & 0xff;
 
     // Variant 0b10 in the two high bits, keeping 6 random bits
     bytes[8] = 0x80 | (bytes[8] & 0x3f);

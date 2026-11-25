@@ -40,7 +40,7 @@ defmodule Hologram.DB.EntityOperationsSortKeyTest do
         |> Module2.new()
         |> create()
 
-      assert get(Module2, entity.id) == entity
+      assert unnumbered(get(Module2, entity.id)) == entity
     end
   end
 

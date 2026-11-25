@@ -6,7 +6,6 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Component.Action
-  alias Hologram.DB.Oplog
   alias Hologram.DB.QueryCache
   alias Hologram.Entity.Model
   alias Hologram.LiveReload
@@ -642,9 +641,8 @@ defmodule Hologram.Realtime.SSE do
 
   # The options a sync session is started with, for the given user and page, under the rules of the
   # given policy hash, from what the start read decided (see `read_sync_start/6`) and what was read
-  # beside the connection's identity: its replica, how far that replica's batches are applied, and
-  # where the log stood. Public so tests can check what the session is handed without standing up
-  # a stream.
+  # beside the connection's identity: its replica, and how far that replica's batches are applied.
+  # Public so tests can check what the session is handed without standing up a stream.
   @doc false
   @spec sync_session_opts(term | nil, term, String.t(), map, map) :: keyword
   def sync_session_opts(user_id, page, policy_hash, start, connection) do
@@ -659,7 +657,6 @@ defmodule Hologram.Realtime.SSE do
       actor_user_id: user_id,
       applied_seq: connection.applied_seq,
       client: self(),
-      fill_place: connection.fill_place,
       lens: start[:lens],
       page: page,
       policy_hash: policy_hash,
@@ -1178,11 +1175,7 @@ defmodule Hologram.Realtime.SSE do
     # Read here, beside the identity it is read for.
     applied_seq = replica_id && Record.highest_confirmed_seq(replica_id)
 
-    connection = %{
-      applied_seq: applied_seq,
-      fill_place: {Oplog.current_xmin(), 0},
-      replica_id: replica_id
-    }
+    connection = %{applied_seq: applied_seq, replica_id: replica_id}
 
     {:ok, session} =
       user_id

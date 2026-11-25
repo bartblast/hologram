@@ -28,6 +28,26 @@ defmodule HologramClusterTests.SyncTest do
     {frame["data"], client}
   end
 
+  defp await_frame_data(client) do
+    {data, client} = await_deltas(client)
+
+    {Jason.decode!(data), client}
+  end
+
+  # The data of every frame up to the one making the given number final.
+  defp await_final_through(client, seq) do
+    {data, client} = await_deltas(client)
+
+    if final_through?(Jason.decode!(data), seq) do
+      [data]
+    else
+      [data | await_final_through(client, seq)]
+    end
+  end
+
+  defp final_through?(frame, seq),
+    do: is_integer(frame["final_seq"]) and frame["final_seq"] >= seq
+
   # The stream is cut when the test ends: a connection left open holds a session and its
   # evaluators alive on the peer, which the next scenario would then be served stale rounds by.
   defp connect(peer) do
@@ -71,15 +91,11 @@ defmodule HologramClusterTests.SyncTest do
     # Ruling 2's guarantee, and the one claim the sandbox structurally cannot host: it runs every
     # test inside a single transaction, so two transactions racing each other never exist there.
     #
-    # A transaction takes its id when it first writes and holds it until it ends, so a LATER
-    # transaction can commit FIRST. A reader advancing on insert order would deliver the later row
-    # and then never come back for the earlier one - silently, permanently. The windowed read
-    # cannot: its upper edge is the oldest transaction still running, so while one is held open
-    # the window stops below BOTH rows.
-    #
-    # That is the honest price of gap-freeness and this test states it: a long transaction stalls
-    # the stream rather than corrupting it. Nothing arrives while the write is held, and then both
-    # arrive together, the held one included.
+    # A save takes its serial when it first writes and holds it until it ends, so a LATER save can
+    # commit FIRST. A reader advancing past what it sent would deliver the later row and then never
+    # come back for the earlier one - silently, permanently. The stream sends the row that committed
+    # at once, but the final limit cannot pass a save still running, so the later row's number stays
+    # above it, and the reader comes back for the serial it skipped once that save commits.
     test "delivers the held write once it commits, rather than passing it by" do
       [peer_a, peer_b] = start_peers(2)
 
@@ -95,22 +111,26 @@ defmodule HologramClusterTests.SyncTest do
 
       assert_receive {:holding, ^holder}, 5_000
 
-      # Committed after the held write started, and with a HIGHER transaction id.
+      # Committed after the held write started, so with a HIGHER serial.
       create_item(peer_b, "committed-first", "Committed first")
 
-      # Neither travels yet: the window's upper edge cannot pass the transaction still running,
-      # so the row that committed is waiting on the one that has not.
-      assert {:timeout, still_waiting} =
-               SyncClient.next_frame(client, "sync_deltas", @settle_ms)
+      {committed_frame, still_waiting} = await_frame_data(client)
+
+      [committed_row] =
+        committed_frame["deltas"]["put_entity"]["HologramClusterTests.Entities.Item"]
+
+      assert committed_row["title"] == "Committed first"
+
+      # The row travels, its number isn't final: the save still running holds a lower serial.
+      committed_seq = committed_row["server_created_seq"]
+      refute final_through?(committed_frame, committed_seq)
 
       send(holder, :release)
 
-      {:ok, frame, _client} = SyncClient.next_frame(still_waiting, "sync_deltas", 10_000)
+      frames = await_final_through(still_waiting, committed_seq)
 
-      # One window read covers both, so they arrive in one frame - and the held one arriving at
-      # all is the whole proof.
-      assert frame["data"] =~ ~s["title":"Held open"]
-      assert frame["data"] =~ ~s["title":"Committed first"]
+      # The held row arriving at all is the whole proof.
+      assert Enum.any?(frames, &(&1 =~ ~s["title":"Held open"]))
     end
   end
 

@@ -2,9 +2,9 @@ defmodule HologramSyncTests.Consistency.Writer do
   @moduledoc false
 
   # Runs one writer transaction the way the randomized run writes: the operations through the
-  # trusted write path, each followed by its hold, so transactions overlap and commit out of id
-  # order - then, as its last statements, the commit lock, the transaction's id and the state it
-  # leaves, read while no other writer can commit.
+  # trusted write path, each followed by its hold, so transactions overlap and commit out of the
+  # order of their serials - then, as its last statements, the commit lock, the serials its log
+  # entries hold and the state it leaves, read while no other writer can commit.
   #
   # The lock is held to the commit, and PostgreSQL takes a transaction out of the running set before
   # it lets its locks go, so the next writer to get the lock sees every earlier commit: commits
@@ -104,7 +104,15 @@ defmodule HologramSyncTests.Consistency.Writer do
     # Strictly increasing across processes, unlike the monotonic time, which two reads can share.
     lock_order = System.unique_integer([:monotonic, :positive])
 
-    {:ok, %{rows: [[xid]]}} = Connection.query("SELECT pg_current_xact_id()::text", [])
+    # A serial an operation spent without writing - an insert a conflict turned into nothing - is
+    # left out, which only leaves the transaction's first serial higher than the one it took.
+    {:ok, %{rows: [[min_seq, max_seq]]}} =
+      Connection.query(
+        ~s|SELECT min("seq"), max("seq") FROM "hologram_system"."oplog" | <>
+          ~s|WHERE "tx" = pg_current_xact_id()|,
+        []
+      )
+
     state = Model.snapshot()
 
     before_commit.()
@@ -112,8 +120,9 @@ defmodule HologramSyncTests.Consistency.Writer do
     %{
       after_lock_at: after_lock_at,
       lock_order: lock_order,
-      state: state,
-      xid: String.to_integer(xid)
+      max_seq: max_seq,
+      min_seq: min_seq,
+      state: state
     }
   end
 end

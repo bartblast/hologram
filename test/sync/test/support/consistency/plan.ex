@@ -87,9 +87,9 @@ defmodule HologramSyncTests.Consistency.Plan do
 
   A schedule is what a client does in order once it first connects: `{:wait, ms}`, `:cut`,
   `:connect`, `:connect_cut_mid_fill` - connect, and cut the stream right after the first deltas
-  frame it carries, so the cut lands part way through a fill or a catch-up - `:await_synced`, wait
-  until the client is told it holds everything, and `:await_writers`, wait until every writer has
-  returned.
+  frame it carries, so the cut lands part way through a fill or a catch-up - `:reload`, start the
+  page again from what the store wrote down and connect, `:await_synced`, wait until the client is
+  told it holds everything, and `:await_writers`, wait until every writer has returned.
   """
   @type t :: %{
           clients: list(%{name: String.t(), schedule: list(term), user_id: String.t() | nil}),
@@ -575,7 +575,8 @@ defmodule HologramSyncTests.Consistency.Plan do
   # frame, so the cut lands part way through a fill or a catch-up. The second user's second tab is
   # cut once it holds everything and stays away until the writers are done, so its gap is most of
   # the run's writes, past the sync app's `gap_limit`, and it's sent everything again. The flaky
-  # tabs' absences grow with the steps, so a longer run cuts as often as a short one.
+  # tabs' absences grow with the steps, so a longer run cuts as often as a short one. Some flaky
+  # tabs come back by reloading, from the place and the final limit the store wrote down.
   defp clients(planned, steps) do
     [first_user, second_user | _users] = planned.users
 
@@ -607,9 +608,11 @@ defmodule HologramSyncTests.Consistency.Plan do
 
   defp absence(away_ms) do
     reconnect =
-      if :rand.uniform(3) == 1,
-        do: [:connect_cut_mid_fill, {:wait, 50}, :connect],
-        else: [:connect]
+      case :rand.uniform(4) do
+        1 -> [:connect_cut_mid_fill, {:wait, 50}, :connect]
+        2 -> [:reload]
+        _connect -> [:connect]
+      end
 
     [{:wait, :rand.uniform(400)}, :cut, {:wait, away_ms} | reconnect]
   end

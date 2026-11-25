@@ -3,6 +3,7 @@ defmodule Hologram.Test do
   alias Hologram.DB
   alias Hologram.DB.SchemaReconciler
   alias Hologram.MisuseError
+  alias Hologram.Sync.Dispatcher
   alias Hologram.Test.DatabaseBootstrap
 
   @doc """
@@ -115,6 +116,18 @@ defmodule Hologram.Test do
 
   defp actor_user_id(id), do: id
 
+  # The app started before the schema was built, so the dispatcher's first round found no log to
+  # read, and the round after would wait for the poll. A session starts only once a round has read
+  # the log, so the first clients of a run would wait as long.
+  defp wake_dispatcher do
+    for {Dispatcher, pid, _type, _modules} <- Supervisor.which_children(Hologram.Sync.Supervisor),
+        is_pid(pid) do
+      Dispatcher.wake(pid)
+    end
+
+    :ok
+  end
+
   # The test env starts the pool and nothing else - dev converges at boot and every other env
   # applies the migration history, while a test app's schema is its helper's to manage. The run's
   # database is fresh, so a run converges from scratch, and this is the only thing that builds the
@@ -122,6 +135,7 @@ defmodule Hologram.Test do
   defp converge_schema do
     if Process.whereis(DB) do
       SchemaReconciler.reconcile(DB.reconciliation_context())
+      wake_dispatcher()
     end
 
     :ok

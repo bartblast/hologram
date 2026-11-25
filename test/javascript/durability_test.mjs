@@ -388,6 +388,8 @@ describe("Durability", () => {
       await Durability.persistFrame(
         [taskRecord("t1", "Draft copy")],
         "place-1",
+        [],
+        12,
       );
 
       await writeMeta({
@@ -402,6 +404,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await readAll("entities"), []);
       assert.isUndefined(await readMeta("cursor"));
+      assert.isUndefined(await readMeta("finalSeq"));
 
       assert.equal(await readMeta("actorUserId"), "u1");
       assert.equal(await readMeta("seq"), 41);
@@ -1964,6 +1967,46 @@ describe("Durability", () => {
   });
 
   describe("persistFrame()", () => {
+    it("writes the final point with the place", async () => {
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([], "place-1", [], 12);
+
+      assert.equal(await readMeta("finalSeq"), 12);
+    });
+
+    // A frame naming no place can come mid-fill, with the rows of a type still to come unstored.
+    it("leaves the stored final point alone for a frame naming no place", async () => {
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([], "place-1", [], 12);
+      await Durability.persistFrame([], null, [], 20);
+
+      assert.equal(await readMeta("finalSeq"), 12);
+    });
+
+    it("takes the stored final point away for a place told with none", async () => {
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([], "place-1", [], 12);
+      await Durability.persistFrame([], "place-2", [], null);
+
+      assert.isUndefined(await readMeta("finalSeq"));
+    });
+
+    it("writes a row's waiting numbers with its record", async () => {
+      const record = {
+        ...taskRecord("t1", "Draft copy"),
+        waiting: {numbers: {server_updated_seq: 15}, own: true},
+      };
+
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([record], "place-1", [], 12);
+
+      assert.deepStrictEqual(await readAll("entities"), [record]);
+    });
+
     it("puts a held row's record and deletes a gone row's", async () => {
       await Durability.open();
       await Durability.load();
@@ -2431,6 +2474,14 @@ describe("Durability", () => {
   });
 
   describe("readBase()", () => {
+    it("answers the final point stored with the place, with the rows", async () => {
+      await seedPreviousLoad({finalSeq: 12});
+      await Durability.open();
+      await Durability.load();
+
+      assert.equal((await Durability.readBase("place-0")).finalSeq, 12);
+    });
+
     it("answers the stored place and every row, when the place differs", async () => {
       await seedPreviousLoad();
       await Durability.open();
@@ -2438,6 +2489,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await Durability.readBase("place-0"), {
         cursor: "place-1",
+        finalSeq: null,
         landed: [],
         owner: "u1",
         records: [taskRecord("t1", "Draft copy")],
@@ -2464,6 +2516,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await Durability.readBase(null), {
         cursor: "place-1",
+        finalSeq: null,
         landed: [],
         owner: "u1",
         records: [taskRecord("t1", "Draft copy")],
@@ -2498,6 +2551,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await Durability.readBase("place-1"), {
         cursor: "place-2",
+        finalSeq: null,
         landed: [],
         owner: "u1",
         records: [taskRecord("t1", "Draft copy"), taskRecord("t2", "Later")],
@@ -2522,6 +2576,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await reading, {
         cursor: "place-1",
+        finalSeq: null,
         landed: [],
         owner: "u1",
         records: [taskRecord("t1", "Draft copy")],
@@ -2653,6 +2708,16 @@ describe("Durability", () => {
       assert.equal(await readMeta("clock"), 1_756_100_000_999_000);
     });
 
+    it("rewrites the final point with the place", async () => {
+      await seedPreviousLoad({finalSeq: 12});
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.repair([taskRecord("t2", "second")], "place-2", 20);
+
+      assert.equal(await readMeta("finalSeq"), 20);
+    });
+
     // A store with no place may have been cleared by a start-over nobody heard of, and whatever
     // emptied it, the rows the tab holds are not what it vouches for - so the tab starts over.
     it("writes nothing and says so when the store holds no place", async () => {
@@ -2741,6 +2806,51 @@ describe("Durability", () => {
   });
 
   describe("restore()", () => {
+    it("holds the stored rows' numbers back against the stored final point", async () => {
+      await createSchema();
+
+      await writeRecords([
+        {
+          facts: {},
+          id: "t1",
+          row: {id: "t1", server_updated_seq: 8, title: "Draft copy"},
+          type: "MyApp.Task",
+          waiting: {numbers: {server_updated_seq: 15}, own: false},
+        },
+      ]);
+
+      await writeMeta({actorUserId: "u1", cursor: "place-1", finalSeq: 10});
+
+      LocalDatabase.actorUserId = "u1";
+
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+
+      assert.equal(LocalDatabase.finalSeq(), 10);
+
+      assert.equal(
+        LocalDatabase.baseRow("MyApp.Task", "t1").server_updated_seq,
+        8,
+      );
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers("MyApp.Task", "t1"), {
+        numbers: {server_updated_seq: 15},
+        own: false,
+      });
+    });
+
+    it("takes up no final point with rows it refuses", async () => {
+      await seedPreviousLoad({cursor: undefined, finalSeq: 10});
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+
+      assert.isNull(LocalDatabase.finalSeq());
+    });
+
     it("fills the database with the stored rows and answers the place they are dated at", async () => {
       await seedPreviousLoad();
       await Durability.open();

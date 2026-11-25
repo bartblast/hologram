@@ -464,7 +464,8 @@ defmodule Hologram.Sync.LensTest do
   end
 
   defp deltas(lens, deltas) do
-    {:sync_deltas, "cursor", translated, 7} = message(lens, {:sync_deltas, "cursor", deltas, 7})
+    {:sync_deltas, "cursor", translated, 7, 9} =
+      message(lens, {:sync_deltas, "cursor", deltas, 7, 9})
 
     translated
   end
@@ -501,9 +502,22 @@ defmodule Hologram.Sync.LensTest do
                kind: "staff",
                points: 5,
                server_created_at: nil,
+               server_created_seq: nil,
                server_updated_at: nil,
+               server_updated_seq: nil,
                updated_at: nil
              }
+    end
+
+    test "a put keeps its mark as the client's own" do
+      lens = resolved!([%{op: :rename_attribute, entity: Module39, from: :points, to: :score}])
+      row = %Module39{id: @id_1, score: 5}
+      own_put = Frame.put_entity(row, %{}, true)
+
+      [put] = deltas(lens, [own_put])
+
+      assert put.data[:"$own"] == true
+      assert put.data.points == 5
     end
 
     test "a to-many renamed since goes under its old name, and its edges too, while its inverse keeps its own" do
@@ -804,14 +818,14 @@ defmodule Hologram.Sync.LensTest do
           %{op: :create_entity, entity: Module30}
         ])
 
-      assert message(lens, {:sync_synced, {:types, [Module30, Module34, Module39], 7}, "c"}) ==
-               {:sync_synced, {:types, [MyApp.Member, Module39], 7}, "c"}
+      assert message(lens, {:sync_synced, {:types, [Module30, Module34, Module39], 7}, "c", 9}) ==
+               {:sync_synced, {:types, [MyApp.Member, Module39], 7}, "c", 9}
     end
 
     test "any other message passes as it is" do
       lens = resolved!([])
 
-      assert message(lens, {:sync_synced, :all, "c"}) == {:sync_synced, :all, "c"}
+      assert message(lens, {:sync_synced, :all, "c", nil}) == {:sync_synced, :all, "c", nil}
       assert message(lens, {:sync_resync, :model_hash}) == {:sync_resync, :model_hash}
     end
   end

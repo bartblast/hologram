@@ -26,6 +26,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
   alias Hologram.Sync.Carry
+  alias Hologram.Sync.FinalSeq
   alias Hologram.Template.DataTransfer
   alias Hologram.Template.DOM
   alias Hologram.Template.Helpers
@@ -461,9 +462,15 @@ defmodule Hologram.Template.Renderer do
       end
   end
 
+  # One limit for the whole render, so a number every query of the page reads is final in all of
+  # them or in none: one shown in a list and hidden in another would leave the page disagreeing
+  # with what the browser works out from the rows it carries. A render again for a user signed in
+  # during it is a render of its own, and pins a limit of its own.
   defp render_page_once(page_module, params, server_struct, opts) do
-    Context.with_actor(server_struct.user_id, fn ->
-      render_page_as_actor(page_module, params, server_struct, opts)
+    FinalSeq.with_pinned(fn ->
+      Context.with_actor(server_struct.user_id, fn ->
+        render_page_as_actor(page_module, params, server_struct, opts)
+      end)
     end)
   end
 

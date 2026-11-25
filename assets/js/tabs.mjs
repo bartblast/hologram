@@ -740,6 +740,7 @@ export default class Tabs {
       {
         completeness,
         cursor: SyncStream.syncCursor,
+        finalSeq: LocalDatabase.finalSeq(),
         kind: "state",
         replica: Replica.current(),
         rules: SyncStream.rulesForGroup(),
@@ -789,6 +790,7 @@ export default class Tabs {
           placeless = await Durability.repair(
             LocalDatabase.records(LocalDatabase.vouchedRowKeys()),
             SyncStream.syncCursor,
+            LocalDatabase.finalSeq(),
           );
         } finally {
           if (Tabs.#token === token) {
@@ -929,6 +931,20 @@ export default class Tabs {
       SyncStream.syncCursor = message.cursor;
     }
 
+    // How far the numbers are final comes with the place, since it is a claim about the same rows -
+    // taken by a tab at that place already too, as a marker naming no place can have moved the
+    // point there since this tab last heard one. Moving it files numbers into the rows the page
+    // shows, so the page renders.
+    if (message.cursor !== null && message.cursor === SyncStream.syncCursor) {
+      const finalSeq = LocalDatabase.finalSeq();
+
+      LocalDatabase.raiseFinal(message.finalSeq);
+
+      if (LocalDatabase.finalSeq() !== finalSeq) {
+        SyncStream.scheduleRender();
+      }
+    }
+
     Tabs.#takeRules(message);
     Tabs.#takeCompleteness(message);
   }
@@ -1067,6 +1083,9 @@ export default class Tabs {
         Tabs.#takeRules(message);
       } else {
         if (base.records !== null) {
+          // The numbers the page showed outlive the rows they sit beside, which go now.
+          const shown = LocalDatabase.shownNumbers();
+
           for (const rowKey of LocalDatabase.vouchedRowKeys()) {
             const separator = rowKey.indexOf(" ");
 
@@ -1081,7 +1100,10 @@ export default class Tabs {
           // server sends again only what changed after it, and an older value the page rendered
           // would stay for good. The sets a record names are the store's too; a set it says
           // nothing about is left as the page filed it, which is what a restore does.
-          for (const {facts, id, row, type} of base.records) {
+          // How far their numbers are final is the store's too, written down with them.
+          LocalDatabase.takeStoredFinal(base.finalSeq);
+
+          for (const {facts, id, row, type, waiting} of base.records) {
             if (row === null) {
               continue;
             }
@@ -1093,7 +1115,12 @@ export default class Tabs {
               Clock.observe(revision);
             }
 
-            LocalDatabase.putRow(type, row);
+            LocalDatabase.putStored(
+              type,
+              row,
+              waiting,
+              shown.get(`${type} ${id}`),
+            );
             LocalDatabase.unmarkCarried(type, id);
 
             for (const [relationship, targetIds] of Object.entries(facts)) {

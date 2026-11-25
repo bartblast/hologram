@@ -8,6 +8,7 @@ defmodule Hologram.Entity.Derived.Validator do
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Validator, as: EntityValidator
+  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Reflection
 
@@ -17,7 +18,8 @@ defmodule Hologram.Entity.Derived.Validator do
   Validates the derived fields of the given entity types against their given resolved definitions,
   keyed by entity type and field name: the element type of a field holding rows is an entity type,
   every definition computes what its field declares, none reads a server-only attribute - a client
-  computes derived fields over the rows it holds - and no derived fields read each other in a cycle.
+  computes derived fields over the rows it holds - no derived fields read each other in a cycle, and
+  none that an allow rule reads depends on a sequence number.
 
   Returns :ok, or raises Hologram.CompileError listing every violation, each at the declaration of
   the field it is about.
@@ -45,6 +47,7 @@ defmodule Hologram.Entity.Derived.Validator do
     violations =
       field_violations
       |> Enum.concat(cycle_violations(fields, definitions))
+      |> Enum.concat(rule_sequence_violations(entity_types, definitions))
       |> Enum.sort_by(fn {entity_type, name, _description} -> {entity_type, name} end)
 
     if violations != [] do
@@ -58,6 +61,41 @@ defmodule Hologram.Entity.Derived.Validator do
 
     :ok
   end
+
+  # What a definition's answer depends on, each name with the type declaring it. Narrower than
+  # read_names/2: an include adds rows beside the answer, and a sort only decides which rows the
+  # query's own take, skip or single row keeps - except a sort by a sequence number, which leaves
+  # out every row whose number isn't final, bounded or not. A query reading a derived set never
+  # inherits that set's order, so a bound says nothing about how the set was sorted.
+  defp answer_reads(owner, {:name, name}), do: [resolved_name(owner, name)]
+
+  defp answer_reads(owner, {:concat, operands}),
+    do: Enum.flat_map(operands, &answer_reads(owner, &1))
+
+  defp answer_reads(owner, {:condition, clauses}), do: clause_names(clauses, [owner])
+
+  defp answer_reads(owner, {:if, clauses, then_value, else_value}) do
+    clause_names(clauses, [owner]) ++
+      answer_reads(owner, then_value) ++ answer_reads(owner, else_value)
+  end
+
+  defp answer_reads(owner, {:query, %Query{source: {owner, chain}} = term}) do
+    {hops, [set_name]} = Enum.split(chain, -1)
+
+    sort_reads =
+      if bounded_term?(term),
+        do: Enum.uniq(deciding_sort_keys(term) ++ sequence_sort_keys(term)),
+        else: sequence_sort_keys(term)
+
+    [{Entity.path_target(owner, hops), set_name} | sort_reads] ++
+      clause_names(term.filter, [term.entity, owner])
+  end
+
+  defp answer_reads(_owner, {:value, _value}), do: []
+
+  defp bounded_term?(%Query{cardinality: :one}), do: true
+
+  defp bounded_term?(%Query{skip: skip, take: take}), do: skip not in [nil, 0] or take != nil
 
   defp clause_names(clauses, scope) do
     Enum.flat_map(clauses, fn
@@ -139,6 +177,25 @@ defmodule Hologram.Entity.Derived.Validator do
     end)
     |> Hologram.Derived.cycles()
     |> Enum.map(&cycle_violation/1)
+  end
+
+  # The sort keys that can decide which rows a bound keeps. An id is unique, so no key after it ever
+  # decides.
+  defp deciding_sort_keys(term) do
+    term.sort
+    |> Enum.take_while(fn {key, _direction} -> key != :id end)
+    |> Enum.map(fn {key, _direction} -> resolved_name(term.entity, key) end)
+  end
+
+  # The sequence numbers a query orders by, wherever they sit in its sort, since a list ordered by one
+  # leaves out every row whose number isn't final. A count orders nothing, so it counts every row.
+  defp sequence_sort_keys(%Query{cardinality: :count}), do: []
+
+  defp sequence_sort_keys(term) do
+    for {key, _direction} <- term.sort,
+        Entity.sequence_attribute?(key),
+        not Derived.declared?(term.entity, key),
+        do: resolved_name(term.entity, key)
   end
 
   defp declaration_location(entity_type, name) do
@@ -253,6 +310,32 @@ defmodule Hologram.Entity.Derived.Validator do
     {Entity.path_target(type, hops), last_name}
   end
 
+  # The derived fields an allow rule reads that depend on a sequence number, however many other
+  # derived fields lie between. A rule naming a number outright is refused with the rule (see
+  # Hologram.Policy.Validator), and one through a derived set only shows in its resolved definition.
+  defp rule_sequence_violations(entity_types, definitions) do
+    entity_types
+    |> Enum.flat_map(fn entity_type ->
+      for {operation, _to, _via, predicates, _name, _fields} <- entity_type.__policies__(),
+          {type, name} <-
+            clause_names(rule_clauses(entity_type, operation, predicates), [entity_type]),
+          Derived.declared?(type, name),
+          {read_type, read_name} <- sequence_reads({type, name}, definitions) do
+        {type, name,
+         "derived field #{inspect(name)} in #{inspect(type)} reads #{inspect(read_type)}.#{read_name}, a sequence number, and an allow rule of #{inspect(entity_type)} reads the field. A browser and the server read a sequence number differently until it's final, so no rule can depend on it"}
+      end
+    end)
+    |> Enum.uniq()
+  end
+
+  # An update rule's clauses read the row after the change through new(), resolved one row above
+  # the rule's own - spelled here as the same names of the rule's row, which has the same type.
+  defp rule_clauses(entity_type, operation, predicates) do
+    entity_type
+    |> Policy.condition_clauses(operation, predicates)
+    |> Policy.stored_spelling()
+  end
+
   defp same_type?({type, opts}, {type, other_opts}), do: opts[:values] == other_opts[:values]
 
   defp same_type?({:float, _opts}, {:integer, _other_opts}), do: true
@@ -264,6 +347,33 @@ defmodule Hologram.Entity.Derived.Validator do
   defp scoped_name({:outer, levels, name}, scope), do: resolved_name(Enum.at(scope, levels), name)
 
   defp scoped_name(name, [type | _rows_above]), do: resolved_name(type, name)
+
+  # The sequence numbers the answer of the given derived field depends on, itself or through the
+  # derived fields it reads.
+  defp sequence_reads(field, definitions) do
+    {sequences, _visited} = sequence_reads(field, definitions, MapSet.new())
+
+    Enum.uniq(sequences)
+  end
+
+  # Each field is walked once, so fields sharing what they read don't multiply the walk.
+  defp sequence_reads({type, _name} = field, definitions, visited) do
+    if MapSet.member?(visited, field) do
+      {[], visited}
+    else
+      {sequences, others} =
+        type
+        |> answer_reads(Map.fetch!(definitions, field))
+        |> Enum.split_with(fn {_read_type, name} -> Entity.sequence_attribute?(name) end)
+
+      {through, walked} =
+        others
+        |> Enum.filter(fn {read_type, name} -> Derived.declared?(read_type, name) end)
+        |> Enum.flat_map_reduce(MapSet.put(visited, field), &sequence_reads(&1, definitions, &2))
+
+      {sequences ++ through, walked}
+    end
+  end
 
   defp server_only?(entity_type, name),
     do: name in Entity.server_only_attribute_names(entity_type)

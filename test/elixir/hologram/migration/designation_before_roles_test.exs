@@ -76,8 +76,8 @@ defmodule Hologram.Migration.DesignationBeforeRolesTest do
   defp insert_grant do
     statement = """
     INSERT INTO "hologram_data"."hologram_role_grant"
-      ("id", "user_id", "role", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-    VALUES (gen_random_uuid(), $1, 'member', now(), now(), now(), now(), '{}')
+      ("id", "user_id", "role", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, 'member', now(), now(), 0, now(), 0, now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(@user_id)])
@@ -85,8 +85,8 @@ defmodule Hologram.Migration.DesignationBeforeRolesTest do
 
   defp insert_user(table) do
     statement = """
-    INSERT INTO "hologram_data"."#{table}" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-    VALUES ($1, now(), now(), now(), now(), '{}')
+    INSERT INTO "hologram_data"."#{table}" ("id", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+    VALUES ($1, now(), now(), 0, now(), 0, now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(@user_id)])

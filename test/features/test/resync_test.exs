@@ -138,7 +138,11 @@ defmodule HologramFeatureTests.ResyncTest do
     truncate_oplog()
     :ok = delete(Todo, beta.id)
 
-    simulate_sse_disconnect(current_instance_id(session))
+    # The emptied log reads as lost commits once the server's next round finds it, which stops the
+    # session and drops the stream until the browser reconnects, so the blip waits for a live stream.
+    session
+    |> current_instance_id()
+    |> simulate_sse_disconnect()
 
     session
     |> assert_text(css("#todos"), ~r/^alpha 0$/)

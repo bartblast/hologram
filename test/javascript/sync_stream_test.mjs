@@ -1139,7 +1139,12 @@ describe("SyncStream", () => {
       globalThis.Hologram.sync = {
         model: {
           [TASK]: {
-            attributes: {id: "uuid", title: "string"},
+            attributes: {
+              id: "uuid",
+              server_created_seq: "integer",
+              server_updated_seq: "integer",
+              title: "string",
+            },
             relationships: {},
             serverOnly: [],
           },
@@ -1185,6 +1190,109 @@ describe("SyncStream", () => {
       eventSource.listeners.sync_deltas({data: frame({cursor: null})});
 
       assert.isNull(persisting.firstCall.args[1]);
+    });
+
+    it("moves the final point once the frame's rows are in, and writes it", () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+
+      LocalDatabase.raiseFinal(10);
+
+      eventSource.listeners.sync_deltas({
+        data: frame({
+          deltas: {
+            put_entity: {
+              [TASK]: [
+                {
+                  id: "t1",
+                  server_created_seq: 12,
+                  server_updated_seq: 12,
+                  title: "Draft copy",
+                },
+              ],
+            },
+          },
+          final_seq: 12,
+        }),
+      });
+
+      assert.equal(LocalDatabase.finalSeq(), 12);
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 12);
+
+      assert.deepStrictEqual(
+        persisting.firstCall.args[0],
+        LocalDatabase.records([`${TASK} t1`]),
+      );
+
+      assert.equal(persisting.firstCall.args[0][0].row.server_created_seq, 12);
+      assert.equal(persisting.firstCall.args[1], "Nzc4LjA");
+      assert.equal(persisting.firstCall.args[3], 12);
+    });
+
+    // Past what a JavaScript number holds exactly, the frame spells both as their decimal text.
+    it("files a big number the frame's big final point reaches", () => {
+      sinon.stub(Durability, "persistFrame");
+
+      LocalDatabase.raiseFinal(10);
+
+      eventSource.listeners.sync_deltas({
+        data: frame({
+          deltas: {
+            put_entity: {
+              [TASK]: [
+                {
+                  id: "t1",
+                  server_created_seq: "9007199254740993",
+                  server_updated_seq: "9007199254740993",
+                  title: "Draft copy",
+                },
+              ],
+            },
+          },
+          final_seq: "9007199254740993",
+        }),
+      });
+
+      assert.strictEqual(
+        LocalDatabase.baseRow(TASK, "t1").server_created_seq,
+        9007199254740993n,
+      );
+    });
+
+    it("holds a number back when the frame moves the point short of it", () => {
+      LocalDatabase.raiseFinal(10);
+
+      eventSource.listeners.sync_deltas({
+        data: frame({
+          deltas: {
+            put_entity: {
+              [TASK]: [
+                {
+                  id: "t1",
+                  server_created_seq: 14,
+                  server_updated_seq: 14,
+                  title: "Draft copy",
+                },
+              ],
+            },
+          },
+          final_seq: 12,
+        }),
+      });
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_created_seq);
+
+      assert.equal(
+        LocalDatabase.waitingNumbers(TASK, "t1").numbers.server_created_seq,
+        14,
+      );
+    });
+
+    // Each node works out its own point, so one the stream reconnected to can be behind.
+    it("keeps the highest point across frames", () => {
+      eventSource.listeners.sync_deltas({data: frame({final_seq: 20})});
+      eventSource.listeners.sync_deltas({data: frame({final_seq: 15})});
+
+      assert.equal(LocalDatabase.finalSeq(), 20);
     });
 
     it("keeps the place the frame leaves the client at", () => {
@@ -1886,6 +1994,96 @@ describe("SyncStream", () => {
       assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
     });
 
+    it("keeps the final point through a refill of the same log", () => {
+      LocalDatabase.raiseFinal(10);
+
+      eventSource.listeners.sync_resync({data: envelope("gap_too_large")});
+
+      assert.equal(LocalDatabase.finalSeq(), 10);
+    });
+
+    // A log claimed again numbers its saves from the start.
+    for (const reason of ["retention", "cursor"]) {
+      it(`forgets the final point when the log it came from is gone (${reason})`, () => {
+        LocalDatabase.raiseFinal(10);
+
+        LocalDatabase.putRow(
+          TASK,
+          LocalDatabase.holdNumbers(TASK, {
+            id: "t2",
+            server_created_seq: 12,
+            server_updated_seq: 12,
+          }),
+        );
+
+        eventSource.listeners.sync_resync({data: envelope(reason)});
+
+        assert.isNull(LocalDatabase.finalSeq());
+        assert.isNull(LocalDatabase.waitingNumbers(TASK, "t2"));
+      });
+    }
+
+    // A log claimed again numbers from the start, below what the lost one reached.
+    it("takes the new log's numbers over the lost log's, across a reload", () => {
+      LocalDatabase.raiseFinal(1000);
+
+      LocalDatabase.putRow(TASK, {
+        id: "t2",
+        server_created_seq: 900,
+        server_updated_seq: 950,
+        title: "Draft copy",
+      });
+
+      eventSource.listeners.sync_resync({data: envelope("retention")});
+
+      SyncStream.receiveFrame("sync_deltas", {
+        applied_seq: null,
+        cursor: null,
+        deltas: {
+          put_entity: {
+            [TASK]: [
+              {
+                id: "t2",
+                server_created_seq: 5,
+                server_updated_seq: 70,
+                title: "Draft copy",
+              },
+            ],
+          },
+        },
+      });
+
+      const stored = LocalDatabase.records([`${TASK} t2`]);
+
+      SyncStream.receiveFrame("synced", {
+        cursor: "Nzc4LjA",
+        final_seq: 60,
+        scope: "all",
+      });
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t2").server_created_seq, 5);
+      assert.isNull(LocalDatabase.baseRow(TASK, "t2").server_updated_seq);
+
+      LocalDatabase.reset();
+      LocalDatabase.restore(stored, 60);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t2").server_created_seq, 5);
+      assert.isNull(LocalDatabase.baseRow(TASK, "t2").server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t2"), {
+        numbers: {server_updated_seq: 70},
+        own: false,
+      });
+    });
+
+    it("forgets the final point when who is asking changed", () => {
+      LocalDatabase.raiseFinal(10);
+
+      eventSource.listeners.sync_resync({data: envelope("identity")});
+
+      assert.isNull(LocalDatabase.finalSeq());
+    });
+
     it("keeps a row the refill delivered, as the server now spells it", () => {
       eventSource.listeners.sync_resync({data: envelope()});
 
@@ -2120,7 +2318,31 @@ describe("SyncStream", () => {
       eventSource.listeners.synced({data: envelope("all", "Nzc4LjA")});
 
       assert.isTrue(persisting.calledOnce);
-      assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA", []]);
+      assert.deepStrictEqual(persisting.firstCall.args, [
+        [],
+        "Nzc4LjA",
+        [],
+        null,
+      ]);
+    });
+
+    it("moves the final point before its sweep, and writes it with the place", () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+      const raising = sinon.spy(LocalDatabase, "raiseFinal");
+      const marking = sinon.spy(LocalDatabase, "markAllSynced");
+
+      eventSource.listeners.synced({
+        data: JSON.stringify({
+          cursor: "Nzc4LjA",
+          final_seq: 42,
+          protocol_version: 1,
+          scope: "all",
+        }),
+      });
+
+      sinon.assert.callOrder(raising, marking);
+      assert.equal(LocalDatabase.finalSeq(), 42);
+      assert.equal(persisting.firstCall.args[3], 42);
     });
 
     // The holder's stored record names the row the sweep took, and a reload would read it back.
@@ -2143,7 +2365,7 @@ describe("SyncStream", () => {
       });
 
       sinon.assert.calledOnceWithExactly(reading, written);
-      sinon.assert.calledOnceWithExactly(persisting, records, null, []);
+      sinon.assert.calledOnceWithExactly(persisting, records, null, [], null);
     });
 
     // A catch-up's marker can sweep a row a stored set names, with no row of its own to write. Only
@@ -2168,9 +2390,13 @@ describe("SyncStream", () => {
         data: JSON.stringify({cursor: null, scope: "all"}),
       });
 
-      sinon.assert.calledOnceWithExactly(persisting, [], null, [
-        removal("swept"),
-      ]);
+      sinon.assert.calledOnceWithExactly(
+        persisting,
+        [],
+        null,
+        [removal("swept")],
+        null,
+      );
     });
 
     it("passes the marker's number on to what it settles", () => {
@@ -2220,6 +2446,154 @@ describe("SyncStream", () => {
 
       assert.equal(SyncStream.syncCursor, "Nzc4LjA");
       assert.isTrue(persisting.calledOnce);
+    });
+  });
+
+  // A fill's marker carries the fill's one final point, but each type's rows reach it only at that
+  // type's own marker: the rows of a type still to come arrive in no number order.
+  describe("a fill's final point", () => {
+    const NOTE = "MyApp.Note";
+    const TASK = "MyApp.Task";
+
+    const attributes = {
+      id: "uuid",
+      server_created_seq: "integer",
+      server_updated_seq: "integer",
+      title: "string",
+    };
+
+    const row = (id, seq) => ({
+      id,
+      server_created_seq: seq,
+      server_updated_seq: seq,
+      title: "Draft copy",
+    });
+
+    const chunk = (type, rows) => ({
+      applied_seq: null,
+      cursor: null,
+      deltas: {put_entity: {[type]: rows}},
+      final_seq: null,
+    });
+
+    const typeMarker = (type, finalSeq) => ({
+      applied_seq: null,
+      cursor: null,
+      final_seq: finalSeq,
+      scope: "types",
+      types: [type],
+    });
+
+    const allMarker = (finalSeq) => ({
+      cursor: "Nzc4LjA",
+      final_seq: finalSeq,
+      scope: "all",
+    });
+
+    const created = (type, id) =>
+      LocalDatabase.baseRow(type, id).server_created_seq;
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [NOTE]: {attributes, relationships: {}, serverOnly: []},
+          [TASK]: {attributes, relationships: {}, serverOnly: []},
+        },
+        modelHash: "a3f9c2",
+        protocolVersion: 1,
+      };
+
+      sinon.stub(Batches, "landUnsent");
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
+    // Filed at the first type's marker, a later type's 80 would read as the newest final number
+    // while its 60 is still on the way, and a read marker saved then would skip the 60.
+    it("holds a type's numbers back until that type's marker", () => {
+      SyncStream.receiveFrame("sync_deltas", chunk(TASK, [row("t1", 90)]));
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+      SyncStream.receiveFrame("sync_deltas", chunk(NOTE, [row("n1", 80)]));
+
+      assert.isNull(created(NOTE, "n1"));
+
+      SyncStream.receiveFrame("sync_deltas", chunk(NOTE, [row("n2", 60)]));
+
+      assert.isNull(created(NOTE, "n2"));
+
+      SyncStream.receiveFrame("synced", typeMarker(NOTE, 100));
+
+      assert.equal(created(NOTE, "n1"), 80);
+      assert.equal(created(NOTE, "n2"), 60);
+      assert.isNull(LocalDatabase.finalSeq());
+    });
+
+    it("files a number of a type already marked as it arrives", () => {
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+      SyncStream.receiveFrame("sync_deltas", chunk(TASK, [row("t1", 90)]));
+
+      assert.equal(created(TASK, "t1"), 90);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("holds a number above the marker's point back for its type", () => {
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+      SyncStream.receiveFrame("sync_deltas", chunk(TASK, [row("t1", 110)]));
+
+      assert.isNull(created(TASK, "t1"));
+    });
+
+    it("makes the point every type's at the marker ending the fill", () => {
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+      SyncStream.receiveFrame("sync_deltas", chunk(NOTE, [row("n1", 80)]));
+      SyncStream.receiveFrame("synced", allMarker(100));
+
+      assert.equal(LocalDatabase.finalSeq(), 100);
+      assert.equal(created(NOTE, "n1"), 80);
+    });
+
+    // The rows at or below the kept point stay held until the markers say which go, so their
+    // numbers stay final, while one above it waits for its type's marker.
+    it("keeps a refill's old point for every type", () => {
+      LocalDatabase.raiseFinal(50);
+
+      SyncStream.receiveFrame("sync_resync", {reason: "gap_too_large"});
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+
+      SyncStream.receiveFrame(
+        "sync_deltas",
+        chunk(NOTE, [row("n1", 40), row("n2", 70)]),
+      );
+
+      assert.equal(LocalDatabase.finalSeq(), 50);
+      assert.equal(created(NOTE, "n1"), 40);
+      assert.isNull(created(NOTE, "n2"));
+    });
+
+    // A fill begun again says nothing of a type until its own marker in it.
+    it("forgets a type's point when the fill starts over", () => {
+      SyncStream.receiveFrame("synced", typeMarker(TASK, 100));
+      SyncStream.receiveFrame("sync_resync", {reason: "gap_too_large"});
+      SyncStream.receiveFrame("sync_deltas", chunk(TASK, [row("t1", 90)]));
+
+      assert.isNull(created(TASK, "t1"));
+    });
+
+    // A follower is handed the leader's frames, and has to hold back what the leader does.
+    it("holds the same numbers back in a tab that follows", () => {
+      const relay = (event, frame) =>
+        Tabs.receive({event, frame, kind: "frame"});
+
+      relay("synced", typeMarker(TASK, 100));
+      relay("sync_deltas", chunk(NOTE, [row("n1", 80)]));
+
+      assert.isNull(created(NOTE, "n1"));
+
+      relay("synced", typeMarker(NOTE, 100));
+
+      assert.equal(created(NOTE, "n1"), 80);
     });
   });
 
