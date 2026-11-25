@@ -465,6 +465,9 @@ describe("Durability", () => {
         "place-1",
       );
 
+      assert.lengthOf(await readAll("entities"), 1);
+      assert.equal(await readMeta("cursor"), "place-1");
+
       sinon.stub(Tabs, "storeLost").callsFake(() => {
         Replica.owner = "u2";
       });
