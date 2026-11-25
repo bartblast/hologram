@@ -955,7 +955,16 @@ defmodule Hologram.Migration.ValueTest do
           )
         )
 
-      assert [%{opts: [backfill: %Value{args: [:title], term: {:coalesce, _terms}}]}] =
+      assert [
+               %{
+                 opts: [
+                   backfill: %Value{
+                     args: [:title],
+                     term: {:coalesce, [{:name, [:title]}, {:value, "F"}]}
+                   }
+                 ]
+               }
+             ] =
                module.__hologram_migration__().ops
     end
 
@@ -965,7 +974,13 @@ defmodule Hologram.Migration.ValueTest do
 
       module = compile_migration("20260813091522", op_with(body, ""))
 
-      assert [%{opts: [backfill: %Value{term: {:coalesce, _terms}}]}] =
+      assert [
+               %{
+                 opts: [
+                   backfill: %Value{term: {:coalesce, [{:name, [:title]}, {:value, "true"}]}}
+                 ]
+               }
+             ] =
                module.__hologram_migration__().ops
     end
 
@@ -975,7 +990,7 @@ defmodule Hologram.Migration.ValueTest do
 
       module = compile_migration("20260813091522", op_with(body, ""))
 
-      assert [%{opts: [backfill: %Value{term: {:coalesce, _terms}}]}] =
+      assert [%{opts: [backfill: %Value{term: {:coalesce, [{:name, [:title]}, {:value, "a"}]}}]}] =
                module.__hologram_migration__().ops
     end
 
@@ -985,7 +1000,13 @@ defmodule Hologram.Migration.ValueTest do
 
       module = compile_migration("20260813091522", op_with(body, ""))
 
-      assert [%{opts: [backfill: %Value{term: {:coalesce, _terms}}]}] =
+      assert [
+               %{
+                 opts: [
+                   backfill: %Value{term: {:coalesce, [{:name, [:title]}, {:value, "true"}]}}
+                 ]
+               }
+             ] =
                module.__hologram_migration__().ops
     end
 
@@ -994,7 +1015,7 @@ defmodule Hologram.Migration.ValueTest do
 
       module = compile_migration("20260813091522", op_with(body, "def title(x), do: x"))
 
-      assert [%{opts: [backfill: %Value{term: {:coalesce, _terms}}]}] =
+      assert [%{opts: [backfill: %Value{term: {:coalesce, [{:name, [:title]}, {:value, "F"}]}}]}] =
                module.__hologram_migration__().ops
     end
 
