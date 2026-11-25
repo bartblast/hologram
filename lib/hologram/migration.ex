@@ -91,7 +91,8 @@ defmodule Hologram.Migration do
       row holds a value. It doesn't take a `:float` attribute: `0.0` and `-0.0` count as one
       value, so which of them it gives isn't defined
 
-  A `fn` names the row's fields and relationships it reads as its arguments. Its body is a query
+  A `fn` has one clause, and names the row's fields and relationships it reads as its arguments,
+  each a bare name written once, with no pattern or guard. Its body is a query
   when its outermost part is one of these words other than `<>`, when it's only a field or a path,
   or when it's wrapped in `query(...)`, and then it runs as one `UPDATE`:
 
@@ -117,6 +118,15 @@ defmodule Hologram.Migration do
 
       add_attribute :slug, :string, backfill: fn title ->
         title |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
+      end
+
+  A field holding nil is handled in the body, since the `fn` has no other clause:
+
+      add_attribute :slug, :string, backfill: fn title ->
+        case title do
+          nil -> "untitled"
+          title -> String.downcase(title)
+        end
       end
 
   Its arguments are the row's own fields, and the body is pure: the standard library's value
