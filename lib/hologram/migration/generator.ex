@@ -180,14 +180,6 @@ defmodule Hologram.Migration.Generator do
 
   defp created?(ops), do: Enum.any?(ops, &(&1.op == :create_entity))
 
-  defp early_op?(%{op: :delete_unique}), do: true
-
-  defp early_op?(%{op: kind, changes: [optional: true]})
-       when kind in [:change_attribute, :change_relationship],
-       do: true
-
-  defp early_op?(_op), do: false
-
   defp entity_of(op), do: Map.get(op, :entity)
 
   # Generated text is formatted text: a long payload wraps here rather than the first
@@ -274,7 +266,9 @@ defmodule Hologram.Migration.Generator do
   # renames (the ordering rule - every later line names the current model's spelling),
   # then the entity blocks, then the flat ops that take no scope. A backfill answering a fill
   # applies apart from the ops around it, so the ops above it have to stand without the ones
-  # below, and the blocks asking for a fill come after the others.
+  # below: the blocks asking for a fill come after the others, and the members they make optional
+  # go to blocks of their own above all of them, since another block's fill can need one ending
+  # a cycle of required to-ones.
   defp group_sections(plan) do
     {entity_ops, flat_ops} = Enum.split_with(plan.ops, &block_op?/1)
     {renames, other_flat_ops} = Enum.split_with(flat_ops, &(&1.op == :rename_entity))
@@ -283,23 +277,32 @@ defmodule Hologram.Migration.Generator do
     ops_by_entity = Enum.group_by(entity_ops, &entity_of/1)
     questions_by_entity = Enum.group_by(block_questions, &entity_of/1)
 
-    blocks =
+    {fill_blocks, other_blocks} =
       ops_by_entity
       |> Map.keys()
       |> Enum.concat(Map.keys(questions_by_entity))
       |> Enum.uniq()
-      |> Enum.sort_by(
-        &{not created?(Map.get(ops_by_entity, &1, [])),
-         asks_fill?(Map.get(questions_by_entity, &1, [])), inspect(&1)}
-      )
+      |> Enum.sort_by(&{not created?(Map.get(ops_by_entity, &1, [])), inspect(&1)})
       |> Enum.map(fn entity_type ->
         {:block, entity_type, Map.get(ops_by_entity, entity_type, []),
          Map.get(questions_by_entity, entity_type, [])}
       end)
+      |> Enum.split_with(fn {:block, _entity_type, _ops, questions} -> asks_fill?(questions) end)
+
+    {relaxation_blocks, answered_blocks} =
+      fill_blocks
+      |> Enum.map(fn {:block, entity_type, ops, questions} ->
+        {relaxations, later_ops} = Enum.split_with(ops, &relaxation?/1)
+
+        {{:block, entity_type, relaxations, []}, {:block, entity_type, later_ops, questions}}
+      end)
+      |> Enum.unzip()
 
     Enum.map(flat_questions, &{:question, &1}) ++
       Enum.map(renames, &{:flat, &1}) ++
-      blocks ++ Enum.map(other_flat_ops, &{:flat, &1})
+      other_blocks ++
+      Enum.reject(relaxation_blocks, &match?({:block, _entity_type, [], _questions}, &1)) ++
+      answered_blocks ++ Enum.map(other_flat_ops, &{:flat, &1})
   end
 
   defp indent(text) do
@@ -420,6 +423,12 @@ defmodule Hologram.Migration.Generator do
   defp plural_verb([_one]), do: "is"
 
   defp plural_verb(_many), do: "are"
+
+  defp relaxation?(%{op: kind, changes: [optional: true]})
+       when kind in [:change_attribute, :change_relationship],
+       do: true
+
+  defp relaxation?(_op), do: false
 
   defp render_args(args) do
     Enum.map_join(args, ", ", &inspect/1)
@@ -669,20 +678,18 @@ defmodule Hologram.Migration.Generator do
 
   # An entity block whose ops include the creation renders as create_entity - the
   # creation itself is the header, never a member line. Questions come first inside the
-  # block, so what needs a human is what a reader meets - after the keys that leave and the
-  # members made optional, though: an answer is written where its question sits, and one that
-  # brings a member under a name a leaving key still holds would be refused with the key's
-  # delete two lines below it, as a backfill would be with a relaxation below it that the
-  # file needs, since it applies apart from the ops around it.
+  # block, so what needs a human is what a reader meets - after the keys that leave, though:
+  # an answer is written where its question sits, and one that brings a member under a name
+  # a leaving key still holds would be refused with the key's delete two lines below it.
   defp render_section({:block, entity_type, ops, questions}) do
     {creations, member_ops} = Enum.split_with(ops, &(&1.op == :create_entity))
-    {early_ops, later_ops} = Enum.split_with(member_ops, &early_op?/1)
+    {key_deletes, later_ops} = Enum.split_with(member_ops, &(&1.op == :delete_unique))
     verb = if creations == [], do: "change_entity", else: "create_entity"
 
-    early_lines = Enum.map(early_ops, &"#{@indent}#{render_op(&1)}")
+    key_delete_lines = Enum.map(key_deletes, &"#{@indent}#{render_op(&1)}")
     question_lines = Enum.map(questions, &indent(render_question(&1, later_ops)))
     op_lines = Enum.map(later_ops, &"#{@indent}#{render_op(&1)}")
-    body = Enum.join(early_lines ++ question_lines ++ op_lines, "\n")
+    body = Enum.join(key_delete_lines ++ question_lines ++ op_lines, "\n")
 
     "#{verb} #{inspect(entity_type)} do\n#{body}\nend"
   end

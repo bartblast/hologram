@@ -348,6 +348,61 @@ defmodule Hologram.Migration.GeneratorTest do
       assert generate(history, current, @timestamp, opts) == :nothing_to_do
     end
 
+    # The blocks asking for a fill are written by name, so a relaxation in a later one is written
+    # above all of them.
+    @tag :database
+    test "writes a relaxation ending a required cycle above another block's fill a backfill answers" do
+      opts = opts!("backfilled_cross_block_cycle")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Alpha
+           create_entity MyApp.Beta
+           create_entity MyApp.Place
+
+           change_entity MyApp.Alpha do
+             add_relationship :b, MyApp.Beta, optional: true
+           end
+
+           change_entity MyApp.Beta do
+             add_relationship :a, MyApp.Alpha
+             add_relationship :place, MyApp.Place, optional: true
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Alpha => %{relationships: [{:b, MyApp.Beta, []}]},
+          MyApp.Beta => %{
+            relationships: [{:a, MyApp.Alpha, [optional: true]}, {:place, MyApp.Place, []}]
+          },
+          MyApp.Place => %{}
+        })
+
+      assert {:ok, path, 2} = generate(migrations, current, @timestamp, opts)
+
+      answered =
+        path
+        |> File.read!()
+        |> String.replace(
+          ~r/^( *)resolve! :fill, attributes: \[:(b|place)\]$/m,
+          "\\1change_relationship :\\2, optional: false, backfill: ^\"01900000-0000-7000-8000-000000000000\""
+        )
+
+      refute answered =~ ~r/^ *resolve!/m
+
+      File.write!(path, answered)
+      Code.compile_file(path)
+
+      [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+      history = Enum.concat(migrations, [migration])
+
+      assert generate(history, current, @timestamp, opts) == :nothing_to_do
+    end
+
     @tag :database
     test "formats the file with the given formatter" do
       opts =
@@ -774,30 +829,37 @@ defmodule Hologram.Migration.GeneratorTest do
       assert render(plan, @module) == module_text(@module, expected)
     end
 
-    test "writes a relaxation in a fill question's block above the question" do
+    test "writes the relaxations of the blocks asking for a fill in blocks above all of them" do
+      fill = fn entity, name ->
+        %{
+          kind: :fill,
+          entity: entity,
+          attributes: [name],
+          members: [{:change_attribute, name, [optional: false]}],
+          withheld_ops: []
+        }
+      end
+
       plan = %{
         ops: [
-          %{op: :add_attribute, entity: MyApp.Task, name: :note, type: :string, opts: []},
-          %{op: :change_relationship, entity: MyApp.Task, name: :place, changes: [optional: true]}
+          %{op: :add_attribute, entity: MyApp.Beta, name: :note, type: :string, opts: []},
+          %{op: :change_relationship, entity: MyApp.Beta, name: :a, changes: [optional: true]}
         ],
-        questions: [
-          %{
-            kind: :fill,
-            entity: MyApp.Task,
-            attributes: [:title],
-            members: [{:change_attribute, :title, [optional: false]}],
-            withheld_ops: []
-          }
-        ]
+        questions: [fill.(MyApp.Alpha, :title), fill.(MyApp.Beta, :rank)]
       }
 
-      [before_question, after_question] =
+      [before_questions, alpha_question, beta_question] =
         plan
         |> render(@module)
         |> String.split("# RESOLVE:")
 
-      assert before_question =~ "change_relationship :place, optional: true"
-      assert after_question =~ "add_attribute :note, :string"
+      assert before_questions =~
+               "change_entity MyApp.Beta do\n    change_relationship :a, optional: true\n  end\n\n" <>
+                 "  change_entity MyApp.Alpha do"
+
+      refute alpha_question =~ "change_relationship :a"
+      assert beta_question =~ "add_attribute :note, :string"
+      refute beta_question =~ "change_relationship :a"
     end
 
     test "writes a tightening beside a type change as two ops when it backfills" do
