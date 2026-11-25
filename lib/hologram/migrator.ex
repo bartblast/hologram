@@ -642,7 +642,7 @@ defmodule Hologram.Migrator do
   # index that stands, a fill making rows repeat a key would fail in PostgreSQL - and so would
   # one writing a row that already repeats the key of an invalid one that still checks writes.
   defp apply_op(%{op: :alter_column, fill: value} = op, later_ops) do
-    if count_result(DDL.null_check_statement(op.table, op.column)) > 0 do
+    if nulls?(op) do
       drop_removed_indexes(op.table, {:fill, op.column}, later_ops)
       Preflight.check_fill!(op)
       fill_with_companions(op, value)
@@ -665,7 +665,7 @@ defmodule Hologram.Migrator do
   # An Elixir fn has no SQL, so it can't be asked about beforehand: what it writes meets the
   # column's indexes page by page, and the rules are read back after, as for any computed fill.
   defp apply_op(%{op: :fill_column, function: _function, nulls_only: true} = op, later_ops) do
-    if count_result(DDL.null_check_statement(op.table, op.column)) > 0 do
+    if nulls?(op) do
       drop_removed_indexes(op.table, {:fill, op.column}, later_ops)
       FillCheck.create_filled_ids!()
 
@@ -693,7 +693,7 @@ defmodule Hologram.Migrator do
   # and only the filled rows' keys and rules are asked about. With no row holding nil there's
   # nothing to fill, and an enum value this transaction added stays unused.
   defp apply_op(%{op: :fill_column, nulls_only: true} = op, later_ops) do
-    if count_result(DDL.null_check_statement(op.table, op.column)) > 0 do
+    if nulls?(op) do
       drop_removed_indexes(op.table, {:fill, op.column}, later_ops)
       FillCheck.check_bytes!(op)
       Preflight.check_computed_fill!(op)
@@ -989,6 +989,13 @@ defmodule Hologram.Migrator do
     {:ok, %{rows: [[count]]}} = Connection.query(statement)
 
     count
+  end
+
+  defp nulls?(op) do
+    statement = DDL.null_exists_statement(op.table, op.column)
+    {:ok, %{rows: [[nulls?]]}} = Connection.query(statement)
+
+    nulls?
   end
 
   # A file builds some of its indexes after it commits, so a node that stopped in between
