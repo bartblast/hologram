@@ -3818,18 +3818,35 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
 
-    test "orders by the masked number when the filter lets nil through", %{mapping: mapping} do
+    # None of a number's places would hold once it's final, so a list ordered by it leaves the row
+    # out until it is.
+    test "orders only the final numbers when the filter lets nil through", %{mapping: mapping} do
       term = sequence_term([{:server_updated_seq, :!=, 5}], server_updated_seq: :desc)
 
       assert %{sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s| ORDER BY #{masked("server_updated_seq")} DESC, "id" ASC|)
+
+      assert String.ends_with?(
+               sql,
+               ~s| AND "server_updated_seq" <= $1 ORDER BY "server_updated_seq" DESC, "id" ASC|
+             )
     end
 
-    test "orders by the masked number without a filter on it", %{mapping: mapping} do
+    test "orders only the final numbers without a filter on them", %{mapping: mapping} do
       term = sequence_term([], server_updated_seq: :desc)
 
       assert %{params: [:final_seq], sql: sql} = compile(term, mapping)
-      assert String.ends_with?(sql, ~s| ORDER BY #{masked("server_updated_seq")} DESC, "id" ASC|)
+
+      assert String.ends_with?(
+               sql,
+               ~s| WHERE "server_updated_seq" <= $1 ORDER BY "server_updated_seq" DESC, "id" ASC|
+             )
+    end
+
+    test "counts the numbers that aren't final in a count ordered by them", %{mapping: mapping} do
+      term = %{sequence_term([], server_updated_seq: :desc) | cardinality: :count}
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      refute String.contains?(sql, "WHERE")
     end
 
     test "orders by the raw number when the filter holds only final ones", %{mapping: mapping} do

@@ -1139,16 +1139,10 @@ defmodule Hologram.DB.IndexPlan do
 
   defp ordering_column(column, _entity_mapping), do: column.name
 
-  # A sequence number orders by its masked value unless the level's filter holds it to final ones
-  # (see the query compiler's order_clause/3), and no index holds the masked value.
-  defp order_columns(%{sort: sort, filter: filter}, fixed, scope) do
+  # A sequence number orders by its raw column, since the rows a term arranges hold only final ones
+  # (see the query compiler's arranged_filter/1).
+  defp order_columns(%{sort: sort}, fixed, scope) do
     sort
-    |> Enum.take_while(fn {name, _direction} ->
-      column = order_column(name, scope)
-
-      column == nil or not Mapper.sequence?(column) or
-        QueryCompiler.final_by_filter?(filter, name)
-    end)
     |> Enum.reduce_while({[], nil}, &order_step(&1, &2, fixed, scope))
     |> elem(0)
     |> Enum.reverse()

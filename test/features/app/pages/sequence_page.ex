@@ -52,8 +52,9 @@ defmodule HologramFeatureTests.SequencePage do
     put_state(component, :view, view(component.state.marker))
   end
 
-  # Four reads: the notices by their created number, ascending and descending, the newest one with
-  # a final number, and the ones created after the read marker.
+  # Five reads: the notices by their created number, ascending and descending, the newest one with
+  # a final number, the ones created after the read marker, and all of them by title, which keeps a
+  # notice whose number isn't final that the reads ordered by it leave out.
   defp view(marker) do
     ascending =
       Notice
@@ -71,13 +72,19 @@ defmodule HologramFeatureTests.SequencePage do
       |> sort(server_created_seq)
       |> DB.read()
 
+    by_title =
+      Notice
+      |> sort(title)
+      |> DB.read()
+
     newest_title =
       case newest() do
         nil -> "none"
         notice -> notice.title
       end
 
-    "#{titles(ascending)} | #{titles(descending)} | #{newest_title} | #{titles(unread)}"
+    "#{titles(ascending)} | #{titles(descending)} | #{newest_title} | #{titles(unread)} | " <>
+      titles(by_title)
   end
 
   defp newest do

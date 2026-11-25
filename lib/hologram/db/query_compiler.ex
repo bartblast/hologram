@@ -186,7 +186,8 @@ defmodule Hologram.DB.QueryCompiler do
     quoted_table = Mapper.quote_identifier(entity_mapping.table)
     statement_scope = condition_scope(term.entity, mapping, quoted_table, policy)
 
-    {authored_conditions, authored_params} = conditions(term.filter, statement_scope, [])
+    {authored_conditions, authored_params} =
+      conditions(arranged_filter(term), statement_scope, [])
 
     {include_sql, params_after_includes} =
       include_selects(term, entity_mapping, mapping, policy, authored_params)
@@ -2198,7 +2199,7 @@ defmodule Hologram.DB.QueryCompiler do
         source_depth: depth
       })
 
-    {conditions, new_params} = conditions(term.filter, inner_scope, params_after_policy)
+    {conditions, new_params} = conditions(arranged_filter(term), inner_scope, params_after_policy)
 
     where_sql = Enum.join([membership_sql | policy_conditions] ++ conditions, " AND ")
     table = Map.fetch!(owner_scope.mapping, term.entity).table
@@ -2567,15 +2568,15 @@ defmodule Hologram.DB.QueryCompiler do
   # direction. Without a companion the raw column orders alone, and a derived
   # field by the value its definition computes - an enum by its label's position.
   #
-  # A sequence number orders by its masked value, so nil sorts where the browser sorts it - unless
-  # the same level's filter already holds only final numbers, where the raw column is the same
-  # value and an index serves it.
+  # A sequence number orders by its raw column: the rows a term arranges hold only final ones (see
+  # arranged_filter/1), where it is the masked value and an index serves it, and the order of the
+  # rows a count counts can't change how many there are.
   defp order_clause(%{sort: []}, _scope, reversed_params), do: {"", reversed_params}
 
-  defp order_clause(%{sort: entries, filter: filter}, scope, reversed_params) do
+  defp order_clause(%{sort: entries}, scope, reversed_params) do
     {rendered_entries, new_params} =
       Enum.map_reduce(entries, reversed_params, fn {name, direction}, acc_params ->
-        {keys_sql, next_params} = order_keys_sql(scope, name, filter, acc_params)
+        {keys_sql, next_params} = order_keys_sql(scope, name, acc_params)
 
         rendered_entry = Enum.map_join(keys_sql, ", ", &"#{&1} #{direction_sql(direction)}")
 
@@ -2585,24 +2586,14 @@ defmodule Hologram.DB.QueryCompiler do
     {" ORDER BY " <> Enum.join(rendered_entries, ", "), new_params}
   end
 
-  defp order_keys_sql(scope, name, filter, reversed_params) do
+  defp order_keys_sql(scope, name, reversed_params) do
     if Derived.declared?(scope.entity_type, name) do
       {value_sql, column, new_params} = derived_sql(scope, name, reversed_params)
 
       {[position_sql(value_sql, column)], new_params}
     else
-      scope.entity_mapping
-      |> fetch_column!(name)
-      |> column_keys_sql(scope, name, filter, reversed_params)
-    end
-  end
+      column = fetch_column!(scope.entity_mapping, name)
 
-  defp column_keys_sql(column, scope, name, filter, reversed_params) do
-    if Mapper.sequence?(column) and not final_by_filter?(filter, name) do
-      {masked_sql, _column, new_params} = masked_column_sql(scope, column, reversed_params)
-
-      {[masked_sql], new_params}
-    else
       columns =
         case companion_column(scope.entity_mapping, name) do
           nil -> [column]
@@ -2614,8 +2605,29 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   @doc false
+  # The filter the rows a term arranges match: its own, and for each sequence number it orders by
+  # that its filter doesn't already hold to final values, the condition that it is final - a list
+  # ordered by a row's number leaves out a row whose number isn't final yet, since none of its
+  # places would hold once the number is, the way the browser leaves it out until it is. A count
+  # orders nothing, so it counts every row.
+  @spec arranged_filter(%{atom => any}) :: list
+  def arranged_filter(%{cardinality: :count} = term), do: term.filter
+
+  def arranged_filter(%{entity: entity_type, filter: filter, sort: sort}) do
+    implied =
+      for {name, _direction} <- sort,
+          Entity.sequence_attribute?(name),
+          not Derived.declared?(entity_type, name),
+          not final_by_filter?(filter, name),
+          uniq: true,
+          do: {name, :!=, nil}
+
+    filter ++ implied
+  end
+
+  @doc false
   # Whether the filter's top-level conditions hold the named sequence number to final values only -
-  # one of them fails for nil - so that its raw column orders the rows as its masked value does.
+  # one of them fails for nil - so that no condition need add it.
   @spec final_by_filter?(list, atom) :: boolean
   def final_by_filter?(filter, name) do
     Enum.any?(filter, fn
@@ -2799,7 +2811,8 @@ defmodule Hologram.DB.QueryCompiler do
       |> condition_scope(mapping, quoted_wrapper, policy)
       |> Map.put(:qualified, true)
 
-    {conditions, filtered_params} = conditions(sub_term.filter, filter_scope, reversed_params)
+    {conditions, filtered_params} =
+      conditions(arranged_filter(sub_term), filter_scope, reversed_params)
 
     target_policy = include_policy(policy, sub_term.entity)
 

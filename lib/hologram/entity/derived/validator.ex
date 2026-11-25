@@ -64,8 +64,9 @@ defmodule Hologram.Entity.Derived.Validator do
 
   # What a definition's answer depends on, each name with the type declaring it. Narrower than
   # read_names/2: an include adds rows beside the answer, and a sort only decides which rows the
-  # query's own take, skip or single row keeps. A query orders by its own sort keys and never
-  # inherits its source's, so a bound says nothing about how the set it reads was sorted.
+  # query's own take, skip or single row keeps - except a sort by a sequence number, which leaves
+  # out every row whose number isn't final, bounded or not. A query reading a derived set never
+  # inherits that set's order, so a bound says nothing about how the set was sorted.
   defp answer_reads(owner, {:name, name}), do: [resolved_name(owner, name)]
 
   defp answer_reads(owner, {:concat, operands}),
@@ -83,8 +84,8 @@ defmodule Hologram.Entity.Derived.Validator do
 
     sort_reads =
       if bounded_term?(term),
-        do: deciding_sort_keys(term),
-        else: []
+        do: Enum.uniq(deciding_sort_keys(term) ++ sequence_sort_keys(term)),
+        else: sequence_sort_keys(term)
 
     [{Entity.path_target(owner, hops), set_name} | sort_reads] ++
       clause_names(term.filter, [term.entity, owner])
@@ -184,6 +185,17 @@ defmodule Hologram.Entity.Derived.Validator do
     term.sort
     |> Enum.take_while(fn {key, _direction} -> key != :id end)
     |> Enum.map(fn {key, _direction} -> resolved_name(term.entity, key) end)
+  end
+
+  # The sequence numbers a query orders by, wherever they sit in its sort, since a list ordered by one
+  # leaves out every row whose number isn't final. A count orders nothing, so it counts every row.
+  defp sequence_sort_keys(%Query{cardinality: :count}), do: []
+
+  defp sequence_sort_keys(term) do
+    for {key, _direction} <- term.sort,
+        Entity.sequence_attribute?(key),
+        not Derived.declared?(term.entity, key),
+        do: resolved_name(term.entity, key)
   end
 
   defp declaration_location(entity_type, name) do

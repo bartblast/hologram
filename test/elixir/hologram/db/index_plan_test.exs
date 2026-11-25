@@ -670,7 +670,8 @@ defmodule Hologram.DB.IndexPlanTest do
       assert needs(query, @mapping) == [need(@module2, ["server_updated_seq"])]
     end
 
-    test "orders nothing by a number beside a placeholder list it is not in" do
+    # The rows a query ordered by a number arranges hold only final ones, whatever its filter says.
+    test "orders by a number beside a placeholder list it is not in" do
       query =
         Module2
         |> sort(server_updated_seq: :desc)
@@ -678,17 +679,17 @@ defmodule Hologram.DB.IndexPlanTest do
         |> Stage.normalize()
         |> Map.put(:filter, [{:server_updated_seq, :not_in, {:placeholder, :seqs}}])
 
-      assert needs(query, @mapping) == []
+      assert needs(query, @mapping) == [need(@module2, [], nil, ["server_updated_seq"])]
     end
 
-    test "orders nothing by a number the filter leaves nil" do
+    test "orders by a number the filter leaves nil" do
       query =
         Module2
         |> filter(a == true)
         |> sort([server_updated_seq, b])
         |> take(1)
 
-      assert term_needs(query) == [need(@module2, ["a"])]
+      assert term_needs(query) == [need(@module2, ["a"], nil, ["server_updated_seq", "b"])]
     end
   end
 

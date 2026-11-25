@@ -4005,7 +4005,6 @@ describe("QueryKernel", () => {
       assert.deepEqual(titles({sort: [["server_updated_seq", "asc"]]}), [
         "a",
         "b",
-        "c",
         "e",
         "d",
         "f",
@@ -4017,23 +4016,57 @@ describe("QueryKernel", () => {
         "f",
         "d",
         "e",
-        "c",
         "b",
         "a",
       ]);
     });
 
-    it("breaks a tie among rows with no number known by the next key", () => {
-      hold(row("g", 13, 13));
+    // Nothing tells where the stranger's row goes until its number is final, so it waits and the
+    // rows the list shows keep their order.
+    it("leaves out a row with no number known until it has one", () => {
+      LocalDatabase.raiseFinal(11);
+
+      assert.deepEqual(titles({sort: [["server_updated_seq", "asc"]]}), [
+        "a",
+        "c",
+        "b",
+        "e",
+        "d",
+        "f",
+      ]);
+    });
+
+    it("leaves out a row with no number known by any of the sort's numbers", () => {
+      LocalDatabase.putRow(TASK, row("g", 4, null));
 
       assert.deepEqual(
         titles({
           sort: [
-            ["server_updated_seq", "desc"],
-            ["id", "desc"],
+            ["server_created_seq", "asc"],
+            ["server_updated_seq", "asc"],
           ],
         }),
-        ["f", "d", "e", "g", "c", "b", "a"],
+        ["a", "b", "e", "d", "f"],
+      );
+    });
+
+    it("keeps a row with no number known in a list ordered by something else", () => {
+      assert.deepEqual(titles({sort: [["title", "asc"]]}), [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+      ]);
+    });
+
+    it("counts a row with no number known", () => {
+      assert.equal(
+        QueryKernel.run(
+          term({cardinality: "count", sort: [["server_updated_seq", "asc"]]}),
+        ),
+        6,
       );
     });
 

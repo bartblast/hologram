@@ -999,12 +999,41 @@ defmodule Hologram.Query.InterpreterTest do
                ["cleo"]
     end
 
-    test "orders the masked numbers, nil after every number ascending", %{limit: limit} do
-      assert titles(agreed_at(sort(Module2, [server_created_seq, c]), limit)) ==
-               ["ann", "bob", "cleo"]
+    # None of a number's places would hold once it's final, so a list ordered by it leaves the row
+    # out until it is.
+    test "orders only the final numbers", %{limit: limit} do
+      assert titles(agreed_at(sort(Module2, [server_created_seq, c]), limit)) == ["ann", "bob"]
 
       assert titles(agreed_at(sort(Module2, server_created_seq: :desc, c: :asc), limit)) ==
-               ["cleo", "bob", "ann"]
+               ["bob", "ann"]
+
+      assert titles(agreed_at(sort(Module2, [server_created_seq, server_updated_seq]), limit)) ==
+               ["ann"]
+    end
+
+    test "orders only the final numbers a filter letting nil through leaves", %{
+      bob: bob,
+      limit: limit
+    } do
+      query =
+        Module2
+        |> filter(server_updated_seq != ^bob.server_updated_seq)
+        |> sort(server_updated_seq: :desc)
+
+      assert titles(agreed_at(query, limit)) == ["ann"]
+    end
+
+    test "keeps a number that isn't final in a list ordered by something else", %{limit: limit} do
+      assert titles(agreed_at(sort(Module2, c), limit)) == ["ann", "bob", "cleo"]
+    end
+
+    test "counts the numbers that aren't final in a count ordered by them", %{limit: limit} do
+      query =
+        Module2
+        |> sort(server_updated_seq: :desc)
+        |> count()
+
+      assert agreed_at(query, limit) == 3
     end
 
     test "reads the newest final number", %{limit: limit} do

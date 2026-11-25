@@ -69,7 +69,9 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
       end
     end
 
-    test "returns :ok for a rule reading a set a declared sort orders by a sequence number" do
+    test "raises on a rule reading a set a declared sort orders by a sequence number" do
+      line = __ENV__.line + 16
+
       defmodule Fixture203 do
         use Hologram.Entity
 
@@ -91,10 +93,47 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         allow :read, when: any(message <- open, message.public == true)
       end
 
-      assert validate([Fixture203, Fixture204]) == :ok
+      expected_msg = """
+      invalid data model:
+        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :open in Hologram.Entity.Derived.ValidatorTest.Fixture204 reads Hologram.Entity.Derived.ValidatorTest.Fixture203.server_created_seq, a sequence number, and an allow rule of Hologram.Entity.Derived.ValidatorTest.Fixture204 reads the field. A browser and the server read a sequence number differently until it's final, so no rule can depend on it\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate([Fixture203, Fixture204])
+      end
     end
 
-    test "returns :ok for a rule reading a set sorted by a sequence number with no bound" do
+    test "returns :ok for a rule reading a count of a set a sort orders by a sequence number" do
+      defmodule Fixture219 do
+        use Hologram.Entity
+
+        attribute :public, :boolean, default: false
+
+        allow :read
+      end
+
+      defmodule Fixture220 do
+        use Hologram.Entity
+
+        relationship :messages, [Hologram.Entity.Derived.ValidatorTest.Fixture219],
+          sort: server_created_seq
+
+        derived :open_count, :integer, fn messages ->
+          messages
+          |> filter(public == true)
+          |> sort(server_updated_seq)
+          |> count()
+        end
+
+        allow :read, when: open_count > 0
+      end
+
+      assert validate([Fixture219, Fixture220]) == :ok
+    end
+
+    test "raises on a rule reading a set sorted by a sequence number with no bound" do
+      line = __ENV__.line + 15
+
       defmodule Fixture205 do
         use Hologram.Entity
 
@@ -115,7 +154,14 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         allow :read, when: any(message <- ordered, message.public == true)
       end
 
-      assert validate([Fixture205, Fixture206]) == :ok
+      expected_msg = """
+      invalid data model:
+        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :ordered in Hologram.Entity.Derived.ValidatorTest.Fixture206 reads Hologram.Entity.Derived.ValidatorTest.Fixture205.server_created_seq, a sequence number, and an allow rule of Hologram.Entity.Derived.ValidatorTest.Fixture206 reads the field. A browser and the server read a sequence number differently until it's final, so no rule can depend on it\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate([Fixture205, Fixture206])
+      end
     end
 
     test "raises on a rule reading a set a take bounds over a sort by a sequence number" do
@@ -153,7 +199,9 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
       end
     end
 
-    test "returns :ok for a take over a derived set, which orders by its own sort keys" do
+    test "raises on a take over a derived set sorted by a sequence number, which orders by its own keys" do
+      line = __ENV__.line + 19
+
       defmodule Fixture209 do
         use Hologram.Entity
 
@@ -178,7 +226,14 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         allow :read, when: any(message <- first_one, message.public == true)
       end
 
-      assert validate([Fixture209, Fixture210]) == :ok
+      expected_msg = """
+      invalid data model:
+        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :first_one in Hologram.Entity.Derived.ValidatorTest.Fixture210 reads Hologram.Entity.Derived.ValidatorTest.Fixture209.server_updated_seq, a sequence number, and an allow rule of Hologram.Entity.Derived.ValidatorTest.Fixture210 reads the field. A browser and the server read a sequence number differently until it's final, so no rule can depend on it\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate([Fixture209, Fixture210])
+      end
 
       {:query, term} = Derived.resolve(Fixture210, :first_one)
 
@@ -265,7 +320,9 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
       assert validate([Fixture218]) == :ok
     end
 
-    test "returns :ok for a bounded sort a unique id decides before a sequence number" do
+    test "raises on a sequence number a bounded sort orders by after a unique id" do
+      line = __ENV__.line + 15
+
       defmodule Fixture213 do
         use Hologram.Entity
 
@@ -288,10 +345,19 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         allow :read, when: any(message <- first_by_id, message.public == true)
       end
 
-      assert validate([Fixture213, Fixture214]) == :ok
+      expected_msg = """
+      invalid data model:
+        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :first_by_id in Hologram.Entity.Derived.ValidatorTest.Fixture214 reads Hologram.Entity.Derived.ValidatorTest.Fixture213.server_created_seq, a sequence number, and an allow rule of Hologram.Entity.Derived.ValidatorTest.Fixture214 reads the field. A browser and the server read a sequence number differently until it's final, so no rule can depend on it\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate([Fixture213, Fixture214])
+      end
     end
 
-    test "returns :ok for a sort by a sequence number under a skip of nothing" do
+    test "raises on a sort by a sequence number under a skip of nothing" do
+      line = __ENV__.line + 15
+
       defmodule Fixture215 do
         use Hologram.Entity
 
@@ -314,7 +380,14 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         allow :read, when: any(message <- all_rows, message.public == true)
       end
 
-      assert validate([Fixture215, Fixture216]) == :ok
+      expected_msg = """
+      invalid data model:
+        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :all_rows in Hologram.Entity.Derived.ValidatorTest.Fixture216 reads Hologram.Entity.Derived.ValidatorTest.Fixture215.server_created_seq, a sequence number, and an allow rule of Hologram.Entity.Derived.ValidatorTest.Fixture216 reads the field. A browser and the server read a sequence number differently until it's final, so no rule can depend on it\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate([Fixture215, Fixture216])
+      end
     end
 
     test "returns :ok for a derived field reading a sequence number that no rule reads" do

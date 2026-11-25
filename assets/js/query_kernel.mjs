@@ -47,10 +47,11 @@ import StringOrder from "./string_order.mjs";
 // Model.compareTemporal, which is the attribute's declared type deciding, the way an enum's does.
 //
 // A row's server_created_seq and server_updated_seq order by LocalDatabase.orderingKey rather than
-// as they read: a number not final here, or a row the server has not saved, goes at the newest
-// end, and a number a page showed counts though the field reads null. Only the ordering operators
-// and sorting take that rule - an ordering operator holds only for a number final here or shown -
-// while an equality judges the field as it reads. With nothing waiting it is the plain order.
+// as they read: this client's own row, or a row the server has not saved, goes at the newest end,
+// and a number a page showed counts though the field reads null. A sort by one leaves out any
+// other row whose number isn't known here, until it is. Only the ordering operators and sorting
+// take that rule - an ordering operator holds only for a number final here or shown - while an
+// equality judges the field as it reads. With nothing waiting it is the plain order.
 //
 // What comes back is what the database holds, arranged - never boxed. A result row is a node
 // pairing the stored row with what the query included of it, which is the shape the boxing
@@ -141,8 +142,37 @@ export default class QueryKernel {
 
   static #arrange(rows, term, context) {
     return QueryKernel.#bound(
-      QueryKernel.#sort(rows, term.sort, term.entity, context),
+      QueryKernel.#sort(
+        QueryKernel.#numberedRows(rows, term.sort, term.entity),
+        term.sort,
+        term.entity,
+        context,
+      ),
       term,
+    );
+  }
+
+  // A list ordered by a row's number leaves out a row whose number isn't known here yet, since
+  // none of its places would hold once the number comes. It shows up when the number does, so the
+  // rows the list already shows keep their order. This client's own rows and the ones the server
+  // hasn't saved stay, at the newest end (see LocalDatabase.orderingKey).
+  static #numberedRows(rows, keys, entityType) {
+    const names = keys
+      .map(([name]) => name)
+      .filter(
+        (name) =>
+          LocalDatabase.isSequenceField(name) &&
+          !Model.derivedField(entityType, name),
+      );
+
+    if (names.length === 0) {
+      return rows;
+    }
+
+    return rows.filter((row) =>
+      names.every(
+        (name) => LocalDatabase.orderingKey(entityType, row, name)[0] !== 1,
+      ),
     );
   }
 

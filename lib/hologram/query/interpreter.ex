@@ -56,7 +56,8 @@ defmodule Hologram.Query.Interpreter do
 
   An optional `:final_seq` is the limit the database executor reads `server_created_seq` and
   `server_updated_seq` against: every number above it reads as nil, in what is filtered, ordered,
-  computed and returned. Without one every number reads as stored.
+  computed and returned. Without one every number reads as stored. Rows ordered by one of the two
+  leave out every row it reads nil for, which a count of them doesn't.
 
   Raises Hologram.MisuseError when the term holds a placeholder, as the database executor does
   (see `Hologram.Query.Stage.assert_no_placeholders!/1`).
@@ -107,8 +108,25 @@ defmodule Hologram.Query.Interpreter do
 
   defp arrange(rows, term, scope) do
     rows
+    |> numbered(term, scope)
     |> Ordering.sort(term.sort, term.entity, &read(&1, &2, scope))
     |> bound(term)
+  end
+
+  # A list ordered by a row's number leaves out a row whose number isn't final yet, since none of
+  # its places would hold once the number is, the way the browser leaves it out until it is.
+  defp numbered(rows, term, scope) do
+    names =
+      for {name, _direction} <- term.sort,
+          Entity.sequence_attribute?(name),
+          not Derived.declared?(term.entity, name),
+          do: name
+
+    if names == [] do
+      rows
+    else
+      Enum.filter(rows, fn row -> Enum.all?(names, &(read(row, &1, scope) != nil)) end)
+    end
   end
 
   defp bound(rows, term) do

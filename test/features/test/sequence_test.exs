@@ -18,23 +18,24 @@ defmodule HologramFeatureTests.SequenceTest do
   end
 
   # The held notice takes its number first and commits last. A browser marking read at the newest
-  # number it holds would skip it, so the newer notice's number waits until the held one commits.
+  # number it holds would skip it, so the newer notice's number waits until the held one commits,
+  # and the lists ordered by it leave the newer notice out until then.
   feature "never moves a read marker past a save that is still running", %{session: session} do
     create_notice("first")
 
     session
     |> visit(SequencePage)
     |> await_local_fill()
-    |> await_local_read("Show view", "view", "first | first | first | first")
+    |> await_local_read("Show view", "view", "first | first | first | first | first")
 
     held = hold_save("held")
 
     create_notice("after")
 
     session
-    |> await_local_read("Show view", "view", "first, after | after, first | first | first")
+    |> await_local_read("Show view", "view", "first | first | first | first | after, first")
     |> click(button("Mark read"))
-    |> await_local_read("Show view", "view", "first, after | after, first | first | none")
+    |> await_local_read("Show view", "view", "first | first | first | none | after, first")
 
     assert read_notice("after").server_created_seq == nil
 
@@ -44,7 +45,7 @@ defmodule HologramFeatureTests.SequenceTest do
       session,
       "Show view",
       "view",
-      "first, held, after | after, held, first | after | held, after"
+      "first, held, after | after, held, first | after | held, after | after, first, held"
     )
 
     assert read_notice("held").server_created_seq < read_notice("after").server_created_seq
@@ -52,20 +53,24 @@ defmodule HologramFeatureTests.SequenceTest do
 
   # Mine waits unsent, then is saved while another save holds its number back, then theirs arrives
   # numbered above mine. Mine sorts at the newest end until its number is final, and no comparison
-  # takes it before then.
+  # takes it before then, while theirs stays out of the lists until its number is final.
   feature "sorts own rows at the newest end until their number is final", %{session: session} do
     create_notice("first")
 
     session
     |> visit(SequencePage)
     |> await_local_fill()
-    |> await_local_read("Show view", "view", "first | first | first | first")
+    |> await_local_read("Show view", "view", "first | first | first | first | first")
     |> click(button("Mark read"))
-    |> await_local_read("Show view", "view", "first | first | first | none")
+    |> await_local_read("Show view", "view", "first | first | first | none | first")
     |> hold_mutation_requests()
     |> click(button("Write mine"))
     |> await_pending_writes(1)
-    |> await_local_read("Show view", "view", "first, mine | mine, first | first | none")
+    |> await_local_read(
+      "Show view",
+      "view",
+      "first, mine | mine, first | first | none | first, mine"
+    )
 
     held = hold_save("held")
 
@@ -79,7 +84,7 @@ defmodule HologramFeatureTests.SequenceTest do
       session,
       "Show view",
       "view",
-      "first, theirs, mine | mine, theirs, first | first | none"
+      "first, mine | mine, first | first | none | first, mine, theirs"
     )
 
     release_save(held)
@@ -88,12 +93,13 @@ defmodule HologramFeatureTests.SequenceTest do
       session,
       "Show view",
       "view",
-      "first, held, mine, theirs | theirs, mine, held, first | theirs | held, mine, theirs"
+      "first, held, mine, theirs | theirs, mine, held, first | theirs | held, mine, theirs | " <>
+        "first, held, mine, theirs"
     )
   end
 
   # The reload brings back the newer notice's number as waiting, from the store and from the page's
-  # render alike, and files it once the held save commits.
+  # render alike, so the lists leave it out until the held save commits.
   feature "holds a number back across a reload", %{session: session} do
     create_notice("first")
 
@@ -106,13 +112,13 @@ defmodule HologramFeatureTests.SequenceTest do
     create_notice("after")
 
     session
-    |> await_local_read("Show view", "view", "first, after | after, first | first | first")
+    |> await_local_read("Show view", "view", "first | first | first | first | after, first")
     |> await_durable_writes()
     |> reload()
     |> await_page_mount(SequencePage)
-    |> assert_text(css("#view"), "first, after | after, first | first | first")
+    |> assert_text(css("#view"), "first | first | first | first | after, first")
     |> await_local_fill()
-    |> await_local_read("Show view", "view", "first, after | after, first | first | first")
+    |> await_local_read("Show view", "view", "first | first | first | first | after, first")
 
     release_save(held)
 
@@ -120,7 +126,8 @@ defmodule HologramFeatureTests.SequenceTest do
       session,
       "Show view",
       "view",
-      "first, held, after | after, held, first | after | first, held, after"
+      "first, held, after | after, held, first | after | first, held, after | " <>
+        "after, first, held"
     )
   end
 
