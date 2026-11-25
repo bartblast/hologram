@@ -3636,7 +3636,7 @@ describe("Batches", () => {
     it("leaves them in the store", () => {
       const forgetting = sinon.stub(Durability, "forgetBatch");
 
-      made("u1", "t1");
+      made("u1", "t1").filed = true;
 
       Batches.releaseForeign("u2");
 
@@ -3894,9 +3894,18 @@ describe("Batches", () => {
       await Promise.resolve();
 
       try {
+        assert.include(Batches.pending, batch);
+
         assert.deepStrictEqual(
           Overlay.foldTargetIds(TODO, "tags", "t1", []),
           new Set(),
+        );
+
+        Batches.discard();
+
+        assert.deepStrictEqual(
+          Overlay.foldTargetIds(TODO, "tags", "t1", []),
+          new Set(["g1"]),
         );
       } finally {
         Batches.discard();
