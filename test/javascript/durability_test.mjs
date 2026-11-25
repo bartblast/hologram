@@ -1394,11 +1394,15 @@ describe("Durability", () => {
     it("keeps storing when a read that stopped being current fails", async () => {
       await Durability.open();
 
-      sinon
-        .stub(FDBDatabase.prototype, "transaction")
-        .throws(new DOMException("broken", "UnknownError"));
+      const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+      let current = true;
 
-      await Durability.load(() => false);
+      const loading = Durability.load(() => current);
+
+      current = false;
+      starting.firstCall.returnValue.abort();
+
+      await loading;
 
       assert.equal(Durability.mode, "indexeddb");
     });
