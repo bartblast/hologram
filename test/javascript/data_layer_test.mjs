@@ -1558,6 +1558,29 @@ describe("DataLayer", () => {
         assert.isFalse(SyncStream.holdsWrites());
       });
 
+      // A number this tab spent under its group's pair would be recorded nowhere.
+      it("brings back a pair its group shared as shared", () => {
+        sealed("t1");
+
+        followToSecondUser();
+        Replica.adoptOwn({id: "replica-2", token: "token-2"});
+        followBack();
+
+        assert.equal(Replica.id, "replica-1");
+        assert.isFalse(Replica.minted);
+      });
+
+      it("brings back a pair minted for this tab as minted", () => {
+        Replica.adoptOwn({id: "replica-1", token: "token-1"});
+        sealed("t1");
+
+        followToSecondUser();
+        followBack();
+
+        assert.equal(Replica.id, "replica-1");
+        assert.isTrue(Replica.minted);
+      });
+
       it("holds no pair for a user with none waiting", () => {
         followToSecondUser();
         followBack();

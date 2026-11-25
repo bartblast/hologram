@@ -75,8 +75,8 @@ export default class DataLayer {
   // same way: the writes held meanwhile have nothing else to wake them (see takeReplica).
   static #endedCookieHold = false;
 
-  // The pairs of the users whose batches wait in this tab with no store to hold them, by user (see
-  // followIdentity).
+  // The pairs of the users whose batches wait in this tab with no store to hold them, by user, each
+  // with whether the server minted it for this tab (see followIdentity).
   static #heldPairs = new Map();
 
   // Made public to make tests easier
@@ -790,9 +790,14 @@ export default class DataLayer {
       //
       // Except where the tab holds batches of a user that no store has: those wait here, and go out
       // under that user's pair once the user is signed in again. The server may have applied one
-      // whose answer never came, and only that pair tells it so.
+      // whose answer never came, and only that pair tells it so. A pair its group shared comes back
+      // as shared: a number this tab spent under it would be recorded nowhere, so a batch with none
+      // still waits for a pair minted for this tab (see Batches.#numbered).
       if (Batches.heldFor(previous) && Replica.id !== null) {
-        $.#heldPairs.set(previous, Replica.current());
+        $.#heldPairs.set(previous, {
+          minted: Replica.minted,
+          pair: Replica.current(),
+        });
       }
 
       const heldPair = isReturning ? $.#heldPairs.get(owner) : undefined;
@@ -803,8 +808,13 @@ export default class DataLayer {
       Replica.endMint();
       $.#holdNoPair();
 
+      if (heldPair?.minted) {
+        Replica.adoptOwn(heldPair.pair);
+      } else if (heldPair !== undefined) {
+        Replica.adopt(heldPair.pair);
+      }
+
       if (heldPair !== undefined) {
-        Replica.adoptOwn(heldPair);
         SyncStream.awaitingPair = false;
       }
     }
