@@ -1600,22 +1600,21 @@ defmodule Hologram.Sync.SessionTest do
         end
       )
 
-      Process.sleep(300)
+      # However late the session runs, three asks come, and the waits between them only grow: the
+      # first is 10 ms and each one after doubles it, and a timer never fires early.
+      times =
+        for _ask <- 1..3 do
+          assert_receive {:asked, at}, 1_000
+          at
+        end
 
-      {:messages, messages} = Process.info(self(), :messages)
-      times = for {:asked, at} <- messages, do: at
-
-      gaps =
+      [first_gap, second_gap] =
         times
         |> Enum.chunk_every(2, 1, :discard)
         |> Enum.map(fn [a, b] -> b - a end)
 
-      # The first wait is 10 ms and each one after doubles it, and a timer never fires early.
-      assert length(gaps) >= 2
-
-      for {gap, index} <- Enum.with_index(gaps) do
-        assert gap >= 10 * Integer.pow(2, index)
-      end
+      assert first_gap >= 10
+      assert second_gap >= 20
 
       refute_received {:sync_synced, _types, _cursor, _final_seq}
     end
