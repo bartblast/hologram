@@ -271,8 +271,8 @@ defmodule Hologram.Sync.DispatcherTest do
       dispatcher = start_dispatcher!(read_edge: read_edge)
 
       assert_receive :lost, 1_000
-      refute_received {:dispatched, _effects, _place}
       assert :sys.get_state(dispatcher).cursor == place
+      refute_received {:dispatched, _effects, _place}
       assert ReadEdge.get(read_edge) == {place, log_id}
 
       settle(dispatcher)
@@ -740,8 +740,8 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
 
       assert_receive :lost, 1_000
-      refute_received {:dispatched, _effects, _place}
       assert :sys.get_state(dispatcher).cursor == place
+      refute_received {:dispatched, _effects, _place}
       refute Oplog.log_id() == log_id
 
       settle(dispatcher)
@@ -759,8 +759,8 @@ defmodule Hologram.Sync.DispatcherTest do
       wake(dispatcher)
 
       assert_receive :lost, 1_000
-      refute_received {:dispatched, _effects, _place}
       assert :sys.get_state(dispatcher).cursor == place
+      refute_received {:dispatched, _effects, _place}
       assert ReadEdge.get(read_edge) == {place, Oplog.log_id()}
 
       settle(dispatcher)
