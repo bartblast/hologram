@@ -2120,11 +2120,13 @@ export default class Hologram {
     // The epoch of the navigation this popstate opened. What follows waits, for the snapshot's
     // chunks and for the server, and a later navigation may supersede this one before either
     // answers - neither the answer nor the failure of a superseded wait says anything about the
-    // navigation now in flight.
+    // navigation now in flight. That includes a Link clicked meanwhile, which moves no epoch
+    // until its page arrives.
     const epoch = $.registryEpoch;
     const isSuperseded = () =>
       Math.max($.domEpoch, $.registryEpoch) !== epoch ||
-      popstate !== $.#popstateCount;
+      popstate !== $.#popstateCount ||
+      navigation !== $.navigationCount;
 
     // The history id stays the page being left's until the registry holds the page of the entry
     // the browser went to: a snapshot saved meanwhile is of the page still on screen, and belongs

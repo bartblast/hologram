@@ -6545,6 +6545,24 @@ describe("Hologram", () => {
         }
       });
 
+      // A click on a Link while the server is asked for the page's bundle, which moves no epoch
+      // until its page arrives. What the visitor did last is that.
+      it("leaves the entry to a navigation that started while the bundle was asked for", async () => {
+        fetchStub.callsFake((_pageModule, onSuccess) => {
+          Hologram.navigationCount += 1;
+
+          return onSuccess("restored-1");
+        });
+
+        seedSnapshot("history-unmounted-12");
+
+        await Hologram.handlePopstateEvent({state: "history-unmounted-12"});
+
+        sinon.assert.calledOnce(fetchStub);
+        sinon.assert.notCalled(dataLayer.ingestMountData);
+        sinon.assert.notCalled(dataLayer.restoreCounts);
+      });
+
       it("takes in nothing once the document has mounted", async () => {
         dataLayer.isStoreRestored = true;
 
