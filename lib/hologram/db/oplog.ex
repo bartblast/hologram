@@ -143,6 +143,8 @@ defmodule Hologram.DB.Oplog do
     case Connection.query(statement) do
       {:ok, _result} -> :ok
       {:error, %Postgrex.Error{postgres: %{code: :invalid_column_reference}}} -> :no_key
+      # Raised as it came, so the dispatcher can retry it on its next round.
+      {:error, error} -> raise error
     end
   end
 
