@@ -48,6 +48,12 @@ defmodule Hologram.Sync.FrameTest do
     allow :delete, when: none(card <- board.cards, card.author_id == user_id())
   end
 
+  defp envelope_data(envelope) do
+    [_head, json] = String.split(envelope, "data: ", parts: 2)
+
+    Jason.decode!(json)
+  end
+
   defp delete_key do
     Policy.verdict_key(VerdictTask, :delete)
   end
@@ -531,7 +537,7 @@ defmodule Hologram.Sync.FrameTest do
     test "carries how far the numbers the client's rows carry are final" do
       envelope = encode_deltas_envelope(42, @cursor, [], nil, 9)
 
-      assert String.contains?(envelope, ~s["final_seq":9])
+      assert envelope_data(envelope)["final_seq"] == 9
     end
 
     test "carries no final number in a frame that leaves the batch unfinished" do
@@ -676,13 +682,11 @@ defmodule Hologram.Sync.FrameTest do
     # The marker is the moment a place becomes a claim the client can honour, and for a client that
     # is filled and then left alone it is the only frame that will ever carry one.
     test "carries how far the numbers the client's rows carry are final" do
-      assert {:types, [Module2], nil}
-             |> then(&encode_synced_envelope(42, &1, nil, 9))
-             |> String.contains?(~s["final_seq":9])
+      types = encode_synced_envelope(42, {:types, [Module2], nil}, nil, 9)
+      all = encode_synced_envelope(42, :all, "Nzc4LjA", 9)
 
-      assert 42
-             |> encode_synced_envelope(:all, "Nzc4LjA", 9)
-             |> String.contains?(~s["final_seq":9])
+      assert envelope_data(types)["final_seq"] == 9
+      assert envelope_data(all)["final_seq"] == 9
     end
 
     test "hands over the place the client may come back from" do
