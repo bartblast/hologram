@@ -1893,6 +1893,7 @@ describe("Tabs", () => {
     });
 
     it("takes the final point with the place", () => {
+      sinon.stub(SyncStream, "scheduleRender");
       Tabs.receive({
         cursor: "place-1",
         finalSeq: 12,
@@ -1906,6 +1907,7 @@ describe("Tabs", () => {
     });
 
     it("takes a higher final point with the place it already holds", () => {
+      sinon.stub(SyncStream, "scheduleRender");
       SyncStream.syncCursor = "place-1";
       LocalDatabase.raiseFinal(5);
 
@@ -1919,6 +1921,29 @@ describe("Tabs", () => {
       });
 
       assert.equal(LocalDatabase.finalSeq(), 12);
+    });
+
+    // Moving the point files numbers into the rows the page shows, which nothing else in taking a
+    // state renders.
+    it("renders when the final point it takes moves", () => {
+      const rendering = sinon.stub(SyncStream, "scheduleRender");
+      SyncStream.syncCursor = "place-1";
+      LocalDatabase.raiseFinal(5);
+
+      const state = (finalSeq) => ({
+        cursor: "place-1",
+        finalSeq,
+        kind: "state",
+        replica: {id: null, token: null},
+        completeness: {all: false, types: []},
+        synced: [],
+      });
+
+      Tabs.receive(state(5));
+      sinon.assert.notCalled(rendering);
+
+      Tabs.receive(state(12));
+      sinon.assert.calledOnce(rendering);
     });
 
     it("leaves the final point alone with another place it already holds", () => {

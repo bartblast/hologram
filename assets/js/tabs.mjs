@@ -835,9 +835,16 @@ export default class Tabs {
 
     // How far the numbers are final comes with the place, since it is a claim about the same rows -
     // taken by a tab at that place already too, as a marker naming no place can have moved the
-    // point there since this tab last heard one.
+    // point there since this tab last heard one. Moving it files numbers into the rows the page
+    // shows, so the page renders.
     if (message.cursor !== null && message.cursor === SyncStream.syncCursor) {
+      const finalSeq = LocalDatabase.finalSeq();
+
       LocalDatabase.raiseFinal(message.finalSeq);
+
+      if (LocalDatabase.finalSeq() !== finalSeq) {
+        SyncStream.scheduleRender();
+      }
     }
 
     Tabs.#takeRules(message);
