@@ -484,8 +484,9 @@ defmodule Hologram.Migrator do
   takes, and one cut short is left invalid, to be built again. Set by the session's first
   statement rather than as startup parameters, which a pooler may refuse, and only the ones the
   server knows: `transaction_timeout` is PostgreSQL 17's. A pooler's own limit on an idle
-  transaction isn't one of them, so it has to be off or longer than the slowest page of an Elixir
-  backfill, during which the transaction sits idle.
+  transaction isn't one of them, so it has to be off or longer than the longest the transaction
+  sits idle between two statements: the slowest page of an Elixir backfill, or the sort and search
+  keys a fill computes for its rows.
 
   It also runs with the pool's keepalives and user timeout (see
   Hologram.DB.Config.keepalive_statement/0): a node that vanishes holding the migration lock or the
