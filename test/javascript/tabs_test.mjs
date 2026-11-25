@@ -1910,15 +1910,20 @@ describe("Tabs", () => {
       sinon.stub(SyncStream, "scheduleRender");
       SyncStream.syncCursor = "place-1";
       LocalDatabase.raiseFinal(5);
+      Tabs.leader = false;
 
-      Tabs.receive({
-        cursor: "place-1",
-        finalSeq: 12,
-        kind: "state",
-        replica: {id: null, token: null},
-        completeness: {all: false, types: []},
-        synced: [],
-      });
+      try {
+        Tabs.receive({
+          cursor: "place-1",
+          finalSeq: 12,
+          kind: "state",
+          replica: {id: null, token: null},
+          completeness: {all: false, types: []},
+          synced: [],
+        });
+      } finally {
+        Tabs.leader = true;
+      }
 
       assert.equal(LocalDatabase.finalSeq(), 12);
     });
@@ -1939,11 +1944,17 @@ describe("Tabs", () => {
         synced: [],
       });
 
-      Tabs.receive(state(5));
-      sinon.assert.notCalled(rendering);
+      Tabs.leader = false;
 
-      Tabs.receive(state(12));
-      sinon.assert.calledOnce(rendering);
+      try {
+        Tabs.receive(state(5));
+        sinon.assert.notCalled(rendering);
+
+        Tabs.receive(state(12));
+        sinon.assert.calledOnce(rendering);
+      } finally {
+        Tabs.leader = true;
+      }
     });
 
     it("leaves the final point alone with another place it already holds", () => {
