@@ -8694,6 +8694,17 @@ describe("Hologram", () => {
 
     let addStub, reloadStub, removeStub;
 
+    // The listener the document put up for popstate.
+    const onPopstate = () => {
+      const call = addStub
+        .getCalls()
+        .find((added) => added.args[0] === "popstate");
+
+      assert.isDefined(call);
+
+      return call.args[1];
+    };
+
     beforeEach(() => {
       addStub = sinon.stub(window, "addEventListener");
       removeStub = sinon.stub(window, "removeEventListener");
@@ -8732,7 +8743,7 @@ describe("Hologram", () => {
         Hologram.handlePopstateEvent,
       );
 
-      addStub.firstCall.args[1]();
+      onPopstate()();
 
       sinon.assert.calledTwice(reloadStub);
     });
@@ -8820,7 +8831,7 @@ describe("Hologram", () => {
         sessionStorage.clear();
 
         history.replaceState("entry-of-the-page", null, "/search?tab=3");
-        addStub.firstCall.args[1]();
+        onPopstate()();
 
         sinon.assert.calledTwice(reloadStub);
         assert.isFalse(Hologram.wasReloadedForHistoryEntry());
