@@ -89,8 +89,15 @@ defmodule Hologram.Sync.FillTest do
       public = policy_entity(true)
       stored = DB.read(PolicyModule1, public.id)
 
-      {[row], _applied_seq} =
-        FinalSeq.with_pinned(0, fn -> read(PolicyModule1, nil, nil, [PolicyModule1]) end)
+      assert is_integer(stored.server_created_seq) and stored.server_created_seq > 0
+      assert is_integer(stored.server_updated_seq) and stored.server_updated_seq > 0
+
+      {masked, {[row], _applied_seq}} =
+        FinalSeq.with_pinned(0, fn ->
+          {DB.read(PolicyModule1, public.id), read(PolicyModule1, nil, nil, [PolicyModule1])}
+        end)
+
+      assert {masked.server_created_seq, masked.server_updated_seq} == {nil, nil}
 
       assert row.server_created_seq == stored.server_created_seq
       assert row.server_updated_seq == stored.server_updated_seq
