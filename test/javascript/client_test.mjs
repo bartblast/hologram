@@ -467,10 +467,16 @@ describe("Client", () => {
         );
 
       const answer = Client.fetchIdentityTag();
-
-      await timers.tickAsync(Config.clientFetchTimeoutMs);
-
       const pending = Symbol("pending");
+
+      await timers.tickAsync(Config.clientFetchTimeoutMs - 1);
+
+      assert.equal(
+        await Promise.race([answer, Promise.resolve(pending)]),
+        pending,
+      );
+
+      await timers.tickAsync(1);
 
       assert.isNull(await Promise.race([answer, Promise.resolve(pending)]));
     });
