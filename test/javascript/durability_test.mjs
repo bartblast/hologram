@@ -2984,6 +2984,8 @@ describe("Durability", () => {
 
       Durability.restore(true);
 
+      await Durability.replicaWritten();
+
       sinon.assert.notCalled(posting);
     });
 
