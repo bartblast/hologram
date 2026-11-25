@@ -415,7 +415,9 @@ defmodule Hologram.Sync.FinalLimitContentionTest do
     end)
   end
 
-  test "keeps the log id across a clean restart, which only moves the start time", %{
+  # A clean restart moves only the start time, so the run names the log id apart from it. The
+  # scratch server can't be restarted here, so this reads the two within one run.
+  test "names the run by the log id and the start time apart", %{
     scratch: scratch
   } do
     route(scratch, fn ->
