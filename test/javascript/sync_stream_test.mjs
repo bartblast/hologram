@@ -1630,6 +1630,8 @@ describe("SyncStream", () => {
         data: JSON.stringify({reason: "identity"}),
       });
 
+      assert.isFalse(SyncStream.awaitingIdentity);
+      assert.isTrue(SyncStream.awaitingPair);
       assert.isTrue(SyncStream.holdsWrites());
     });
 
@@ -1654,6 +1656,8 @@ describe("SyncStream", () => {
 
       SyncStream.listen({addEventListener() {}});
 
+      assert.isFalse(SyncStream.awaitingIdentity);
+      assert.isTrue(SyncStream.awaitingPair);
       assert.isTrue(SyncStream.holdsWrites());
     });
 
