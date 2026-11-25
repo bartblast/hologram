@@ -78,6 +78,17 @@ export default class Batches {
   // them, so this is what sends them once their user is signed in again.
   static #setAside = new Map();
 
+  // Batches of other users whose filing was still out at the change of user, by user. Where the
+  // filing finds no store they're set aside like the ones above. A user signed in again before that
+  // takes theirs back at once, rather than after the actions started since.
+  static #filingAside = new Map();
+
+  // The order the batches of both maps above were made in, which is the order they come back in:
+  // one still filing can be older than one set aside, and neither has a number to sort by yet. A
+  // batch keeps its place until it comes back, however many times it moves between the maps.
+  static #asideOrder = new Map();
+  static #asideCount = 0;
+
   // One batch is in flight at a time, and the loop that keeps it that way must not be entered
   // twice - every close calls flush, and an answer can arrive while another action is running. Held
   // while it runs, for a caller that has to know when it has finished.
@@ -299,12 +310,23 @@ export default class Batches {
       }
     }
 
-    // Ahead of the open ones, which were made after them. One answered while it waited is done.
-    const returning = (Batches.#setAside.get(current) ?? []).filter(
-      (batch) => batch.seq === null || !Batches.#answered.has(batch.seq),
+    // Ahead of the open ones, which were made after them, in the order they were made. One answered
+    // while it waited is done.
+    const away = [
+      ...(Batches.#setAside.get(current) ?? []),
+      ...(Batches.#filingAside.get(current) ?? []),
+    ].sort(
+      (left, right) =>
+        Batches.#asideOrder.get(left) - Batches.#asideOrder.get(right),
     );
 
     Batches.#setAside.delete(current);
+    Batches.#filingAside.delete(current);
+    away.forEach((batch) => Batches.#asideOrder.delete(batch));
+
+    const returning = away.filter(
+      (batch) => batch.seq === null || !Batches.#answered.has(batch.seq),
+    );
 
     for (const batch of returning) {
       Batches.pending.push(batch);
@@ -824,6 +846,8 @@ export default class Batches {
     Batches.#filing.clear();
     Batches.#releasedOpen.clear();
     Batches.#setAside.clear();
+    Batches.#filingAside.clear();
+    Batches.#asideOrder.clear();
     Batches.pending = [];
     Batches.rejected = [];
     Batches.#answered = new Set();
@@ -994,9 +1018,13 @@ export default class Batches {
   }
 
   // Only the ones the store never got. One whose filing is still in flight is decided when it
-  // settles, and goes straight back if its owner is signed in again by then.
+  // settles, unless its owner is signed in again by then and took it back (see #filingAside).
   static #putAside(batches) {
     for (const batch of batches) {
+      if (batch.filed !== true && !Batches.#asideOrder.has(batch)) {
+        Batches.#asideOrder.set(batch, Batches.#asideCount++);
+      }
+
       if (batch.filed === false) {
         if (!Batches.#setAside.has(batch.actorUserId)) {
           Batches.#setAside.set(batch.actorUserId, []);
@@ -1004,11 +1032,34 @@ export default class Batches {
 
         Batches.#setAside.get(batch.actorUserId).push(batch);
       } else if (batch.filed === null) {
+        const owner = batch.actorUserId;
+
+        if (!Batches.#filingAside.has(owner)) {
+          Batches.#filingAside.set(owner, []);
+        }
+
+        Batches.#filingAside.get(owner).push(batch);
+
         batch.recorded.then(() => {
+          const waiting = Batches.#filingAside.get(owner) ?? [];
+
+          // Back already, or decided by an earlier change of user.
+          if (!waiting.includes(batch)) {
+            return;
+          }
+
+          if (waiting.length === 1) {
+            Batches.#filingAside.delete(owner);
+          } else {
+            waiting.splice(waiting.indexOf(batch), 1);
+          }
+
           if (batch.filed === false) {
             Batches.#putAside([batch]);
             Batches.releaseForeign(LocalDatabase.actorUserId);
             Batches.flush();
+          } else {
+            Batches.#asideOrder.delete(batch);
           }
         });
       }

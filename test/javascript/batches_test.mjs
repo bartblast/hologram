@@ -3759,6 +3759,118 @@ describe("Batches", () => {
       assert.deepStrictEqual(Batches.pending, [batch]);
       assert.isTrue(Overlay.names(TODO, "t1"));
     });
+
+    // An action its user starts once back can undo what the batch did, and has to stay on top of
+    // it.
+    it("puts a batch whose filing was out while its user was away beneath an action started since", async () => {
+      let file;
+
+      globalThis.Hologram.sync = {model: TODO_MODEL};
+
+      sinon
+        .stub(Durability, "fileBatch")
+        .returns(new Promise((resolve) => (file = resolve)));
+
+      sinon.stub(Batches, "flush");
+
+      const edge = (op) => ({
+        id: "t1",
+        op,
+        relationship: "tags",
+        target_id: "g1",
+        type: TODO,
+      });
+
+      // A store that failed after the page had one, which numbers a batch only in its turn.
+      Durability.hadStore = true;
+      Durability.mode = "indexeddb";
+      LocalDatabase.actorUserId = "u1";
+
+      Batches.open("todos");
+      Batches.current().append(edge("add_relationship"));
+      const batch = Batches.close();
+
+      LocalDatabase.actorUserId = "u2";
+      Batches.releaseForeign("u2");
+
+      LocalDatabase.actorUserId = "u1";
+      Batches.releaseForeign("u1");
+
+      Batches.open("todos");
+      Batches.current().append(edge("delete_relationship"));
+
+      Durability.mode = "memory";
+      file(false);
+      await batch.recorded;
+      await Promise.resolve();
+
+      try {
+        assert.deepStrictEqual(
+          Overlay.foldTargetIds(TODO, "tags", "t1", []),
+          new Set(),
+        );
+      } finally {
+        Batches.discard();
+        Durability.hadStore = false;
+        delete globalThis.Hologram.sync;
+      }
+    });
+
+    // The store failed while the first was still being filed, so the second was set aside with no
+    // number, and is the newer one all the same.
+    it("puts a batch whose filing was out ahead of a later one set aside", async () => {
+      let file;
+
+      globalThis.Hologram.sync = {model: TODO_MODEL};
+
+      sinon
+        .stub(Durability, "fileBatch")
+        .returns(new Promise((resolve) => (file = resolve)));
+
+      sinon.stub(Batches, "flush");
+
+      const edge = (op) => ({
+        id: "t1",
+        op,
+        relationship: "tags",
+        target_id: "g1",
+        type: TODO,
+      });
+
+      Durability.hadStore = true;
+      Durability.mode = "indexeddb";
+      LocalDatabase.actorUserId = "u1";
+
+      Batches.open("todos");
+      Batches.current().append(edge("add_relationship"));
+      const first = Batches.close();
+
+      Durability.mode = "memory";
+
+      Batches.open("todos");
+      Batches.current().append(edge("delete_relationship"));
+      const second = Batches.close();
+
+      LocalDatabase.actorUserId = "u2";
+      Batches.releaseForeign("u2");
+
+      LocalDatabase.actorUserId = "u1";
+      Batches.releaseForeign("u1");
+
+      try {
+        assert.deepStrictEqual(Batches.pending, [first, second]);
+
+        assert.deepStrictEqual(
+          Overlay.foldTargetIds(TODO, "tags", "t1", []),
+          new Set(),
+        );
+      } finally {
+        file(false);
+        await first.recorded;
+        Durability.hadStore = false;
+        delete globalThis.Hologram.sync;
+      }
+    });
   });
 
   describe("disown()", () => {
