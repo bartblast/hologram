@@ -305,6 +305,14 @@ defmodule Hologram.Migration.Generator do
       end)
       |> Enum.split_with(fn {:block, _entity_type, _ops, questions} -> asks_fill?(questions) end)
 
+    # A created entity type's own to-ones can't close a cycle: the edge into it would have to be a
+    # retarget, or another created type's, which the current model would hold too.
+    edge_added_above? =
+      Enum.any?(other_blocks, fn {:block, _entity_type, ops, questions} ->
+        not created?(ops) and
+          Enum.any?(ops ++ Enum.flat_map(questions, & &1.withheld_ops), &may_add_required_edge?/1)
+      end)
+
     {edge_blocks, answered_blocks} =
       fill_blocks
       |> Enum.with_index()
@@ -312,8 +320,14 @@ defmodule Hologram.Migration.Generator do
         {edge_changes, later_ops} = Enum.split_with(ops, &ends_required_edge?/1)
         answered_block = {:block, entity_type, later_ops, questions}
 
-        {{:block, entity_type, edge_changes, []},
-         if(index > 0, do: note_cycle_lines(answered_block), else: answered_block)}
+        # Each block above a fill block's own can close a cycle: an earlier fill block with its
+        # backfill, another one with a required to-one it adds.
+        noted_block =
+          if index > 0 or edge_added_above?,
+            do: note_cycle_lines(answered_block),
+            else: answered_block
+
+        {{:block, entity_type, edge_changes, []}, noted_block}
       end)
       |> Enum.unzip()
 
@@ -325,7 +339,7 @@ defmodule Hologram.Migration.Generator do
   end
 
   # The lines left below the block's own fill that can still end a required to-one, written in the
-  # fill question as a note to move one above the backfills when another block's needs it.
+  # fill question as a note to move one above the line closing a cycle with it.
   defp note_cycle_lines({:block, entity_type, ops, questions}) do
     cycle_lines =
       ops
@@ -352,6 +366,18 @@ defmodule Hologram.Migration.Generator do
     do: Keyword.has_key?(changes, :type)
 
   defp may_end_required_edge?(_op), do: false
+
+  defp may_add_required_edge?(%{op: :add_relationship, type: type, opts: opts}),
+    do: not is_list(type) and Keyword.get(opts, :optional) != true
+
+  # A tightening of a to-one always asks a fill, so outside the fill blocks only a retarget adds one.
+  defp may_add_required_edge?(%{op: :change_relationship, changes: changes}) do
+    type = Keyword.get(changes, :type)
+
+    type != nil and not is_list(type) and Keyword.get(changes, :optional) != true
+  end
+
+  defp may_add_required_edge?(_op), do: false
 
   defp indent(text) do
     text
@@ -691,8 +717,8 @@ defmodule Hologram.Migration.Generator do
 
   defp cycle_note(%{cycle_lines: [_line | _lines] = lines}) do
     [
-      "If one of these ends a cycle of required to-ones that a backfill above needs, write it " <>
-        "in a change_entity block of its own above that backfill, with the delete_unique lines " <>
+      "If one of these ends a cycle of required to-ones that a line above closes, write it " <>
+        "in a change_entity block of its own above that line, with the delete_unique lines " <>
         "naming it - unless this block's backfill reads what it takes away:"
       | Enum.map(lines, &"  #{&1}")
     ]
