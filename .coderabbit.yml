@@ -6,4 +6,6 @@ reviews:
   path_filters:
     - "!test/elixir/hologram/compiler/query_extractor_test.exs"
     - "!test/elixir/hologram/compiler_test.exs"
+    - "!test/*/mix.exs"
+    - "!test/umbrella/apps/*/mix.exs"
   poem: false
