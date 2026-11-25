@@ -520,11 +520,13 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     assert Checks.await_converged(client, member.id, 5_000) == :ok
     assert await(fn -> Client.final_seq(client) != nil end)
 
-    final_seq = Client.final_seq(client)
-    cursor = Client.cursor(client)
+    Client.cut(client)
+
+    # The place and the limit written down with it, which a frame naming no place can have left
+    # below the one the page shows.
+    %{cursor: cursor, stored_final: stored_final} = :sys.get_state(client)
     shown = last_view(client)
 
-    Client.cut(client)
     create!(Tag, name: "while away")
     Client.reload(client)
 
@@ -536,12 +538,20 @@ defmodule HologramSyncTests.Consistency.ClientTest do
 
     assert Enum.any?(
              events,
-             &(&1.kind == :reload and &1.from == :store and &1.final_seq == final_seq)
+             &(&1.kind == :reload and &1.from == :store and &1.final_seq == stored_final)
            )
+
+    # A number above the stored limit waits again after the reload, so only rows at or below it
+    # come back as shown.
+    kept =
+      for {id, {created_seq, updated_seq} = numbers} <- shown.rows[Tag],
+          Enum.all?([created_seq, updated_seq], &(&1 == nil or &1 <= stored_final)),
+          into: %{},
+          do: {id, numbers}
 
     after_reload = last_view(client)
 
-    assert Map.take(after_reload.rows[Tag], Map.keys(shown.rows[Tag])) == shown.rows[Tag]
+    assert Map.take(after_reload.rows[Tag], Map.keys(kept)) == kept
     assert Client.failures(client) == []
   end
 
