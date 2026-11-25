@@ -1385,7 +1385,8 @@ export default class LocalDatabase {
   }
 
   // Takes the stored numbers a held row waits for, each only when the row holds an older one for
-  // the field, or none.
+  // the field, or none, and no page showed one for it at least as new: that one is the version the
+  // row holds, and an older version's number filed under it would pass comparisons its own fails.
   static #takeWaiting(type, id, stored) {
     if (stored === undefined || stored === null) {
       return;
@@ -1396,11 +1397,13 @@ export default class LocalDatabase {
 
     for (const [field, number] of Object.entries(stored.numbers)) {
       const held = row[field];
+      const shown = entry.shown?.[field];
 
       if (
-        held === null ||
-        held === undefined ||
-        BigInt(held) < BigInt(number)
+        (held === null ||
+          held === undefined ||
+          BigInt(held) < BigInt(number)) &&
+        (shown === undefined || BigInt(shown) < BigInt(number))
       ) {
         entry.numbers[field] = number;
       }

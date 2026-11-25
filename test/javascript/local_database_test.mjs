@@ -2144,6 +2144,36 @@ describe("LocalDatabase", () => {
       });
     });
 
+    // The page showed a newer version's number, so the stored one is an older version's.
+    it("takes no stored waiting number a held row's shown one is newer than", () => {
+      LocalDatabase.raiseFinal(3);
+      LocalDatabase.putRow(
+        TASK,
+        LocalDatabase.carryNumbers(TASK, row("t1", 2, 20)),
+      );
+
+      LocalDatabase.restore(
+        [
+          {
+            facts: {},
+            id: "t1",
+            row: row("t1", 2, null),
+            type: TASK,
+            waiting: {numbers: {server_updated_seq: 15}, own: false},
+          },
+        ],
+        10,
+      );
+
+      LocalDatabase.raiseFinal(15);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+
+      LocalDatabase.raiseFinal(20);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 20);
+    });
+
     it("keeps a newer waiting created number over a stored one a held row holds none for", () => {
       LocalDatabase.raiseFinal(3);
       LocalDatabase.putRow(TASK, row("t1", null, null));
