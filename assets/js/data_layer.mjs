@@ -828,7 +828,15 @@ export default class DataLayer {
       $.caughtUpTag = null;
     }
 
-    if (named && identityTag !== SyncStream.followedTag) {
+    // A cookie of the identity the tab follows can still be behind the latest response: one for the
+    // next user can have come back while the handshake was on its way. The follow asks the server
+    // then too (see followIdentity).
+    const isLagging = () =>
+      named &&
+      (identityTag !== SyncStream.followedTag ||
+        IdentityTracker.isBehind(identityTag));
+
+    if (isLagging()) {
       // The stream about to open replaces the one the tab is leaving, which closes any sync session
       // that one held.
       $.followIdentity(
@@ -837,7 +845,7 @@ export default class DataLayer {
       );
     }
 
-    SyncStream.laggingCookie = named && identityTag !== SyncStream.followedTag;
+    SyncStream.laggingCookie = isLagging();
 
     if (SyncStream.laggingCookie) {
       return false;

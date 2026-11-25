@@ -1362,6 +1362,8 @@ describe("DataLayer", () => {
     it("catches up with a tag again once a handshake names the one the tab follows", () => {
       DataLayer.catchUpIdentity();
 
+      IdentityTracker.tag = "1.tag-1";
+
       DataLayer.takeHandshake({
         actorEntityId: "entity-1",
         actorUserId: "u1",
@@ -1369,6 +1371,7 @@ describe("DataLayer", () => {
         replica: null,
       });
 
+      IdentityTracker.tag = "2.tag-2";
       DataLayer.catchUpIdentity();
 
       sinon.assert.calledTwice(reconnecting);
@@ -2548,6 +2551,35 @@ describe("DataLayer", () => {
 
         assert.isFalse(SyncStream.laggingCookie);
         assert.isFalse(SyncStream.holdsWrites());
+      });
+    });
+
+    // A page response came back for the next user while the handshake was on its way, and the tab
+    // hasn't followed that user yet. The stream would serve the previous one.
+    describe("on a cookie of the identity the tab follows, behind the latest response", () => {
+      let reconnecting, settling;
+
+      beforeEach(() => {
+        IdentityTracker.observe("2.tag-2");
+
+        reconnecting = sinon.stub(Sse, "reconnect");
+        settling = sinon.stub(Client, "settleIdentity").resolves();
+      });
+
+      it("opens no stream, and holds writes", () => {
+        assert.isFalse(DataLayer.takeHandshake(answer()));
+        assert.isTrue(SyncStream.laggingCookie);
+      });
+
+      it("opens a new stream once the server has said who is signed in", async () => {
+        DataLayer.takeHandshake(answer());
+
+        sinon.assert.calledOnce(settling);
+
+        await settling.firstCall.returnValue;
+        await Promise.resolve();
+
+        sinon.assert.calledOnce(reconnecting);
       });
     });
 
