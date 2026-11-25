@@ -67,6 +67,33 @@ defmodule Hologram.Sync.FinalLimitTest do
       refute waiting?(finished)
     end
 
+    # Prepared for a two-phase commit, a save's lock passes to the prepared transaction, which
+    # pg_locks names by -1/ and its transaction id instead.
+    test "waits for a save that was prepared after the serial was read" do
+      state =
+        new()
+        |> advance(10, ["3/7"])
+        |> advance(10, ["-1/900"])
+
+      assert limit(state) == nil
+      assert waiting?(state)
+
+      finished = advance(state, 10, [])
+
+      assert limit(finished) == 10
+      refute waiting?(finished)
+    end
+
+    test "reaches the serial once a prepared save it saw has ended" do
+      state =
+        new()
+        |> advance(10, ["-1/900"])
+        |> advance(10, ["-1/901"])
+
+      assert limit(state) == 10
+      refute waiting?(state)
+    end
+
     test "doesn't wait for a save that started after the serial was read" do
       state =
         new()

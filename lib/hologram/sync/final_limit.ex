@@ -269,10 +269,25 @@ defmodule Hologram.Sync.FinalLimit do
   end
 
   # A round is over once none of the saves it saw are left.
+  #
+  # Except a save prepared for a two-phase commit, which hands its lock to the prepared transaction:
+  # pg_locks then names it -1/<xid> instead of the id the round saw, and it hasn't ended. One of the
+  # saves a round saw that is gone can be one of the prepared ones now running, so the round waits
+  # for those too. A prepared one that started later only holds the round back until it ends, and
+  # the dispatcher warns of one held over a minute.
   defp settle(state, running, last_entry_through) do
+    prepared = MapSet.filter(running, &String.starts_with?(&1, "-1/"))
+
     candidates =
       Enum.map(state.candidates, fn {high, holders} ->
-        {high, MapSet.intersection(holders, running)}
+        kept = MapSet.intersection(holders, running)
+
+        unprepared_gone? =
+          holders
+          |> MapSet.difference(kept)
+          |> Enum.any?(&(not String.starts_with?(&1, "-1/")))
+
+        {high, if(unprepared_gone?, do: MapSet.union(kept, prepared), else: kept)}
       end)
 
     case for {high, holders} <- candidates, MapSet.size(holders) == 0, do: high do
