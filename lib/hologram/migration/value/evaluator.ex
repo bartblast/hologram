@@ -11,6 +11,7 @@ defmodule Hologram.Migration.Value.Evaluator do
   # rows, and under `{type, relationship}` the rows of that type whose to-one points at this row.
   # Hologram.Migration.Value.Loader builds rows in this shape.
 
+  alias Hologram.Migration.Value
   alias Hologram.Migration.Value.Resolver
   alias Hologram.Query.Words
 
@@ -21,11 +22,14 @@ defmodule Hologram.Migration.Value.Evaluator do
   @type row :: %{optional(atom | {module, atom}) => any}
 
   @doc """
-  Returns the value the given resolved term computes for the given row.
+  Returns the value the given resolved term computes for the given row, what an Elixir fn returns
+  as the row-by-row fill writes it, like a uuid in lowercase.
   """
   @spec evaluate(Resolver.resolved(), row) :: any
-  def evaluate({:function, module, function, args}, row) do
-    apply(module, function, Enum.map(args, &Map.get(row, &1)))
+  def evaluate({:function, module, function, args, type}, row) do
+    module
+    |> apply(function, Enum.map(args, &Map.get(row, &1)))
+    |> Value.normalize_constant(Resolver.codec_type(type))
   end
 
   def evaluate({:value, value, _type}, _row), do: value
@@ -69,7 +73,7 @@ defmodule Hologram.Migration.Value.Evaluator do
   map from each relationship to what's read through it.
   """
   @spec reads(Resolver.resolved()) :: %{(atom | {module, atom}) => map}
-  def reads({:function, _module, _function, _args}), do: %{}
+  def reads({:function, _module, _function, _args, _type}), do: %{}
 
   def reads({:value, _value, _type}), do: %{}
 

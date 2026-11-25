@@ -137,13 +137,32 @@ defmodule Hologram.Migration.Value.EvaluatorTest do
 
   describe "evaluate/2 and reads/1, an Elixir fn" do
     test "calls the function with the row's values, in argument order" do
-      term = {:function, String, :replace_suffix, [:title, :suffix, :with]}
+      term = {:function, String, :replace_suffix, [:title, :suffix, :with], :string}
 
       assert evaluate(term, %{title: "a.txt", suffix: ".txt", with: ".md"}) == "a.md"
     end
 
+    test "gives what the function returns as its type stores it" do
+      uuid = "0B9E3C5A-4C8F-4A1E-9F3D-2B6A7C8D9E0F"
+      stored = String.downcase(uuid)
+
+      for type <- [:uuid, {:reference, MyApp.User}] do
+        assert evaluate({:function, String, :upcase, [:id], type}, %{id: stored}) == stored
+      end
+
+      assert evaluate({:function, Kernel, :abs, [:n], :float}, %{n: -2}) === 2.0
+
+      assert evaluate({:function, DateTime, :from_naive!, [:at, :zone], :datetime}, %{
+               at: ~N[2026-01-01 12:00:00],
+               zone: "Etc/UTC"
+             }) == ~U[2026-01-01 12:00:00.000000Z]
+
+      assert evaluate({:function, Time, :from_iso8601!, [:at], :time}, %{at: "12:00:00"}) ==
+               ~T[12:00:00.000000]
+    end
+
     test "reads nothing beyond the row's own fields" do
-      assert reads({:function, String, :upcase, [:title]}) == %{}
+      assert reads({:function, String, :upcase, [:title], :string}) == %{}
     end
   end
 

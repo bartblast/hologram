@@ -210,12 +210,6 @@ defmodule Hologram.Migration.Value.SQL do
 
   defp copied_enum_values(_type, _entity_type, _mapping, _target), do: []
 
-  defp encode_type({:enum, _owner, _name, _values}), do: :enum
-
-  defp encode_type({:reference, _target}), do: :uuid
-
-  defp encode_type(type), do: type
-
   defp enum_sql_type(mapping, owner, name) do
     column = attribute_column!(mapping, owner, name)
 
@@ -333,7 +327,7 @@ defmodule Hologram.Migration.Value.SQL do
   end
 
   defp slot(value, type, scope, reversed_params) do
-    encoded = Codec.encode(value, encode_type(type))
+    encoded = Codec.encode(value, Resolver.codec_type(type))
     number = length(reversed_params) + 1
 
     {"$#{number}::#{sql_type(type, scope.mapping)}", [encoded | reversed_params]}

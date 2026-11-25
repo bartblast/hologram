@@ -35,7 +35,7 @@ defmodule Hologram.Migration.Value.Resolver do
   @type resolved_set :: {:relationship, list(atom)} | {:referencing, module, atom}
 
   @type resolved ::
-          {:function, module, atom, list(atom)}
+          {:function, module, atom, list(atom), type}
           | {:value, any, type}
           | {:name, list(atom), type}
           | {:concat, list(resolved)}
@@ -88,6 +88,16 @@ defmodule Hologram.Migration.Value.Resolver do
 
     %{term: resolved, type: type}
   end
+
+  @doc """
+  Returns the type the codec stores a value of the given resolved type as.
+  """
+  @spec codec_type(type) :: atom
+  def codec_type({:enum, _owner, _name, _values}), do: :enum
+
+  def codec_type({:reference, _target}), do: :uuid
+
+  def codec_type(type), do: type
 
   @doc """
   Returns whether PostgreSQL can store the given value, which `of_type?/2` accepted, in a column of
@@ -506,7 +516,7 @@ defmodule Hologram.Migration.Value.Resolver do
   end
 
   # What it returns is known only when it runs, so the apply checks its type then.
-  defp resolve_term({:function, _module, _function, args} = term, expected, context) do
+  defp resolve_term({:function, module, function, args}, expected, context) do
     entry = entry!(context.entity, context)
 
     Enum.each(args, fn arg ->
@@ -519,7 +529,7 @@ defmodule Hologram.Migration.Value.Resolver do
       end
     end)
 
-    {term, expected}
+    {{:function, module, function, args, expected}, expected}
   end
 
   defp resolve_term({:value, value}, expected, context) do

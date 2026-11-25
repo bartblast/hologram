@@ -964,7 +964,13 @@ defmodule Hologram.Migration.Renderer do
 
   # An Elixir fn has no SQL, so the op names what the row-by-row fill reads and writes. It can
   # return any value of an enum, so all of them count as used.
-  defp fill_source(%{term: {:function, module, function, args}}, op, mapping, column, _target) do
+  defp fill_source(
+         %{term: {:function, module, function, args, _type}},
+         op,
+         mapping,
+         column,
+         _target
+       ) do
     entry = Map.fetch!(mapping, op.entity)
     filled = Enum.find(entry.columns, &(&1.name == column))
 

@@ -859,7 +859,11 @@ defmodule Hologram.Migration.Value.ResolverTest do
       term = {:function, MyApp.M, :__backfill_0__, [:destination, :owner_id, :id]}
       value = %Value{args: [:destination, :owner_id, :id], term: term}
 
-      assert resolve_on(MyApp.Trip, value, :string) == %{term: term, type: :string}
+      assert resolve_on(MyApp.Trip, value, :string) == %{
+               term:
+                 {:function, MyApp.M, :__backfill_0__, [:destination, :owner_id, :id], :string},
+               type: :string
+             }
     end
 
     test "refuses a relationship as an argument of an Elixir fn" do
