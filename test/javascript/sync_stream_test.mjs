@@ -1188,6 +1188,14 @@ describe("SyncStream", () => {
 
       assert.equal(LocalDatabase.finalSeq(), 12);
       assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 12);
+
+      assert.deepStrictEqual(
+        persisting.firstCall.args[0],
+        LocalDatabase.records([`${TASK} t1`]),
+      );
+
+      assert.equal(persisting.firstCall.args[0][0].row.server_created_seq, 12);
+      assert.equal(persisting.firstCall.args[1], "Nzc4LjA");
       assert.equal(persisting.firstCall.args[3], 12);
     });
 
