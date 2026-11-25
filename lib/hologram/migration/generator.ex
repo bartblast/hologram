@@ -182,6 +182,18 @@ defmodule Hologram.Migration.Generator do
 
   defp entity_of(op), do: Map.get(op, :entity)
 
+  # A change making a to-one optional, whatever else it changes. It only ever takes a required edge
+  # away, so it can't close a cycle wherever it goes. A retarget stays below: it adds an edge too,
+  # and the block's own backfill can read through the old target - as it can read what the deletes
+  # and the changes to a to-many take away.
+  defp ends_required_edge?(%{op: :change_attribute, changes: [optional: true]}), do: true
+
+  defp ends_required_edge?(%{op: :change_relationship, changes: changes}) do
+    Keyword.get(changes, :optional) == true and not is_list(Keyword.get(changes, :type))
+  end
+
+  defp ends_required_edge?(_op), do: false
+
   # Generated text is formatted text: a long payload wraps here rather than the first
   # time someone runs mix format, so a fresh file is never a pending diff.
   # Written out per attribute with its own name and type, so the answer is an edit of a
@@ -269,9 +281,9 @@ defmodule Hologram.Migration.Generator do
   # renames (the ordering rule - every later line names the current model's spelling),
   # then the entity blocks, then the flat ops that take no scope. A backfill answering a fill
   # applies apart from the ops around it, so the ops above it have to stand without the ones
-  # below: the blocks asking for a fill come after the others, and the members they make optional
-  # go to blocks of their own above all of them, since another block's fill can need one ending
-  # a cycle of required to-ones.
+  # below: the blocks asking for a fill come after the others, and the changes that can end a
+  # cycle of required to-ones go to blocks of their own above all of them, since another block's
+  # fill can need one.
   defp group_sections(plan) do
     {entity_ops, flat_ops} = Enum.split_with(plan.ops, &block_op?/1)
     {renames, other_flat_ops} = Enum.split_with(flat_ops, &(&1.op == :rename_entity))
@@ -292,19 +304,19 @@ defmodule Hologram.Migration.Generator do
       end)
       |> Enum.split_with(fn {:block, _entity_type, _ops, questions} -> asks_fill?(questions) end)
 
-    {relaxation_blocks, answered_blocks} =
+    {edge_blocks, answered_blocks} =
       fill_blocks
       |> Enum.map(fn {:block, entity_type, ops, questions} ->
-        {relaxations, later_ops} = Enum.split_with(ops, &relaxation?/1)
+        {edge_changes, later_ops} = Enum.split_with(ops, &ends_required_edge?/1)
 
-        {{:block, entity_type, relaxations, []}, {:block, entity_type, later_ops, questions}}
+        {{:block, entity_type, edge_changes, []}, {:block, entity_type, later_ops, questions}}
       end)
       |> Enum.unzip()
 
     Enum.map(flat_questions, &{:question, &1}) ++
       Enum.map(renames, &{:flat, &1}) ++
       other_blocks ++
-      Enum.reject(relaxation_blocks, &match?({:block, _entity_type, [], _questions}, &1)) ++
+      Enum.reject(edge_blocks, &match?({:block, _entity_type, [], _questions}, &1)) ++
       answered_blocks ++ Enum.map(other_flat_ops, &{:flat, &1})
   end
 
@@ -426,12 +438,6 @@ defmodule Hologram.Migration.Generator do
   defp plural_verb([_one]), do: "is"
 
   defp plural_verb(_many), do: "are"
-
-  defp relaxation?(%{op: kind, changes: [optional: true]})
-       when kind in [:change_attribute, :change_relationship],
-       do: true
-
-  defp relaxation?(_op), do: false
 
   defp render_args(args) do
     Enum.map_join(args, ", ", &inspect/1)

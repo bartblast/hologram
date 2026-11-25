@@ -349,58 +349,68 @@ defmodule Hologram.Migration.GeneratorTest do
     end
 
     # The blocks asking for a fill are written by name, so a relaxation in a later one is written
-    # above all of them.
-    @tag :database
-    test "writes a relaxation ending a required cycle above another block's fill a backfill answers" do
-      opts = opts!("backfilled_cross_block_cycle")
+    # above all of them - with the other changes it makes to the member, too.
+    for {label, dir, changes, text} <- [
+          {"alone", "backfilled_cross_block_cycle", [optional: true], "optional: true"},
+          {"beside another change", "backfilled_cross_block_cycle_unique",
+           [optional: true, unique: true], "optional: true, unique: true"}
+        ] do
+      @tag :database
+      test "writes a relaxation #{label} ending a required cycle above another block's fill a backfill answers" do
+        opts = opts!(unquote(dir))
 
-      migrations =
-        history([
-          {"20260813091521",
-           """
-           create_entity MyApp.Alpha
-           create_entity MyApp.Beta
-           create_entity MyApp.Place
+        migrations =
+          history([
+            {"20260813091521",
+             """
+             create_entity MyApp.Alpha
+             create_entity MyApp.Beta
+             create_entity MyApp.Place
 
-           change_entity MyApp.Alpha do
-             add_relationship :b, MyApp.Beta, optional: true
-           end
+             change_entity MyApp.Alpha do
+               add_relationship :b, MyApp.Beta, optional: true
+             end
 
-           change_entity MyApp.Beta do
-             add_relationship :a, MyApp.Alpha
-             add_relationship :place, MyApp.Place, optional: true
-           end
-           """}
-        ])
+             change_entity MyApp.Beta do
+               add_relationship :a, MyApp.Alpha
+               add_relationship :place, MyApp.Place, optional: true
+             end
+             """}
+          ])
 
-      current =
-        model(%{
-          MyApp.Alpha => %{relationships: [{:b, MyApp.Beta, []}]},
-          MyApp.Beta => %{
-            relationships: [{:a, MyApp.Alpha, [optional: true]}, {:place, MyApp.Place, []}]
-          },
-          MyApp.Place => %{}
-        })
+        current =
+          model(%{
+            MyApp.Alpha => %{relationships: [{:b, MyApp.Beta, []}]},
+            MyApp.Beta => %{
+              relationships: [{:a, MyApp.Alpha, unquote(changes)}, {:place, MyApp.Place, []}]
+            },
+            MyApp.Place => %{}
+          })
 
-      assert {:ok, path, 2} = generate(migrations, current, @timestamp, opts)
+        assert {:ok, path, 2} = generate(migrations, current, @timestamp, opts)
 
-      answered =
-        path
-        |> File.read!()
-        |> String.replace(
-          ~r/^( *)resolve! :fill, attributes: \[:(b|place)\]$/m,
-          "\\1change_relationship :\\2, optional: false, backfill: ^\"01900000-0000-7000-8000-000000000000\""
-        )
+        assert File.read!(path) =~
+                 "change_entity MyApp.Beta do\n    change_relationship :a, #{unquote(text)}\n  end\n\n" <>
+                   "  change_entity MyApp.Alpha do"
 
-      refute answered =~ ~r/^ *resolve!/m
+        answered =
+          path
+          |> File.read!()
+          |> String.replace(
+            ~r/^( *)resolve! :fill, attributes: \[:(b|place)\]$/m,
+            "\\1change_relationship :\\2, optional: false, backfill: ^\"01900000-0000-7000-8000-000000000000\""
+          )
 
-      File.write!(path, answered)
-      Code.compile_file(path)
+        refute answered =~ ~r/^ *resolve!/m
 
-      [migration] = Loader.from_modules!([written_module(opts[:namespace])])
-      history = Enum.concat(migrations, [migration])
+        File.write!(path, answered)
+        Code.compile_file(path)
 
-      assert generate(history, current, @timestamp, opts) == :nothing_to_do
+        [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+        history = Enum.concat(migrations, [migration])
+
+        assert generate(history, current, @timestamp, opts) == :nothing_to_do
+      end
     end
 
     @tag :database
@@ -860,6 +870,53 @@ defmodule Hologram.Migration.GeneratorTest do
       refute alpha_question =~ "change_relationship :a"
       assert beta_question =~ "add_attribute :note, :string"
       refute beta_question =~ "change_relationship :a"
+    end
+
+    test "writes the changes making a to-one optional above the blocks asking for a fill" do
+      fill = fn entity, name ->
+        %{
+          kind: :fill,
+          entity: entity,
+          attributes: [name],
+          members: [{:change_attribute, name, [optional: false]}],
+          withheld_ops: []
+        }
+      end
+
+      change = fn name, changes ->
+        %{op: :change_relationship, entity: MyApp.Beta, name: name, changes: changes}
+      end
+
+      plan = %{
+        ops: [
+          change.(:a, optional: true, unique: true),
+          change.(:c, optional: true, type: MyApp.Gamma),
+          change.(:g, type: MyApp.Gamma),
+          change.(:d, type: [MyApp.Alpha]),
+          change.(:e, unique: true),
+          %{op: :delete_relationship, entity: MyApp.Beta, name: :f}
+        ],
+        questions: [fill.(MyApp.Alpha, :title), fill.(MyApp.Beta, :rank)]
+      }
+
+      [before_questions, _alpha_question, beta_question] =
+        plan
+        |> render(@module)
+        |> String.split("# RESOLVE:")
+
+      assert before_questions =~
+               "change_entity MyApp.Beta do\n" <>
+                 "    change_relationship :a, optional: true, unique: true\n" <>
+                 "    change_relationship :c, optional: true, type: MyApp.Gamma\n" <>
+                 "  end\n\n" <>
+                 "  change_entity MyApp.Alpha do"
+
+      # A retarget adds a required edge, and it, a to-many and a delete change what Beta's own
+      # backfill can still read.
+      assert beta_question =~ "change_relationship :d, type: [MyApp.Alpha]"
+      assert beta_question =~ "change_relationship :g, type: MyApp.Gamma"
+      assert beta_question =~ "change_relationship :e, unique: true"
+      assert beta_question =~ "delete_relationship :f"
     end
 
     test "writes a tightening beside a type change as two ops when it backfills" do
