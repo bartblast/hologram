@@ -490,6 +490,28 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
                Checks.below_final([view], [created, elsewhere], @member, 20)
     end
 
+    test "judges a row a type-wide grant on its way can't let its user read" do
+      created = %{
+        after_lock_at: 0,
+        committed_at: 1,
+        max_seq: 5,
+        min_seq: 5,
+        ops: ["create_tag t-1 t-1"],
+        state: tags_state(%{"t-1" => {5, 5}})
+      }
+
+      granted = %{
+        created
+        | after_lock_at: 2,
+          max_seq: 20,
+          min_seq: 20,
+          ops: ["grant_wide #{@member}"]
+      }
+
+      assert [%{id: "t-1", problem: :missing}] =
+               Checks.below_final([view(10, 20, %{})], [created, granted], @member, 20)
+    end
+
     test "judges a row for a client with no user when a type-wide grant is on its way" do
       created = %{
         after_lock_at: 0,

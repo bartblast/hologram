@@ -12,6 +12,8 @@ defmodule HologramSyncTests.Consistency.Checks do
 
   alias HologramSyncTests.Consistency.Client
   alias HologramSyncTests.Consistency.Model
+  alias HologramSyncTests.Entities.Board
+  alias HologramSyncTests.Entities.Card
 
   @typedoc """
   One way a client's store differs from what it should hold.
@@ -212,7 +214,7 @@ defmodule HologramSyncTests.Consistency.Checks do
             readable_throughout?(window, user_id, type, id),
             problem = row_problem(view, window, type, id, created_seq, final_seq),
             problem != nil,
-            not touched_above?(indexed, view.at, final_seq, user_id, id),
+            not touched_above?(indexed, view.at, final_seq, user_id, type, id),
             do:
               Map.merge(problem, %{
                 at: view.at,
@@ -230,8 +232,9 @@ defmodule HologramSyncTests.Consistency.Checks do
   # lets through from the live tables, so one locked after the floor can keep a row from coming
   # until its own effect does. Every such commit that matters locked before the frame arrived, the
   # floor's among them. When one names the row or what its access goes through, the client may
-  # rightly not hold the row yet. A type-wide grant or revoke names only the user.
-  defp touched_above?(indexed, at, final_seq, user_id, id) do
+  # rightly not hold the row yet. A type-wide grant or revoke names only the user, and changes only
+  # who reads boards and the cards on them.
+  defp touched_above?(indexed, at, final_seq, user_id, type, id) do
     above =
       for {entry, _index} <- indexed,
           entry.after_lock_at < at and entry.max_seq != nil and entry.max_seq > final_seq,
@@ -244,7 +247,9 @@ defmodule HologramSyncTests.Consistency.Checks do
       above ->
         names = related_ids(id, Enum.map(indexed, &elem(&1, 0)))
 
-        Enum.any?(above, &(names_any?(&1, names) or names_wide?(&1, user_id)))
+        wide? = type in [Board, Card]
+
+        Enum.any?(above, &(names_any?(&1, names) or (wide? and names_wide?(&1, user_id))))
     end
   end
 
