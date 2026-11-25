@@ -6080,6 +6080,63 @@ describe("Hologram", () => {
       Hologram.virtualDocument = null;
     });
 
+    // A click on a Link, say, while the snapshot is read. What the visitor did last is that.
+    it("leaves the entry to a navigation that started while the snapshot was read", async () => {
+      const originalConfig = globalThis.Hologram.config;
+      globalThis.Hologram.config = {...originalConfig, liveReload: true};
+
+      sessionStorage.setItem(
+        "hologram_page_snapshot_history-overtaken",
+        Serializer.serialize(
+          {
+            componentRegistryEntries: Type.map(),
+            identityPeriod: IdentityTracker.period,
+            instanceId: "overtaken-instance",
+            pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Module7"),
+            pageParams: Type.map(),
+            scrollPosition: [0, 0],
+            subscriptionReceipts: [],
+          },
+          "client",
+        ),
+      );
+
+      let answer;
+
+      const fetchStub = sinon
+        .stub(Client, "fetchPageDigest")
+        .returns(new Promise((resolve) => (answer = resolve)));
+
+      const fetchPageStub = sinon
+        .stub(Client, "fetchPage")
+        .rejects(new Error("not to be fetched"));
+
+      const historyId = Hologram.historyId;
+      const registryEpoch = Hologram.registryEpoch;
+
+      try {
+        const restoring = Hologram.handlePopstateEvent({
+          state: "history-overtaken",
+        });
+
+        await waitForEventLoop();
+
+        Hologram.navigationCount += 1;
+
+        answer("overtaken-digest");
+        await restoring.catch(() => {});
+
+        sinon.assert.notCalled(fetchPageStub);
+        assert.equal(Hologram.historyId, historyId);
+        assert.equal(Hologram.registryEpoch, registryEpoch);
+      } finally {
+        fetchPageStub.restore();
+        fetchStub.restore();
+        sessionStorage.clear();
+        globalThis.Hologram.config = originalConfig;
+      }
+    });
+
     // The entry's page would run the same code the server can no longer serve.
     describe("in a tab the server stopped serving", () => {
       let record, reloadStub;

@@ -2087,8 +2087,10 @@ export default class Hologram {
         (!$.#isSnapshotOfCurrentIdentity(pageSnapshot) ||
           (await $.#isSnapshotOutdated(pageSnapshot)));
 
-      // The reads above can finish in any order, and the browser is on a later popstate's entry.
-      if (popstate !== $.#popstateCount) {
+      // The reads above can finish in any order, and the browser is on a later popstate's entry. Or
+      // a navigation started while they ran, a Link clicked on the page still on screen, say, and
+      // that is what the visitor did last.
+      if (popstate !== $.#popstateCount || navigation !== $.navigationCount) {
         return;
       }
 
