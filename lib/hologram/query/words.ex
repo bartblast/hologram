@@ -165,12 +165,13 @@ defmodule Hologram.Query.Words do
   end
 
   # A nested quote keeps its body's unquotes for itself, but the unquotes in its separate options
-  # are the enclosing quote's.
+  # are the enclosing quote's. A node put in place of another is walked below its root only, so the
+  # options and a receiver go in a list, which an unquote at their root doesn't escape.
   defp unquoted(body) do
     {_body, code} =
       Macro.prewalk(body, [], fn
         {:quote, _meta, [options, _block]}, code ->
-          {options, code}
+          {[options], code}
 
         {:quote, _meta, args}, code when is_list(args) ->
           {nil, code}
@@ -179,7 +180,7 @@ defmodule Hologram.Query.Words do
           {nil, [expr | code]}
 
         {{:., _dot_meta, [receiver, :unquote]}, _meta, [expr]}, code ->
-          {receiver, [expr | code]}
+          {[receiver], [expr | code]}
 
         node, code ->
           {node, code}

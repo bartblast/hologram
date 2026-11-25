@@ -76,6 +76,13 @@ defmodule Hologram.Query.WordsTest do
                " - if you meant the query word split, it works only in a migration's backfill: for now"
     end
 
+    test "finds a word a nested quote's separate options unquote whole" do
+      ast = Code.string_to_quoted!(~s[foo(quote(do: quote(unquote(split(a, " ")), do: 1)))])
+
+      assert backfill_only_hint(ast) ==
+               " - if you meant the query word split, it works only in a migration's backfill: for now"
+    end
+
     test "is empty for a word piped into an unquote, which a quote holds as data" do
       ast = Code.string_to_quoted!(~s[foo(quote(do: split(a, " ") |> unquote()))])
 
@@ -100,6 +107,13 @@ defmodule Hologram.Query.WordsTest do
 
     test "finds a word unquoted as the name of a remote call" do
       ast = Code.string_to_quoted!(~s[foo(quote(do: String.unquote(split(a, " "))(b)))])
+
+      assert backfill_only_hint(ast) ==
+               " - if you meant the query word split, it works only in a migration's backfill: for now"
+    end
+
+    test "finds a word unquoted as the receiver of a remote call" do
+      ast = Code.string_to_quoted!(~s[foo(quote(do: unquote(split(a, " ")).unquote(b)(c)))])
 
       assert backfill_only_hint(ast) ==
                " - if you meant the query word split, it works only in a migration's backfill: for now"
