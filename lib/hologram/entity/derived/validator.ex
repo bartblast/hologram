@@ -8,8 +8,8 @@ defmodule Hologram.Entity.Derived.Validator do
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Validator, as: EntityValidator
+  alias Hologram.Policy
   alias Hologram.Query
-  alias Hologram.Query.Stage
   alias Hologram.Reflection
 
   @quantifiers [:all, :any, :none]
@@ -304,9 +304,9 @@ defmodule Hologram.Entity.Derived.Validator do
   defp rule_sequence_violations(entity_types, definitions) do
     entity_types
     |> Enum.flat_map(fn entity_type ->
-      for {_operation, _to, _via, predicates, _name, _fields} <- entity_type.__policies__(),
+      for {operation, _to, _via, predicates, _name, _fields} <- entity_type.__policies__(),
           {type, name} <-
-            clause_names(Stage.predicate_triples!(entity_type, predicates), [entity_type]),
+            clause_names(rule_clauses(entity_type, operation, predicates), [entity_type]),
           Derived.declared?(type, name),
           {read_type, read_name} <- sequence_reads({type, name}, definitions) do
         {type, name,
@@ -314,6 +314,14 @@ defmodule Hologram.Entity.Derived.Validator do
       end
     end)
     |> Enum.uniq()
+  end
+
+  # An update rule's clauses read the row after the change through new(), resolved one row above
+  # the rule's own - spelled here as the same names of the rule's row, which has the same type.
+  defp rule_clauses(entity_type, operation, predicates) do
+    entity_type
+    |> Policy.condition_clauses(operation, predicates)
+    |> Policy.stored_spelling()
   end
 
   defp same_type?({type, opts}, {type, other_opts}), do: opts[:values] == other_opts[:values]

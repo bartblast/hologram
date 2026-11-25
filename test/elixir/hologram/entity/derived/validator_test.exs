@@ -230,6 +230,41 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
       end
     end
 
+    test "raises on a derived field an update rule reads on the row after the change" do
+      line = __ENV__.line + 5
+
+      defmodule Fixture217 do
+        use Hologram.Entity
+
+        derived :numbered, :integer, fn server_updated_seq -> server_updated_seq end
+
+        allow :update, when: new(numbered) > 5
+      end
+
+      expected_msg = """
+      invalid data model:
+        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :numbered in Hologram.Entity.Derived.ValidatorTest.Fixture217 reads Hologram.Entity.Derived.ValidatorTest.Fixture217.server_updated_seq, a sequence number, and an allow rule of Hologram.Entity.Derived.ValidatorTest.Fixture217 reads the field. A browser and the server read a sequence number differently until it's final, so no rule can depend on it\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate([Fixture217])
+      end
+    end
+
+    test "returns :ok for an update rule reading a plain field on the row after the change" do
+      defmodule Fixture218 do
+        use Hologram.Entity
+
+        attribute :status, :string
+
+        derived :shout, :string, fn status -> status end
+
+        allow :update, when: status == "a" and new(shout) == "b"
+      end
+
+      assert validate([Fixture218]) == :ok
+    end
+
     test "returns :ok for a bounded sort a unique id decides before a sequence number" do
       defmodule Fixture213 do
         use Hologram.Entity
