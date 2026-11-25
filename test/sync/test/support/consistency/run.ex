@@ -10,6 +10,7 @@ defmodule HologramSyncTests.Consistency.Run do
 
   import HologramSyncTests.Helpers, only: [create!: 2, read_seq: 0, truncate_tables: 0]
 
+  alias Hologram.DB
   alias Hologram.DB.Oplog
   alias Hologram.Entity.Model, as: EntityModel
   alias Hologram.Sync.Catchup
@@ -395,9 +396,17 @@ defmodule HologramSyncTests.Consistency.Run do
   # fail on what that save held back rather than on what it checks. So the log gets a change first,
   # and the run starts once the dispatcher has read past it. The row goes with the truncate after;
   # the change stays in the log.
+  #
+  # The row's own number, read as stored, rather than the last serial handed out: a save that took
+  # one after it and rolled back leaves no entry for the dispatcher to reach.
   defp warm_up_log do
     create!(Tag, name: "warm-up")
-    serial = Oplog.last_serial()
+
+    %{rows: [[serial]]} =
+      DB.sql!(
+        ~s(SELECT "server_created_seq" FROM "hologram_data"."#{DB.table_name(Tag)}" ) <>
+          ~s(WHERE "name" = 'warm-up')
+      )
 
     if await(fn -> read_seq() >= serial end, @read_ms) == :timeout do
       raise "a save elsewhere on the database server kept running for #{@read_ms} ms, " <>
