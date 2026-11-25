@@ -4021,6 +4021,33 @@ describe("QueryKernel", () => {
       ]);
     });
 
+    // The ids this client makes count up, so its rows the server hasn't saved go in the order it
+    // made them, newest last when ascending and newest first when descending.
+    it("orders the rows not saved yet by when they were made", () => {
+      LocalDatabase.putRow(
+        TASK,
+        row("g", null, null, {server_created_at: null}),
+      );
+
+      assert.deepEqual(titles({sort: [["server_created_seq", "asc"]]}), [
+        "a",
+        "b",
+        "e",
+        "d",
+        "f",
+        "g",
+      ]);
+
+      assert.deepEqual(titles({sort: [["server_created_seq", "desc"]]}), [
+        "g",
+        "f",
+        "d",
+        "e",
+        "b",
+        "a",
+      ]);
+    });
+
     // Nothing tells where the stranger's row goes until its number is final, so it waits and the
     // rows the list shows keep their order.
     it("leaves out a row with no number known until it has one", () => {

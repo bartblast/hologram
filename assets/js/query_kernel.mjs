@@ -1030,8 +1030,11 @@ export default class QueryKernel {
         view[name] = QueryKernel.#derivedValue(row, entityType, name, context);
       }
 
+      // A row the server hasn't saved has no number, so its id - which counts up in the order
+      // this client made its rows - stands in, and a descending order turns it around too.
       for (const name of sequenceNames) {
-        view[name] = LocalDatabase.orderingKey(entityType, row, name);
+        const key = LocalDatabase.orderingKey(entityType, row, name);
+        view[name] = key[0] === 3 ? [3, row.id] : key;
       }
 
       return {row, view};
