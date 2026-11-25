@@ -75,13 +75,16 @@ defmodule HologramSyncTests.Consistency.PlanTest do
   end
 
   test "brings some cut tabs back by reloading" do
-    steps =
+    schedules =
       for seed <- 1..5,
           client <- Plan.generate(seed, 60).clients,
-          step <- client.schedule,
-          do: step
+          do: client.schedule
 
-    assert :reload in steps
+    assert Enum.any?(schedules, fn schedule ->
+             schedule
+             |> Enum.drop_while(&(&1 != :cut))
+             |> Enum.member?(:reload)
+           end)
   end
 
   # Taken one after another in the order the plan picked them, every operation is one the state
