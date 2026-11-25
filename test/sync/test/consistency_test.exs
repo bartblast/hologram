@@ -187,4 +187,35 @@ defmodule HologramSyncTests.ConsistencyTest do
     assert trace =~ "writer 1 (ops): tag_card card-1 tag-1 - no entity with id"
     assert trace =~ "writer 2 (ops): rename x - %DBConnection.ConnectionError{"
   end
+
+  test "a failed run's message names a commit that ended after the limit covering it went out" do
+    client = %{events: [], name: "tab of u", user_id: "u"}
+
+    outcome = %{
+      below_final: [
+        %{
+          at: 12,
+          client: "tab of u",
+          commit: 1,
+          final_seq: 9,
+          min_seq: 9,
+          problem: :ended_after,
+          type: Card
+        }
+      ],
+      clients: [client],
+      differences: [],
+      failures: [],
+      history: %{aborted: [], entries: []},
+      leaks: [],
+      missed_resyncs: []
+    }
+
+    message =
+      Report.message(outcome, %{runs: 1, seed: 7, steps: 3}, 1, "tmp/sync_consistency/7-1.log")
+
+    assert message =~
+             "was told at 12 the numbers of HologramSyncTests.Entities.Card are final up to 9, " <>
+               "while commit 1, holding serial 9, got the commit lock after that"
+  end
 end

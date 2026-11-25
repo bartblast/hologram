@@ -150,6 +150,13 @@ defmodule HologramSyncTests.Consistency.Report do
        "#{problem.last_seq}", nil}
   end
 
+  defp describe_problem({:below_final, %{problem: :ended_after} = problem}) do
+    {problem.client,
+     "was told at #{problem.at} the numbers of #{inspect(problem.type)} are final up to " <>
+       "#{problem.final_seq}, while commit #{problem.commit}, holding serial " <>
+       "#{problem.min_seq}, got the commit lock after that", nil}
+  end
+
   defp describe_problem({:below_final, %{problem: :above_final, final_seq: nil} = problem}) do
     {problem.client,
      "was told at #{problem.at} no number of #{inspect(problem.type)} is final yet, and shows " <>
