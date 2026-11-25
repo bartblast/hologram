@@ -534,10 +534,13 @@ defmodule Hologram.Sync.FinalLimitContentionTest do
     :erlang.trace(reader.pid, true, [:call])
     :erlang.trace_pattern({Connection, :query, 3}, true, [:local])
 
-    send(reader.pid, :read)
-    Task.await(reader)
-
-    :erlang.trace_pattern({Connection, :query, 3}, false, [:local])
+    # The pattern is global, so a failed read mustn't leave it tracing other tests' queries.
+    try do
+      send(reader.pid, :read)
+      Task.await(reader)
+    after
+      :erlang.trace_pattern({Connection, :query, 3}, false, [:local])
+    end
 
     # Trace messages can still be on their way when the reader is done.
     ref = :erlang.trace_delivered(reader.pid)
