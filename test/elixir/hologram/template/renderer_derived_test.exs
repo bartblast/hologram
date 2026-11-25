@@ -657,8 +657,11 @@ defmodule Hologram.Template.RendererDerivedTest do
           render_page_html(Module167)
         end)
 
-      assert String.contains?(html, ~s|"server_created_seq":#{stored.server_created_seq}|)
-      assert String.contains?(html, ~s|"server_updated_seq":null|)
+      rows = boot_data(html)["syncRows"]["put_entity"][@entity_2_type]
+      row = Enum.find(rows, &(&1["id"] == target.id))
+
+      assert row["server_created_seq"] == stored.server_created_seq
+      assert Map.fetch(row, "server_updated_seq") == {:ok, nil}
     end
 
     test "carries nothing for a page whose fields read no rows" do
