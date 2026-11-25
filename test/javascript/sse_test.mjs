@@ -1586,14 +1586,14 @@ describe("Sse", () => {
 
       beforeEach(() => {
         IdentityTracker.init("1.tag-1");
-        Sse.handshakePeriod = IdentityTracker.period;
+        Sse.receiptsPeriod = IdentityTracker.period;
         IdentityTracker.observe("2.tag-2");
 
         SubscriptionReceiptRegistry.entries.set(refusedKey, refused);
       });
 
       afterEach(() => {
-        Sse.handshakePeriod = null;
+        Sse.receiptsPeriod = null;
         IdentityTracker.init(null);
         IdentityTracker.period = null;
         IdentityTracker.documentPeriod = null;
@@ -1673,33 +1673,26 @@ describe("Sse", () => {
 
         await Sse.connect();
 
-        assert.equal(Sse.handshakePeriod, IdentityTracker.period);
+        assert.equal(Sse.receiptsPeriod, IdentityTracker.period);
       });
 
       // The receipts are the page's, and a page mounted for the new identity holds them before
-      // any handshake under it answers.
-      describe("with a page mounted for the new identity", () => {
-        beforeEach(() => {
-          Hologram.pageIdentityPeriod = IdentityTracker.period;
-        });
+      // any handshake under it answers (see Hologram.pageIdentityPeriod).
+      it("reloads when a page mounted for the new identity had every receipt rejected", async () => {
+        Sse.receiptsPeriod = IdentityTracker.period;
 
-        afterEach(() => {
-          Hologram.pageIdentityPeriod = null;
-        });
+        stubHandshakeResponse({refreshedReceipts: Type.list()});
 
-        it("reloads when every receipt it presented was rejected", async () => {
-          stubHandshakeResponse({refreshedReceipts: Type.list()});
+        await Sse.connect();
 
-          await Sse.connect();
-
-          sinon.assert.calledOnce(globalThis.window.location.reload);
-          sinon.assert.notCalled(globalThis.EventSource);
-        });
+        sinon.assert.calledOnce(globalThis.window.location.reload);
+        sinon.assert.notCalled(globalThis.EventSource);
       });
 
-      it("drops the receipts of a page of the identity it left", async () => {
-        Hologram.pageIdentityPeriod = Sse.handshakePeriod;
-        Sse.handshakePeriod = IdentityTracker.period;
+      // The page stays on screen, and a receipt added for the new identity is the new identity's.
+      it("reloads when a receipt added after the first handshake under it is rejected", async () => {
+        // The page was mounted for the identity the tab left.
+        Hologram.pageIdentityPeriod = Sse.receiptsPeriod;
 
         try {
           stubHandshakeResponse({refreshedReceipts: Type.list()});
@@ -1707,7 +1700,12 @@ describe("Sse", () => {
           await Sse.connect();
 
           sinon.assert.notCalled(globalThis.window.location.reload);
-          assert.equal(SubscriptionReceiptRegistry.entries.size, 0);
+
+          SubscriptionReceiptRegistry.entries.set(keptKey, kept);
+
+          await Sse.connect();
+
+          sinon.assert.calledOnce(globalThis.window.location.reload);
         } finally {
           Hologram.pageIdentityPeriod = null;
         }
@@ -1734,7 +1732,7 @@ describe("Sse", () => {
       });
 
       afterEach(() => {
-        Sse.handshakePeriod = null;
+        Sse.receiptsPeriod = null;
         IdentityTracker.init(null);
         IdentityTracker.period = null;
         IdentityTracker.documentPeriod = null;
@@ -1797,15 +1795,15 @@ describe("Sse", () => {
         // against the period the last real one left.
         it("records no period", async () => {
           IdentityTracker.init("1.tag-1");
-          Sse.handshakePeriod = IdentityTracker.period;
-          const previous = Sse.handshakePeriod;
+          Sse.receiptsPeriod = IdentityTracker.period;
+          const previous = Sse.receiptsPeriod;
           IdentityTracker.observe("2.tag-2");
 
           stubHandshakeResponse(session);
 
           await Sse.connect();
 
-          assert.equal(Sse.handshakePeriod, previous);
+          assert.equal(Sse.receiptsPeriod, previous);
         });
 
         it("changes no receipts, and reloads for none", async () => {

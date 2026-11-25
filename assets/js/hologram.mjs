@@ -2748,6 +2748,7 @@ export default class Hologram {
     Hologram.#pageParams = mountData.pageParams;
 
     $.pageIdentityPeriod = mountData.identityPeriod ?? null;
+    $.#recordReceiptsPeriod($.pageIdentityPeriod);
 
     LiveReload.recordPageBundle(mountData.pageModule, mountData.pageDigest);
 
@@ -3322,6 +3323,14 @@ export default class Hologram {
     }
   }
 
+  // The receipts the page brought were issued for the identity it was rendered for, and a page
+  // that came with no period leaves it to the last handshake (see Sse.receiptsPeriod).
+  static #recordReceiptsPeriod(identityPeriod) {
+    if (identityPeriod !== null && identityPeriod !== undefined) {
+      Sse.receiptsPeriod = identityPeriod;
+    }
+  }
+
   static #registerPageModule(pageModule) {
     $.#registeredPageModules.add(pageModule.value);
   }
@@ -3389,6 +3398,7 @@ export default class Hologram {
     Hologram.#pageParams = pageParams;
 
     $.pageIdentityPeriod = identityPeriod;
+    $.#recordReceiptsPeriod(identityPeriod);
 
     $.#scrollPosition = scrollPosition;
 

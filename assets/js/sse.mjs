@@ -60,9 +60,12 @@ export default class Sse {
   // from its back/forward cache, if it ever does.
   static isSuspended = false;
 
-  // The identity period of the last handshake. Once it has ended, the subscriptions this tab holds
-  // were authorized for an identity it has left, and the server is right to refuse them.
-  static handshakePeriod = null;
+  // The identity period the receipts this tab holds were issued for: the one of the page that
+  // brought them, or of the last handshake, whichever came later. A page mounted for a new identity
+  // holds its receipts before any handshake under it answers, and a page the identity changed under
+  // gets the new identity's from the handshake after. Once it has ended, the receipts were issued
+  // for an identity the tab has left, and the server is right to refuse them.
+  static receiptsPeriod = null;
 
   static reconnectAttempts = 0;
 
@@ -323,7 +326,7 @@ export default class Sse {
         return;
       }
 
-      $.handshakePeriod = IdentityTracker.period;
+      $.receiptsPeriod = IdentityTracker.period;
       $.reloadDeferrals = 0;
 
       App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
@@ -599,15 +602,10 @@ export default class Sse {
     }
   }
 
-  // The identity the receipts were issued for. They are the page's, and a page mounted for a new
-  // identity holds them before any handshake under it answers. A page that came with no period
-  // leaves it to the last handshake, or to the document.
+  // The identity the receipts were issued for. Before any page or handshake has said, the
+  // document's.
   static #receiptsPeriod() {
-    return (
-      Hologram.pageIdentityPeriod ??
-      $.handshakePeriod ??
-      IdentityTracker.documentPeriod
-    );
+    return $.receiptsPeriod ?? IdentityTracker.documentPeriod;
   }
 }
 

@@ -8322,12 +8322,17 @@ describe("Hologram", () => {
           identityPeriod: IdentityTracker.period,
         });
 
-        await Hologram.handlePopstateEvent({state: "history-identity-3"});
-        await flushPromises();
+        try {
+          await Hologram.handlePopstateEvent({state: "history-identity-3"});
+          await flushPromises();
 
-        assert.strictEqual(App.instanceId, "restored-instance");
-        assert.equal(Hologram.pageIdentityPeriod, IdentityTracker.period);
-        sinon.assert.notCalled(fetchPageStub);
+          assert.strictEqual(App.instanceId, "restored-instance");
+          assert.equal(Hologram.pageIdentityPeriod, IdentityTracker.period);
+          assert.equal(Sse.receiptsPeriod, IdentityTracker.period);
+          sinon.assert.notCalled(fetchPageStub);
+        } finally {
+          Sse.receiptsPeriod = null;
+        }
       });
 
       // An entry with no id is taken for the page on screen only under its path.
