@@ -16,6 +16,9 @@ defmodule Hologram.Migration.Value do
   alias Hologram.Migration.Value.Resolver
   alias Hologram.Query.Expression
 
+  # The largest integer a float holds exactly, as Resolver widens a literal.
+  @max_exact_float_integer 9_007_199_254_740_992
+
   @enforce_keys [:term]
   defstruct [:term, args: []]
 
@@ -151,10 +154,15 @@ defmodule Hologram.Migration.Value do
   @doc """
   Returns the given constant backfill of the given type as it's stored: a uuid in lowercase, the
   only spelling the database codec and the browser compare, whichever case the file wrote it in,
-  and a datetime in UTC or a time at microsecond precision, as the database gives them back. A
-  value that isn't of the type stays as it is, for the check to refuse.
+  a datetime in UTC or a time at microsecond precision, as the database gives them back, and an
+  integer a float holds exactly as that float, as a literal in a computed backfill is. A value that
+  isn't of the type stays as it is, for the check to refuse.
   """
   @spec normalize_constant(any, atom) :: any
+  def normalize_constant(value, :float)
+      when is_integer(value) and abs(value) <= @max_exact_float_integer,
+      do: value * 1.0
+
   def normalize_constant(value, :uuid) when is_binary(value), do: String.downcase(value)
 
   def normalize_constant(value, type) when type in [:datetime, :time] do

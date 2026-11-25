@@ -10,9 +10,6 @@ defmodule Hologram.Migration.Value.Check do
   alias Hologram.Migration.Value
   alias Hologram.Migration.Value.Resolver
 
-  # The largest integer a float holds exactly, as Resolver widens a literal.
-  @max_exact_float_integer 9_007_199_254_740_992
-
   @bounded_types [:date, :datetime, :float, :integer, :time]
 
   @length_rules [:length, :max_length, :min_length]
@@ -203,10 +200,7 @@ defmodule Hologram.Migration.Value.Check do
   defp compilable?(_format), do: false
 
   defp constant_refusal(value, {name, type, opts}, op, later_ops, next_model, final_model) do
-    checked =
-      value
-      |> Value.normalize_constant(type)
-      |> widen(type)
+    checked = Value.normalize_constant(value, type)
 
     cond do
       rule = unfit_rule(type, opts) ->
@@ -618,9 +612,7 @@ defmodule Hologram.Migration.Value.Check do
     walk(later_ops, next_model, final_model)
   end
 
-  defp widen(value, :float) when is_integer(value) and abs(value) <= @max_exact_float_integer do
-    value * 1.0
-  end
+  defp widen(value, :float), do: Value.normalize_constant(value, :float)
 
   defp widen(value, _type), do: value
 end

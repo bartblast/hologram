@@ -247,6 +247,11 @@ defmodule Hologram.Migration.ValueTest do
       assert Value.normalize_constant(~T[10:00:00], :time) == ~T[10:00:00.000000]
     end
 
+    test "widens an integer a float holds exactly to a float" do
+      assert Value.normalize_constant(3, :float) === 3.0
+      assert Value.normalize_constant(9_007_199_254_740_993, :float) == 9_007_199_254_740_993
+    end
+
     test "leaves a value that isn't of the type for the check to refuse" do
       assert Value.normalize_constant("nope", :datetime) == "nope"
     end

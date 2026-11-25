@@ -84,6 +84,26 @@ defmodule Hologram.Migration.RendererTest do
     end
   end
 
+  describe "render/2, a constant float backfill" do
+    test "writes an integer the file gave as a float" do
+      pre_model = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      op = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :weight,
+        type: :float,
+        opts: [backfill: 3],
+        line: 7
+      }
+
+      assert %{transactional: [%{op: :add_column, backfill: backfill} | _rest]} =
+               render([op], pre_model)
+
+      assert backfill === 3.0
+    end
+  end
+
   describe "render/2, a computed backfill on an added attribute" do
     setup do
       pre_model =
