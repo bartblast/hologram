@@ -1066,13 +1066,17 @@ defmodule Hologram.Sync.DispatcherTest do
       dispatcher =
         start_dispatcher!(advance: sandbox_advance(running: ["a"]), recheck_interval_ms: 200)
 
-      :erlang.trace(dispatcher, true, [:receive])
+      :erlang.trace(dispatcher, true, [:receive, :monotonic_timestamp])
 
       wake(dispatcher)
       wake(dispatcher)
 
-      assert_receive {:trace, ^dispatcher, :receive, :recheck}, @poll_timeout_ms
-      refute_receive {:trace, ^dispatcher, :receive, :recheck}, 100
+      # Timed where the dispatcher took them, so a test process slow to resume can't make the look
+      # scheduled one interval later read as a second one waiting.
+      assert_receive {:trace_ts, ^dispatcher, :receive, :recheck, first_at}, @poll_timeout_ms
+      assert_receive {:trace_ts, ^dispatcher, :receive, :recheck, second_at}, @poll_timeout_ms
+
+      assert System.convert_time_unit(second_at - first_at, :native, :millisecond) >= 150
 
       settle(dispatcher)
     end
