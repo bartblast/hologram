@@ -292,6 +292,62 @@ defmodule Hologram.Migration.GeneratorTest do
       assert generate(history, current, @timestamp, opts) == :nothing_to_do
     end
 
+    # A backfill applies apart from the ops around it, so the relaxation ending the cycle is
+    # written above the question.
+    @tag :database
+    test "writes a relaxation ending a required cycle above a fill a backfill answers" do
+      opts = opts!("backfilled_cycle")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Alpha
+           create_entity MyApp.Beta
+           create_entity MyApp.Place
+
+           change_entity MyApp.Alpha do
+             add_relationship :b, MyApp.Beta, optional: true
+           end
+
+           change_entity MyApp.Beta do
+             add_relationship :a, MyApp.Alpha
+             add_relationship :place, MyApp.Place, optional: true
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Alpha => %{relationships: [{:b, MyApp.Beta, []}]},
+          MyApp.Beta => %{
+            attributes: [{:place_id, :uuid, [optional: true]}],
+            relationships: [{:a, MyApp.Alpha, [optional: true]}]
+          },
+          MyApp.Place => %{}
+        })
+
+      assert {:ok, path, 1} = generate(migrations, current, @timestamp, opts)
+
+      answered =
+        path
+        |> File.read!()
+        |> String.replace(
+          ~r/^( *)resolve! :fill, attributes: \[:b\]$/m,
+          "\\1change_relationship :b, optional: false, backfill: ^\"01900000-0000-7000-8000-000000000000\""
+        )
+
+      refute answered =~ ~r/^ *resolve!/m
+
+      File.write!(path, answered)
+      Code.compile_file(path)
+
+      [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+      history = Enum.concat(migrations, [migration])
+
+      assert generate(history, current, @timestamp, opts) == :nothing_to_do
+    end
+
     @tag :database
     test "formats the file with the given formatter" do
       opts =
@@ -716,6 +772,32 @@ defmodule Hologram.Migration.GeneratorTest do
       """
 
       assert render(plan, @module) == module_text(@module, expected)
+    end
+
+    test "writes a relaxation in a fill question's block above the question" do
+      plan = %{
+        ops: [
+          %{op: :add_attribute, entity: MyApp.Task, name: :note, type: :string, opts: []},
+          %{op: :change_relationship, entity: MyApp.Task, name: :place, changes: [optional: true]}
+        ],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:title],
+            members: [{:change_attribute, :title, [optional: false]}],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      [before_question, after_question] =
+        plan
+        |> render(@module)
+        |> String.split("# RESOLVE:")
+
+      assert before_question =~ "change_relationship :place, optional: true"
+      assert after_question =~ "add_attribute :note, :string"
     end
 
     test "writes a tightening beside a type change as two ops when it backfills" do
