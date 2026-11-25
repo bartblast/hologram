@@ -1098,8 +1098,10 @@ defmodule Hologram.Migration.RendererTest do
     end
 
     test "accepts a value a rebuild has carried into a new type", %{pre_model: pre_model} do
+      # The rename cuts the chunk, so the add runs as its own step before the rebuild.
       ops = [
         add_value(:kind, :fresh),
+        rename_attribute(:state, :phase),
         %{
           op: :reorder_enum_values,
           entity: MyApp.Task,
@@ -1114,7 +1116,10 @@ defmodule Hologram.Migration.RendererTest do
         ])
       ]
 
-      assert %{transactional: _transactional} = render(ops, pre_model)
+      kinds = op_kinds(render(ops, pre_model).transactional)
+
+      assert Enum.filter(kinds, &(&1 in [:add_enum_value, :rebuild_enum_type, :fill_column])) ==
+               [:add_enum_value, :rebuild_enum_type, :fill_column]
     end
 
     test "accepts a value that was on the type already", %{pre_model: pre_model} do
