@@ -55,6 +55,30 @@ defmodule Hologram.Migration.FieldAccess.Definitions do
   def __code__(code, env), do: FieldAccess.rewrite(code, env, false)
 
   @doc """
+  Returns the code of the given body of a definition written at the given file and line, the
+  keyword list a def takes: its do, or a try of it when it has a rescue, catch, else or after.
+
+  Raises Hologram.CompileError when the body isn't a keyword list, or is an empty one.
+  """
+  @spec __unwrap_body__(any, String.t(), non_neg_integer) :: Macro.t()
+  def __unwrap_body__(expr, file, line) do
+    cond do
+      not Keyword.keyword?(expr) or expr == [] ->
+        raise Hologram.CompileError,
+          message:
+            "a migration's def, defp, defmacro and defmacrop take their body as do: or a do block",
+          file: file,
+          line: line
+
+      Keyword.keys(expr) == [:do] ->
+        expr[:do]
+
+      true ->
+        {:try, [], [expr]}
+    end
+  end
+
+  @doc """
   Registers the attribute the given module records the guards it defines in.
   """
   @spec register_guards(module) :: :ok

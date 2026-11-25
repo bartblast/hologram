@@ -20,10 +20,18 @@ defmodule Hologram.Migration.FieldAccessTest do
   end
 
   describe "define/4" do
-    test "refuses a function or macro whose body isn't a keyword list" do
+    test "refuses a function or macro whose body is an empty list" do
       for kind <- [:def, :defmacro] do
         assert_raise Hologram.CompileError, ~r/take their body as do: or a do block/, fn ->
-          define(kind, env(), quote(do: m), Code.string_to_quoted!("unquote(body)"))
+          define(kind, env(), quote(do: m), [])
+        end
+      end
+    end
+
+    test "refuses an unquoted body that isn't a keyword list where the definition runs" do
+      for kind <- [:def, :defmacro] do
+        assert_raise Hologram.CompileError, ~r/take their body as do: or a do block/, fn ->
+          compile_migration("20260813091522", "#{kind} m, unquote(:body)")
         end
       end
     end

@@ -857,6 +857,20 @@ defmodule Hologram.Migration.CallCheckTest do
       defmacrop twice(value), do: quote(do: unquote(value) <> unquote(value))
 
       def via_arg(row), do: twice(row.name)
+
+      defp tier, unquote(do: "standard")
+
+      def via_tier, do: tier()
+
+      def unquoted_body(row), unquote([do: quote(do: var!(row).z)])
+
+      def unquoted_rescue,
+        unquote(do: quote(do: raise("x")), rescue: quote(do: (_error -> :rescued)))
+
+      defmacrop unquoted_macro(value),
+        unquote(do: quote(unquote: false, do: quote(do: unquote(var!(value)).z)))
+
+      def via_unquoted_macro(row), do: unquoted_macro(row)
       """
 
       module = compile_migration("20260813091522", body)
@@ -890,6 +904,10 @@ defmodule Hologram.Migration.CallCheckTest do
       assert module.defaulted() == "x.y"
       assert module.via_guard(%{}) == :ok
       assert module.via_arg(%{name: "f"}) == "ff"
+      assert module.via_tier() == "standard"
+      assert module.unquoted_body(%{z: 1}) == 1
+      assert module.unquoted_rescue() == :rescued
+      assert module.via_unquoted_macro(%{z: 2}) == 2
 
       assert_raise BadMapError, fn -> module.data(Hologram.Test.Fixtures.Migration.Module1) end
 
@@ -918,6 +936,14 @@ defmodule Hologram.Migration.CallCheckTest do
       end
 
       assert_raise BadMapError, fn -> module.title(Hologram.Test.Fixtures.Migration.Module1) end
+
+      assert_raise BadMapError, fn ->
+        module.unquoted_body(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
+      assert_raise BadMapError, fn ->
+        module.via_unquoted_macro(Hologram.Test.Fixtures.Migration.Module1)
+      end
     end
 
     test "reads a pipe in a macro's code by the import it was written with" do

@@ -188,21 +188,24 @@ defmodule Hologram.Migration.FieldAccess do
   def rewrite(other, _env, _splicing), do: other
 
   # The body as Elixir expands it, after a rescue, catch or after the body takes, wrapped in
-  # the given call.
+  # the given call. An unquote fragment's value is a keyword list only once the definition
+  # runs, so the body is taken apart there.
   defp body(expr, env, wrap) do
-    cond do
-      not Keyword.keyword?(expr) or expr == [] ->
-        raise Hologram.CompileError,
-          message:
-            "a migration's def, defp, defmacro and defmacrop take their body as do: or a do block",
-          file: env.file,
-          line: env.line
+    if Keyword.keyword?(expr) do
+      code = Definitions.__unwrap_body__(expr, env.file, env.line)
 
-      Keyword.keys(expr) == [:do] ->
-        [do: wrap.(expr[:do])]
+      [do: wrap.(code)]
+    else
+      unwrapped =
+        quote do
+          Definitions.__unwrap_body__(
+            unquote(Macro.escape(expr, unquote: true)),
+            unquote(env.file),
+            unquote(env.line)
+          )
+        end
 
-      true ->
-        [do: wrap.({:try, [], [expr]})]
+      [do: wrap.({:unquote, [], [unwrapped]})]
     end
   end
 
