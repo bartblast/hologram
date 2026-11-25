@@ -80,8 +80,9 @@ defmodule Hologram.Query.Words do
 
   @doc """
   Returns the first of the given values that isn't nil, or nil when all are. A false is a value.
+  Reads no value past the one it returns, so a stream computes only those.
   """
-  @spec coalesce(list(any)) :: any
+  @spec coalesce(Enumerable.t()) :: any
   def coalesce(values), do: Enum.find(values, &(not is_nil(&1)))
 
   @doc """

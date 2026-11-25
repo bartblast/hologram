@@ -49,9 +49,10 @@ defmodule Hologram.Migration.Value.Evaluator do
     |> Words.at(position)
   end
 
+  # A stream, so a fallback is computed only when the values before it are nil.
   def evaluate({:coalesce, values}, row) do
     values
-    |> Enum.map(&evaluate(&1, row))
+    |> Stream.map(&evaluate(&1, row))
     |> Words.coalesce()
   end
 

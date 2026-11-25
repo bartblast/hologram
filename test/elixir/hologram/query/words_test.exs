@@ -187,6 +187,12 @@ defmodule Hologram.Query.WordsTest do
     test "takes an empty string as a value" do
       assert coalesce(["", "a"]) == ""
     end
+
+    test "reads no value past the one it gives" do
+      values = Stream.map([nil, "a", :unread], &if(&1 == :unread, do: raise("read"), else: &1))
+
+      assert coalesce(values) == "a"
+    end
   end
 
   describe "concat/1" do

@@ -87,6 +87,13 @@ defmodule Hologram.Migration.Value.EvaluatorTest do
       assert evaluate(term, %{nickname: "a"}) == "a"
     end
 
+    test "doesn't compute a coalesce's fallback once a value isn't nil" do
+      term = {:coalesce, [{:name, [:active], :boolean}, {:name, [:place, :open], :boolean}]}
+
+      # The fallback can't be read from this row, so computing it would raise.
+      assert evaluate(term, %{active: false, place: :unreadable}) == false
+    end
+
     test "counts a set" do
       assert evaluate({:count, {:relationship, [:tags]}}, %{tags: [%{}, %{}]}) == 2
     end
