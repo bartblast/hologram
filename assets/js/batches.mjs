@@ -495,10 +495,17 @@ export default class Batches {
         // Asked here, after the store has been read and right before the send, rather than once on
         // the way in: the queue is still taken up, so a batch another tab filed is on this tab's
         // screen too, and a stop that arrives while a send is out stops the drain behind it.
+        //
+        // A hold that ends during that read is asked about once more: the flush its end starts
+        // finds this sender busy, so nothing else sends the queue.
         if (SyncStream.holdsWrites()) {
           await Batches.#takeUpWhileHeld();
 
-          return;
+          if (SyncStream.holdsWrites()) {
+            return;
+          }
+
+          continue;
         }
 
         // Asked again here for the same reason: a tab that follows a change of user moves to the

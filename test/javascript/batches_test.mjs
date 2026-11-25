@@ -733,6 +733,34 @@ describe("Batches", () => {
       assert.isFalse(announcing.called);
     });
 
+    // The flush that the end of the hold starts finds the sender busy with that read, so nothing
+    // else would send the queue.
+    it("sends the queue when the hold ends while the queue is read", async () => {
+      sendStub.resolves(confirmed());
+
+      SyncStream.stopReason = "model_hash";
+
+      sealed(creating("t1", "first"));
+
+      let reads = 0;
+
+      sinon.stub(Durability, "queuedBatches").callsFake(async () => {
+        reads += 1;
+
+        if (reads === 2) {
+          SyncStream.stopReason = null;
+          Batches.flush();
+        }
+
+        return [];
+      });
+
+      await Batches.flush();
+
+      assert.isTrue(sendStub.calledOnce);
+      assert.deepStrictEqual(Batches.pending, []);
+    });
+
     // A stubbed read can't tell the old loop from this one: only a real store says what a read
     // started at a given moment would have found.
     describe("with a real store", () => {
