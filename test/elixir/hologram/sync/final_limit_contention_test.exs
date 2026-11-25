@@ -504,6 +504,10 @@ defmodule Hologram.Sync.FinalLimitContentionTest do
 
     :erlang.trace_pattern({Connection, :query, 3}, false, [:local])
 
+    # Trace messages can still be on their way when the reader is done.
+    ref = :erlang.trace_delivered(reader.pid)
+    assert_receive {:trace_delivered, _pid, ^ref}
+
     assert_received {:trace, _pid, :call, {Connection, :query, [first | _args]}}
     assert_received {:trace, _pid, :call, {Connection, :query, [second | _args]}}
 
