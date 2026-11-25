@@ -102,32 +102,35 @@ defmodule Hologram.Migration.FieldAccess.Definitions do
   # The guard is recorded with its definition where the module body runs, as it's defined, so one
   # in a branch that doesn't run, or one a macro has since replaced, can't vouch for another macro
   # of its name. A guard made overridable counts as replaced, and one whose name is unquoted isn't
-  # recorded: both are refused like any other macro.
+  # recorded: both are refused like any other macro. Each arity its defaults give is recorded.
   defp define_guard(kind, guard, env) do
-    case guard_call(guard) do
-      nil ->
-        FieldAccess.define(kind, env, guard)
-
-      call ->
+    records =
+      for call <- guard_calls(guard) do
         quote do
-          unquote(FieldAccess.define(kind, env, guard))
-
           Module.put_attribute(
             __MODULE__,
             unquote(@guards_attribute),
             {unquote(call), Module.get_definition(__MODULE__, unquote(call))}
           )
         end
+      end
+
+    quote do
+      unquote(FieldAccess.define(kind, env, guard))
+      unquote_splicing(records)
     end
   end
 
-  defp guard_call({:when, _meta, [{name, _call_meta, args}, _body]})
-       when is_atom(name) and is_list(args),
-       do: {name, length(args)}
+  defp guard_calls({:when, _meta, [{name, _call_meta, args}, _body]})
+       when is_atom(name) and is_list(args) do
+    defaults = Enum.count(args, &match?({:\\, _default_meta, [_arg, _default]}, &1))
 
-  defp guard_call({:when, _meta, [{name, _call_meta, context}, _body]})
+    for arity <- (length(args) - defaults)..length(args)//1, do: {name, arity}
+  end
+
+  defp guard_calls({:when, _meta, [{name, _call_meta, context}, _body]})
        when is_atom(name) and is_atom(context),
-       do: {name, 0}
+       do: [{name, 0}]
 
-  defp guard_call(_guard), do: nil
+  defp guard_calls(_guard), do: []
 end

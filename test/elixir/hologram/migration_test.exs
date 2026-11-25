@@ -530,6 +530,21 @@ defmodule Hologram.MigrationTest do
                module.__hologram_migration__().ops
     end
 
+    test "accepts a guard of the migration called with its defaults in an op" do
+      module =
+        compile_migration("20260813091522", """
+        defguardp long(text, limit \\\\ 3) when byte_size(text) > limit
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string, default: if(long("Paris"), do: "y", else: "n")
+          add_attribute :second, :string, default: if(long("Paris", 9), do: "y", else: "n")
+        end
+        """)
+
+      assert [%{opts: [default: "y"]}, %{opts: [default: "n"]}] =
+               module.__hologram_migration__().ops
+    end
+
     test "keeps a field access a quote holds as data in an op" do
       module =
         compile_migration("20260813091522", """
