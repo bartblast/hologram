@@ -4157,7 +4157,7 @@ defmodule Hologram.Query.StageTest do
       hints = [{:key, 0, :nope, "a value from the surrounding code is pinned", []}]
 
       assert_error MisuseError,
-                   "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned",
+                   "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :updated_at - a value from the surrounding code is pinned",
                    fn -> new_row_triples!(Module2, [nope: {:==, {:attribute, :c}}], hints) end
     end
 
