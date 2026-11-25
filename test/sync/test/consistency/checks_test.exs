@@ -697,6 +697,14 @@ defmodule HologramSyncTests.Consistency.ChecksTest do
       assert [%{final_seq: nil, problem: :not_final}] =
                Checks.below_final([], entries, @member, nil)
     end
+
+    # Serials go out in the order saves start, not the order they commit.
+    test "flags a limit short of an earlier commit's higher serial once the writes stopped" do
+      entries = [%{max_seq: 5}, %{max_seq: 20}, %{max_seq: 7}]
+
+      assert [%{final_seq: 7, last_seq: 20, problem: :not_final}] =
+               Checks.below_final([], entries, @member, 7)
+    end
   end
 
   defp tags_state(numbered) do
