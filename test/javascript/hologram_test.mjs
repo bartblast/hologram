@@ -5196,10 +5196,14 @@ describe("Hologram", () => {
 
           try {
             IdentityTracker.observe("2.tag-2");
-            Hologram.navigationCount += 1;
             bundleArrives("stale-7");
 
-            await fetchPageStub.lastCall.args[1]({identityPeriod: null});
+            sinon.assert.calledOnce(fetchPageStub);
+            const answer = fetchPageStub.lastCall.args[1];
+
+            Hologram.navigationCount += 1;
+
+            await answer({identityPeriod: null});
 
             sinon.assert.notCalled(loading);
           } finally {
