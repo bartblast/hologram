@@ -1479,12 +1479,18 @@ describe("Overlay", () => {
       assert.equal(Overlay.foldRow(TODO, "t1", null).title, "Third");
     });
 
+    // Folded ahead of sequence 2 it finds no row, and after sequence 5 its title wins.
     it("folds it between batches with a lower and a higher number", () => {
       Overlay.push(sealed(2, createWrite()));
-      Overlay.push(sealed(5, update("Fifth")));
+      Overlay.push(
+        sealed(5, updateWrite({data: {title: "Fifth"}, stamp: stamp + 2})),
+      );
 
       Overlay.insert(
-        sealed(3, updateWrite({data: {done: true}, stamp: stamp + 1})),
+        sealed(
+          3,
+          updateWrite({data: {done: true, title: "Third"}, stamp: stamp + 1}),
+        ),
       );
 
       const row = Overlay.foldRow(TODO, "t1", null);
