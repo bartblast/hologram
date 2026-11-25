@@ -1120,6 +1120,12 @@ export default class DataLayer {
     return $.caughtUpTag !== null;
   }
 
+  // Whether the last handshake's cookie was behind the identity this tab follows, so writes wait
+  // for the next handshake to bring one that isn't (see takeHandshake).
+  static waitsForCookie() {
+    return SyncStream.laggingCookie;
+  }
+
   // Whether this tab followed a change of user and waits for a handshake to bring the new user's
   // pair: it dropped the previous user's, so it has none to show (see replicaToReplace).
   static awaitsPair() {

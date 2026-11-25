@@ -1275,6 +1275,29 @@ describe("Sse", () => {
         }
       });
 
+      // The tab still holds its writes, and no stream is left to tell it to ask again.
+      it("sets a deadline on the handshake after one whose cookie lagged", () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        SyncStream.laggingCookie = true;
+
+        fetchStub.returns(new Promise(() => {}));
+
+        try {
+          Sse.connect();
+
+          const {signal} = fetchStub.firstCall.args[1];
+
+          timers.tick(Config.mutationTimeoutMs);
+
+          assert.isTrue(signal.aborted);
+        } finally {
+          SyncStream.laggingCookie = false;
+        }
+      });
+
       it("sets no deadline on a handshake while no identity is wanted", async () => {
         const timers = sinon.useFakeTimers({
           toFake: ["setTimeout", "clearTimeout"],
