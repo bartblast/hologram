@@ -1491,15 +1491,27 @@ defmodule HologramFeatureTests.Helpers do
   cookie. Use it to give a connection a same-session sibling.
   """
   def visit_as_sibling(session, origin, page_module, params \\ []) do
+    session
+    |> visit("/external")
+    |> share_session_cookie(origin)
+    |> visit(page_module, params)
+  end
+
+  @doc """
+  Copies `origin`'s signed `phoenix_session` cookie into `session`, which must
+  already be on the domain.
+
+  Wallaby sessions have isolated cookie jars, so a cookie one tab's response sets
+  never reaches its siblings the way it does across a browser's tabs. Use it to
+  carry such a cookie over, for example after a re-auth in one tab.
+  """
+  def share_session_cookie(session, origin) do
     %{"value" => session_cookie} =
       origin
       |> cookies()
       |> Enum.find(&(&1["name"] == "phoenix_session"))
 
-    session
-    |> visit("/external")
-    |> Browser.set_cookie("phoenix_session", session_cookie)
-    |> visit(page_module, params)
+    Browser.set_cookie(session, "phoenix_session", session_cookie)
   end
 
   @doc """
