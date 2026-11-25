@@ -866,6 +866,18 @@ describe("Durability", () => {
         assert.deepStrictEqual(await queued(), [8]);
       });
 
+      // The tab can follow a sign-in while the batch is out.
+      it("goes by the identity the batch was sent under", async () => {
+        await letGo();
+
+        const sentUnder = Durability.sentUnder();
+        Replica.adopt({id: "r-minted", token: "statement-minted"});
+
+        await Durability.forgetBatch(7, sentUnder);
+
+        assert.deepStrictEqual(await queued(), [8]);
+      });
+
       it("leaves the batch when the tab no longer presents the stored identity", async () => {
         await letGo();
 

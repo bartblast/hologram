@@ -393,7 +393,12 @@ describe("Batches", () => {
         answer(confirmed());
         await flushing;
 
-        assert.isTrue(forgetting.calledOnceWithExactly(batch.seq));
+        sinon.assert.calledOnceWithExactly(
+          forgetting,
+          batch.seq,
+          sinon.match.object,
+        );
+
         assert.isNull(LocalDatabase.getRow(TODO, "t1"));
       });
 
@@ -1755,7 +1760,21 @@ describe("Batches", () => {
 
       await Batches.flush();
 
-      assert.isTrue(forgetting.calledOnceWithExactly(1));
+      sinon.assert.calledOnceWithExactly(forgetting, 1, sinon.match.object);
+    });
+
+    // The tab can follow a sign-in while the batch is out.
+    it("forgets a batch under the identity it was sent under", async () => {
+      const forgetting = sinon.stub(Durability, "forgetBatch");
+      const sentUnder = {holdsIdentity: true, owner: null, replicaId: "r-sent"};
+
+      sinon.stub(Durability, "sentUnder").returns(sentUnder);
+      sealed(creating("t1", "first"));
+      sendStub.resolves(confirmed());
+
+      await Batches.flush();
+
+      sinon.assert.calledOnceWithExactly(forgetting, 1, sentUnder);
     });
 
     // Refused for the writes or refused for the build, it is answered either way - and a batch
@@ -1773,7 +1792,7 @@ describe("Batches", () => {
 
       await Batches.flush();
 
-      assert.isTrue(forgetting.calledOnceWithExactly(1));
+      sinon.assert.calledOnceWithExactly(forgetting, 1, sinon.match.object);
     });
 
     // A delete that fails on the spot ends the group, and a tab that never heard would resend it.

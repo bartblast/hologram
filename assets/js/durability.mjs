@@ -415,13 +415,12 @@ export default class Durability {
   // is answered from it, so that costs a round trip. One that isn't is judged afresh (see
   // #forgetWithoutStore).
   //
-  // Whose batch it is gets read here, before the wait: an answer to the next batch can move this
-  // tab to another identity while the delete is running.
-  static async forgetBatch(seq) {
-    const owner = Durability.#pairOwner();
-    const replicaId = Replica.id;
-    const holdsIdentity = Durability.hadStore && Durability.holdsIdentity();
-
+  // Given the identity the batch was sent under (see sentUnder), since the tab can follow a sign-in
+  // while the batch is out, and an answer to the next batch can move it during the delete too.
+  static async forgetBatch(
+    seq,
+    {holdsIdentity, owner, replicaId} = Durability.sentUnder(),
+  ) {
     if (Durability.mode !== "memory") {
       const deleted = await Durability.#write([QUEUE], (transaction) =>
         transaction.objectStore(QUEUE).delete(seq),
@@ -728,6 +727,15 @@ export default class Durability {
   // Whether the identity this tab presents is the one the store holds. A tab without a store that
   // does may send the stored batches under it, and nothing else: their numbers are recorded, and a
   // new one would be recorded nowhere, so the next load could spend it again.
+  // The identity a batch goes out under, read as it is sent, for forgetting it once answered.
+  static sentUnder() {
+    return {
+      holdsIdentity: Durability.hadStore && Durability.holdsIdentity(),
+      owner: Durability.#pairOwner(),
+      replicaId: Replica.id,
+    };
+  }
+
   static holdsIdentity() {
     return Replica.id !== null && Replica.id === Durability.#storedReplicaId;
   }

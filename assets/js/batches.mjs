@@ -528,6 +528,7 @@ export default class Batches {
 
         batch.mark("sending");
 
+        const sentUnder = Durability.sentUnder();
         const answer = await Batches.#answerFor(batch);
 
         // No verdict about the writes, so the batch stays exactly where it is and the queue stops
@@ -661,7 +662,7 @@ export default class Batches {
         // ends the group, and a tab that never heard would send the batch again.
         Tabs.post({answer, kind: "answered", seq: batch.seq});
 
-        Durability.forgetBatch(batch.seq);
+        Durability.forgetBatch(batch.seq, sentUnder);
 
         Batches.settle(batch.seq, answer);
       }
