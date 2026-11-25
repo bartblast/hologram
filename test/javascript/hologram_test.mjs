@@ -7901,7 +7901,25 @@ describe("Hologram", () => {
           Hologram.handleBeforeunloadEvent();
           sinon.assert.notCalled(saveEtsStub);
 
-          await Hologram.restoreEts();
+          // The read is held open, so an unload during it would write over the stored tables.
+          let failRead;
+
+          Object.defineProperty(navigator, "storage", {
+            configurable: true,
+            value: {
+              getDirectory: () =>
+                new Promise((_resolve, reject) => (failRead = reject)),
+            },
+          });
+
+          const restoring = Hologram.restoreEts();
+          await waitForEventLoop();
+
+          Hologram.handleBeforeunloadEvent();
+          sinon.assert.notCalled(saveEtsStub);
+
+          failRead(new Error("no OPFS"));
+          await restoring;
 
           Hologram.handleBeforeunloadEvent();
           sinon.assert.calledOnce(saveEtsStub);
