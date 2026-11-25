@@ -8933,6 +8933,7 @@ describe("Hologram", () => {
     let mountStub, originalPagePath, requestChunksStub, restoreStub;
 
     beforeEach(() => {
+      IdentityTracker.init("1.tag");
       originalPagePath = Hologram.pagePath;
       mountStub = sinon.stub(MountGate, "mountWhenReady");
       requestChunksStub = sinon.stub(Hologram, "requestChunks");
@@ -8963,6 +8964,18 @@ describe("Hologram", () => {
       await mounting;
 
       sinon.assert.calledOnceWithExactly(restoreStub, pageSnapshot);
+      sinon.assert.calledOnce(mountStub);
+    });
+
+    it("mounts from the rendered state when the identity changes while the chunks load", async () => {
+      const mounting = Hologram.mountDocument(pageSnapshot, 0);
+
+      IdentityTracker.observe("2.other");
+
+      announce();
+      await mounting;
+
+      sinon.assert.notCalled(restoreStub);
       sinon.assert.calledOnce(mountStub);
     });
 

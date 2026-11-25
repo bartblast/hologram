@@ -1350,7 +1350,12 @@ export default class Hologram {
       return;
     }
 
-    if (isRestorable) {
+    // The snapshot was taken for the identity the document was rendered for, which can have
+    // changed while its chunks loaded. Its state would go in under a period that has ended.
+    if (
+      isRestorable &&
+      IdentityTracker.isCurrent(IdentityTracker.documentPeriod)
+    ) {
       $.restoreDocumentSnapshot(pageSnapshot);
     }
 
