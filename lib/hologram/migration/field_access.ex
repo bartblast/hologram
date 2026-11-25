@@ -70,9 +70,9 @@ defmodule Hologram.Migration.FieldAccess do
   def rewrite({:quote, _meta, args} = node, env, splicing) when is_list(args),
     do: rewrite_quote(node, env, splicing)
 
-  def rewrite({:|>, _meta, [_left, {:quote, _quote_meta, args}]} = node, env, splicing)
+  def rewrite({:|>, meta, [_left, {:quote, _quote_meta, args}]} = node, env, splicing)
       when is_list(args) do
-    if own_macro?(env, :|>, 2), do: node, else: rewrite_quote(node, env, splicing)
+    if own_macro?(env, meta, :|>, 2), do: node, else: rewrite_quote(node, env, splicing)
   end
 
   def rewrite(
@@ -146,7 +146,7 @@ defmodule Hologram.Migration.FieldAccess do
   # A pipe passes the first argument, so a path macro at its end takes the left side as
   # its path, and the migration's own macro takes it as written.
   def rewrite({:|>, meta, [left, right]} = ast, env, splicing) do
-    if own_macro?(env, :|>, 2),
+    if own_macro?(env, meta, :|>, 2),
       do: ast,
       else: {:|>, meta, rewrite_pipe(left, right, env, splicing)}
   end
@@ -158,7 +158,7 @@ defmodule Hologram.Migration.FieldAccess do
   def rewrite({name, meta, [path | args]} = ast, env, splicing)
       when is_atom(name) and is_list(meta) do
     cond do
-      own_macro?(env, name, length(args) + 1) ->
+      own_macro?(env, meta, name, length(args) + 1) ->
         ast
 
       {name, length(args) + 1} in @path_macros ->
@@ -265,13 +265,18 @@ defmodule Hologram.Migration.FieldAccess do
 
   # A migration's own macro rewrites the code it expands to (see define/4), and the code
   # it takes may be data it returns, so a call to it stays as written. A guard expands to
-  # code it doesn't rewrite, so its arguments are rewritten like a function's.
-  defp own_macro?(%Macro.Env{module: module}, name, arity) do
+  # code it doesn't rewrite, so its arguments are rewritten like a function's. A quote's call
+  # names the import it was written with, which Elixir takes over the module's own macro.
+  defp own_macro?(%Macro.Env{module: module}, meta, name, arity) do
     call = {name, arity}
 
-    module != nil and Module.open?(module) and
+    not quoted_import?(meta, arity) and module != nil and Module.open?(module) and
       (Module.defines?(module, call, :defmacro) or Module.defines?(module, call, :defmacrop)) and
       not Definitions.guard?(module, call)
+  end
+
+  defp quoted_import?(meta, arity) do
+    Keyword.has_key?(meta, :context) and List.keymember?(meta[:imports] || [], arity, 0)
   end
 
   defp placeholder?(ast) do
@@ -294,7 +299,7 @@ defmodule Hologram.Migration.FieldAccess do
     arity = if is_list(args), do: length(args) + 1, else: 1
 
     cond do
-      own_macro?(env, name, arity) ->
+      own_macro?(env, meta, name, arity) ->
         [left, right]
 
       {name, arity} in @path_macros ->

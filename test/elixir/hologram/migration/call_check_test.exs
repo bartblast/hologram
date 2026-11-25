@@ -973,6 +973,24 @@ defmodule Hologram.Migration.CallCheckTest do
       assert compile_migration("20260813091522", body).quoted_text() == "x.y"
     end
 
+    test "reads a pipe into a quote in a macro's code by the import it was written with" do
+      body = ~S"""
+      defmacrop left |> right, do: {left, right}
+
+      defmacrop bound(row), do: quote(do: [bind_quoted: [x: unquote(row).name]] |> quote(do: x))
+
+      def name(row), do: bound(row)
+      """
+
+      module = compile_migration("20260813091522", body)
+
+      code = module.name(%{name: "Alice"})
+
+      assert {"Alice", _binding} = Code.eval_quoted(code)
+
+      assert_raise BadMapError, fn -> module.name(Hologram.Test.Fixtures.Migration.Module1) end
+    end
+
     test "passes a pipe to the migration's own pipe macro as written" do
       body = ~S"""
       import Kernel, only: []
