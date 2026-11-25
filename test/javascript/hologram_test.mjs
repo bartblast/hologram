@@ -5221,23 +5221,27 @@ describe("Hologram", () => {
             "Hologram.Test.Fixtures.RestoredPage",
           );
 
-          const pageSnapshot = () => ({
+          const pageSnapshot = (scrollPosition) => ({
             chunkDigests: [],
             componentRegistryEntries: Type.map(),
             identityPeriod: IdentityTracker.period,
             instanceId: "restored-instance",
             pageModule: snapshotModule,
             pageParams: Type.map(),
-            scrollPosition: [0, 0],
+            scrollPosition: scrollPosition,
             subscriptionReceipts: [],
           });
 
           let digestStub, instanceId;
 
-          const restore = async (historyId, digest) => {
+          const restore = async (
+            historyId,
+            digest,
+            scrollPosition = [0, 0],
+          ) => {
             sessionStorage.setItem(
               `hologram_page_snapshot_${historyId}`,
-              Serializer.serialize(pageSnapshot(), "client"),
+              Serializer.serialize(pageSnapshot(scrollPosition), "client"),
             );
 
             digestStub.callsFake((_module, onSuccess) => onSuccess(digest));
@@ -5292,6 +5296,33 @@ describe("Hologram", () => {
               fetchPageStub.firstCall.args[0].data[0],
               snapshotModule,
             );
+          });
+
+          // The page that answers is the one left next, and is saved where it was scrolled to.
+          it("doesn't take the position of the restore it gave up on for the page that answers", async () => {
+            await restore("history-snapshot-4", "restored-4", [0, 640]);
+
+            IdentityTracker.observe("2.tag-2");
+            bundleArrives("restored-4");
+
+            await fetchPageStub.firstCall.args[1]({
+              ...payloadFor("restored-answer-4"),
+              actorUserId: "u2",
+              identityPeriod: IdentityTracker.period,
+              syncRows: {},
+            });
+
+            frames.splice(0).forEach((frame) => frame());
+
+            Hologram.handleBeforeunloadEvent();
+
+            const savedSnapshot = Deserializer.deserialize(
+              sessionStorage.getItem(
+                `hologram_page_snapshot_${Hologram.historyId}`,
+              ),
+            );
+
+            assert.deepStrictEqual(savedSnapshot.scrollPosition, [0, 0]);
           });
 
           // The restore it gave up on must not make the page it asked for skip its mount data.

@@ -3142,6 +3142,7 @@ export default class Hologram {
     $.requestChunks(chunkDigests);
 
     // What a restore left for the mount was abandoned, or this page wouldn't have come.
+    $.#scrollPosition = null;
     $.#shouldLoadMountData = true;
 
     // Readable before the patch, rather than as a side effect of a script the patch inserts and
