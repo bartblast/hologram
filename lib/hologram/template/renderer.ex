@@ -1521,21 +1521,33 @@ defmodule Hologram.Template.Renderer do
   # and what the returned struct holds under it, :error for a deleted one. Only that init/3's: the
   # ones before it run again, and a change carried over would then be made twice. Named by the
   # component and its cid, which the render for the new user gives it again.
+  #
+  # A write of the value already there changes the entry's operation and not its value. Its value
+  # goes with it all the same: an earlier init/3 can set another one when it runs again, and the
+  # page would then read one value and persist the other.
   defp response_changes(module, server_struct, returned_server_struct) do
+    cookie_ops =
+      map_changes(server_struct.__meta__.cookie_ops, returned_server_struct.__meta__.cookie_ops)
+
+    session_ops =
+      map_changes(server_struct.__meta__.session_ops, returned_server_struct.__meta__.session_ops)
+
     %{
       component: {module, server_struct.cid},
-      cookie_ops:
-        map_changes(server_struct.__meta__.cookie_ops, returned_server_struct.__meta__.cookie_ops),
-      cookies: map_changes(server_struct.cookies, returned_server_struct.cookies),
+      cookie_ops: cookie_ops,
+      cookies: value_changes(server_struct.cookies, returned_server_struct.cookies, cookie_ops),
       response_headers:
         map_changes(server_struct.response_headers, returned_server_struct.response_headers),
-      session: map_changes(server_struct.session, returned_server_struct.session),
-      session_ops:
-        map_changes(
-          server_struct.__meta__.session_ops,
-          returned_server_struct.__meta__.session_ops
-        )
+      session: value_changes(server_struct.session, returned_server_struct.session, session_ops),
+      session_ops: session_ops
     }
+  end
+
+  defp value_changes(before, returned, op_changes) do
+    changes = map_changes(before, returned)
+    op_keys = for {key, _op} <- op_changes, not List.keymember?(changes, key, 0), do: key
+
+    changes ++ Enum.map(op_keys, &{&1, Map.fetch(returned, &1)})
   end
 
   defp map_changes(before, returned) do

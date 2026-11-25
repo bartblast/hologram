@@ -25,11 +25,16 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module179 do
       |> put_state(:change_each_time, Map.get(params, :change_each_time, false))
       |> put_state(:child_cid, child_cid(params))
 
-    # Written before the child's init/3 writes the same key.
-    if Map.get(params, :signs_in_over, false) do
-      {component, put_session(server, :signed_in_by, "module_179")}
-    else
-      component
+    # Written before the child's init/3 writes the same key, or only once somebody is signed in.
+    cond do
+      Map.get(params, :signs_in_over, false) ->
+        {component, put_session(server, :signed_in_by, "module_179")}
+
+      Map.get(params, :signs_in_over_user, false) and server.user_id != nil ->
+        {component, put_session(server, :signed_in_by, "module_179")}
+
+      true ->
+        component
     end
   end
 

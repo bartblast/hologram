@@ -1217,6 +1217,23 @@ defmodule Hologram.Template.RendererDerivedTest do
       assert server_struct.session["signed_in_by"] == "module_180"
     end
 
+    # The child's write left the value as it was, and the page's init/3 sets another one when it
+    # runs again for the new user.
+    test "keeps the value the init/3 that signed in wrote over the one already there", %{
+      user: user
+    } do
+      %{server_struct: server_struct} =
+        render_page(
+          Module179,
+          %{signs_in_over_user: true, user_id: user.id},
+          %Server{session: %{"signed_in_by" => "module_180"}},
+          @page_opts
+        )
+
+      assert server_struct.session["signed_in_by"] == "module_180"
+      assert server_struct.__meta__.session_ops["signed_in_by"] == {:put, "module_180"}
+    end
+
     test "gives the actor back after rendering again", %{user: user} do
       render_page(Module179, %{user_id: user.id}, %Server{}, @page_opts)
 
