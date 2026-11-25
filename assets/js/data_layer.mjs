@@ -67,6 +67,10 @@ export default class DataLayer {
   // once the mount is done (see #followMountedIdentity).
   static #reconnectsAfterMount = false;
 
+  // Whether the last handshake put its pair in use, which wakes the sender once the handshake is
+  // taken (see takeReplica).
+  static #tookHandshakePair = false;
+
   // The pairs of the users whose batches wait in this tab with no store to hold them, by user (see
   // followIdentity).
   static #heldPairs = new Map();
@@ -865,10 +869,12 @@ export default class DataLayer {
       // as under a pair it asked for (see Replica.requestMint).
       if (Replica.id === null && Tabs.name === null) {
         Replica.adoptOwn(Replica.fresh);
+        $.#tookHandshakePair = true;
       } else if (Replica.id === null && leadsForItself) {
         Replica.adopt(Replica.fresh);
         Durability.persistReplica(Replica.current());
         Tabs.postState();
+        $.#tookHandshakePair = true;
       }
     }
 
@@ -1270,14 +1276,20 @@ export default class DataLayer {
   // Takes up the identity a stream handshake brought, if this tab asked for one, and wakes the
   // sender that was holding for it. Answers the sender's promise, so a page about to reload can let
   // it finish. A handshake that refused the pair it showed ends the asking, so the stream can open.
+  //
+  // The sender is woken too when the handshake put its own pair in use: the writes it held for a
+  // pair have one now, and nothing else tells it.
   static takeReplica(replica, refused = false, presentedId = undefined) {
+    const tookHandshakePair = $.#tookHandshakePair;
+    $.#tookHandshakePair = false;
+
     if (refused) {
       Replica.refuseMint(presentedId);
-
-      return null;
+    } else if (Replica.takeMinted(replica)) {
+      return Batches.flush();
     }
 
-    return Replica.takeMinted(replica) ? Batches.flush() : null;
+    return tookHandshakePair ? Batches.flush() : null;
   }
 
   // Whether the next stream handshake should ask the server for an identity (see

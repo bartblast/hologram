@@ -2612,6 +2612,56 @@ describe("DataLayer", () => {
         assert.isFalse(SyncStream.holdsWrites());
       });
 
+      // The writes held for a pair have one now, and nothing else wakes the sender.
+      it("wakes the sender once the handshake is taken", () => {
+        const sending = Promise.resolve();
+        const flush = sinon.stub(Batches, "flush").returns(sending);
+
+        try {
+          SyncStream.awaitingPair = true;
+
+          DataLayer.takeHandshake(answer());
+
+          assert.strictEqual(DataLayer.takeReplica(null), sending);
+          sinon.assert.calledOnce(flush);
+
+          assert.isNull(DataLayer.takeReplica(null));
+          sinon.assert.calledOnce(flush);
+        } finally {
+          flush.restore();
+        }
+      });
+
+      it("wakes the sender of a leader that writes it down", () => {
+        const flush = sinon.stub(Batches, "flush");
+
+        try {
+          Tabs.name = "hologram.1.model.u1";
+
+          DataLayer.takeHandshake(answer());
+          DataLayer.takeReplica(null);
+
+          sinon.assert.calledOnce(flush);
+        } finally {
+          flush.restore();
+        }
+      });
+
+      it("leaves the sender alone when the tab keeps the pair it holds", () => {
+        const flush = sinon.stub(Batches, "flush");
+
+        try {
+          Replica.adopt({id: "replica-1", token: "token-1"});
+
+          DataLayer.takeHandshake(answer());
+          DataLayer.takeReplica(null);
+
+          sinon.assert.notCalled(flush);
+        } finally {
+          flush.restore();
+        }
+      });
+
       // Minted for this tab alone, so its batches are numbered under it as under one it asked for.
       it("counts as the tab's own in a tab in no group that holds none", () => {
         Replica.requestMint();
