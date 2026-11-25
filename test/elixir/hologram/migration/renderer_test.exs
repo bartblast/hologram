@@ -647,9 +647,62 @@ defmodule Hologram.Migration.RendererTest do
       expected_msg =
         ~s(the default "fresh" of column "grade" on table "my_app_task" is an enum value ) <>
           "its type doesn't hold yet when the column fills - list the value in the values: of " <>
-          "the op adding the attribute, and drop the op adding it to the type further down"
+          "the op adding the attribute, and drop the op adding it to the type further down - " <>
+          "or, when a rename further down gives the value its label, list the label in place " <>
+          "of the value renamed and drop the rename"
 
       assert_raise Hologram.CompileError, expected_msg, fn -> render(ops, pre_model) end
+    end
+
+    test "refuses a required add filling a label a rename gives a value below a cut" do
+      pre_model =
+        model(%{MyApp.Task => %{attributes: [{:seats, :integer, [optional: true]}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          type: :enum,
+          opts: [default: :live, values: [:draft]],
+          line: 3
+        },
+        %{
+          op: :rename_enum_value,
+          entity: MyApp.Task,
+          attribute: :grade,
+          from: :draft,
+          to: :live,
+          line: 8
+        }
+      ]
+
+      expected_msg =
+        ~s(the default "live" of column "grade" on table "my_app_task" is an enum value ) <>
+          "its type doesn't hold yet when the column fills - list the value in the values: of " <>
+          "the op adding the attribute, and drop the op adding it to the type further down - " <>
+          "or, when a rename further down gives the value its label, list the label in place " <>
+          "of the value renamed and drop the rename"
+
+      assert_raise Hologram.CompileError, expected_msg, fn -> render(ops, pre_model) end
+    end
+
+    test "accepts the same add with the renamed value's label listed in its values" do
+      pre_model =
+        model(%{MyApp.Task => %{attributes: [{:seats, :integer, [optional: true]}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          type: :enum,
+          opts: [default: :live, values: [:live]],
+          line: 3
+        }
+      ]
+
+      assert %{transactional: _transactional} = render(ops, pre_model)
     end
 
     test "accepts the same add with the value listed in its values" do

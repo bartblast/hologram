@@ -311,8 +311,8 @@ defmodule Hologram.DB.Preflight do
   @doc """
   Returns the refusal of a default its enum doesn't hold yet where the given column fills, by the
   op filling it: a tightening, or an add. An added column's type is new, so the value comes from
-  an addition further down the same file, and moving the add to the next file would leave that
-  addition naming an attribute not there yet.
+  an addition or a rename further down the same file, and moving the add to the next file would
+  leave that op naming an attribute not there yet.
   """
   @spec unheld_default_message(String.t(), String.t(), any, :add | :tighten) :: String.t()
   def unheld_default_message(table, column, value, filled_by) do
@@ -750,7 +750,8 @@ defmodule Hologram.DB.Preflight do
   # own index entries hold every unique index of its table.
   defp unheld_default_remedy(:add) do
     "list the value in the values: of the op adding the attribute, and drop the op adding it " <>
-      "to the type further down"
+      "to the type further down - or, when a rename further down gives the value its label, " <>
+      "list the label in place of the value renamed and drop the rename"
   end
 
   defp unheld_default_remedy(:tighten) do
