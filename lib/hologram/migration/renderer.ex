@@ -638,17 +638,27 @@ defmodule Hologram.Migration.Renderer do
 
   # A backfill holds a value of the type its add declares, so a type change of the attribute after
   # it applies to the filled rows on its own, as a cast, rather than merging into the add. A change
-  # restating the add's type casts nothing, so it merges.
+  # restating the add's type casts nothing, so it merges. The add is the one of the attribute as it
+  # stands, the latest op above that adds or deletes it - an add deleted since fills nothing the
+  # change meets.
   defp retypes_filled_add?(%{op: :change_attribute, changes: changes} = op, ops) do
     Keyword.has_key?(changes, :type) and
-      Enum.any?(ops, fn earlier ->
-        earlier.op == :add_attribute and earlier.entity == op.entity and
-          earlier.name == op.name and Keyword.has_key?(earlier.opts, :backfill) and
-          earlier.type != changes[:type]
-      end)
+      case Enum.find(ops, &adds_or_deletes?(&1, op.entity, op.name)) do
+        %{op: :add_attribute} = add ->
+          Keyword.has_key?(add.opts, :backfill) and add.type != changes[:type]
+
+        _deleted_or_none ->
+          false
+      end
   end
 
   defp retypes_filled_add?(_op, _ops), do: false
+
+  defp adds_or_deletes?(%{op: kind, entity: entity, name: name}, entity, name)
+       when kind in [:add_attribute, :delete_attribute],
+       do: true
+
+  defp adds_or_deletes?(_op, _entity, _name), do: false
 
   defp role_values(mapping) do
     case Map.fetch(mapping, RoleGrant) do
