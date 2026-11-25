@@ -1831,7 +1831,7 @@ describe("DataLayer", () => {
         const resumed = {
           batches: [{seq: 4, writes: []}],
           cursor: "place-2",
-          readForeign: true,
+          readForeign: false,
           seq: 5,
         };
 
@@ -1902,11 +1902,23 @@ describe("DataLayer", () => {
           sinon.assert.calledOnceWithExactly(restoring, false);
           sinon.assert.calledOnceWithExactly(resumingFrom, 5);
           sinon.assert.calledOnceWithExactly(adopting, resumed.batches);
-          sinon.assert.calledOnceWithExactly(readying, true);
+          sinon.assert.calledOnceWithExactly(readying, false);
           sinon.assert.calledOnceWithExactly(posting, {kind: "joined"});
           sinon.assert.calledOnce(flushing);
 
           assert.equal(SyncStream.syncCursor, "place-2");
+        });
+
+        // A store of another user's gives no place, and the tab readies as one that read it.
+        it("takes up a store of another user's with no place", async () => {
+          Tabs.leader = false;
+          restoring.returns({...resumed, cursor: null, readForeign: true});
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.calledOnceWithExactly(readying, true);
+          assert.isNull(SyncStream.syncCursor);
         });
 
         // Only the current visit's read counts: a newer move loads again.
