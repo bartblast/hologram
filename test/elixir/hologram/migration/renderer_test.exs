@@ -1100,7 +1100,23 @@ defmodule Hologram.Migration.RendererTest do
         change.([type: [MyApp.Admin]], 4)
       ]
 
-      assert %{transactional: _transactional} = render(ops, pre_model)
+      %{transactional: transactional} = render(ops, pre_model)
+
+      assert [
+               %{op: :drop_foreign_key, table: "my_app_task"},
+               %{op: :alter_column, column: "reviewer_id", after: %{null: false}},
+               %{op: :add_foreign_key, column: "reviewer_id", references: "my_app_admin"},
+               %{op: :create_table, table: "my_app_task_reviewer_$join"},
+               %{op: :add_foreign_key, column: "source_id", references: "my_app_task"},
+               %{op: :add_foreign_key, column: "target_id", references: "my_app_admin"},
+               %{
+                 op: :widen_to_many,
+                 column: "reviewer_id",
+                 join_table: "my_app_task_reviewer_$join"
+               },
+               %{op: :drop_foreign_key, constraint: "my_app_task_reviewer_id_$fk"},
+               %{op: :drop_column, table: "my_app_task", column: "reviewer_id"}
+             ] = transactional
     end
 
     test "keeps a constant tightening apart from a type change beside it", %{
