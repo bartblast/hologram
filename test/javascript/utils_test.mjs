@@ -215,7 +215,8 @@ describe("Utils", () => {
       const embeddedMs = (uuid) =>
         parseInt(uuid.replaceAll("-", "").slice(0, 12), 16);
 
-      const sorted = (uuids) => [...uuids].sort();
+      const strictlyIncreasing = (uuids) =>
+        uuids.every((uuid, index) => index === 0 || uuids[index - 1] < uuid);
 
       afterEach(() => {
         timers.restore();
@@ -227,7 +228,7 @@ describe("Utils", () => {
 
         const uuids = Array.from({length: 100}, () => Utils.uuidv7());
 
-        assert.deepStrictEqual(sorted(uuids), uuids);
+        assert.isTrue(strictlyIncreasing(uuids));
         assert.isTrue(uuids.every((uuid) => embeddedMs(uuid) === nowMs));
       });
 
@@ -239,7 +240,7 @@ describe("Utils", () => {
         // never the one after it.
         const uuids = Array.from({length: 4_097}, () => Utils.uuidv7());
 
-        assert.deepStrictEqual(sorted(uuids), uuids);
+        assert.isTrue(strictlyIncreasing(uuids));
         assert.equal(embeddedMs(uuids[0]), nowMs);
         assert.equal(embeddedMs(uuids.at(-1)), nowMs + 1);
       });
