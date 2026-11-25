@@ -8704,6 +8704,7 @@ describe("Hologram", () => {
       removeStub.restore();
       addStub.restore();
 
+      delete globalThis.Hologram._documentState;
       delete globalThis.Hologram._missedPopstate;
       delete globalThis.Hologram._popstateShim;
       Hologram.documentUrl = null;
@@ -8771,6 +8772,57 @@ describe("Hologram", () => {
       assert.isFalse(Hologram.listenForPopstate());
 
       sinon.assert.calledOnce(reloadStub);
+    });
+
+    describe("into an entry", () => {
+      let originalState, originalUrl;
+
+      beforeEach(() => {
+        originalState = history.state;
+        originalUrl = window.location.href;
+        sessionStorage.clear();
+        globalThis.Hologram._missedPopstate = true;
+      });
+
+      afterEach(() => {
+        history.replaceState(originalState, null, originalUrl);
+        sessionStorage.clear();
+      });
+
+      it("of another id, noting it for the next document", () => {
+        globalThis.Hologram._documentState = "entry-of-the-document";
+        history.replaceState("entry-moved-to", null, "/search?tab=2");
+
+        Hologram.listenForPopstate();
+
+        sinon.assert.calledOnce(reloadStub);
+        assert.isTrue(Hologram.wasReloadedForHistoryEntry());
+      });
+
+      // The snapshot under the shared id can be the document's own entry's, of another query string.
+      it("sharing the document's id, without noting it", () => {
+        globalThis.Hologram._documentState = "entry-of-the-page";
+        history.replaceState("entry-of-the-page", null, "/search?tab=2");
+
+        Hologram.listenForPopstate();
+
+        sinon.assert.calledOnce(reloadStub);
+        assert.isFalse(Hologram.wasReloadedForHistoryEntry());
+      });
+
+      it("sharing the document's id, on a further Back", () => {
+        globalThis.Hologram._documentState = "entry-of-the-page";
+        history.replaceState("entry-moved-to", null, "/search?tab=2");
+
+        Hologram.listenForPopstate();
+        sessionStorage.clear();
+
+        history.replaceState("entry-of-the-page", null, "/search?tab=3");
+        addStub.firstCall.args[1]();
+
+        sinon.assert.calledTwice(reloadStub);
+        assert.isFalse(Hologram.wasReloadedForHistoryEntry());
+      });
     });
 
     it("goes on in a document with no inline script", () => {

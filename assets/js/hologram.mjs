@@ -1285,17 +1285,31 @@ export default class Hologram {
     }
 
     if (globalThis.Hologram._missedPopstate) {
+      // Entries of one page can share an id and differ in their query string, and the snapshot
+      // under that id can be the other entry's. So an entry with this document's id gets a plain
+      // reload, as in handlePopstateEvent.
+      const reload = () => {
+        if (
+          typeof history.state === "string" &&
+          history.state === globalThis.Hologram._documentState
+        ) {
+          Hologram.reloadBrowserLocation();
+        } else {
+          $.reloadHistoryEntry();
+        }
+      };
+
       // This document never boots, so a further Back only has to reload into its own entry. So
       // does a return from the back/forward cache, when another navigation cancelled the reload.
-      window.addEventListener("popstate", () => $.reloadHistoryEntry());
+      window.addEventListener("popstate", reload);
 
       window.addEventListener("pageshow", (event) => {
         if (event.persisted) {
-          $.reloadHistoryEntry();
+          reload();
         }
       });
 
-      $.reloadHistoryEntry();
+      reload();
 
       return false;
     }

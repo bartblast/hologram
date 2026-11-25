@@ -13,6 +13,8 @@ defmodule Hologram.UI.Runtime do
   # booting. A jump to a #fragment fires popstate too, with a null state and the same path and query
   # string, and keeps the document. Only string states are compared, since those are Hologram's
   # entry ids, and an object state arrives as a new clone that never equals the one read here.
+  # The document's own state is kept for the runtime, which reloads an entry that shares it without
+  # restoring a snapshot, since the snapshot under a shared id can be another entry's.
   @impl Component
   def template do
     ~HOLO"""
@@ -25,6 +27,8 @@ defmodule Hologram.UI.Runtime do
         globalThis.Hologram.dispatchAction = function(actionName, target, params) \{
           globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);
         \}
+
+        globalThis.Hologram._documentState = history.state;
 
         globalThis.Hologram._popstateShim = (function(state, url) \{
           return function(event) \{
