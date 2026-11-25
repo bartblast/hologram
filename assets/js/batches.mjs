@@ -991,9 +991,11 @@ export default class Batches {
   static #putAside(batches) {
     for (const batch of batches) {
       if (batch.filed === false) {
-        const held = Batches.#setAside.get(batch.actorUserId) ?? [];
+        if (!Batches.#setAside.has(batch.actorUserId)) {
+          Batches.#setAside.set(batch.actorUserId, []);
+        }
 
-        Batches.#setAside.set(batch.actorUserId, [...held, batch]);
+        Batches.#setAside.get(batch.actorUserId).push(batch);
       } else if (batch.filed === null) {
         batch.recorded.then(() => {
           if (batch.filed === false) {
