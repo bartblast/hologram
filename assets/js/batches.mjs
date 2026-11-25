@@ -557,7 +557,12 @@ export default class Batches {
         // it doesn't hold can't tell what it already has: it would apply the write again over rows
         // that hold it. Frames and answers reach the other tabs from this tab too, after this, and
         // one tab's messages arrive in order.
-        Tabs.postNow({kind: "sealed", record: batch.record()});
+        //
+        // Not one an open store never got, whose answer is withheld too (see below): a tab that
+        // took it up would hold a number the store never recorded, and keep it on screen.
+        if (batch.filed !== false || Durability.mode === "memory") {
+          Tabs.postNow({kind: "sealed", record: batch.record()});
+        }
 
         batch.mark("sending");
 

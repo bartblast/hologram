@@ -1838,6 +1838,28 @@ describe("Batches", () => {
       sinon.assert.neverCalledWithMatch(posting, {kind: "answered"});
     });
 
+    // The answer is withheld for it, so a tab that took it up would keep it on screen.
+    it("announces no batch the store never got as it sends it", async () => {
+      const announcing = sinon.stub(Tabs, "postNow");
+
+      const originalMode = Durability.mode;
+
+      const batch = sealed(creating("t1", "first"));
+      batch.filed = false;
+      sendStub.resolves(confirmed());
+
+      try {
+        Durability.mode = "indexeddb";
+
+        await Batches.flush();
+      } finally {
+        Durability.mode = originalMode;
+      }
+
+      sinon.assert.calledOnce(sendStub);
+      sinon.assert.neverCalledWithMatch(announcing, {kind: "sealed"});
+    });
+
     // Refused for the writes or refused for the build, it is answered either way - and a batch
     // kept for a resend would come back on a later page load as a write the user watched fail.
     it("forgets a refused batch", async () => {
