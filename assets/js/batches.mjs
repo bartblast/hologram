@@ -447,8 +447,14 @@ export default class Batches {
         }
 
         // Nothing leaves under an identity still on its way to the store (see
-        // Durability.replicaWritten).
-        await Durability.replicaWritten();
+        // Durability.replicaWritten). A pair written during the wait has a write of its own, which
+        // is waited for too.
+        let identityWrite;
+
+        do {
+          identityWrite = Durability.replicaWritten();
+          await identityWrite;
+        } while (identityWrite !== Durability.replicaWritten());
 
         // Either wait is long enough for the batch to be let go of (see disown) or answered through
         // another tab, and then it isn't this tab's to send.

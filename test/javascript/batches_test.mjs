@@ -239,6 +239,38 @@ describe("Batches", () => {
       assert.isTrue(sendStub.calledOnce);
     });
 
+    // A pair that replaces the one being written has a write of its own.
+    it("sends nothing until an identity written during the wait is stored", async () => {
+      let firstWritten, secondWritten;
+
+      const first = new Promise((resolve) => (firstWritten = resolve));
+      const second = new Promise((resolve) => (secondWritten = resolve));
+      let current = first;
+
+      sinon.stub(Durability, "replicaWritten").callsFake(() => current);
+
+      sendStub.resolves(confirmed());
+      sealed(creating("t1", "first"));
+
+      const flushing = Batches.flush();
+
+      try {
+        await waitForEventLoop();
+
+        current = second;
+        firstWritten();
+        await waitForEventLoop();
+
+        assert.isFalse(sendStub.called);
+      } finally {
+        firstWritten();
+        secondWritten();
+        await flushing;
+      }
+
+      assert.isTrue(sendStub.calledOnce);
+    });
+
     describe("when the user changes", () => {
       let written;
 
@@ -249,7 +281,7 @@ describe("Batches", () => {
           .stub(Durability, "replicaWritten")
           .onFirstCall()
           .returns(new Promise((resolve) => (written = resolve)))
-          .resolves();
+          .returns(Promise.resolve());
       });
 
       // The server applies a batch under the user of the session that sends it.
