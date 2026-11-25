@@ -154,6 +154,20 @@ defmodule Hologram.Auth.ContextTest do
       assert_receive {^ref, true}, @receive_timeout
     end
 
+    # A connection's process serves one request after another, so the starter can be in the next
+    # user's session by the time the task reads.
+    test "raises Hologram.MisuseError while the starter is in another user's session" do
+      {pid, ref} =
+        with_actor("user_id_70", fn -> spawn_waiting(fn -> refused?(&session?/0) end, self()) end)
+
+      # Still in that session when the task reads.
+      with_actor("user_id_71", fn ->
+        send(pid, :go)
+
+        assert_receive {^ref, true}, @receive_timeout
+      end)
+    end
+
     test "raises Hologram.MisuseError in a task a supervisor started for a session" do
       supervisor = start_supervised!(Task.Supervisor)
 

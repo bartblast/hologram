@@ -110,7 +110,7 @@ defmodule HologramFeatureTests.TaskRulesTest do
     |> sign_in_author()
     |> click_and_expect("Hold bare", "holding_bare")
     |> click_and_expect("Sign in stranger", "signed_in_stranger")
-    |> click_and_expect("Release held", "released_refused_reused")
+    |> click_and_expect("Release held", "released_refused")
   end
 
   feature "refuses a supervised task that reads after its caller's requests ended", %{
@@ -165,7 +165,7 @@ defmodule HologramFeatureTests.TaskRulesTest do
     |> sign_in_author()
     |> click_and_expect("Hold carried", "holding_carried")
     |> click_and_expect("Sign in stranger", "signed_in_stranger")
-    |> click_and_expect("Release held", "released_author_visible_reused")
+    |> click_and_expect("Release held", "released_author_visible")
   end
 
   feature "lets a Task read past the rules by claiming trust", %{session: session} do
