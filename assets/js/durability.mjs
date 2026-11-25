@@ -1152,8 +1152,17 @@ export default class Durability {
           "readwrite",
         );
 
-        Durability.#whileOwned(transaction, () =>
-          Durability.#wipe(transaction),
+        // Judged by whose the store was when the write failed: the tab can follow another user
+        // before the read below lands, and the store it failed on is still the previous user's.
+        Durability.#whileOwned(
+          transaction,
+          () => Durability.#wipe(transaction),
+          {
+            asOf: {
+              claim: Durability.#claimId,
+              pairOwner: Durability.#pairOwner(),
+            },
+          },
         );
       } catch {
         // There is nothing further to try - this page stops storing either way.
@@ -1434,7 +1443,14 @@ export default class Durability {
   //
   // A tab refused here goes on from memory. Its queue and its pair stay writable, since both are
   // kept per user.
-  static #whileOwned(transaction, write, {settlesStore = false} = {}) {
+  //
+  // `asOf` holds the claim and the pair's owner to judge by instead of the ones the tab holds when
+  // the read lands.
+  static #whileOwned(
+    transaction,
+    write,
+    {asOf = null, settlesStore = false} = {},
+  ) {
     const owner = LocalDatabase.actorUserId ?? null;
     const meta = transaction.objectStore(META);
     const storedOwner = meta.get("actorUserId");
@@ -1442,11 +1458,15 @@ export default class Durability {
 
     storedClaim.onsuccess = () => {
       const claim = storedClaim.result ?? null;
+      const {claim: claimId, pairOwner} = asOf ?? {
+        claim: Durability.#claimId,
+        pairOwner: Durability.#pairOwner(),
+      };
 
       if (
-        Durability.#pairOwner() !== owner ||
+        pairOwner !== owner ||
         (storedOwner.result ?? null) !== owner ||
-        (claim !== Durability.#claimId && !settlesStore)
+        (claim !== claimId && !settlesStore)
       ) {
         // What was refused is missing from the store, so no later frame may date the rows at a
         // place past it, even once the owner matches again. No stored id equals undefined, so only

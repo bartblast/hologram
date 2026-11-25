@@ -455,6 +455,27 @@ describe("Durability", () => {
       assert.isUndefined(await readMeta("cursor"));
     });
 
+    // The tab can follow another user while the wipe reads whose the store is. The store is still
+    // the failed tab's user's, and a later page of theirs would resume past the frame that failed.
+    it("drops the rows and the place when the tab follows another user meanwhile", async () => {
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame(
+        [taskRecord("t1", "Draft copy")],
+        "place-1",
+      );
+
+      sinon.stub(Tabs, "storeLost").callsFake(() => {
+        Replica.owner = "u2";
+      });
+
+      await Durability.persistFrame([unstorableRecord()], "place-2");
+
+      assert.equal(Durability.mode, "memory");
+      assert.deepStrictEqual(await readAll("entities"), []);
+      assert.isUndefined(await readMeta("cursor"));
+    });
+
     // The rows and the place are gone for the whole browser, not for this tab - so a tab that goes
     // on writing frames into it would be dating rows the store no longer holds.
     it("tells the group it has stopped storing", async () => {
