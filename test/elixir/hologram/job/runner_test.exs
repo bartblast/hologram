@@ -5,7 +5,9 @@ defmodule Hologram.Job.RunnerTest do
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.Auth
+  alias Hologram.Auth.Context
   alias Hologram.DB
+  alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity
   alias Hologram.Job
@@ -252,6 +254,46 @@ defmodule Hologram.Job.RunnerTest do
     test "runs a job created with no actor raw" do
       assert invoke(job(:record_actor)) == :done
       assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == false
+    end
+
+    test "runs a job created with no actor with no session, whatever session calls it" do
+      user = create_user("caller@example.com")
+      job = job(:record_actor)
+
+      as_user(user, fn ->
+        assert invoke(job) == :done
+        assert Auth.user_id() == user.id
+      end)
+
+      assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == false
+    end
+
+    # A job with neither a user nor the server's mark fails closed: a signed-out visitor's.
+    test "runs a job with no user and no server mark as an anonymous session" do
+      job = %{job(:record_actor) | run_as_server: false}
+
+      assert invoke(job) == :done
+      assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == true
+      assert Context.session?() == false
+    end
+
+    test "judges a write of a job with no user and no server mark by the rules" do
+      job = %{job(:create_row) | run_as_server: false}
+
+      assert {:failed, text} = invoke(job)
+
+      assert text =~ "** (Hologram.AccessDeniedError) not allowed to create"
+      assert DB.read(Entity2) == []
+    end
+
+    test "runs a job created by a user in that user's session" do
+      user = create_user("session@example.com")
+
+      assert invoke(job(:record_actor, user)) == :done
+      assert Process.get(:ran_in_session?) == true
     end
 
     test "answers failed for a write the creating user may not make" do
@@ -281,6 +323,14 @@ defmodule Hologram.Job.RunnerTest do
       assert_receive {:DOWN, ^monitor_ref, :process, ^dead, _reason}
 
       assert catch_exit(process(Module3, job.id, dead))
+    end
+
+    test "runs a job stored with no actor with no session", %{run_lock: run_lock} do
+      job = job(:record_actor)
+
+      assert process(Module3, job.id, run_lock) == :done
+      assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == false
     end
 
     test "leaves a queued job whose run lock another session holds", %{run_lock: run_lock} do
@@ -502,6 +552,24 @@ defmodule Hologram.Job.RunnerTest do
     end
   end
 
+  # Runs the function on the test's sandboxed connection in a Task a session started, the way a
+  # worker started by a process working for a session runs.
+  defp in_session_task(fun) do
+    test_pid = self()
+    user = create_user("runner_session_task@example.com")
+
+    Context.with_actor(user.id, fn ->
+      fn ->
+        :ok = DBConnection.Ownership.ownership_allow(DB.pool_name(), test_pid, self(), [])
+        Connection.enter_sandbox()
+
+        fun.()
+      end
+      |> Task.async()
+      |> Task.await()
+    end)
+  end
+
   describe "queued/3" do
     # Each job is made due a second before the one created before it, an order no insertion order
     # could produce by accident.
@@ -575,6 +643,12 @@ defmodule Hologram.Job.RunnerTest do
       jobs_oldest_first(1)
 
       assert queued(Module3, MapSet.new(), 0) == []
+    end
+
+    test "reads the queue from a process a session started" do
+      [job_id] = jobs_oldest_first(1)
+
+      assert in_session_task(fn -> queued_ids([], 5) end) == [job_id]
     end
   end
 
@@ -685,6 +759,13 @@ defmodule Hologram.Job.RunnerTest do
       assert row.attempt == 1
       assert row.error =~ "the run was cut short before its outcome was recorded"
       assert_scheduled_between(row.scheduled_at, before_sweep, after_sweep, 27_000, 33_000)
+    end
+
+    test "sweeps from a process a session started" do
+      job = abandoned_job()
+
+      assert in_session_task(fn -> sweep([Module1], MapSet.new()) end) == :ok
+      assert EntityOperations.get(Module1, job.id).status == :failed
     end
 
     test "fails a running job whose run lock nobody holds" do

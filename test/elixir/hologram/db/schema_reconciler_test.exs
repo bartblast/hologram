@@ -45,6 +45,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
   @module2_table ~s("hologram_data"."test_fixtures_entity_module2")
 
+  @reset_hint " - or run mix holo.db.reset to start over, which deletes this database's " <>
+                "Hologram data"
+
   @not_managed_msg "the configured database contains Hologram schemas but no " <>
                      "managed-database marker - it is not managed by schema " <>
                      "reconciliation - drop the \"hologram_system\" and " <>
@@ -471,6 +474,21 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         check_system_schema_version!(%{system_schema_version: 3}, %{system_upgrades: [{2, []}]})
       end
     end
+
+    # The migrator checks the layout with a dev context too, and the reset is no way out there.
+    test "names no reset for a dev context" do
+      expected_msg =
+        "the configured database's system tables are at layout version 3, from a newer " <>
+          "Hologram - this Hologram knows layout versions up to 2 - upgrade Hologram or " <>
+          "point the config at another database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        check_system_schema_version!(
+          %{system_schema_version: 3},
+          %{env: "dev", system_upgrades: [{2, []}]}
+        )
+      end
+    end
   end
 
   describe "create_system_tables/0" do
@@ -712,6 +730,22 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       end
     end
 
+    test "names the reset in dev for system tables at a newer layout" do
+      drop_hologram_schemas()
+      dev_context = %{@context | env: "dev"}
+      ensure_managed!(dev_context)
+      set_system_schema_version(3)
+
+      expected_msg =
+        "the configured database's system tables are at layout version 3, from a newer " <>
+          "Hologram - this Hologram knows layout versions up to 2 - upgrade Hologram or " <>
+          "point the config at another database" <> @reset_hint
+
+      assert_error RuntimeError, expected_msg, fn ->
+        ensure_managed!(Map.put(dev_context, :system_upgrades, [{2, []}]))
+      end
+    end
+
     test "names another app ahead of a newer layout" do
       drop_hologram_schemas()
       ensure_managed!(@context)
@@ -738,12 +772,53 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       end
     end
 
+    test "names the reset in dev for Hologram schemas without a marker" do
+      drop_hologram_schemas()
+      {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_data"))
+
+      assert_error RuntimeError, @not_managed_msg <> @reset_hint, fn ->
+        ensure_managed!(%{@context | env: "dev"})
+      end
+    end
+
     test "raises when only one Hologram schema exists" do
       drop_hologram_schemas()
       {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_data"))
 
       assert_error RuntimeError, @not_managed_msg, fn ->
         ensure_managed!(@context)
+      end
+    end
+
+    test "names the reset in dev for a lone system schema whose marker matches" do
+      drop_hologram_schemas()
+      dev_context = %{@context | env: "dev"}
+      ensure_managed!(dev_context)
+      {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
+
+      assert_error RuntimeError, @not_managed_msg <> @reset_hint, fn ->
+        ensure_managed!(dev_context)
+      end
+    end
+
+    # The reset refuses these databases too, so it's no way out.
+    test "names no reset in dev for a lone system schema whose marker the reset refuses" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+      {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
+
+      assert_raise RuntimeError, ~r/ - point the config at the right database$/, fn ->
+        ensure_managed!(%{@context | otp_app: "other_app", env: "dev"})
+      end
+
+      assert_raise RuntimeError, ~r/ - the config points at another env's database$/, fn ->
+        ensure_managed!(%{@context | env: "dev"})
+      end
+
+      write_marker(%{read_marker() | env: "dev", managed_by: "migrations"})
+
+      assert_raise RuntimeError, ~r/ - schema reconciliation never touches it$/, fn ->
+        ensure_managed!(%{@context | env: "dev"})
       end
     end
 
@@ -780,6 +855,29 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       assert_error RuntimeError, expected_msg, fn ->
         ensure_managed!(%{@context | env: "dev"})
+      end
+    end
+
+    # The reset refuses these databases too, so it's no way out.
+    test "names no reset in dev for another app's, another env's or a migration-managed database" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+
+      assert_raise RuntimeError, ~r/ - point the config at the right database$/, fn ->
+        ensure_managed!(%{@context | otp_app: "other_app", env: "dev"})
+      end
+
+      assert_raise RuntimeError, ~r/ - the config points at another env's database$/, fn ->
+        ensure_managed!(%{@context | env: "dev"})
+      end
+
+      drop_hologram_schemas()
+      dev_context = %{@context | env: "dev"}
+      ensure_managed!(dev_context)
+      write_marker(%{read_marker() | managed_by: "migrations"})
+
+      assert_raise RuntimeError, ~r/ - schema reconciliation never touches it$/, fn ->
+        ensure_managed!(dev_context)
       end
     end
 
@@ -1542,6 +1640,34 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       end
     end
 
+    test "names the reset in dev for a hand-created table in hologram_data" do
+      context = %{reconcile_context([Module1]) | env: "dev"}
+      reconcile(context)
+
+      {:ok, _result} = Connection.query(~s{CREATE TABLE "hologram_data"."alien" ("x" int8)})
+
+      expected_msg =
+        ~s(unknown table "alien" in the hologram_data schema - ) <>
+          "this schema is model-managed - move the object to another schema or remove it" <>
+          @reset_hint
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    test "names the reset in dev for a failed system table upgrade" do
+      context = %{reconcile_context([Module1]) | env: "dev"}
+      ensure_managed!(Map.put(context, :system_upgrades, []))
+
+      expected_msg =
+        ~r/^upgrading the system tables to layout version 2 failed - .*division by zero#{Regex.escape(@reset_hint)}$/
+
+      assert_raise RuntimeError, expected_msg, fn ->
+        reconcile(Map.put(context, :system_upgrades, [{2, ["SELECT 1 / 0"]}]))
+      end
+    end
+
     test "raises for a hand-added column on a managed table" do
       reconcile(reconcile_context([Module1]))
 
@@ -1794,6 +1920,84 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         ~s(cannot add required column "z" to table "test_fixtures_entity_module2" - ) <>
           "1 existing row would have no value - " <>
           "declare default: <value>, make the attribute optional: true, or clear the rows"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    # The guard's refusals are hinted apart from converge!/1's, so a boot names the reset once.
+    test "names the reset once in dev for Hologram schemas without a marker" do
+      {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_data"))
+
+      assert_error RuntimeError, @not_managed_msg <> @reset_hint, fn ->
+        reconcile(%{reconcile_context([Module1]) | env: "dev"})
+      end
+    end
+
+    test "names the reset in dev for a primary key edited by hand" do
+      context = %{reconcile_context([Module1]) | env: "dev"}
+      reconcile(context)
+
+      {:ok, _result} =
+        Connection.query("""
+        ALTER TABLE "hologram_data"."test_fixtures_entity_module1"
+          DROP CONSTRAINT "test_fixtures_entity_module1_$pk",
+          ADD CONSTRAINT "test_fixtures_entity_module1_$pk" PRIMARY KEY ("id", "created_at")
+        """)
+
+      expected_msg =
+        ~s(primary key columns mismatch on table "test_fixtures_entity_module1" ) <>
+          ~s{(actual: ["id", "created_at"], target: ["id"]) - } <>
+          "no derivable schema can produce this, the database was edited by hand" <> @reset_hint
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    # Only refusals raise RuntimeError, so a failing statement is left as it is.
+    test "names no reset in dev for an error that isn't a refusal" do
+      dev_context = %{reconcile_context([Module2]) | env: "dev"}
+
+      context =
+        update_in(dev_context, [:mapping, Module2, :columns], fn [column | columns] ->
+          [%{column | sql_type: "no_such_type"} | columns]
+        end)
+
+      error = assert_raise MatchError, fn -> reconcile(context) end
+
+      refute Exception.message(error) =~ "holo.db.reset"
+    end
+
+    test "names the reset in dev for a preflight refusal" do
+      dev_context = %{reconcile_context([Module2]) | env: "dev"}
+      reconcile(dev_context)
+      insert_module2_row("NULL", "'abc'")
+
+      new_column = %{
+        name: "z",
+        type: :integer,
+        sql_type: "int8",
+        collation: nil,
+        enum_values: nil,
+        default: nil,
+        null: false,
+        references: nil,
+        fk_constraint: nil,
+        source: {:attribute, :z}
+      }
+
+      context =
+        update_in(dev_context, [:mapping, Module2, :columns], fn columns ->
+          [new_column | columns]
+        end)
+
+      expected_msg =
+        ~s(cannot add required column "z" to table "test_fixtures_entity_module2" - ) <>
+          "1 existing row would have no value - " <>
+          "declare default: <value>, make the attribute optional: true, or clear the rows" <>
+          @reset_hint
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)

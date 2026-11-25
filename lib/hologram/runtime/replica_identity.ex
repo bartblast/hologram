@@ -18,11 +18,16 @@ defmodule Hologram.Runtime.ReplicaIdentity do
   """
   @spec issue(String.t(), String.t(), term | nil) :: String.t()
   def issue(replica_id, session_id, user_id) do
-    Phoenix.Token.sign(
-      Hologram.secret_key_base(),
-      @salt,
-      {replica_id, subject(session_id, user_id)}
-    )
+    issue_for(replica_id, subject(session_id, user_id))
+  end
+
+  @doc """
+  Returns a signed statement that the given replica id belongs to the given subject, the owner
+  `verified_subject/4` read out of another statement.
+  """
+  @spec issue_for(String.t(), subject) :: String.t()
+  def issue_for(replica_id, subject) do
+    Phoenix.Token.sign(Hologram.secret_key_base(), @salt, {replica_id, subject})
   end
 
   @doc """
@@ -34,16 +39,28 @@ defmodule Hologram.Runtime.ReplicaIdentity do
   @spec verify(String.t(), String.t(), String.t(), term | nil) ::
           :ok | {:error, :invalid | :mismatch}
   def verify(token, replica_id, session_id, user_id) do
+    with {:ok, _subject} <- verified_subject(token, replica_id, session_id, user_id) do
+      :ok
+    end
+  end
+
+  @doc """
+  Returns `{:ok, subject}` with the owner the given statement names, when `verify/4` would accept
+  it, and the same errors otherwise.
+  """
+  @spec verified_subject(String.t(), String.t(), String.t(), term | nil) ::
+          {:ok, subject} | {:error, :invalid | :mismatch}
+  def verified_subject(token, replica_id, session_id, user_id) do
     # No expiry: the binding is the security, and a batch queued offline for days must still be
     # presentable.
     case Phoenix.Token.verify(Hologram.secret_key_base(), @salt, token, max_age: :infinity) do
-      {:ok, {^replica_id, {:user, ^user_id}}} when user_id != nil ->
-        :ok
+      {:ok, {^replica_id, {:user, ^user_id} = subject}} when user_id != nil ->
+        {:ok, subject}
 
       # A session's id does not change at login, so a statement minted for an anonymous visitor
       # keeps working after they sign in - what changes is only what the NEXT page load mints.
-      {:ok, {^replica_id, {:session, ^session_id}}} ->
-        :ok
+      {:ok, {^replica_id, {:session, ^session_id} = subject}} ->
+        {:ok, subject}
 
       {:ok, _statement} ->
         {:error, :mismatch}

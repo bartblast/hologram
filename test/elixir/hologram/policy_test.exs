@@ -17,6 +17,7 @@ defmodule Hologram.PolicyTest do
       held_chains: 2,
       line_held_chains: 2,
       locked_set_links: 1,
+      new_row_chains: 1,
       operation_key: 1,
       operation_reads: 2,
       operation_rules: 2,
@@ -29,7 +30,9 @@ defmodule Hologram.PolicyTest do
       related_chains: 2,
       revoke_role_qualifying_roles: 1,
       revoke_role_qualifying_roles: 2,
+      stored_spelling: 1,
       update_fields: 1,
+      update_names: 1,
       validate_operation!: 2,
       verdict_key: 2,
       verdict_operations: 1,
@@ -40,6 +43,7 @@ defmodule Hologram.PolicyTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Entity.Derived
   alias Hologram.MisuseError
+  alias Hologram.Policy.Evaluator
   alias Hologram.PolicyTest.HeldBoard
   alias Hologram.PolicyTest.HeldTask
   alias Hologram.PolicyTest.ServerOnlyReport
@@ -736,6 +740,286 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "build/1 for lines reading the row after the change" do
+    test "keeps the clauses under :exact and leaves the others in the predicates" do
+      defmodule NewRowFixture1 do
+        use Hologram.Entity
+
+        attribute :status, :enum, values: [:approved, :pending], default: :pending
+
+        role :manager
+
+        allow :read
+
+        allow :update,
+          as: :approve,
+          to: :manager,
+          only: [:status],
+          when: status == :pending and new(status) == :approved
+      end
+
+      assert build(NewRowFixture1)[:approve] == [
+               %{
+                 exact: %{
+                   predicates: [
+                     {:status, :==, :pending},
+                     {{:outer, 1, :status}, :==, :approved}
+                   ]
+                 },
+                 predicates: [{:status, :==, :pending}],
+                 to: [{:own, [:manager]}],
+                 via: nil
+               }
+             ]
+    end
+
+    test "leaves a rule with no new() without :exact" do
+      defmodule NewRowFixture2 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        allow :read
+        allow :update, when: priority > 1
+      end
+
+      assert build(NewRowFixture2)[:update] == [
+               %{predicates: [{:priority, :>, 1}], to: nil, via: nil}
+             ]
+    end
+
+    test "drops a disjunction with an alternative left with nothing" do
+      defmodule NewRowFixture3 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        allow :read
+        allow :update, when: priority == 1 or new(priority) == 2
+      end
+
+      assert [
+               %{
+                 exact: %{
+                   predicates: [
+                     {:or, [[{:priority, :==, 1}], [{{:outer, 1, :priority}, :==, 2}]]}
+                   ]
+                 },
+                 predicates: []
+               }
+             ] = build(NewRowFixture3)[:update]
+    end
+
+    test "keeps a disjunction whose alternatives each keep a clause" do
+      defmodule NewRowFixture4 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+        attribute :rank, :integer
+
+        allow :read
+        allow :update, when: (rank == 1 and new(priority) == 2) or priority == 3
+      end
+
+      assert [%{predicates: [{:or, [[{:rank, :==, 1}], [{:priority, :==, 3}]]}]}] =
+               build(NewRowFixture4)[:update]
+    end
+
+    defmodule NewRowTag do
+      use Hologram.Entity
+
+      attribute :level, :integer
+
+      allow :read
+    end
+
+    test "drops a quantifier reading the new row inside its condition whole" do
+      defmodule NewRowFixture5 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: none(tag <- tags, tag.level > new(priority) and tag.level > 1)
+      end
+
+      assert [%{exact: %{predicates: [{:none, {[:tags], _clauses}}]}, predicates: []}] =
+               build(NewRowFixture5)[:update]
+    end
+
+    test "keeps what a none's condition matches whatever the change" do
+      defmodule NewRowFixture24 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: none(tag <- tags, tag.level > 1 or tag.level > new(priority))
+      end
+
+      assert [%{predicates: [{:none, {[:tags], [{:or, [[{:level, :>, 1}]]}]}}]}] =
+               build(NewRowFixture24)[:update]
+    end
+
+    test "keeps what an all's condition needs whatever the change" do
+      defmodule NewRowFixture25 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: all(tag <- tags, tag.level > 1 and tag.level > new(priority))
+      end
+
+      assert [%{predicates: [{:all, {[:tags], [{:level, :>, 1}]}}]}] =
+               build(NewRowFixture25)[:update]
+    end
+
+    test "keeps an any's stored source when its condition reads the new row" do
+      defmodule NewRowFixture20 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(tag <- tags, tag.level > new(priority))
+      end
+
+      assert [rule] = build(NewRowFixture20)[:update]
+
+      assert rule.exact.predicates ==
+               [{:any, {[:tags], [{:level, :>, {:attribute, {:outer, 2, :priority}}}]}}]
+
+      assert rule.predicates == [{:any, {[:tags], []}}]
+
+      refute Evaluator.rule_matches?(
+               rule,
+               struct(NewRowFixture20),
+               nil,
+               fn _requirement, _entity, _actor_user_id -> [] end
+             )
+    end
+
+    test "keeps the clauses of an any that read only the stored rows" do
+      defmodule NewRowFixture21 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(tag <- tags, tag.level > 1 and tag.level > new(priority))
+      end
+
+      assert [%{predicates: [{:any, {[:tags], [{:level, :>, 1}]}}]}] =
+               build(NewRowFixture21)[:update]
+    end
+
+    test "counts an alternative of an any reading the new row as holding" do
+      defmodule NewRowFixture22 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(tag <- tags, tag.level > 1 or tag.level > new(priority))
+      end
+
+      assert [%{predicates: [{:any, {[:tags], []}}]}] = build(NewRowFixture22)[:update]
+    end
+
+    test "drops a quantifier over the new row nested in an any" do
+      defmodule NewRowFixture23 do
+        use Hologram.Entity
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(a <- tags, any(b <- new(tags), b.level > a.level))
+      end
+
+      assert [%{predicates: [{:any, {[:tags], []}}]}] = build(NewRowFixture23)[:update]
+    end
+
+    test "drops a quantifier over a source on the new row" do
+      defmodule NewRowFixture6 do
+        use Hologram.Entity
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(new(tags))
+      end
+
+      assert [%{exact: %{predicates: [{:any, {{:outer, 1, [:tags]}, []}}]}, predicates: []}] =
+               build(NewRowFixture6)[:update]
+    end
+
+    test "keeps a quantifier reading only the stored row" do
+      defmodule NewRowFixture7 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(tag <- tags, tag.level > priority) and new(priority) > 1
+      end
+
+      assert [%{predicates: [{:any, {[:tags], _clauses}}]}] = build(NewRowFixture7)[:update]
+    end
+  end
+
+  describe "stored_spelling/1" do
+    test "spells a name of the new row as the name of the rule's row" do
+      assert stored_spelling([{{:outer, 1, :status}, :==, :approved}]) ==
+               [{:status, :==, :approved}]
+    end
+
+    test "spells a path and an operand of the new row" do
+      assert stored_spelling([
+               {{:outer, 1, [:project, :rank]}, :>, {:attribute, {:outer, 1, :priority}}}
+             ]) == [{[:project, :rank], :>, {:attribute, :priority}}]
+    end
+
+    test "spells a quantifier's source and leaves a name of the rule's row inside it" do
+      clauses = [
+        {:any,
+         {{:outer, 1, [:project, :members]},
+          [
+            {:level, :>=, {:attribute, {:outer, 2, :priority}}},
+            {:rank, :==, {:attribute, {:outer, 1, :rank}}}
+          ]}}
+      ]
+
+      assert stored_spelling(clauses) == [
+               {:any,
+                {[:project, :members],
+                 [
+                   {:level, :>=, {:attribute, {:outer, 1, :priority}}},
+                   {:rank, :==, {:attribute, {:outer, 1, :rank}}}
+                 ]}}
+             ]
+    end
+
+    test "spells the alternatives of a disjunction" do
+      assert stored_spelling([{:or, [[{{:outer, 1, :a}, :==, 1}], [{:b, :==, 2}]]}]) ==
+               [{:or, [[{:a, :==, 1}], [{:b, :==, 2}]]}]
+    end
+  end
+
   describe "update_fields/1" do
     test "returns the attributes and relationships, sorted" do
       defmodule UpdateFieldsFixture do
@@ -1281,6 +1565,30 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "update_names/1" do
+    test "returns the names update lines carry, sorted" do
+      assert update_names(Hologram.Test.Fixtures.Policy.Module59) == [:approve, :move]
+    end
+
+    test "returns no names for a type whose update lines carry none" do
+      defmodule UnnamedUpdateFixture do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        allow :read
+        allow :update
+      end
+
+      assert update_names(UnnamedUpdateFixture) == []
+    end
+
+    test "leaves out a name carried by a line of another operation" do
+      assert update_names(Hologram.Test.Fixtures.Policy.Module49) == []
+      assert :draft in operations(Hologram.Test.Fixtures.Policy.Module49)
+    end
+  end
+
   describe "hash/1" do
     defmodule HashedTask do
       use Hologram.Entity
@@ -1335,6 +1643,30 @@ defmodule Hologram.PolicyTest do
       """
 
       assert hash_of_project(narrow) != hash_of_project(wide)
+    end
+
+    # The rules under each key are the same either way, and a browser asking about one change refuses
+    # a name no update line carries.
+    test "gives a type a new hash when a name moves between an update line and another" do
+      on_update = """
+      attribute :public, :boolean
+
+      role :editor
+
+      allow :update, as: :publish, to: :editor
+      allow :create, to: :editor
+      """
+
+      on_create = """
+      attribute :public, :boolean
+
+      role :editor
+
+      allow :update, to: :editor
+      allow :create, as: :publish, to: :editor
+      """
+
+      assert hash_of_project(on_update) != hash_of_project(on_create)
     end
 
     # Rules are OR'd, so lines written in another order decide the same thing.
@@ -1523,6 +1855,154 @@ defmodule Hologram.PolicyTest do
       """
 
       assert hash_of_project(through_project) == hash_of_project(through_archive)
+    end
+  end
+
+  describe "what a rule reading the row after the change reads" do
+    defmodule NewReadChannel do
+      use Hologram.Entity
+
+      attribute :archived, :boolean, default: false
+
+      relationship :messages, [Hologram.PolicyTest.NewReadMessage], inverse: channel
+
+      allow :read
+    end
+
+    defmodule NewReadMessage do
+      use Hologram.Entity
+
+      attribute :body, :string
+      attribute :pinned, :boolean, default: false
+
+      relationship :channel, NewReadChannel, optional: true
+
+      derived :label, :string, fn body -> body <> "!" end
+
+      allow :read
+
+      allow :update,
+        as: :pin,
+        only: [:pinned],
+        when: none(message <- new(channel.messages), message.pinned == true)
+
+      allow :update, as: :move, only: [:channel], when: new(channel.archived) == false
+      allow :update, as: :retitle, only: [:body], when: new(label) == "x!"
+    end
+
+    setup do
+      put_derived_definitions([NewReadMessage])
+    end
+
+    test "counts the chains new() follows among the related chains" do
+      assert related_chains(NewReadMessage) == [[:channel], [:channel, :messages]]
+    end
+
+    test "counts a path through new() among the chains a client holds" do
+      assert held_chains(NewReadMessage, :move) == [[:channel]]
+    end
+
+    # A none is one the rows a client holds can't answer.
+    test "leaves a deciding quantifier over new() out of the chains a client holds" do
+      assert held_chains(NewReadMessage, :pin) == []
+    end
+
+    test "names the set a none over new() reads among the locked links" do
+      assert locked_set_links([NewReadMessage]) ==
+               MapSet.new([{:reference, NewReadMessage, :channel_id, NewReadChannel}])
+    end
+
+    test "gives a type a new hash when a derived field only new() reads changes" do
+      rules_hash = hash([NewReadMessage])
+
+      Derived.put_definitions(%{{NewReadMessage, :label} => {:value, "y"}})
+
+      assert hash([NewReadMessage]) != rules_hash
+    end
+  end
+
+  describe "role and operation checks on the row after the change" do
+    defmodule NewCheckProject do
+      use Hologram.Entity
+
+      relationship :team, Hologram.PolicyTest.NewCheckTeam, optional: true
+
+      role :member
+      role :owner, extends: :member
+
+      allow :read
+      allow :update, as: :edit, to: :owner
+    end
+
+    defmodule NewCheckTeam do
+      use Hologram.Entity
+
+      role :lead
+
+      allow :read
+    end
+
+    defmodule NewCheckTask do
+      use Hologram.Entity
+
+      attribute :title, :string
+
+      relationship :project, NewCheckProject, optional: true
+
+      allow :read
+
+      allow :update,
+        only: [:project],
+        when: has_role(:member, new(project)) and can(:edit, new(project))
+
+      allow :update, as: :lead, only: [:title], when: has_role(:lead, new(project.team))
+
+      allow :update,
+        as: :either,
+        only: [:title],
+        when: has_role(:member, new(project)) or title == "open"
+    end
+
+    test "keeps a role check's expanded roles under :exact and out of the predicates" do
+      assert [
+               %{
+                 exact: %{
+                   predicates: [
+                     {:has_role, {roles, [:project]}},
+                     {:can, {:edit, [:project]}}
+                   ]
+                 },
+                 predicates: []
+               }
+             ] = build(NewCheckTask)[{:update, :project}]
+
+      assert Enum.sort(roles) == [:member, :owner]
+    end
+
+    test "builds a role check standing in an alternative of a disjunction" do
+      assert [
+               %{
+                 exact: %{
+                   predicates: [
+                     {:or, [[{:has_role, {_roles, [:project]}}], [{:title, :==, "open"}]]}
+                   ]
+                 },
+                 predicates: []
+               }
+             ] = build(NewCheckTask)[:either]
+    end
+
+    test "counts the rows a role check and an operation check read" do
+      assert related_chains(NewCheckTask) == [[:project]]
+      assert related_chains(NewCheckTask, {:update, :project}) == [[:project]]
+      assert held_chains(NewCheckTask, :lead) == [[:project]]
+    end
+
+    test "spells no role or operation check for what reads a stored row" do
+      assert stored_spelling([
+               {:has_role, {[:member], [:project]}},
+               {:or, [[{:can, {:edit, [:project]}}], [{:a, :==, 1}]]}
+             ]) == [{:or, [[], [{:a, :==, 1}]]}]
     end
   end
 
@@ -1968,6 +2448,70 @@ defmodule Hologram.PolicyTest do
     test "names the set a derived field in a quantifier's condition reads" do
       assert locked_set_links([CountedTagsRule]) ==
                MapSet.new([{:edge, LockedCard, :tags, :source, LockedCard}])
+    end
+  end
+
+  describe "new_row_chains/1" do
+    defmodule NewChainMember do
+      use Hologram.Entity
+    end
+
+    defmodule NewChainProject do
+      use Hologram.Entity
+
+      relationship :members, [NewChainMember]
+
+      derived :member_count, :integer, fn members -> count(members) end
+    end
+
+    defmodule NewChainLabel do
+      use Hologram.Entity
+
+      relationship :project, NewChainProject, optional: true
+
+      derived :staffed, :boolean, fn project -> project.member_count > 0 end
+    end
+
+    defmodule NewChainCountedTask do
+      use Hologram.Entity
+
+      relationship :labels, [NewChainLabel]
+
+      allow :update, when: none(label <- new(labels), label.staffed == true)
+    end
+
+    defmodule NewChainAskingTask do
+      use Hologram.Entity
+
+      relationship :project, Hologram.PolicyTest.NewCheckProject, optional: true
+
+      allow :update, when: can(:read, new(project.team))
+    end
+
+    test "names the chain of a set read on the row after the change" do
+      assert new_row_chains(Policy.Module61) == [[:project, :members]]
+    end
+
+    test "names a path and a set read on the row after the change" do
+      assert new_row_chains(Policy.Module59) == [[:labels], [:project]]
+    end
+
+    test "follows a count a derived field reads inside a quantifier" do
+      put_derived_definitions([NewChainProject, NewChainLabel])
+
+      assert [:labels, :project] in new_row_chains(NewChainCountedTask)
+    end
+
+    test "stops a role check at the row before its target" do
+      assert new_row_chains(Hologram.PolicyTest.NewCheckTask) == [[:project]]
+    end
+
+    test "stops an operation check at the row before its target" do
+      assert new_row_chains(NewChainAskingTask) == [[:project]]
+    end
+
+    test "is empty for a type no rule of which reads the row after a change" do
+      assert new_row_chains(Policy.Module62) == []
     end
   end
 

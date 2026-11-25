@@ -10,7 +10,7 @@ defmodule Hologram.Job.Runner do
   # the claim's transaction and given up once the outcome is recorded - so a running row whose lock
   # nobody holds is one whose run was cut short.
 
-  import Hologram.Query, only: [filter: 2, sort: 2, take: 2]
+  import Hologram.Query, only: [filter: 2, sort: 2, take: 2, trust: 1]
 
   alias Hologram.Auth.Context
   alias Hologram.DB
@@ -88,14 +88,19 @@ defmodule Hologram.Job.Runner do
   end
 
   @doc """
-  Calls the given job's run/1 with it, as the user who created it - so its reads are filtered and
-  its writes evaluated as that user's, and raw for a job created with no actor.
+  Calls the given job's run/1 with it, as whoever created it: as the recorded user, raw with no
+  session for a job marked run_as_server, and otherwise as an anonymous session, so a job with
+  neither mark is judged by the rules rather than trusted.
 
   Returns `:done` when run/1 answered `:ok` or `{:ok, value}` - the value is not kept, since what a
   job did is in the rows it wrote - or `{:failed, text}` for `{:error, reason}`, for a raise, throw
   or exit, and for any other return, each with the text that goes on the row.
   """
   @spec invoke(struct) :: :done | {:failed, String.t()}
+  def invoke(%{actor_id: nil, run_as_server: true} = job) do
+    Context.without_session(fn -> attempt(job) end)
+  end
+
   def invoke(job) do
     Context.with_actor(job.actor_id, fn -> attempt(job) end)
   end
@@ -163,6 +168,10 @@ defmodule Hologram.Job.Runner do
     # the ordinary verb rather than a statement of its own: with nobody acting there is nothing to
     # filter, and the rows come back as the structs run/1 is handed. The same goes for sweep/2.
     #
+    # The read claims trust, as does sweep/2's, since a worker can be started by a process working
+    # for a session, like a test's after as_user/1, and would otherwise be refused as that session's
+    # work.
+    #
     # The queued and the running rows are read apart, two reads where one would do, because only
     # this one is bounded - the index on status and due time keeps both cheap (see
     # Hologram.DB.IndexPlan.framework_needs/1).
@@ -176,6 +185,7 @@ defmodule Hologram.Job.Runner do
     |> filter(status == :queued and scheduled_at <= ^now)
     |> sort(scheduled_at)
     |> take(^limit)
+    |> trust()
     |> DB.read()
     |> Enum.reject(&MapSet.member?(skip_ids, &1.id))
     |> Enum.take(count)
@@ -209,6 +219,7 @@ defmodule Hologram.Job.Runner do
     Enum.each(job_types, fn job_type ->
       job_type
       |> filter(status == :running)
+      |> trust()
       |> DB.read()
       |> Enum.map(& &1.id)
       |> Enum.reject(&MapSet.member?(skip_ids, &1))

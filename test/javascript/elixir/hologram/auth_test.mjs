@@ -16,6 +16,7 @@ import Elixir_Hologram_Auth, {
   unqualifiedRoleMessage,
 } from "../../../../assets/js/elixir/hologram/auth.mjs";
 import Batches from "../../../../assets/js/batches.mjs";
+import Bitstring from "../../../../assets/js/bitstring.mjs";
 import Clock from "../../../../assets/js/clock.mjs";
 import Elixir_Hologram_DB from "../../../../assets/js/elixir/hologram/db.mjs";
 import Interpreter from "../../../../assets/js/interpreter.mjs";
@@ -3596,6 +3597,1591 @@ describe("Elixir_Hologram_Auth", () => {
     });
   });
 
+  // Mirrors "can?/4 for one specific change" of test/elixir/hologram/auth_test.exs.
+  describe("can?/4", () => {
+    const canChange = Elixir_Hologram_Auth["can?/4"];
+
+    afterEach(() => {
+      LocalDatabase.actorEntityId = null;
+    });
+
+    const update = Type.atom("update");
+    const alice = Type.bitstring(ALICE);
+
+    const values = (entries) =>
+      Type.keywordList(
+        Object.entries(entries).map(([name, value]) => [
+          Type.atom(name),
+          value,
+        ]),
+      );
+
+    const enumValue = (label) => Type.atom(label);
+    const ref = (id) => Type.bitstring(id);
+
+    const approving = rule({
+      new: {predicates: [[{name: "status", outer: 1}, "==", "published"]]},
+    });
+
+    const putFolder = (id, overrides = {}) =>
+      LocalDatabase.putRow(FOLDER, {
+        archived: false,
+        id,
+        name: null,
+        parent_id: null,
+        ...overrides,
+      });
+
+    const defineUpdate = (key, updateRule, folderPolicy = {}) => {
+      defineModel({[key]: [updateRule]}, folderPolicy);
+      globalThis.Hologram.sync.model[DOCUMENT].constraints = {};
+      globalThis.Hologram.sync.model[DOCUMENT].defaults = {};
+      globalThis.Hologram.sync.model[DOCUMENT].frameworkAttributes = [];
+      globalThis.Hologram.sync.model[DOCUMENT].updateNames = ["archive"];
+      Model.reset();
+    };
+
+    const asks = (operation, entries, entity = document(), user = alice) =>
+      canChange(user, operation, entity, values(entries));
+
+    const entryless = () =>
+      Type.map([
+        [Type.atom("__meta__"), Model.emptyMetadata()],
+        [Type.atom("__struct__"), Type.alias("MyApp.Nothing")],
+      ]);
+
+    it("answers :update on the row the values leave", () => {
+      defineUpdate("update:status", approving);
+
+      assert.deepStrictEqual(
+        asks(update, {status: enumValue("published")}),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, {status: enumValue("review")}),
+        Type.boolean(false),
+      );
+    });
+
+    it("needs every changed field covered for :update", () => {
+      defineUpdate("update:status", approving);
+
+      assert.deepStrictEqual(
+        asks(update, {
+          status: enumValue("published"),
+          title: Type.bitstring("x"),
+        }),
+        Type.boolean(false),
+      );
+    });
+
+    it("keeps a bare name reading the stored value", () => {
+      defineUpdate(
+        "update:status",
+        rule({
+          new: {
+            predicates: [
+              ["status", "==", "draft"],
+              [{name: "status", outer: 1}, "==", "published"],
+            ],
+          },
+        }),
+      );
+
+      const published = {status: enumValue("published")};
+
+      assert.deepStrictEqual(
+        asks(update, published, document({status: "draft"})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, published, document({status: "review"})),
+        Type.boolean(false),
+      );
+    });
+
+    it("asks a name's rules", () => {
+      defineUpdate("archive", approving);
+
+      const archive = Type.atom("archive");
+
+      assert.deepStrictEqual(
+        asks(archive, {status: enumValue("published")}),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(archive, {status: enumValue("review")}),
+        Type.boolean(false),
+      );
+    });
+
+    it("asks a field's rules whatever the values name", () => {
+      defineUpdate("update:status", approving);
+
+      assert.deepStrictEqual(
+        asks(updateOf(Type.atom("status")), {
+          status: enumValue("published"),
+          title: Type.bitstring("x"),
+        }),
+        Type.boolean(true),
+      );
+    });
+
+    it("takes the values as a map", () => {
+      defineUpdate("update:status", approving);
+
+      assert.deepStrictEqual(
+        canChange(
+          alice,
+          update,
+          document(),
+          Type.map([[Type.atom("status"), enumValue("published")]]),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("follows a new reference along a path", () => {
+      defineUpdate(
+        "update:folder",
+        rule({
+          new: {
+            predicates: [
+              [{name: ["folder", "archived"], outer: 1}, "==", false],
+            ],
+          },
+        }),
+      );
+
+      putFolder(FOLDER_ID, {archived: false});
+      putFolder(PARENT_ID, {archived: true});
+
+      assert.deepStrictEqual(
+        asks(update, {folder_id: ref(FOLDER_ID)}),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, {folder_id: ref(PARENT_ID)}),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers no for a path to a row this client doesn't hold", () => {
+      defineUpdate(
+        "update:folder",
+        rule({
+          new: {
+            predicates: [
+              [{name: ["folder", "archived"], outer: 1}, "==", false],
+            ],
+          },
+        }),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, {folder_id: ref(FOLDER_ID)}),
+        Type.boolean(false),
+      );
+    });
+
+    describe("a value this client can't judge as the server does", () => {
+      const datetimeInYear = (year, month = 1) =>
+        Type.struct("DateTime", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("hour"), Type.integer(0)],
+          [
+            Type.atom("microsecond"),
+            Type.tuple([Type.integer(0), Type.integer(6)]),
+          ],
+          [Type.atom("minute"), Type.integer(0)],
+          [Type.atom("month"), Type.integer(month)],
+          [Type.atom("second"), Type.integer(0)],
+          [Type.atom("std_offset"), Type.integer(0)],
+          [Type.atom("time_zone"), Type.bitstring("Etc/UTC")],
+          [Type.atom("utc_offset"), Type.integer(0)],
+          [Type.atom("year"), Type.integer(year)],
+          [Type.atom("zone_abbr"), Type.bitstring("UTC")],
+        ]);
+
+      const newIs = (name, operator, value) =>
+        rule({new: {predicates: [[{name, outer: 1}, operator, value]]}});
+
+      const defineFormat = (value) => {
+        defineUpdate("update:title", newIs("title", "==", value));
+
+        globalThis.Hologram.sync.model[DOCUMENT].constraints.title = {
+          format: {opts: Type.list([]), source: "^\\S+$"},
+          optional: true,
+        };
+
+        Model.reset();
+      };
+
+      it("doesn't grant on a date past what a JavaScript date holds", () => {
+        defineUpdate("update:due_on", newIs("due_on", "!=", "2026-01-01"));
+
+        const farDate = Type.struct("Date", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("month"), Type.integer(1)],
+          [Type.atom("year"), Type.integer(280000)],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {due_on: farDate}, document({due_on: "2025-06-01"})),
+          Type.boolean(false),
+        );
+      });
+
+      it("reads a datetime past what the database holds as the stored value, as the server does", () => {
+        defineUpdate(
+          "update:held_at",
+          newIs("held_at", "<", "2026-01-01T00:00:00.000000Z"),
+        );
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {held_at: datetimeInYear(300000)},
+            document({held_at: "2025-06-01T00:00:00.000000Z"}),
+          ),
+          Type.boolean(true),
+        );
+      });
+
+      it("still judges an ordinary date", () => {
+        defineUpdate(
+          "update:held_at",
+          newIs("held_at", "<", "2026-01-01T00:00:00.000000Z"),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, {held_at: datetimeInYear(2025)}),
+          Type.boolean(true),
+        );
+      });
+
+      it("reads a too big integer both tiers refuse as the stored value", () => {
+        defineUpdate("update:count", newIs("count", "<=", 100));
+
+        assert.deepStrictEqual(
+          asks(update, {count: Type.integer(2n ** 63n)}, document({count: 5})),
+          Type.boolean(true),
+        );
+      });
+
+      it("compares a big number with a small one", () => {
+        defineUpdate("update:rating", newIs("rating", ">", 0.0));
+
+        assert.deepStrictEqual(
+          asks(update, {rating: Type.float(1.0e16)}),
+          Type.boolean(true),
+        );
+      });
+
+      it("reads a non-text value of an attribute with a format as the stored value", () => {
+        defineFormat("old");
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {title: Bitstring.fromBytes([255])},
+            document({title: "old"}),
+          ),
+          Type.boolean(true),
+        );
+      });
+
+      it("doesn't grant on a non-ASCII value of an attribute with a format", () => {
+        defineFormat("a b");
+
+        assert.deepStrictEqual(
+          asks(update, {title: Type.bitstring("a b")}),
+          Type.boolean(false),
+        );
+      });
+
+      it("reads a non-ASCII value both tiers refuse as the stored value", () => {
+        defineFormat("old");
+
+        globalThis.Hologram.sync.model[DOCUMENT].constraints.title.max_length =
+          3;
+
+        Model.reset();
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {title: Type.bitstring("\u00E9\u00E9\u00E9\u00E9")},
+            document({title: "old"}),
+          ),
+          Type.boolean(true),
+        );
+      });
+
+      it("reads a far date both tiers refuse as the stored value", () => {
+        const stored = "2026-01-01T00:00:00.000000Z";
+
+        defineUpdate("update:held_at", newIs("held_at", "==", stored));
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {held_at: datetimeInYear(300000, 13)},
+            document({held_at: stored}),
+          ),
+          Type.boolean(true),
+        );
+      });
+
+      it("reads a map with a calendar on a text field as the stored value", () => {
+        defineUpdate("update:title", newIs("title", "==", "old"));
+
+        const notText = Type.map([
+          [Type.atom("calendar"), Type.alias("MyApp.Calendar")],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {title: notText}, document({title: "old"})),
+          Type.boolean(true),
+        );
+      });
+
+      it("reads a plain map with a far year on a date field as the stored value", () => {
+        defineUpdate("update:due_on", newIs("due_on", "==", null));
+
+        const plainMap = Type.map([
+          [Type.atom("year"), Type.integer(10n ** 16n)],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {due_on: plainMap}),
+          Type.boolean(true),
+        );
+      });
+
+      it("doesn't read a date with a year past what a number holds as the stored value", () => {
+        defineUpdate("update:due_on", newIs("due_on", "==", null));
+
+        const farDate = Type.struct("Date", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("month"), Type.integer(1)],
+          [Type.atom("year"), Type.integer(10n ** 309n)],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {due_on: farDate}),
+          Type.boolean(false),
+        );
+      });
+
+      it("reads a time on a date field as the stored value, whatever its calendar", () => {
+        defineUpdate("update:due_on", newIs("due_on", "==", null));
+
+        const notDate = Type.struct("Time", [
+          [Type.atom("calendar"), Type.alias("MyApp.Calendar")],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {due_on: notDate}),
+          Type.boolean(true),
+        );
+      });
+
+      it("doesn't read a date in another calendar as the stored value", () => {
+        defineUpdate("update:due_on", newIs("due_on", "==", null));
+
+        const otherCalendar = Type.struct("Date", [
+          [Type.atom("calendar"), Type.alias("MyApp.Calendar")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("month"), Type.integer(13)],
+          [Type.atom("year"), Type.integer(2026)],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {due_on: otherCalendar}),
+          Type.boolean(false),
+        );
+      });
+
+      it("still judges an ASCII value of an attribute with a format", () => {
+        defineFormat("ab");
+
+        assert.deepStrictEqual(
+          asks(update, {title: Type.bitstring("ab")}),
+          Type.boolean(true),
+        );
+      });
+    });
+
+    describe("the timestamp a write moves", () => {
+      const STORED_AT = "2026-01-01T00:00:00.000000Z";
+
+      const defineStamped = (constraint) => {
+        defineUpdate(
+          "update:title",
+          rule({
+            new: {
+              predicates: [
+                [
+                  {name: "updated_at", outer: 1},
+                  "==",
+                  {attribute: "updated_at"},
+                ],
+              ],
+            },
+          }),
+        );
+
+        const entry = globalThis.Hologram.sync.model[DOCUMENT];
+
+        entry.attributes.updated_at = "datetime";
+        entry.constraints.title = {...constraint, optional: true};
+
+        Model.reset();
+      };
+
+      const asksTitle = (text) =>
+        asks(
+          updateOf(Type.atom("title")),
+          {title: Type.bitstring(text)},
+          document({updated_at: STORED_AT}),
+        );
+
+      it("stays undecided when every value is one both tiers refuse", () => {
+        defineStamped({max_length: 3});
+
+        assert.deepStrictEqual(asksTitle("too long"), Type.boolean(false));
+      });
+
+      it("stays undecided for a value that can land", () => {
+        defineStamped({max_length: 3});
+
+        assert.deepStrictEqual(asksTitle("ok"), Type.boolean(false));
+      });
+
+      it("stays undecided for a value only a format refuses", () => {
+        defineStamped({format: {opts: Type.list([]), source: "^x$"}});
+
+        assert.deepStrictEqual(asksTitle("no"), Type.boolean(false));
+      });
+
+      it("stays undecided beside a value that can land", () => {
+        defineStamped({max_length: 3});
+
+        globalThis.Hologram.sync.model[DOCUMENT].policy["update:status"] = [
+          rule(),
+        ];
+
+        Model.reset();
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {
+              status: enumValue("published"),
+              title: Type.bitstring("too long"),
+            },
+            document({updated_at: STORED_AT}),
+          ),
+          Type.boolean(false),
+        );
+      });
+
+      it("stays undecided for a date in another calendar", () => {
+        defineStamped({max_length: 3});
+
+        globalThis.Hologram.sync.model[DOCUMENT].policy["update:due_on"] =
+          globalThis.Hologram.sync.model[DOCUMENT].policy["update:title"];
+
+        Model.reset();
+
+        const otherCalendar = Type.struct("Date", [
+          [Type.atom("calendar"), Type.alias("MyApp.Calendar")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("month"), Type.integer(13)],
+          [Type.atom("year"), Type.integer(2026)],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {due_on: otherCalendar},
+            document({updated_at: STORED_AT}),
+          ),
+          Type.boolean(false),
+        );
+      });
+    });
+
+    describe("rules that don't read the row after the change", () => {
+      const KEY = "update:00112233aabbccdd";
+
+      const delegated = rule({via: ["read", ["folder"]]});
+
+      const neverTitle = rule({
+        new: {predicates: [[{name: "title", outer: 1}, "==", "never"]]},
+      });
+
+      const stored = (verdict) => {
+        LocalDatabase.actorEntityId = ALICE;
+
+        LocalDatabase.putRow(DOCUMENT, {
+          author_id: null,
+          folder_id: FOLDER_ID,
+          id: DOC,
+          public: false,
+          title: null,
+          $verdicts: {[KEY]: verdict},
+        });
+
+        return Model.box(DOCUMENT, LocalDatabase.getRow(DOCUMENT, DOC));
+      };
+
+      const putVerdict = (key) => {
+        globalThis.Hologram.sync.model[DOCUMENT].verdicts = {
+          [key]: {reads: [DOCUMENT, FOLDER], verdict: KEY},
+        };
+      };
+
+      const title = {title: Type.bitstring("y")};
+
+      it("answers from a field's true verdict where the held rows leave it open", () => {
+        defineUpdate("update:title", delegated);
+        putVerdict("update:title");
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(true)),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          asks(updateOf(Type.atom("title")), title, stored(true)),
+          Type.boolean(true),
+        );
+      });
+
+      it("answers from the whole-row verdict beside a field rule reading the change", () => {
+        defineUpdate("update:title", neverTitle);
+        globalThis.Hologram.sync.model[DOCUMENT].policy.update = [delegated];
+        putVerdict("update");
+        Model.reset();
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(true)),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(false)),
+          Type.boolean(false),
+        );
+      });
+
+      it("takes no verdict from whole-row rules that read the change", () => {
+        defineUpdate("update:title", neverTitle);
+
+        globalThis.Hologram.sync.model[DOCUMENT].policy.update = [
+          rule({
+            new: {predicates: [{can: ["read", ["folder"]]}]},
+            via: ["read", ["folder"]],
+          }),
+        ];
+
+        putVerdict("update");
+        Model.reset();
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(true)),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers from a field's false verdict", () => {
+        defineUpdate("update:title", delegated);
+        putVerdict("update:title");
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(false)),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers a name from its verdict", () => {
+        defineUpdate("archive", delegated);
+        putVerdict("archive");
+
+        assert.deepStrictEqual(
+          asks(Type.atom("archive"), title, stored(true)),
+          Type.boolean(true),
+        );
+      });
+
+      it("takes no verdict for a field one of whose rules reads the row after the change", () => {
+        defineUpdate(
+          "update:title",
+          rule({
+            new: {predicates: [[{name: "title", outer: 1}, "==", "y"]]},
+            via: ["read", ["folder"]],
+          }),
+        );
+
+        putVerdict("update:title");
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(true)),
+          Type.boolean(false),
+        );
+      });
+
+      it("takes no verdict for a name one of whose rules reads the row after the change", () => {
+        defineUpdate(
+          "archive",
+          rule({
+            new: {predicates: [[{name: "title", outer: 1}, "==", "y"]]},
+            via: ["read", ["folder"]],
+          }),
+        );
+
+        putVerdict("archive");
+
+        assert.deepStrictEqual(
+          asks(Type.atom("archive"), title, stored(true)),
+          Type.boolean(false),
+        );
+      });
+    });
+
+    describe("a role on the row after the change", () => {
+      const member = rule({
+        new: {predicates: [{hasRole: [["folder"], FOLDER, ["viewer"]]}]},
+      });
+
+      it("answers by the grant on the row the new reference names", () => {
+        defineUpdate("update:folder", member);
+        putFolder(FOLDER_ID);
+        putFolder(PARENT_ID);
+
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: FOLDER_ID, entity_type: FOLDER}),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(PARENT_ID)}),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers a visitor no", () => {
+        defineUpdate("update:folder", member);
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}, document(), Type.nil()),
+          Type.boolean(false),
+        );
+      });
+    });
+
+    describe("an operation on the row the row after the change leads to", () => {
+      const delegating = rule({
+        new: {predicates: [{can: ["read", ["folder"]]}]},
+      });
+
+      const openFolders = {
+        read: [rule({predicates: [["archived", "==", false]]})],
+      };
+
+      it("asks the row the new reference names", () => {
+        defineUpdate("update:folder", delegating, openFolders);
+        putFolder(FOLDER_ID, {archived: false});
+        putFolder(PARENT_ID, {archived: true});
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(PARENT_ID)}),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers no for an empty new reference", () => {
+        defineUpdate("update:folder", delegating, openFolders);
+        globalThis.Hologram.sync.model[DOCUMENT].relationships.folder.optional =
+          true;
+        Model.reset();
+        putFolder(FOLDER_ID, {archived: false});
+
+        const inFolder = document({folder_id: FOLDER_ID});
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}, inFolder),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: Type.nil()}, inFolder),
+          Type.boolean(false),
+        );
+      });
+    });
+
+    describe("a quantifier over the row after the change", () => {
+      const tagged = (quantifier) =>
+        rule({
+          new: {
+            predicates: [
+              {
+                filter: [["name", "==", "urgent"]],
+                quantifier,
+                source: {name: ["tags"], outer: 1},
+              },
+            ],
+          },
+        });
+
+      const inFolder = (quantifier) =>
+        rule({
+          new: {
+            predicates: [
+              {
+                filter: [["title", "==", "x"]],
+                quantifier,
+                source: {name: ["folder", "documents"], outer: 1},
+              },
+            ],
+          },
+        });
+
+      it("decides on held rows of a set the change can't move a row into", () => {
+        defineUpdate("update:title", tagged("any"));
+        LocalDatabase.putRow(TAG, {id: TAG_ID, name: "urgent"});
+        LocalDatabase.addFact(DOCUMENT, "tags", DOC, TAG_ID);
+
+        assert.deepStrictEqual(
+          asks(update, {title: Type.bitstring("y")}),
+          Type.boolean(true),
+        );
+      });
+
+      it("answers no for a set whose hops land on the changed type", () => {
+        defineUpdate("update:folder", inFolder("any"));
+        putFolder(FOLDER_ID);
+
+        LocalDatabase.putRow(DOCUMENT, {
+          folder_id: FOLDER_ID,
+          id: OTHER_DOC,
+          title: "x",
+        });
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}),
+          Type.boolean(false),
+        );
+      });
+    });
+
+    it("reads a value failing its declaration as stored", () => {
+      defineUpdate("update:status", approving);
+
+      assert.deepStrictEqual(
+        asks(
+          update,
+          {status: enumValue("bogus")},
+          document({status: "published"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, {status: enumValue("bogus")}, document({status: "draft"})),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers no on a timestamp the write will move", () => {
+      defineUpdate(
+        "update:title",
+        rule({
+          new: {
+            predicates: [[{name: "updated_at", outer: 1}, "==", null]],
+          },
+        }),
+      );
+
+      globalThis.Hologram.sync.model[DOCUMENT].attributes.updated_at =
+        "datetime";
+
+      Model.reset();
+
+      assert.deepStrictEqual(
+        asks(update, {title: Type.bitstring("x")}),
+        Type.boolean(false),
+      );
+    });
+
+    it("reads no verdict for a rule it can't decide", () => {
+      defineUpdate(
+        "update:title",
+        rule({
+          new: {predicates: [{server: true}]},
+          predicates: [{server: true}],
+        }),
+      );
+
+      globalThis.Hologram.sync.model[DOCUMENT].verdicts = {
+        "update:title": {reads: [], verdict: "v"},
+      };
+
+      LocalDatabase.actorEntityId = ALICE;
+
+      LocalDatabase.putRow(DOCUMENT, {
+        author_id: null,
+        count: null,
+        due_on: null,
+        folder_id: null,
+        held_at: null,
+        id: DOC,
+        priority: null,
+        public: false,
+        rating: null,
+        released_on: null,
+        stage: null,
+        status: null,
+        summary: null,
+        title: null,
+        $verdicts: {v: true},
+      });
+
+      assert.deepStrictEqual(
+        can(alice, updateOf(Type.atom("title")), document()),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, {title: Type.bitstring("x")}),
+        Type.boolean(false),
+      );
+    });
+
+    describe("a chain leading back to the changed row", () => {
+      const folderRow = (overrides = {}) => ({
+        archived: false,
+        id: FOLDER_ID,
+        kind: null,
+        name: null,
+        opened_on: null,
+        parent_id: FOLDER_ID,
+        ...overrides,
+      });
+
+      const defineFolderUpdate = (updateRule, readRules = []) => {
+        defineModel({}, {"update:archived": [updateRule], read: readRules});
+
+        const entry = globalThis.Hologram.sync.model[FOLDER];
+
+        entry.constraints = {};
+        entry.defaults = {};
+        entry.frameworkAttributes = [];
+
+        Model.reset();
+      };
+
+      const archives = (archived, entity) =>
+        canChange(
+          alice,
+          update,
+          entity,
+          values({archived: Type.boolean(archived)}),
+        );
+
+      it("reads the row after the change on a path", () => {
+        defineFolderUpdate(
+          rule({
+            new: {
+              predicates: [
+                [{name: ["parent", "archived"], outer: 1}, "==", true],
+              ],
+            },
+          }),
+        );
+
+        LocalDatabase.putRow(FOLDER, folderRow());
+
+        assert.deepStrictEqual(
+          archives(true, Model.box(FOLDER, folderRow())),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          archives(false, Model.box(FOLDER, folderRow())),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers no for a reference on it naming a row this client doesn't hold", () => {
+        defineFolderUpdate(
+          rule({
+            new: {
+              predicates: [
+                {hasRole: [["parent", "owner"], FOLDER, ["viewer"]]},
+              ],
+            },
+          }),
+        );
+
+        globalThis.Hologram.sync.model[FOLDER].relationships.owner = {
+          toMany: false,
+          type: FOLDER,
+        };
+
+        Model.reset();
+
+        LocalDatabase.putRow(FOLDER, folderRow());
+
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: PARENT_ID, entity_type: FOLDER}),
+        );
+
+        const asked = () =>
+          canChange(
+            alice,
+            updateOf(Type.atom("archived")),
+            Model.box(FOLDER, {...folderRow(), owner_id: null}),
+            values({owner_id: ref(PARENT_ID), parent_id: ref(FOLDER_ID)}),
+          );
+
+        assert.deepStrictEqual(asked(), Type.boolean(false));
+
+        LocalDatabase.putRow(FOLDER, {...folderRow(), id: PARENT_ID});
+
+        assert.deepStrictEqual(asked(), Type.boolean(true));
+      });
+
+      it("answers no when a hop back to the changed row reads a reference it can't vouch for", () => {
+        defineFolderUpdate(
+          rule({
+            new: {
+              predicates: [
+                [
+                  {name: ["parent", "parent", "owner", "archived"], outer: 1},
+                  "==",
+                  false,
+                ],
+              ],
+            },
+          }),
+        );
+
+        globalThis.Hologram.sync.model[FOLDER].relationships.owner = {
+          toMany: false,
+          type: FOLDER,
+        };
+
+        Model.reset();
+
+        LocalDatabase.putRow(
+          FOLDER,
+          folderRow({id: PARENT_ID, parent_id: FOLDER_ID}),
+        );
+
+        assert.deepStrictEqual(
+          canChange(
+            alice,
+            updateOf(Type.atom("archived")),
+            Model.box(
+              FOLDER,
+              folderRow({owner_id: null, parent_id: PARENT_ID}),
+            ),
+            values({owner_id: ref(FOLDER_ID)}),
+          ),
+          Type.boolean(false),
+        );
+      });
+
+      it("leaves a field no rule reads unread when a hop lands on it", () => {
+        defineFolderUpdate(
+          rule({
+            new: {
+              predicates: [
+                [{name: ["parent", "archived"], outer: 1}, "==", true],
+              ],
+            },
+          }),
+        );
+
+        LocalDatabase.putRow(FOLDER, folderRow());
+
+        const key = Type.atom("opened_on");
+        const entity = Model.box(FOLDER, folderRow());
+
+        const malformed = {
+          ...entity,
+          data: {
+            ...entity.data,
+            [Type.encodeMapKey(key)]: [key, Type.integer(5)],
+          },
+        };
+
+        assert.deepStrictEqual(archives(true, malformed), Type.boolean(true));
+      });
+
+      it("asks a delegated rule about the stored row", () => {
+        defineFolderUpdate(
+          rule({new: {predicates: [{can: ["read", ["parent"]]}]}}),
+          [rule({predicates: [["archived", "==", false]]})],
+        );
+
+        const stored = folderRow({archived: true});
+
+        LocalDatabase.putRow(FOLDER, stored);
+
+        assert.deepStrictEqual(
+          archives(false, Model.box(FOLDER, stored)),
+          Type.boolean(false),
+        );
+      });
+    });
+
+    it("answers no for a quantifier over a derived set", () => {
+      defineUpdate(
+        "update:title",
+        rule({
+          new: {
+            predicates: [
+              {
+                filter: [],
+                quantifier: "any",
+                source: {name: ["folder", "recent_documents"], outer: 1},
+              },
+            ],
+          },
+        }),
+      );
+
+      putFolder(FOLDER_ID);
+
+      assert.deepStrictEqual(
+        asks(
+          update,
+          {title: Type.bitstring("x")},
+          document({folder_id: FOLDER_ID}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers no for a type the model doesn't carry", () => {
+      defineModel();
+
+      assert.deepStrictEqual(
+        canChange(alice, update, entryless(), values({a: Type.integer(1)})),
+        Type.boolean(false),
+      );
+    });
+
+    it("reads no entry off the model object's prototype", () => {
+      defineModel();
+
+      const inherited = Type.map([
+        [Type.atom("__meta__"), Model.emptyMetadata()],
+        [Type.atom("__struct__"), Type.atom("constructor")],
+      ]);
+
+      assert.deepStrictEqual(
+        canChange(alice, update, inherited, values({a: Type.integer(1)})),
+        Type.boolean(false),
+      );
+    });
+
+    it("refuses values of the wrong shape for a type the model doesn't carry", () => {
+      defineModel();
+
+      assertBoxedError(
+        () => canChange(alice, update, entryless(), Type.integer(5)),
+        "Hologram.MisuseError",
+        "can? takes the values of a change as a keyword list or a map - got 5",
+      );
+    });
+
+    it("refuses a field that isn't an atom for a type the model doesn't carry", () => {
+      defineModel();
+
+      const operation = Type.tuple([
+        Type.atom("update"),
+        Type.list([Type.atom("title"), Type.integer(1)]),
+      ]);
+
+      assertBoxedError(
+        () =>
+          canChange(
+            alice,
+            operation,
+            entryless(),
+            values({a: Type.integer(1)}),
+          ),
+        "Hologram.MisuseError",
+        "unknown field 1 in {:update, [:title, 1]} for MyApp.Nothing - a field is named by an atom",
+      );
+    });
+
+    it("refuses an operation that isn't an update for a type the model doesn't carry", () => {
+      defineModel();
+
+      const operation = Type.tuple([
+        Type.atom("grant_role"),
+        Type.atom("editor"),
+      ]);
+
+      assertBoxedError(
+        () =>
+          canChange(
+            alice,
+            operation,
+            entryless(),
+            values({a: Type.integer(1)}),
+          ),
+        "Hologram.MisuseError",
+        "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got {:grant_role, :editor}",
+      );
+    });
+
+    describe("a new reference to a row this client doesn't hold", () => {
+      const named = rule({
+        new: {predicates: [[{name: "folder_id", outer: 1}, "!=", null]]},
+      });
+
+      it("answers no, since the server reads a missing row's reference as stored", () => {
+        defineUpdate("update:folder", named);
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}),
+          Type.boolean(false),
+        );
+      });
+
+      it("reads a reference to a held row as given", () => {
+        defineUpdate("update:folder", named);
+        putFolder(FOLDER_ID);
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}),
+          Type.boolean(true),
+        );
+      });
+
+      it("reads the reference the row already stores as given", () => {
+        defineUpdate("update:folder", named);
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {folder_id: ref(FOLDER_ID)},
+            document({folder_id: FOLDER_ID}),
+          ),
+          Type.boolean(true),
+        );
+      });
+    });
+
+    it("leaves a field the rule doesn't read unread", () => {
+      defineUpdate("update:status", approving);
+
+      const key = Type.atom("due_on");
+      const entity = document();
+
+      const malformed = {
+        ...entity,
+        data: {
+          ...entity.data,
+          [Type.encodeMapKey(key)]: [key, Type.integer(1)],
+        },
+      };
+
+      assert.deepStrictEqual(
+        asks(update, {status: enumValue("published")}, malformed),
+        Type.boolean(true),
+      );
+    });
+
+    it("refuses a struct with no metadata", () => {
+      defineUpdate("update:status", approving);
+
+      const entity = document();
+      const data = {...entity.data};
+
+      delete data[Type.encodeMapKey(Type.atom("__meta__"))];
+
+      assertBoxedError(
+        () => asks(update, {status: enumValue("published")}, {...entity, data}),
+        "Hologram.MisuseError",
+        `can? with values asks about a row as stored - ${DOCUMENT} "${DOC}" carries recorded changes, so its fields no longer hold the stored values`,
+      );
+    });
+
+    it("refuses an improper field list as an unknown operation", () => {
+      defineUpdate("update:status", approving);
+
+      const operation = updateOf(
+        Type.improperList([Type.atom("a"), Type.atom("b")]),
+      );
+
+      assertBoxedError(
+        () => asks(operation, {status: enumValue("published")}),
+        "Hologram.MisuseError",
+        `unknown operation ${Interpreter.inspect(operation)} for ${DOCUMENT} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}`,
+      );
+    });
+
+    it("names a repeated unknown name once", () => {
+      defineUpdate("update:status", approving);
+
+      const repeated = Type.keywordList([
+        [Type.atom("nope"), Type.integer(1)],
+        [Type.atom("nope"), Type.integer(2)],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), repeated),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: :nope`,
+      );
+    });
+
+    it("reads a repeated struct key by its last value", () => {
+      defineUpdate("update:status", approving);
+
+      const repeated = Type.keywordList([
+        [Type.atom("__struct__"), Type.atom("foo")],
+        [Type.atom("__struct__"), Type.integer(1)],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), repeated),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: :__struct__`,
+      );
+    });
+
+    it("refuses an improper keyword list", () => {
+      defineUpdate("update:status", approving);
+
+      const improper = Type.improperList([
+        Type.tuple([Type.atom("title"), Type.bitstring("x")]),
+        Type.tuple([Type.atom("title"), Type.bitstring("y")]),
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), improper),
+        "Hologram.MisuseError",
+        `can? takes the values of a change as a keyword list or a map - got ${Interpreter.inspect(improper)}`,
+      );
+    });
+
+    it("refuses empty values for a type the model doesn't carry", () => {
+      defineModel();
+
+      assertBoxedError(
+        () => canChange(alice, update, entryless(), Type.keywordList([])),
+        "Hologram.MisuseError",
+        "invalid changes for MyApp.Nothing - at least one declared attribute or to-one relationship must be changed",
+      );
+    });
+
+    it("refuses a key that isn't an atom for a type the model doesn't carry", () => {
+      defineModel();
+
+      assertBoxedError(
+        () =>
+          canChange(
+            alice,
+            update,
+            entryless(),
+            Type.map([[Type.integer(1), Type.integer(2)]]),
+          ),
+        "Hologram.MisuseError",
+        "invalid changes for MyApp.Nothing - only declared attributes and to-one relationships can be updated: 1",
+      );
+    });
+
+    it("refuses a role grant", () => {
+      defineModel();
+
+      const grant = Model.box(GRANT, grantRow({role: "viewer"}));
+
+      assertBoxedError(
+        () =>
+          canChange(alice, update, grant, values({role: enumValue("owner")})),
+        "Hologram.MisuseError",
+        `cannot update ${GRANT} - a role grant is never changed in place, revoke the role and grant the new one instead`,
+      );
+    });
+
+    it("orders keys equal as numbers by their printed text", () => {
+      defineUpdate("update:status", approving);
+
+      const mixed = Type.map([
+        [Type.integer(1), Type.atom("b")],
+        [Type.float(1.0), Type.atom("a")],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), mixed),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: 1, 1.0`,
+      );
+    });
+
+    it("names a map key by its printed text among the refused keys", () => {
+      defineUpdate("update:status", approving);
+
+      const mixed = Type.map([
+        [Type.map([]), Type.integer(1)],
+        [Type.atom("nope"), Type.integer(2)],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), mixed),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: %{}, :nope`,
+      );
+    });
+
+    it("refuses a key of a type the runtime can't order", () => {
+      defineUpdate("update:status", approving);
+
+      const mapKeyed = Type.map([[Type.map([]), Type.integer(1)]]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), mapKeyed),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: %{}`,
+      );
+    });
+
+    it("names refused keys in the order of their printed text", () => {
+      defineUpdate("update:status", approving);
+
+      const mixed = Type.map([
+        [Type.atom("nope"), Type.integer(1)],
+        [Type.integer(2), Type.integer(3)],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), mixed),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: 2, :nope`,
+      );
+    });
+
+    it("names a key that isn't an atom beside an unknown name", () => {
+      defineUpdate("update:status", approving);
+
+      const mixed = Type.map([
+        [Type.bitstring("x"), Type.integer(1)],
+        [Type.atom("nope"), Type.integer(2)],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), mixed),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: "x", :nope`,
+      );
+    });
+
+    it("refuses a row carrying recorded changes", () => {
+      defineUpdate("update:status", approving);
+
+      const metadata = Type.map([
+        [
+          Type.atom("attribute_ops"),
+          Type.map([
+            [
+              Type.atom("status"),
+              Type.tuple([Type.atom("put"), enumValue("review")]),
+            ],
+          ]),
+        ],
+        [Type.atom("relationship_ops"), Type.map([])],
+      ]);
+
+      const key = Type.atom("__meta__");
+      const entity = document();
+
+      const changed = {
+        ...entity,
+        data: {...entity.data, [Type.encodeMapKey(key)]: [key, metadata]},
+      };
+
+      assertBoxedError(
+        () => asks(update, {status: enumValue("published")}, changed),
+        "Hologram.MisuseError",
+        `can? with values asks about a row as stored - ${DOCUMENT} "${DOC}" carries recorded changes, so its fields no longer hold the stored values`,
+      );
+    });
+
+    it("refuses values that are neither a keyword list nor a map", () => {
+      defineUpdate("update:status", approving);
+
+      assertBoxedError(
+        () =>
+          canChange(alice, update, document(), Type.list([Type.integer(1)])),
+        "Hologram.MisuseError",
+        "can? takes the values of a change as a keyword list or a map - got [1]",
+      );
+    });
+
+    it("refuses a value name an update can't set", () => {
+      defineUpdate("update:status", approving);
+
+      assertBoxedError(
+        () => asks(update, {nope: Type.integer(1)}),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: :nope`,
+      );
+    });
+
+    it("refuses empty values", () => {
+      defineUpdate("update:status", approving);
+
+      assertBoxedError(
+        () => asks(update, {}),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - at least one declared attribute or to-one relationship must be changed`,
+      );
+    });
+
+    describe("an update name a refresh of the rules removed", () => {
+      const archive = Type.atom("archive");
+      const published = {status: enumValue("published")};
+
+      const refreshed = (policy) => {
+        const {derived, inverses} = globalThis.Hologram.sync.model[DOCUMENT];
+
+        Model.replaceRules({
+          [DOCUMENT]: {
+            derived,
+            inverses,
+            operations: Object.keys(policy),
+            policy,
+            updateNames: [],
+            verdicts: {},
+          },
+        });
+      };
+
+      it("answers no, as can?/3 does", () => {
+        defineUpdate("archive", approving);
+        refreshed({});
+
+        assert.deepStrictEqual(asks(archive, published), Type.boolean(false));
+        assert.deepStrictEqual(
+          can(alice, archive, document()),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers no when the name now belongs to another operation", () => {
+        defineUpdate("archive", approving);
+        refreshed({archive: [rule()]});
+
+        assert.deepStrictEqual(asks(archive, published), Type.boolean(false));
+      });
+
+      it("still refuses a name that was never an update", () => {
+        defineUpdate("archive", approving);
+        refreshed({read: [rule()]});
+
+        assertBoxedError(
+          () => asks(Type.atom("read"), published),
+          "Hologram.MisuseError",
+          "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got :read",
+        );
+      });
+
+      it("answers by its rules when a later refresh brings it back", () => {
+        defineUpdate("archive", approving);
+        refreshed({});
+
+        Model.replaceRules({
+          [DOCUMENT]: {
+            derived: {},
+            inverses: {},
+            operations: ["archive"],
+            policy: {archive: [approving]},
+            updateNames: ["archive"],
+            verdicts: {},
+          },
+        });
+
+        assert.deepStrictEqual(asks(archive, published), Type.boolean(true));
+      });
+    });
+
+    it("refuses an operation that isn't an update", () => {
+      defineUpdate("update:status", approving);
+
+      assertBoxedError(
+        () => asks(Type.atom("read"), {status: enumValue("published")}),
+        "Hologram.MisuseError",
+        "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got :read",
+      );
+    });
+
+    it("refuses a role operation", () => {
+      defineUpdate("update:status", approving);
+
+      const operation = Type.tuple([
+        Type.atom("grant_role"),
+        Type.atom("editor"),
+      ]);
+
+      assertBoxedError(
+        () => asks(operation, {status: enumValue("published")}),
+        "Hologram.MisuseError",
+        "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got {:grant_role, :editor}",
+      );
+    });
+  });
+
+  describe("a quantifier's condition holding the build's marker", () => {
+    it("answers a visitor without reading the marker as a clause naming somebody", () => {
+      defineModel({
+        read: [
+          rule({
+            predicates: [
+              {
+                filter: [{server: true}],
+                quantifier: "none",
+                source: ["tags"],
+              },
+            ],
+          }),
+        ],
+      });
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document()),
+        Type.boolean(false),
+      );
+    });
+  });
+
   // Cases this side alone has: no client holds a server-only attribute's value - a struct holds its
   // sentinel and a held row nothing at all - so a rule reading one never decides on it, wherever the
   // rule reads it, and only the server's verdict on the operation answers it.
@@ -3780,6 +5366,75 @@ describe("Elixir_Hologram_Auth", () => {
 
         assert.deepStrictEqual(verdictReads(true), Type.boolean(true));
         assert.deepStrictEqual(verdictReads(false), Type.boolean(false));
+      });
+
+      // The shape the build sends: what the condition compares stays off the bundle, and each held
+      // row reads the marker as unknown.
+      describe("as the build's marker", () => {
+        const anyMarker = (filter) => ({
+          filter,
+          quantifier: "any",
+          source: ["documents"],
+        });
+
+        it("answers from the verdict", () => {
+          const verdictReads = (verdicts) => {
+            putDocument();
+
+            return folderReads([anyMarker([serverOnlyMarker])], verdicts);
+          };
+
+          assert.deepStrictEqual(
+            verdictReads({$verdicts: {[KEY]: true}}),
+            Type.boolean(true),
+          );
+
+          assert.deepStrictEqual(
+            verdictReads({$verdicts: {[KEY]: false}}),
+            Type.boolean(false),
+          );
+
+          assert.deepStrictEqual(verdictReads(), Type.boolean(false));
+        });
+
+        it("answers from the verdict in a nested quantifier's condition", () => {
+          const predicates = [
+            {
+              filter: [
+                {
+                  filter: [serverOnlyMarker],
+                  quantifier: "any",
+                  source: {name: ["documents"], outer: 1},
+                },
+              ],
+              quantifier: "any",
+              source: ["documents"],
+            },
+          ];
+
+          putDocument();
+
+          assert.deepStrictEqual(
+            folderReads(predicates, {$verdicts: {[KEY]: true}}),
+            Type.boolean(true),
+          );
+
+          assert.deepStrictEqual(folderReads(predicates), Type.boolean(false));
+        });
+
+        it("grants on a held row through an alternative reading no server-only attribute", () => {
+          const predicates = [
+            anyMarker([{or: [[["title", "==", "Plans"]], [serverOnlyMarker]]}]),
+          ];
+
+          putDocument({title: "Notes"});
+
+          assert.deepStrictEqual(folderReads(predicates), Type.boolean(false));
+
+          putDocument({title: "Plans"});
+
+          assert.deepStrictEqual(folderReads(predicates), Type.boolean(true));
+        });
       });
     });
 
@@ -5220,7 +6875,7 @@ describe("trustedWriteMessage()", () => {
   it("spells the scope and the verb into the sentence", () => {
     assert.equal(
       trustedWriteMessage("type-wide", "revoked"),
-      "type-wide roles are revoked only by trusted code running without an acting user",
+      "type-wide roles are revoked only by server code claiming trust: true or running outside a session",
     );
   });
 });
@@ -5292,6 +6947,26 @@ describe("grant_role/3", () => {
         type: GATED_GRANT,
       },
     ]);
+  });
+
+  it("appends the same create through grant_role/4 with no options", () => {
+    const result = Elixir_Hologram_Auth["grant_role/4"](
+      Type.bitstring(GATED_BOB),
+      Type.atom("viewer"),
+      document(),
+      Type.list(),
+    );
+
+    assert.deepStrictEqual(result, Type.atom("ok"));
+
+    const writes = Batches.current().writes;
+
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].op, "create");
+    assert.equal(
+      writes[0].id,
+      deriveGrantId(GATED_BOB, GATED_DOCUMENT, GATED_DOC, "viewer"),
+    );
   });
 
   it("takes the user as a struct as well as a bare id", () => {
@@ -5392,7 +7067,7 @@ describe("grant_role/3", () => {
           Type.alias(GATED_DOCUMENT),
         ),
       "Hologram.AccessDeniedError",
-      "type-wide roles are granted only by trusted code running without an acting user",
+      "type-wide roles are granted only by server code claiming trust: true or running outside a session",
     );
   });
 
@@ -5462,6 +7137,181 @@ describe("grant_role/3", () => {
   });
 });
 
+describe("the trust claim on the grant verbs", () => {
+  const trustOpts = () =>
+    Type.keywordList([[Type.atom("trust"), Type.boolean(true)]]);
+
+  const otherOpts = () =>
+    Type.keywordList([[Type.atom("nope"), Type.boolean(true)]]);
+
+  const user = () => Type.bitstring(GATED_BOB);
+  const admin = () => Type.alias("MyApp.Roles.Admin");
+
+  const document = () =>
+    Type.struct(GATED_DOCUMENT, [[Type.atom("id"), Type.bitstring(GATED_DOC)]]);
+
+  const trustMessage =
+    "trust is the server's authority - a client cannot claim it";
+
+  it("grant_role/3 refuses :global", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["grant_role/3"](
+          user(),
+          admin(),
+          Type.atom("global"),
+        ),
+      "Hologram.AccessDeniedError",
+      "global roles are granted only by server code claiming trust: true or running outside a session",
+    );
+  });
+
+  it("grant_role/3 refuses options in the entity's place", () => {
+    assertBoxedError(
+      () => Elixir_Hologram_Auth["grant_role/3"](user(), admin(), trustOpts()),
+      "Hologram.MisuseError",
+      "grant_role takes an entity, an entity type or :global as its third argument, got: [trust: true] - options go fourth",
+    );
+  });
+
+  it("grant_role/4 refuses it for a global role", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["grant_role/4"](
+          user(),
+          admin(),
+          Type.atom("global"),
+          trustOpts(),
+        ),
+      "Hologram.MisuseError",
+      trustMessage,
+    );
+  });
+
+  it("grant_role/4 refuses options that are not a list", () => {
+    for (const opts of [Type.atom("nope"), Type.integer(1), Type.tuple()]) {
+      assertBoxedError(
+        () =>
+          Elixir_Hologram_Auth["grant_role/4"](
+            user(),
+            Type.atom("viewer"),
+            document(),
+            opts,
+          ),
+        "Hologram.MisuseError",
+        `grant_role takes trust: true as its only option, got: ${Interpreter.inspect(opts)}`,
+      );
+    }
+  });
+
+  it("grant_role/4 refuses it", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["grant_role/4"](
+          user(),
+          Type.atom("viewer"),
+          document(),
+          trustOpts(),
+        ),
+      "Hologram.MisuseError",
+      trustMessage,
+    );
+  });
+
+  it("grant_role/4 refuses any other option", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["grant_role/4"](
+          user(),
+          Type.atom("viewer"),
+          document(),
+          otherOpts(),
+        ),
+      "Hologram.MisuseError",
+      "grant_role takes trust: true as its only option, got: [nope: true]",
+    );
+  });
+
+  it("revoke_role/3 refuses :global", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["revoke_role/3"](
+          user(),
+          admin(),
+          Type.atom("global"),
+        ),
+      "Hologram.AccessDeniedError",
+      "global roles are revoked only by server code claiming trust: true or running outside a session",
+    );
+  });
+
+  it("revoke_role/3 refuses options in the entity's place", () => {
+    assertBoxedError(
+      () => Elixir_Hologram_Auth["revoke_role/3"](user(), admin(), trustOpts()),
+      "Hologram.MisuseError",
+      "revoke_role takes an entity, an entity type or :global as its third argument, got: [trust: true] - options go fourth",
+    );
+  });
+
+  it("revoke_role/4 refuses it for a global role", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["revoke_role/4"](
+          user(),
+          admin(),
+          Type.atom("global"),
+          trustOpts(),
+        ),
+      "Hologram.MisuseError",
+      trustMessage,
+    );
+  });
+
+  it("revoke_role/4 refuses options that are not a list", () => {
+    for (const opts of [Type.atom("nope"), Type.integer(1), Type.tuple()]) {
+      assertBoxedError(
+        () =>
+          Elixir_Hologram_Auth["revoke_role/4"](
+            user(),
+            Type.atom("viewer"),
+            document(),
+            opts,
+          ),
+        "Hologram.MisuseError",
+        `revoke_role takes trust: true as its only option, got: ${Interpreter.inspect(opts)}`,
+      );
+    }
+  });
+
+  it("revoke_role/4 refuses it", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["revoke_role/4"](
+          user(),
+          Type.atom("viewer"),
+          document(),
+          trustOpts(),
+        ),
+      "Hologram.MisuseError",
+      trustMessage,
+    );
+  });
+
+  it("revoke_role/4 refuses any other option", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["revoke_role/4"](
+          user(),
+          Type.atom("viewer"),
+          document(),
+          otherOpts(),
+        ),
+      "Hologram.MisuseError",
+      "revoke_role takes trust: true as its only option, got: [nope: true]",
+    );
+  });
+});
+
 describe("grant_role/2", () => {
   it("raises - a global grant is trusted-only", () => {
     assertBoxedError(
@@ -5471,7 +7321,7 @@ describe("grant_role/2", () => {
           Type.alias("MyApp.Roles.Admin"),
         ),
       "Hologram.AccessDeniedError",
-      "global roles are granted only by trusted code running without an acting user",
+      "global roles are granted only by server code claiming trust: true or running outside a session",
     );
   });
 });
@@ -5524,6 +7374,26 @@ describe("revoke_role/3", () => {
     Batches.reset();
     LocalDatabase.actorUserId = null;
     LocalDatabase.actorEntityId = null;
+  });
+
+  it("appends the same delete through revoke_role/4 with no options", () => {
+    const result = Elixir_Hologram_Auth["revoke_role/4"](
+      Type.bitstring(GATED_BOB),
+      Type.atom("viewer"),
+      document(),
+      Type.list(),
+    );
+
+    assert.deepStrictEqual(result, Type.atom("ok"));
+
+    const writes = Batches.current().writes;
+
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].op, "delete");
+    assert.equal(
+      writes[0].id,
+      deriveGrantId(GATED_BOB, GATED_DOCUMENT, GATED_DOC, "viewer"),
+    );
   });
 
   it("appends a delete of the held row carrying its revisions and its grant", () => {
@@ -5625,7 +7495,7 @@ describe("revoke_role/3", () => {
           Type.alias(GATED_DOCUMENT),
         ),
       "Hologram.AccessDeniedError",
-      "type-wide roles are revoked only by trusted code running without an acting user",
+      "type-wide roles are revoked only by server code claiming trust: true or running outside a session",
     );
   });
 
@@ -5671,7 +7541,7 @@ describe("revoke_role/2", () => {
           Type.alias("MyApp.Roles.Admin"),
         ),
       "Hologram.AccessDeniedError",
-      "global roles are revoked only by trusted code running without an acting user",
+      "global roles are revoked only by server code claiming trust: true or running outside a session",
     );
   });
 });

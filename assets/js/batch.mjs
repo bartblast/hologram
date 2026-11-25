@@ -16,6 +16,12 @@ export default class Batch {
   // would become Bob's.
   actorUserId = null;
 
+  // Whether the store holds this batch: null while the filing is in flight, true once it is stored
+  // and for a batch read back from it, false when it never got there. A batch the store doesn't
+  // hold exists only in this tab, so nothing else will ever send it. Not part of `record()`: what
+  // is kept of a batch is filed by being kept.
+  filed = null;
+
   // The writes the server has already settled, by their position in `writes`. A frame naming this
   // batch's number is what usually puts one here: the server applied it, resolved it against
   // whatever else had moved, and sent back the row it left - so folding the write on top again
@@ -84,6 +90,7 @@ export default class Batch {
     const batch = new Batch(null);
 
     batch.actorUserId = record.actorUserId;
+    batch.filed = true;
     batch.landed = new Set(record.landed);
     batch.writes = record.writes;
 

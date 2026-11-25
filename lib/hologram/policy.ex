@@ -75,6 +75,9 @@ defmodule Hologram.Policy do
 
   @model_facts_key {__MODULE__, :model_facts}
 
+  # The clauses asking about the row after an update's change, by a role or an operation.
+  @new_row_checks [:can, :has_role]
+
   @quantifiers [:all, :any, :none]
 
   @verdict_digest_bytes 8
@@ -253,6 +256,7 @@ defmodule Hologram.Policy do
   @spec build(module) :: %{
           Entity.operation() =>
             list(%{
+              optional(:exact) => %{predicates: list(tuple)},
               predicates: list(tuple),
               to: list(tuple) | nil,
               via: {Entity.operation(), list(atom)} | nil
@@ -283,6 +287,19 @@ defmodule Hologram.Policy do
   def field_rules(policy, field) do
     Map.get(policy, {:update, field}, []) ++ Map.get(policy, :update, [])
   end
+
+  # The clauses a line's condition builds: an update line's are read with the row after the change
+  # one level above the rule's own row, which is what new() lowers to.
+  @doc false
+  @spec condition_clauses(module, Entity.operation(), Query.policy_predicates(), list) ::
+          list(Query.policy_clause())
+  def condition_clauses(entity_type, operation, predicates, hints \\ [])
+
+  def condition_clauses(entity_type, :update, predicates, hints),
+    do: Stage.new_row_triples!(entity_type, predicates, hints)
+
+  def condition_clauses(entity_type, _operation, predicates, hints),
+    do: Stage.predicate_triples!(entity_type, predicates, hints)
 
   @doc """
   Returns the given entity type modules that declare no allow lines, sorted.
@@ -453,6 +470,46 @@ defmodule Hologram.Policy do
     |> CryptographicUtils.short_digest(@hash_bytes)
   end
 
+  # The names the given entity type's update lines carry, sorted.
+  @doc false
+  @spec update_names(module) :: list(atom)
+  def update_names(entity_type) do
+    names =
+      for {:update, _to, _via, _predicates, name, _fields} <- entity_type.__policies__(),
+          name != nil,
+          uniq: true,
+          do: name
+
+    Enum.sort(names)
+  end
+
+  # The given names of a write's values as allow lines name them: an attribute by its name, a to-one
+  # by its relationship's rather than its reference field's.
+  @doc false
+  @spec changed_field_names(module, list(atom)) :: list(atom)
+  def changed_field_names(entity_type, names) do
+    reference_names =
+      for {name, type, _opts} <- entity_type.__relationships__(),
+          not is_list(type),
+          into: %{},
+          do: {String.to_existing_atom("#{name}_id"), name}
+
+    Enum.map(names, &Map.get(reference_names, &1, &1))
+  end
+
+  # Whether a rule covering one of the given fields of an update reads the row after the change.
+  @doc false
+  @spec judges_change?(module, list(atom)) :: boolean
+  def judges_change?(entity_type, fields) do
+    policy = build(entity_type)
+
+    Enum.any?(fields, fn field ->
+      policy
+      |> field_rules(field)
+      |> Enum.any?(&Map.has_key?(&1, :exact))
+    end)
+  end
+
   @doc """
   Returns the chains `related_chains/2` returns for the given operation of the given entity type
   that a client answers from the rows it holds, sorted: those its rules read outside any deciding
@@ -527,7 +584,7 @@ defmodule Hologram.Policy do
     for entity_type <- entity_types,
         {_operation, rules} <- build(entity_type),
         rule <- rules,
-        link <- rule_links(entity_type, rule.predicates),
+        link <- rule_links(entity_type, read_clauses(rule)),
         into: MapSet.new(),
         do: link
   end
@@ -574,6 +631,43 @@ defmodule Hologram.Policy do
   def operation_rules(policy, operation), do: Map.get(policy, operation, [])
 
   @doc """
+  Returns the chains of relationship names the given entity type's conditions on the row after a change walk, sorted, which no dependency edge names since they judge no stored row. A role or an operation asked of that row counts up to the row before its target: a role's target declares it, and a target declaring no rule is one no client holds a row of.
+  """
+  @spec new_row_chains(module) :: list(list(atom))
+  def new_row_chains(entity_type) do
+    entity_type
+    |> build()
+    |> Map.values()
+    |> Enum.concat()
+    |> Enum.uniq()
+    |> Enum.filter(&Map.has_key?(&1, :exact))
+    |> Enum.flat_map(fn %{exact: %{predicates: predicates}} = rule ->
+      new_row_read_chains(entity_type, read_clauses(rule)) ++ new_row_check_hops(predicates)
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  # The clauses among the given ones asking about the row after the change by a role or an
+  # operation, those in a disjunction's alternatives included.
+  @doc false
+  @spec new_row_checks(list(tuple)) :: list(tuple)
+  def new_row_checks(clauses) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} -> Enum.flat_map(alternatives, &new_row_checks/1)
+      {check, {_asked, _chain}} = clause when check in @new_row_checks -> [clause]
+      _clause -> []
+    end)
+  end
+
+  # The given clauses of an update line as what they read on the stored row: a name of the row after
+  # the change spelled as the same name of the rule's own row, which has the same type and the same
+  # chains - so whatever asks what a clause reads takes it as it takes any other.
+  @doc false
+  @spec stored_spelling(list(tuple)) :: list(tuple)
+  def stored_spelling(clauses), do: stored_spelling(clauses, 0)
+
+  @doc """
   Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every name an allow line carries - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
   """
   @spec operations(module) :: list(atom)
@@ -592,8 +686,7 @@ defmodule Hologram.Policy do
   and its relationships, a to-one by its relationship name - the names `only:` and `except:` take
   and `can?(user, {:update, field}, row)` asks about. Inverses, derived fields and system
   attributes are left out, since no update sets them, and so are a job's framework-owned
-  attributes, the framework's to set: an update changing one is covered by the whole-row rules
-  alone.
+  attributes, the framework's to set: no update can change one.
   """
   @spec update_fields(module) :: list(atom)
   def update_fields(entity_type) do
@@ -678,20 +771,6 @@ defmodule Hologram.Policy do
     end)
     |> Enum.take_while(fn {type, _name} -> readable_type?(type) end)
     |> Enum.map(fn {_type, name} -> name end)
-  end
-
-  @doc """
-  Returns whether the given clause of a rule of the given entity type reads a server-only
-  attribute - of the row, of one a path or a set leads to, or of one above inside a quantifier. A
-  derived field never reads one, which the build refuses, so the names the clause writes are all
-  there is. No client ever holds such a value, so it answers the clause as unknown, and the
-  server's verdict on the operation answers the rule.
-  """
-  @spec reads_server_only?(module, tuple) :: boolean
-  def reads_server_only?(entity_type, clause) do
-    entity_type
-    |> server_only_references(clause)
-    |> Enum.any?(fn {_relationship_names, server_only?} -> server_only? end)
   end
 
   @doc """
@@ -1469,13 +1548,165 @@ defmodule Hologram.Policy do
     end)
   end
 
+  # A rule reading the row after the change keeps its clauses as written under :exact, for what
+  # judges one specific change, and its own predicates are what's left for anything asking with no
+  # change in hand: whether some change could pass.
   defp line_rule(entity_type, operation, to, via, predicates) do
-    %{
-      predicates: Stage.predicate_triples!(entity_type, predicates),
+    clauses =
+      entity_type
+      |> condition_clauses(operation, predicates)
+      |> expanded_role_checks(entity_type)
+
+    rule = %{
+      predicates: planned_clauses(clauses),
       to: build_to(entity_type, to),
       via: delegation(operation, via)
     }
+
+    if reads_new_row?(clauses, 0),
+      do: Map.put(rule, :exact, %{predicates: clauses}),
+      else: rule
   end
+
+  # A role asked of the row after the change is extends-expanded, as a role reference is.
+  defp expanded_role_checks(clauses, entity_type) do
+    Enum.map(clauses, fn
+      {:has_role, {role_name, chain}} ->
+        target_type = Entity.path_target(entity_type, chain)
+
+        {:has_role, {Entity.expand_role(target_type, role_name), chain}}
+
+      {:or, alternatives} ->
+        {:or, Enum.map(alternatives, &expanded_role_checks(&1, entity_type))}
+
+      clause ->
+        clause
+    end)
+  end
+
+  # The given clauses, nested in the given number of quantifiers, without those reading the row
+  # after the change, which no row answers until there is a change: each counts as holding. An
+  # alternative left with nothing holds, and so does its disjunction. An any over a stored set keeps
+  # the set, since no change can pass on an empty one, and what's left of its condition. An all
+  # keeps what's left of its condition too, since a row failing that fails it whatever the change.
+  # A none keeps only what matches a row whatever the change, since dropping a clause inside it
+  # would narrow it the wrong way. A quantifier over the row after the change goes whole.
+  defp planned_clauses(clauses, depth \\ 0) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} ->
+        planned = Enum.map(alternatives, &planned_clauses(&1, depth))
+
+        if [] in planned, do: [], else: [{:or, planned}]
+
+      {:any, {source, inner}} = clause ->
+        if new_row_name?(source, depth),
+          do: [],
+          else: [put_elem(clause, 1, {source, planned_clauses(inner, depth + 1)})]
+
+      {quantifier, {source, inner}} = clause when quantifier in [:all, :none] ->
+        cond do
+          not reads_new_row?([clause], depth) -> [clause]
+          new_row_name?(source, depth) -> []
+          true -> planned_quantifier(quantifier, source, inner, depth)
+        end
+
+      clause ->
+        if reads_new_row?([clause], depth), do: [], else: [clause]
+    end)
+  end
+
+  defp planned_quantifier(:all, source, inner, depth) do
+    case planned_clauses(inner, depth + 1) do
+      [] -> []
+      planned -> [{:all, {source, planned}}]
+    end
+  end
+
+  defp planned_quantifier(:none, source, inner, depth) do
+    case sure_clauses(inner, depth + 1) do
+      nil -> []
+      sure -> [{:none, {source, sure}}]
+    end
+  end
+
+  # The given clauses cut down to what matches a row whatever the change, or nil when nothing does:
+  # every clause has to, and of a disjunction one alternative is enough.
+  defp sure_clauses(clauses, depth) do
+    sure = Enum.map(clauses, &sure_clause(&1, depth))
+
+    if nil in sure, do: nil, else: sure
+  end
+
+  defp sure_clause({:or, alternatives}, depth) do
+    sure =
+      alternatives
+      |> Enum.map(&sure_clauses(&1, depth))
+      |> Enum.reject(&is_nil/1)
+
+    if sure == [], do: nil, else: {:or, sure}
+  end
+
+  defp sure_clause(clause, depth) do
+    if reads_new_row?([clause], depth), do: nil, else: clause
+  end
+
+  # Every clause a rule reads, those judging a change included, each as what it reads on a stored
+  # row: the row after the change has the same type and the same chains.
+  defp read_clauses(%{exact: %{predicates: predicates}}), do: stored_spelling(predicates)
+
+  defp read_clauses(%{predicates: predicates}), do: predicates
+
+  # Whether the given clauses, nested in the given number of quantifiers, read the row after the
+  # change: the row one level past the rule's own.
+  defp reads_new_row?(clauses, depth) do
+    Enum.any?(clauses, fn
+      {:or, alternatives} ->
+        Enum.any?(alternatives, &reads_new_row?(&1, depth))
+
+      {check, {_asked, _chain}} when check in @new_row_checks ->
+        true
+
+      {quantifier, {source, inner}} when quantifier in @quantifiers ->
+        new_row_name?(source, depth) or reads_new_row?(inner, depth + 1)
+
+      {name, _operator, {:attribute, other}} ->
+        new_row_name?(name, depth) or new_row_name?(other, depth)
+
+      {name, _operator, _value} ->
+        new_row_name?(name, depth)
+    end)
+  end
+
+  defp new_row_name?({:outer, levels, _name}, depth), do: levels == depth + 1
+
+  defp new_row_name?(_name, _depth), do: false
+
+  # A role or an operation asked of the new row reads no name of a row: what it follows is counted
+  # by new_row_check_chains/3.
+  defp stored_spelling(clauses, depth) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} ->
+        [{:or, Enum.map(alternatives, &stored_spelling(&1, depth))}]
+
+      {check, {_asked, _chain}} when check in @new_row_checks ->
+        []
+
+      {quantifier, {source, inner}} when quantifier in @quantifiers ->
+        [{quantifier, {stored_name(source, depth), stored_spelling(inner, depth + 1)}}]
+
+      {name, operator, {:attribute, other}} ->
+        [{stored_name(name, depth), operator, {:attribute, stored_name(other, depth)}}]
+
+      {name, operator, value} ->
+        [{stored_name(name, depth), operator, value}]
+    end)
+  end
+
+  defp stored_name({:outer, levels, name}, depth) when levels == depth + 1 do
+    if depth == 0, do: name, else: {:outer, depth, name}
+  end
+
+  defp stored_name(name, _depth), do: name
 
   # A limited update line is keyed by the fields it covers, any other line by its operation, per
   # role for a grant lifecycle one.
@@ -1710,20 +1941,65 @@ defmodule Hologram.Policy do
   end
 
   # The chains a rule reads - all of them, or those a client answers from the rows it holds.
-  defp rule_chains(entity_type, %{predicates: predicates, to: to, via: via}, reads) do
+  defp rule_chains(entity_type, %{to: to, via: via} = rule, reads) do
+    clauses = read_clauses(rule)
+
     {read_predicates, read_references, read_via} =
       case reads do
         :all ->
-          {predicates, to, via}
+          {clauses, to, via}
 
         {:held, operation} ->
-          {undecided_predicates(entity_type, operation, predicates),
+          {undecided_predicates(entity_type, operation, clauses),
            undecided_references(entity_type, operation, to),
            undecided_via(entity_type, operation, via)}
       end
 
     predicate_chains(entity_type, read_predicates) ++
-      reference_chains(read_references) ++ delegation_chains(entity_type, read_via, reads)
+      reference_chains(read_references) ++
+      delegation_chains(entity_type, read_via, reads) ++
+      new_row_check_chains(entity_type, rule, reads)
+  end
+
+  # What a role or an operation asked of the row after the change reads along its chain, as a role
+  # reference or a delegation reads it.
+  defp new_row_check_chains(entity_type, %{exact: %{predicates: predicates}}, reads) do
+    predicates
+    |> new_row_checks()
+    |> Enum.flat_map(fn
+      {:has_role, {role_names, chain}} -> reference_chains([{:rel, chain, role_names}])
+      {:can, via} -> delegation_chains(entity_type, via, reads)
+    end)
+  end
+
+  defp new_row_check_chains(_entity_type, _rule, _reads), do: []
+
+  # The chains the given clauses walk, those a derived field's definition reads included, a count's
+  # among them.
+  defp new_row_read_chains(entity_type, clauses) do
+    {references, chains} = Derived.set_reads(entity_type, clauses)
+
+    read_chains =
+      entity_type
+      |> Derived.expanded_references(references)
+      |> Enum.flat_map(fn
+        {[], _name} -> []
+        {relationship_names, _name} -> [relationship_names]
+      end)
+
+    read_chains ++ chains
+  end
+
+  # The rows a role or an operation asked of the row after the change passes through on the way to
+  # its target.
+  defp new_row_check_hops(predicates) do
+    predicates
+    |> new_row_checks()
+    |> Enum.map(fn
+      {:has_role, {_role_names, chain}} -> Enum.drop(chain, -1)
+      {:can, {_operation, chain}} -> Enum.drop(chain, -1)
+    end)
+    |> Enum.reject(&(&1 == []))
   end
 
   # The set links a rule's condition reads: those of its quantifiers, and those of the derived
@@ -1753,7 +2029,7 @@ defmodule Hologram.Policy do
       |> build()
       |> Map.values()
       |> Enum.concat()
-      |> Enum.flat_map(& &1.predicates)
+      |> Enum.flat_map(&read_clauses/1)
 
     derived = Derived.read_fields(entity_type, predicates)
 
@@ -1822,8 +2098,21 @@ defmodule Hologram.Policy do
           {type, name, Entity.inverse_relationship(type, name)}
         end),
       operations: operations(entity_type),
-      rules: rules
+      rules: rules,
+      update_names: update_names(entity_type)
     }
+  end
+
+  # Whether the given clause of a rule of the given entity type reads a server-only attribute - of
+  # the row, of one a path or a set leads to, or of one above inside a quantifier. A derived field
+  # never reads one, which the build refuses, so the names the clause writes are all there is. No
+  # client ever holds such a value, so it answers the clause as unknown, and the server's verdict on
+  # the operation answers the rule. The build renders every predicate reading one as a marker
+  # (see Compiler.reads_server_only?/2), which waits for that verdict, so the two must agree.
+  defp reads_server_only?(entity_type, clause) do
+    entity_type
+    |> server_only_references(clause)
+    |> Enum.any?(fn {_relationship_names, server_only?} -> server_only? end)
   end
 
   # Every name the clause reads, as its relationships from the row and whether it is server-only -

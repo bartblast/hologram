@@ -2,7 +2,12 @@
 
 import Bitstring from "../../bitstring.mjs";
 import Clock from "../../clock.mjs";
-import {currentBatch, isServerOnlySentinel} from "./db.mjs";
+import {
+  currentBatch,
+  isServerOnlySentinel,
+  validateChangeNames,
+} from "./db.mjs";
+import Elixir_Hologram_Entity from "./entity.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
@@ -33,6 +38,9 @@ import Type from "../../type.mjs";
 // about, so the first render answers what the server answered.
 const GRANT_TYPE = "Hologram.Auth.RoleGrant";
 
+// The server's refusal of an update of a grant row, which can? with values gives too.
+const GRANT_UPDATE_MESSAGE = `cannot update ${GRANT_TYPE} - a role grant is never changed in place, revoke the role and grant the new one instead`;
+
 // The one spelling Hologram gives entity ids, the server validator's own pattern - without the
 // multiline flag, $ matches only at the very end, so a trailing newline is no match here either.
 const CANONICAL_ID =
@@ -46,6 +54,17 @@ const CANONICAL_ID =
 // and `and` and `or` keep what they can still decide: false and unknown are false, true or unknown
 // is true.
 const UNKNOWN = Symbol("unknown");
+
+// The rows and boxed entities a rule reads as the database a change would leave, each with that
+// change - the twin of the marker Hologram.Auth.after_row/4 sets. A row read from a marked one is
+// marked in turn, and a row with no mark reads as stored, so a bare name keeps the stored value.
+const afterChanges = new WeakMap();
+
+// The furthest year a JavaScript Date reaches in both directions.
+const MAX_DATE_YEAR = 271820n;
+
+// What every write of a value moves, to a moment only the write knows.
+const WRITE_TIMESTAMPS = ["server_updated_at", "updated_at"];
 
 // The sixteen bytes Hologram.Auth.RoleGrant derives every grant id under - drawn once, on
 // 2026-09-02, and fixed: change them and every grant in every store is renamed.
@@ -273,7 +292,62 @@ function clauseHolds(entityType, entity, clause, actorUserId, outer) {
     return quantifierHolds(entityType, entity, clause, actorUserId, outer);
   }
 
+  if (Object.hasOwn(clause, "hasRole")) {
+    return newRowRoleHolds(clause.hasRole, actorUserId, outer);
+  }
+
+  if (Object.hasOwn(clause, "can")) {
+    return newRowOperationHolds(clause.can, actorUserId, outer);
+  }
+
   return UNKNOWN;
+}
+
+// A role asked of the row the row after the change leads to, which the outermost scope holds.
+function newRowRoleHolds(
+  [relationshipNames, targetType, roles],
+  actorUserId,
+  outer,
+) {
+  if (actorUserId === null) {
+    return false;
+  }
+
+  const {entity, entityType} = outer.at(-1);
+  const targetId = chainTargetId(entityType, entity, relationshipNames);
+
+  if (targetId === UNKNOWN) {
+    return UNKNOWN;
+  }
+
+  return (
+    targetId !== null &&
+    grantExists(grantRows(), actorUserId, roles, targetType, [targetId])
+  );
+}
+
+// An operation asked of the row the row after the change leads to. It's judged as that row stands,
+// so a chain leading back to the changed row asks about its stored copy.
+function newRowOperationHolds(
+  [operation, relationshipNames],
+  actorUserId,
+  outer,
+) {
+  const {entity, entityType} = outer.at(-1);
+  const end = chainRow(entityType, entity, relationshipNames);
+
+  if (end === null || end === UNKNOWN) {
+    return end === null ? false : UNKNOWN;
+  }
+
+  const change = afterChanges.get(end.row);
+
+  const row =
+    end.type === change.type && end.row.id === change.id
+      ? LocalDatabase.getRow(end.type, change.id)
+      : end.row;
+
+  return row === null ? UNKNOWN : grants(end.type, row, operation, actorUserId);
 }
 
 // The row a chain of to-one relationships leads to, with its type, null at the first reference
@@ -283,7 +357,13 @@ function chainRow(entityType, entity, relationshipNames) {
   const [relationshipName, ...laterNames] = relationshipNames;
   const targetId = entityValue(entityType, entity, `${relationshipName}_id`);
 
-  return linkedRow(entityType, targetId, relationshipName, laterNames);
+  return linkedRow(
+    entityType,
+    targetId,
+    relationshipName,
+    laterNames,
+    afterChanges.get(entity),
+  );
 }
 
 // The chain followed from a plain held row, as chainRow/3 follows it from a boxed entity.
@@ -293,9 +373,19 @@ function chainRowFrom(entityType, row, relationshipNames) {
   }
 
   const [relationshipName, ...laterNames] = relationshipNames;
-  const targetId = row[`${relationshipName}_id`] ?? null;
+  const referenceField = `${relationshipName}_id`;
 
-  return linkedRow(entityType, targetId, relationshipName, laterNames);
+  const targetId = undecidedByChange(row, referenceField)
+    ? UNKNOWN
+    : (row[referenceField] ?? null);
+
+  return linkedRow(
+    entityType,
+    targetId,
+    relationshipName,
+    laterNames,
+    afterChanges.get(row),
+  );
 }
 
 // The id the last reference of a chain holds, read off the row the relationships before it lead
@@ -314,7 +404,9 @@ function chainTargetId(entityType, entity, relationshipNames) {
     return end;
   }
 
-  return end.row[referenceField] ?? null;
+  return undecidedByChange(end.row, referenceField)
+    ? UNKNOWN
+    : (end.row[referenceField] ?? null);
 }
 
 // The type a name is declared with - an attribute's, or a derived field's holding a value - or
@@ -343,7 +435,10 @@ function derivedValue(entityType, entity, derived) {
 // server-only attribute is UNKNOWN: no client is ever sent its value, so whatever a struct holds
 // there - the sentinel, or a value an action put in - is not the stored one.
 function entityValue(entityType, entity, name) {
-  if (Model.entry(entityType).serverOnly.has(name)) {
+  if (
+    Model.entry(entityType).serverOnly.has(name) ||
+    undecidedByChange(entity, name)
+  ) {
     return UNKNOWN;
   }
 
@@ -417,7 +512,10 @@ function evaluatedDefinition(entityType, entity, definition) {
 // A field's value off a held row as the wire spells it - a derived field computed on the row, as a
 // boxed entity of it. A server-only attribute is UNKNOWN: a held row carries no value for it.
 function fieldValue(entityType, row, name) {
-  if (Model.entry(entityType).serverOnly.has(name)) {
+  if (
+    Model.entry(entityType).serverOnly.has(name) ||
+    undecidedByChange(row, name)
+  ) {
     return UNKNOWN;
   }
 
@@ -427,7 +525,66 @@ function fieldValue(entityType, row, name) {
     return row[name] ?? null;
   }
 
-  return derivedValue(entityType, Model.box(entityType, row), derived);
+  return derivedValue(
+    entityType,
+    boxedAs(entityType, row, afterChanges.get(row)),
+    derived,
+  );
+}
+
+// A held row boxed, carrying the change it's read under. The changed row is its own boxed entity.
+function boxedAs(entityType, row, change) {
+  if (change === undefined) {
+    return Model.box(entityType, row);
+  }
+
+  if (change.builtRow === row) {
+    return change.entity;
+  }
+
+  const boxed = Model.box(entityType, row);
+
+  afterChanges.set(boxed, change);
+
+  return boxed;
+}
+
+// Whether the name is a field of the changed row this client can't tell the value of after the
+// change: a timestamp, which the write sets to a moment only it knows, or a reference to a row it
+// doesn't hold, which reads as stored on the server if no such row exists.
+function undecidedByChange(rowOrEntity, name) {
+  const change = afterChanges.get(rowOrEntity);
+
+  return (
+    change !== undefined &&
+    (change.entity === rowOrEntity || change.builtRow === rowOrEntity) &&
+    change.undecided.has(name)
+  );
+}
+
+// The changed row as a held row spells it, built when a hop first lands on it. An attribute is read
+// off the struct when a rule asks for it, as the server reads it, so a field no rule reads is never
+// unboxed.
+function changedRow(change) {
+  if (change.builtRow === null) {
+    const {entity, type} = change;
+    const entry = Model.entry(type);
+    const row = referenceRow(type, entity);
+
+    for (const name of Object.keys(entry.attributes)) {
+      if (!entry.serverOnly.has(name) && !Object.hasOwn(row, name)) {
+        Object.defineProperty(row, name, {
+          enumerable: true,
+          get: () => storedValue(type, entity, name),
+        });
+      }
+    }
+
+    change.builtRow = row;
+    afterChanges.set(row, change);
+  }
+
+  return change.builtRow;
 }
 
 // Whether the boxed entity holds a server-only attribute's sentinel - what it arrived with, since
@@ -439,16 +596,43 @@ function holdsServerOnlySentinel(entity, name) {
 }
 
 // The row one to-one relationship's reference names, then the chain after it from there - null for
-// an empty reference, UNKNOWN for a row this client does not hold.
-function linkedRow(entityType, targetId, relationshipName, laterNames) {
+// an empty reference, UNKNOWN for a row this client does not hold. Under a change, the changed row
+// is read as it will be and the rest are marked, so the hops after them read the same state.
+function linkedRow(entityType, targetId, relationshipName, laterNames, change) {
   if (targetId === null) {
     return null;
   }
 
+  if (targetId === UNKNOWN) {
+    return UNKNOWN;
+  }
+
   const type = Model.relationships(entityType)[relationshipName].type;
-  const row = LocalDatabase.getRow(type, targetId);
+
+  const row =
+    change === undefined
+      ? LocalDatabase.getRow(type, targetId)
+      : rowUnderChange(type, targetId, change);
 
   return row === null ? UNKNOWN : chainRowFrom(type, row, laterNames);
+}
+
+function rowUnderChange(type, id, change) {
+  if (type === change.type && id === change.id) {
+    return changedRow(change);
+  }
+
+  const held = LocalDatabase.getRow(type, id);
+
+  if (held === null) {
+    return null;
+  }
+
+  const row = {...held};
+
+  afterChanges.set(row, change);
+
+  return row;
 }
 
 // Whether the given clauses name the acting user anywhere - inside a disjunction's alternatives
@@ -463,7 +647,8 @@ function namesActor(clauses) {
       return clause.or.some(namesActor);
     }
 
-    return namesActor(clause.filter);
+    // The marker the build sends for what no client decides says nothing about who it asks of.
+    return Object.hasOwn(clause, "filter") && namesActor(clause.filter);
   });
 }
 
@@ -595,6 +780,14 @@ function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
     return UNKNOWN;
   }
 
+  const change = afterChanges.get(start.entity);
+
+  // The held rows of a set the change moves a row into or out of are the stored ones, which could
+  // answer a definite no the row after the change doesn't.
+  if (change !== undefined && changeReachesSet(start, change)) {
+    return UNKNOWN;
+  }
+
   const relatedType = Model.pathTarget(start.entityType, start.hops);
   const innerOuter = [{entity, entityType}, ...outer];
 
@@ -607,7 +800,7 @@ function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
   const answers = related.map((row) =>
     predicatesHold(
       relatedType,
-      Model.box(relatedType, row),
+      boxedAs(relatedType, row, change),
       clause.filter,
       actorUserId,
       innerOuter,
@@ -615,6 +808,21 @@ function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
   );
 
   return heldAnswer(clause.quantifier, answers);
+}
+
+// Whether a set read under a change can hold a row the change affects: a hop lands on the changed
+// type.
+function changeReachesSet({entityType, hops}, change) {
+  let type = entityType;
+
+  return hops.some((name) => {
+    type = (
+      Model.own(Model.relationships(type), name) ??
+      Model.own(Model.inverses(type), name)
+    ).type;
+
+    return type === change.type;
+  });
 }
 
 // The boxed entity's id and reference fields as a held row spells them - what a set's rows are
@@ -706,8 +914,19 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
 // an alternative that names nobody. A role is held by somebody, so a visitor holds none, and the
 // grant rows are not read. A delegating rule is evaluated as any other, because the type it
 // delegates to answers its own actor-referencing rules the same way.
-function ruleHolds(rule, entityType, entity, actorUserId) {
-  let result = predicatesHold(entityType, entity, rule.predicates, actorUserId);
+//
+// Given the row after a change, a rule reading it is judged by its clauses as written, with that row
+// one level above the rule's own.
+function ruleHolds(rule, entityType, entity, actorUserId, after = null) {
+  const exact = after !== null && Object.hasOwn(rule, "new");
+
+  let result = predicatesHold(
+    entityType,
+    entity,
+    exact ? rule.new.predicates : rule.predicates,
+    actorUserId,
+    exact ? [after] : [],
+  );
 
   if (result === false) {
     return false;
@@ -1024,13 +1243,713 @@ function coversFields(entry, entityType, entity, fields, actorUserId) {
       return held;
     }
 
-    const verdict = verdictEntry(entry, key) ?? verdictEntry(entry, "update");
-
-    return (
-      verdict !== undefined &&
-      verdictHolds(entityType, entity, verdict, actorUserId) === true
+    return verdictAnswers(
+      entry,
+      entityType,
+      entity,
+      [key, "update"],
+      actorUserId,
     );
   });
+}
+
+// Whether the first verdict entry baked under the given keys grants the row.
+function verdictAnswers(entry, entityType, entity, keys, actorUserId) {
+  const verdict = keys
+    .map((key) => verdictEntry(entry, key))
+    .find((found) => found !== undefined);
+
+  return (
+    verdict !== undefined &&
+    verdictHolds(entityType, entity, verdict, actorUserId) === true
+  );
+}
+
+function readsRowAfterChange(rule) {
+  return Object.hasOwn(rule, "new");
+}
+
+// What the given rules' answer for one specific change comes to. A verdict speaks for a rule's
+// planned form, which says nothing about one change, so it answers what the held rows leave open
+// only when none of the rules reads the row after the change, and they all ask what it answers.
+function changeRulesAnswer(
+  held,
+  rules,
+  entry,
+  entityType,
+  entity,
+  keys,
+  actorUserId,
+) {
+  return held === UNKNOWN && !rules.some(readsRowAfterChange)
+    ? verdictAnswers(entry, entityType, entity, keys, actorUserId)
+    : held;
+}
+
+// Whether the server's verdict on the whole-row update rules grants the row. It speaks for one
+// specific change only when none of them reads the row after the change, whatever the field's own
+// rules read.
+function wholeRowVerdictGrants(entry, entityType, entity, rules, actorUserId) {
+  return (
+    rules.length > 0 &&
+    !rules.some(readsRowAfterChange) &&
+    verdictAnswers(entry, entityType, entity, ["update"], actorUserId)
+  );
+}
+
+// Whether some update rule covering each of the given field names holds on the row after a change:
+// false when one can't be covered, UNKNOWN when none fails but one may.
+function coversChange(entry, entityType, entity, fields, after, actorUserId) {
+  const matched = new Map();
+
+  const holds = (rule) => {
+    if (!matched.has(rule)) {
+      matched.set(
+        rule,
+        ruleHolds(rule, entityType, entity, actorUserId, after),
+      );
+    }
+
+    return matched.get(rule);
+  };
+
+  const wholeRowRules = policyRules(entry, "update");
+  let result = true;
+
+  for (const field of fields) {
+    const key = `update:${field}`;
+    const rules = policyRules(entry, key).concat(wholeRowRules);
+
+    const answer = changeRulesAnswer(
+      someHolds(rules, holds),
+      rules,
+      entry,
+      entityType,
+      entity,
+      [key, "update"],
+      actorUserId,
+    );
+
+    const held =
+      answer === UNKNOWN &&
+      wholeRowVerdictGrants(
+        entry,
+        entityType,
+        entity,
+        wholeRowRules,
+        actorUserId,
+      )
+        ? true
+        : answer;
+
+    if (held === false) {
+      return false;
+    }
+
+    if (held === UNKNOWN) {
+      result = UNKNOWN;
+    }
+  }
+
+  return result;
+}
+
+// The value a name of the row after the change holds when the call alone says so, or UNKNOWN.
+function statedName(name, stated) {
+  return isOuterName(name) &&
+    name.outer === 1 &&
+    typeof name.name === "string" &&
+    stated.has(name.name)
+    ? stated.get(name.name)
+    : UNKNOWN;
+}
+
+// What a clause's operand is when the call alone says so: a value written in the rule, or a name
+// the call states. The acting user is the session's, which the call doesn't state.
+function statedOperand(value, stated) {
+  if (isActorValue(value)) {
+    return UNKNOWN;
+  }
+
+  if (isAttributeValue(value)) {
+    return statedName(value.attribute, stated);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => statedOperand(item, stated) === UNKNOWN)
+      ? UNKNOWN
+      : value;
+  }
+
+  return value;
+}
+
+// A float this large is a whole number, which a write spells as bare digits, and the server can read
+// those back as the float next to it. An integer past 2^53 is a BigInt here, and travels exactly.
+function isBigWholeFloat(value) {
+  return Array.isArray(value)
+    ? value.some(isBigWholeFloat)
+    : typeof value === "number" &&
+        Number.isInteger(value) &&
+        !Number.isSafeInteger(value);
+}
+
+// Whether a triple holds by the call alone: it compares names the call states with each other or
+// with a value written in the rule. Anything else reads what only the server knows for certain.
+function statedTripleHolds(entityType, [name, operator, value], stated) {
+  const subject = statedName(name, stated);
+  const operand = statedOperand(value, stated);
+
+  if (subject === UNKNOWN || operand === UNKNOWN) {
+    return UNKNOWN;
+  }
+
+  if (isBigWholeFloat(subject) || isBigWholeFloat(operand)) {
+    return UNKNOWN;
+  }
+
+  return holds(
+    subject,
+    operator,
+    operand,
+    enumRanks(entityType, name.name),
+    declaredType(entityType, name.name),
+  );
+}
+
+function statedClausesHold(entityType, clauses, stated) {
+  let result = true;
+
+  for (const clause of clauses) {
+    let held = UNKNOWN;
+
+    if (Array.isArray(clause)) {
+      held = statedTripleHolds(entityType, clause, stated);
+    } else if (Object.hasOwn(clause, "or")) {
+      held = someHolds(clause.or, (alternative) =>
+        statedClausesHold(entityType, alternative, stated),
+      );
+    }
+
+    if (held === false) {
+      return false;
+    }
+
+    if (held === UNKNOWN) {
+      result = UNKNOWN;
+    }
+  }
+
+  return result;
+}
+
+// Whether a rule holds by the call alone. A role or a delegation reads what only the server knows
+// for certain, so a rule with one holds at most UNKNOWN.
+function statedRuleHolds(rule, entityType, stated) {
+  const clauses = Object.hasOwn(rule, "new")
+    ? rule.new.predicates
+    : rule.predicates;
+
+  const result = statedClausesHold(entityType, clauses, stated);
+
+  if (result === false) {
+    return false;
+  }
+
+  return rule.to === null && rule.via === null ? result : UNKNOWN;
+}
+
+// Whether a date or a datetime is one this client can neither validate nor compare: its year, or
+// the instant its offset moves it to, is past what a JavaScript Date holds.
+function isFarDate(value, type) {
+  if ((type !== "date" && type !== "datetime") || !Type.isMap(value)) {
+    return false;
+  }
+
+  const year = value.data[Type.encodeMapKey(Type.atom("year"))]?.[1];
+
+  if (year === undefined || !Type.isInteger(year)) {
+    return false;
+  }
+
+  if (year.value > MAX_DATE_YEAR || year.value < -MAX_DATE_YEAR) {
+    return true;
+  }
+
+  try {
+    return Model.unbox(value, type).includes("NaN");
+  } catch {
+    return true;
+  }
+}
+
+// The values a call states that a rule can read as they are, as a held row spells them, the names
+// of the invalid ones, and the names this client can't be sure of. An invalid value reads as stored
+// on the server, and a reference to a row reads as stored when no such row exists, which this
+// client can't tell, so neither is stated. Nor is a value with a format, since the browser's regex
+// engine doesn't always answer as the server's does, or a date past what a JavaScript Date holds.
+function statedValues(entityType, values) {
+  const validation = Elixir_Hologram_Entity["validate/2"](
+    Type.alias(entityType),
+    Type.map(
+      Object.entries(values).map(([name, value]) => [Type.atom(name), value]),
+    ),
+  );
+
+  const invalid = Type.isAtom(validation)
+    ? []
+    : Object.values(validation.data[1].data).map(([name]) => name.value);
+
+  const {attributes, constraints} = Model.entry(entityType);
+  const stated = new Map();
+  const unsure = [];
+
+  for (const [name, value] of Object.entries(values)) {
+    if (
+      Object.hasOwn(constraints?.[name] ?? {}, "format") ||
+      isFarDate(value, attributes[name])
+    ) {
+      unsure.push(name);
+    } else if (
+      !invalid.includes(name) &&
+      (Object.hasOwn(attributes, name) || Type.isNil(value))
+    ) {
+      stated.set(name, Model.unbox(value, attributes[name] ?? "uuid"));
+    }
+  }
+
+  return {invalid, stated, unsure};
+}
+
+// The refusal of an update, in the words of the server's Writer.
+function deniedUpdateMessage(entityType, id, uncovered, invalid) {
+  const spell = (fields) =>
+    fields.map((field) => Interpreter.inspect(Type.atom(field))).join(", ");
+
+  const invalidFields = uncovered.filter((field) => invalid.includes(field));
+
+  let hint = "";
+
+  if (invalidFields.length === 1) {
+    hint = ` (the value given for ${spell(invalidFields)} is invalid, so its rule read the stored value)`;
+  } else if (invalidFields.length > 1) {
+    hint = ` (the values given for ${spell(invalidFields)} are invalid, so their rules read the stored values)`;
+  }
+
+  return `not allowed to update ${entityType} ${Interpreter.inspect(Type.bitstring(id))} - no allow line that holds covers ${spell(uncovered)}${hint}`;
+}
+
+// Refuses an update the values it states can't pass, whatever the server holds, before it leaves
+// this client. What the rows and grants here say is never grounds for a refusal: they can be out of
+// date, and a client's write isn't refused for what it read. A type with no rule reading the row
+// after the change on a changed field writes as it did. A field the call alone leaves open sends
+// the write on, since only the server can name every field it refuses. The given function answers
+// which counters' moves can't be on the row as this client holds it: the refusal stands whatever
+// the server holds, and they only decide whether it says their value was invalid.
+export function refuseDeniedChange(
+  entityType,
+  id,
+  values,
+  deltas,
+  edgeNames,
+  unmovable,
+) {
+  const model = globalThis.Hologram.sync?.model ?? {};
+  const entry = Object.hasOwn(model, entityType) ? model[entityType] : null;
+
+  if (entry === null || entry.policy === undefined) {
+    return;
+  }
+
+  const names = [...Object.keys(values), ...Object.keys(deltas)];
+
+  const fields = [
+    ...new Set([...changedFieldNames(entityType, names), ...edgeNames]),
+  ];
+
+  const rulesOf = (field) =>
+    policyRules(entry, `update:${field}`).concat(policyRules(entry, "update"));
+
+  const readsChange = fields.some((field) =>
+    rulesOf(field).some(readsRowAfterChange),
+  );
+
+  if (!readsChange) {
+    return;
+  }
+
+  const {invalid, stated, unsure} = statedValues(entityType, values);
+  const answers = new Map();
+
+  const holdsByCall = (rule) => {
+    if (!answers.has(rule)) {
+      answers.set(rule, statedRuleHolds(rule, entityType, stated));
+    }
+
+    return answers.get(rule);
+  };
+
+  const fieldAnswers = fields.map((field) => [
+    field,
+    someHolds(rulesOf(field), holdsByCall),
+  ]);
+
+  if (fieldAnswers.some(([_field, answer]) => answer === UNKNOWN)) {
+    return;
+  }
+
+  const uncovered = fieldAnswers
+    .filter(([_field, answer]) => answer === false)
+    .map(([field]) => field)
+    .sort(StringOrder.compare);
+
+  // Whether a refused field's value is invalid is part of what the refusal says.
+  if (uncovered.some((field) => unsure.includes(field))) {
+    return;
+  }
+
+  if (uncovered.length > 0) {
+    raiseAccessDenied(
+      deniedUpdateMessage(
+        entityType,
+        id,
+        uncovered,
+        changedFieldNames(entityType, [...invalid, ...unmovable()]),
+      ),
+    );
+  }
+}
+
+// The given names of a write's values as allow lines name them, a to-one by its relationship - the
+// twin of Hologram.Policy.changed_field_names/2.
+function changedFieldNames(entityType, names) {
+  const references = new Map(
+    Object.entries(Model.relationships(entityType))
+      .filter(([_name, relationship]) => !relationship.toMany)
+      .map(([name]) => [`${name}_id`, name]),
+  );
+
+  return names.map((name) => references.get(name) ?? name);
+}
+
+function changeOperationMessage(operation) {
+  return `can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got ${Interpreter.inspect(operation)}`;
+}
+
+// What the operation answers for one specific change, three-valued - the twin of evaluate_change/5
+// in Hologram.Auth.
+function changeAnswer(
+  entry,
+  entityType,
+  entity,
+  operation,
+  names,
+  after,
+  actorUserId,
+) {
+  if (Type.isAtom(operation) && operation.value === "update") {
+    const fields = changedFieldNames(entityType, names);
+
+    return coversChange(entry, entityType, entity, fields, after, actorUserId);
+  }
+
+  const asked = askedFields(operation);
+
+  if (asked !== null) {
+    Model.validateOperation(entityType, operation);
+
+    const fields = asked.map((field) => field.value);
+
+    return coversChange(entry, entityType, entity, fields, after, actorUserId);
+  }
+
+  if (isImproperFieldsAsk(operation)) {
+    Model.validateOperation(entityType, operation);
+  }
+
+  if (!Type.isAtom(operation)) {
+    Interpreter.raiseMisuseError(changeOperationMessage(operation));
+  }
+
+  Model.validateOperation(entityType, operation);
+
+  if ((entry.formerUpdateNames ?? []).includes(operation.value)) {
+    return false;
+  }
+
+  if (!(entry.updateNames ?? []).includes(operation.value)) {
+    Interpreter.raiseMisuseError(changeOperationMessage(operation));
+  }
+
+  const rules = policyRules(entry, operation.value);
+
+  return changeRulesAnswer(
+    someHolds(rules, (rule) =>
+      ruleHolds(rule, entityType, entity, actorUserId, after),
+    ),
+    rules,
+    entry,
+    entityType,
+    entity,
+    [operation.value],
+    actorUserId,
+  );
+}
+
+// The struct's fields no longer hold the stored values once it carries recorded changes, and those
+// are what a rule's bare names read.
+function refuseRecordedChanges(entityType, entity) {
+  const metadata = entity.data[Type.encodeMapKey(Type.atom("__meta__"))]?.[1];
+
+  const clean =
+    metadata !== undefined &&
+    Type.isMap(metadata) &&
+    ["attribute_ops", "relationship_ops"].every((name) => {
+      const ops = metadata.data[Type.encodeMapKey(Type.atom(name))]?.[1];
+
+      return (
+        ops !== undefined &&
+        Type.isMap(ops) &&
+        Object.keys(ops.data).length === 0
+      );
+    });
+
+  if (!clean) {
+    const id =
+      entity.data[Type.encodeMapKey(Type.atom("id"))]?.[1] ?? Type.nil();
+
+    Interpreter.raiseMisuseError(
+      `can? with values asks about a row as stored - ${entityType} ${Interpreter.inspect(id)} carries recorded changes, so its fields no longer hold the stored values`,
+    );
+  }
+}
+
+// The pairs of a change's values, the last of a repeated name winning as a map's does, refused in the
+// server's words unless they're a keyword list or a map that isn't a struct.
+function changePairs(values) {
+  const listed =
+    Type.isProperList(values) && Type.isKeywordList(values)
+      ? values.data.map((pair) => pair.data)
+      : Type.isMap(values)
+        ? Object.values(values.data)
+        : null;
+
+  const pairs = listed && [
+    ...new Map(
+      listed.map((pair) => [Type.encodeMapKey(pair[0]), pair]),
+    ).values(),
+  ];
+
+  const struct = pairs?.some(
+    ([name, value]) =>
+      Type.isAtom(name) && name.value === "__struct__" && Type.isAtom(value),
+  );
+
+  if (pairs === null || struct) {
+    Interpreter.raiseMisuseError(
+      `can? takes the values of a change as a keyword list or a map - got ${Interpreter.inspect(values)}`,
+    );
+  }
+
+  return pairs;
+}
+
+// The values of a change by name, refused in the server's words unless they name what an update can
+// set.
+function changeValues(entityType, pairs) {
+  validateChangeNames(entityType, pairs);
+
+  return new Map(pairs.map(([name, value]) => [name.value, value]));
+}
+
+// What can? with values answers for a type the build carries no entry for, which holds no line: no,
+// once the operation and the values are ones the server wouldn't refuse.
+function refuseChangeWithoutEntry(entityType, operation, pairs) {
+  const nonAtomPairs = pairs.filter(([name]) => !Type.isAtom(name));
+
+  if (pairs.length === 0 || nonAtomPairs.length > 0) {
+    validateChangeNames(entityType, nonAtomPairs);
+  }
+
+  if (Type.isAtom(operation) && operation.value === "update") {
+    return;
+  }
+
+  const asked = askedFields(operation);
+
+  const notAtom = asked?.find((field) => !Type.isAtom(field));
+
+  if (notAtom !== undefined) {
+    Interpreter.raiseMisuseError(
+      `unknown field ${Interpreter.inspect(notAtom)} in ${Interpreter.inspect(operation)} for ${entityType} - a field is named by an atom`,
+    );
+  }
+
+  if (asked !== null && asked.length > 0) {
+    return;
+  }
+
+  if (asked !== null || isImproperFieldsAsk(operation)) {
+    Model.validateOperation(entityType, operation);
+  }
+
+  if (Type.isAtom(operation)) {
+    Model.validateOperation(entityType, operation);
+  }
+
+  Interpreter.raiseMisuseError(changeOperationMessage(operation));
+}
+
+// An {:update, fields} ask whose list is improper, which the server refuses as an unknown operation.
+function isImproperFieldsAsk(operation) {
+  return (
+    Type.isTuple(operation) &&
+    operation.data.length === 2 &&
+    Type.isAtom(operation.data[0]) &&
+    operation.data[0].value === "update" &&
+    Type.isList(operation.data[1])
+  );
+}
+
+// The references among the given values naming a row this client doesn't hold, other than the one
+// the entity already holds, which the store vouches for.
+function unheldReferences(entityType, entity, changes) {
+  return Object.entries(Model.relationships(entityType))
+    .filter(([_name, relationship]) => !relationship.toMany)
+    .flatMap(([name, relationship]) => {
+      const field = `${name}_id`;
+
+      if (!changes.has(field)) {
+        return [];
+      }
+
+      const id = Model.unbox(changes.get(field), "uuid");
+
+      return id === null ||
+        id === storedValue(entityType, entity, field) ||
+        LocalDatabase.getRow(relationship.type, id) !== null
+        ? []
+        : [field];
+    });
+}
+
+// Whether a temporal value is in a calendar other than ISO, which the server asks about the value
+// and this client can't, so neither its validation nor its comparison speaks for the server's.
+function hasOtherCalendar(value, type) {
+  const struct = {date: "Date", datetime: "DateTime", time: "Time"}[type];
+
+  if (struct === undefined || !Type.isStruct(value, struct)) {
+    return false;
+  }
+
+  const calendar = value.data[Type.encodeMapKey(Type.atom("calendar"))]?.[1];
+
+  return (
+    calendar !== undefined &&
+    !Interpreter.isStrictlyEqual(calendar, Type.alias("Calendar.ISO"))
+  );
+}
+
+// Whether a date's year is past what a number holds exactly, so the browser's validator can refuse
+// a date the server accepts.
+function hasInexactYear(value, type) {
+  const struct = {date: "Date", datetime: "DateTime"}[type];
+
+  if (struct === undefined || !Type.isStruct(value, struct)) {
+    return false;
+  }
+
+  const year = value.data[Type.encodeMapKey(Type.atom("year"))]?.[1];
+
+  return (
+    year !== undefined &&
+    Type.isInteger(year) &&
+    !Number.isSafeInteger(Number(year.value))
+  );
+}
+
+// Whether a validation reason is one both tiers give alike. A format goes through two regex engines,
+// and a bound on a date past what a JavaScript Date holds compares nothing here.
+function isSureRefusal(reason) {
+  const kind = Type.isTuple(reason) ? reason.data[0].value : reason.value;
+
+  return !["format", "max", "min"].includes(kind);
+}
+
+// Whether this client can't judge the given value of the attribute as the server does: a date past
+// what a JavaScript Date holds, or a non-ASCII value of an attribute with a format, on which the
+// browser's regex engine can answer differently.
+function isUnjudgedValue(entityType, name, value) {
+  const {attributes, constraints} = Model.entry(entityType);
+
+  if (isFarDate(value, attributes[name])) {
+    return true;
+  }
+
+  return (
+    Object.hasOwn(constraints?.[name] ?? {}, "format") &&
+    Bitstring.isText(value) &&
+    [...Bitstring.toText(value)].some((char) => char.codePointAt(0) > 127)
+  );
+}
+
+// The scope a rule reads the row after a change through: the entity with the given values on it,
+// bar one failing its declaration, which can't be on the row and so reads as stored.
+function rowAfterChange(entityType, entity, changes) {
+  const validation = Elixir_Hologram_Entity["validate/2"](
+    Type.alias(entityType),
+    Type.map([...changes].map(([name, value]) => [Type.atom(name), value])),
+  );
+
+  const refusals = Type.isAtom(validation)
+    ? []
+    : Object.values(validation.data[1].data);
+
+  const invalid = new Set(refusals.map(([name]) => name.value));
+
+  // A value refused for a reason both tiers judge alike reads as stored on both.
+  const surelyInvalid = new Set(
+    refusals
+      .filter(([_name, reasons]) => reasons.data.some(isSureRefusal))
+      .map(([name]) => name.value),
+  );
+
+  const valid = new Map([...changes].filter(([name]) => !invalid.has(name)));
+
+  const data = {...entity.data};
+
+  for (const [name, value] of valid) {
+    const key = Type.atom(name);
+
+    data[Type.encodeMapKey(key)] = [key, value];
+  }
+
+  const boxed = {...entity, data};
+  const {attributes} = Model.entry(entityType);
+
+  const change = {
+    builtRow: null,
+    entity: boxed,
+    id: storedValue(entityType, entity, "id"),
+    type: entityType,
+    undecided: new Set([
+      ...WRITE_TIMESTAMPS,
+      ...unheldReferences(entityType, entity, valid),
+      ...[...changes]
+        .filter(
+          ([name, value]) =>
+            hasOtherCalendar(value, attributes[name]) ||
+            hasInexactYear(value, attributes[name]) ||
+            (!surelyInvalid.has(name) &&
+              isUnjudgedValue(entityType, name, value)),
+        )
+        .map(([name]) => name),
+    ]),
+  };
+
+  afterChanges.set(boxed, change);
+
+  return {entity: boxed, entityType};
 }
 
 // The key an entity operation is baked under: an atom as its name, a per-role grant lifecycle
@@ -1083,7 +2002,20 @@ const Elixir_Hologram_Auth = {
   // that id answers :ok and writes nothing, which is the server's idempotency mirrored where the
   // client can see it. The server replays every check when the batch lands and a refusal rolls
   // the row back.
+  //
+  // :global in place of the entity is the global form, which is trusted-only. Options never go
+  // here, so a list is refused as it is on the server.
   "grant_role/3": (userOrId, role, entity) => {
+    if (isGlobalScope(entity)) {
+      return Elixir_Hologram_Auth["grant_role/2"](userOrId, role);
+    }
+
+    if (Type.isList(entity)) {
+      Interpreter.raiseMisuseError(
+        misplacedOptionsMessage("grant_role", entity),
+      );
+    }
+
     const userId = validateUserId(userOrId);
     const {entityType, entityId} = entityReference(entity, "granted");
     const roleName = validateDeclaredRole(entityType, role);
@@ -1166,6 +2098,13 @@ const Elixir_Hologram_Auth = {
     );
   },
 
+  // Ported to refuse the claim, and otherwise the plain verb.
+  "grant_role/4": (userOrId, role, entity, opts) => {
+    refuseTrustClaim(opts, "grant_role");
+
+    return Elixir_Hologram_Auth["grant_role/3"](userOrId, role, entity);
+  },
+
   "revoke_role/2": (_userOrId, _role) => {
     raiseAccessDenied(trustedWriteMessage("global", "revoked"));
   },
@@ -1177,7 +2116,19 @@ const Elixir_Hologram_Auth = {
   // A row the client does not hold answers :ok and writes nothing, as the server's own no-op does:
   // whoever may revoke a grant may read it, and everyone reads their own, so "not held" is "not
   // there" for anyone the gate lets through. The server replays the gate when the batch lands.
+  //
+  // :global and a list in place of the entity are handled as in grant_role/3.
   "revoke_role/3": (userOrId, role, entity) => {
+    if (isGlobalScope(entity)) {
+      return Elixir_Hologram_Auth["revoke_role/2"](userOrId, role);
+    }
+
+    if (Type.isList(entity)) {
+      Interpreter.raiseMisuseError(
+        misplacedOptionsMessage("revoke_role", entity),
+      );
+    }
+
     const userId = validateUserId(userOrId);
     const {entityType, entityId} = entityReference(entity, "revoked");
     const roleName = validateDeclaredRole(entityType, role);
@@ -1241,6 +2192,13 @@ const Elixir_Hologram_Auth = {
     return Type.atom("ok");
   },
 
+  // Ported to refuse the claim, and otherwise the plain verb.
+  "revoke_role/4": (userOrId, role, entity, opts) => {
+    refuseTrustClaim(opts, "revoke_role");
+
+    return Elixir_Hologram_Auth["revoke_role/3"](userOrId, role, entity);
+  },
+
   "can?/3": (userOrId, operation, entity) => {
     const entityType = Interpreter.moduleExName(
       entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
@@ -1292,6 +2250,46 @@ const Elixir_Hologram_Auth = {
         operationName,
         rules,
         actorUserId,
+      ) === true,
+    );
+  },
+
+  // Whether the user may make one specific change - the twin of Hologram.Auth.can?/4. No is what an
+  // answer neither the held rows nor a verdict can give comes to.
+  "can?/4": (userOrId, operation, entity, values) => {
+    const entityType = Interpreter.moduleExName(
+      entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
+    );
+
+    refuseRecordedChanges(entityType, entity);
+
+    const pairs = changePairs(values);
+
+    if (entityType === GRANT_TYPE) {
+      Interpreter.raiseMisuseError(GRANT_UPDATE_MESSAGE);
+    }
+
+    const model = globalThis.Hologram.sync?.model ?? {};
+    const entry = Object.hasOwn(model, entityType) ? model[entityType] : null;
+
+    if (!entry) {
+      refuseChangeWithoutEntry(entityType, operation, pairs);
+
+      return Type.boolean(false);
+    }
+
+    const changes = changeValues(entityType, pairs);
+    const after = rowAfterChange(entityType, entity, changes);
+
+    return Type.boolean(
+      changeAnswer(
+        entry,
+        entityType,
+        entity,
+        operation,
+        [...changes.keys()],
+        after,
+        unboxActorUserId(userOrId),
       ) === true,
     );
   },
@@ -1416,7 +2414,40 @@ export function signedInWriteMessage(verb) {
 
 // The two grant shapes trusted code writes - type-wide and global - which a browser never may.
 export function trustedWriteMessage(scope, verb) {
-  return `${scope} roles are ${verb} only by trusted code running without an acting user`;
+  return `${scope} roles are ${verb} only by server code claiming trust: true or running outside a session`;
+}
+
+function isGlobalScope(entity) {
+  return Type.isAtom(entity) && entity.value === "global";
+}
+
+// IMPORTANT!
+// A hand port of Hologram.Auth's sentence for options in the entity's place. Always update both
+// tiers together.
+function misplacedOptionsMessage(verb, entity) {
+  return `${verb} takes an entity, an entity type or :global as its third argument, got: ${Interpreter.inspect(entity)} - options go fourth`;
+}
+
+// The options a grant verb takes on the server. Its one option claims the server's authority, which
+// a client can't, so it raises what trust/1 raises here. No options is the plain verb.
+function refuseTrustClaim(opts, verb) {
+  if (Type.isList(opts) && opts.data.length === 0) {
+    return;
+  }
+
+  if (Type.isList(opts) && Type.isKeywordList(opts) && opts.data.length === 1) {
+    const [key, value] = opts.data[0].data;
+
+    if (key.value === "trust" && Type.isTrue(value)) {
+      Interpreter.raiseMisuseError(
+        "trust is the server's authority - a client cannot claim it",
+      );
+    }
+  }
+
+  Interpreter.raiseMisuseError(
+    `${verb} takes trust: true as its only option, got: ${Interpreter.inspect(opts)}`,
+  );
 }
 
 function raiseAccessDenied(message) {

@@ -26,6 +26,11 @@ defmodule Hologram.DB.SchemaReconciler do
   # rest of the run.
   @rename_ops [:rename_enum_type, :rename_index, :rename_table]
 
+  # Appended in dev to the refusals the reset clears: every one but those for another app's,
+  # another env's or a migration-managed database, which the reset refuses too.
+  @reset_hint " - or run mix holo.db.reset to start over, which deletes this database's " <>
+                "Hologram data"
+
   @doc """
   Fills every derived companion column the given ops add - a sort key or a search key - from the
   companion's source column, one row at a time in the caller's transaction. The companion of a
@@ -82,9 +87,11 @@ defmodule Hologram.DB.SchemaReconciler do
   raises with a specific message: Hologram schemas without a marker, a marker belonging
   to another app or env, a database managed by migrations, or system tables at a newer
   layout than the running one (see system_schema_version/1, which reads the context's
-  optional :system_upgrades). It never upgrades the system tables of a database it finds
-  managed - that is upgrade_system_tables!/1, which reconcile/1 runs next in the same
-  transaction.
+  optional :system_upgrades). A database with only one of the two schemas raises as having no
+  marker once a marker left in it passes the app, env and managed-by checks. It never upgrades
+  the system tables of a database it finds managed - that is upgrade_system_tables!/1, which
+  reconcile/1 runs next in the same transaction. In the dev env, the messages of the states
+  mix holo.db.reset clears name it: the Hologram schemas without a marker and the newer layout.
   """
   @spec ensure_managed!(%{atom => any}) :: :claimed | :managed
   def ensure_managed!(context) do
@@ -94,7 +101,7 @@ defmodule Hologram.DB.SchemaReconciler do
     case hologram_schemas() do
       [] -> claim(context)
       [^data_schema, ^system_schema] -> check_marker!(context)
-      _partial -> raise_not_managed!()
+      _partial -> check_partial!(context)
     end
   end
 
@@ -181,6 +188,10 @@ defmodule Hologram.DB.SchemaReconciler do
   registry. Without one, the plan is the framework's own lookups'. It may also carry
   :system_upgrades, steps in place of system_schema_upgrades/0's (see
   system_schema_version/1).
+
+  In the dev env, every refusal mix holo.db.reset clears names it: those of ensure_managed!/1
+  that it clears, a failed system table upgrade, an alien object, a primary key edited by hand
+  and a preflight refusal.
   """
   @spec reconcile(%{atom => any}) :: %{atom => any}
   def reconcile(context) do
@@ -190,39 +201,9 @@ defmodule Hologram.DB.SchemaReconciler do
           Connection.query("SELECT pg_advisory_xact_lock($1)", [@advisory_lock_key])
 
         status = ensure_managed!(context)
-        upgraded = upgrade_system_tables!(context)
+        {ops, upgraded} = with_reset_hint(context, fn -> converge!(context) end)
 
-        actual = Introspection.schema()
-        target = Schema.from_mapping(context.mapping, index_plan(context))
-
-        {renames, changes} =
-          actual
-          |> Schema.diff(target)
-          |> Enum.split_with(&(&1.op in @rename_ops))
-
-        # The renames apply and register first, so the alien check and the preflight below
-        # see the database and the registry as the renames leave them - the changes name
-        # objects by their target names. A preflight refusal still rolls the renames back.
-        check_aliens!(renames, registry())
-        apply_ops(renames, context.mapping)
-        update_registry(renames)
-
-        actual = if renames == [], do: actual, else: Introspection.schema()
-
-        check_aliens!(changes, registry())
-        Preflight.run!(changes, actual, context.mapping)
-
-        apply_ops(changes, context.mapping)
-
-        # A companion this run adds is filled AFTER every op has applied, not at its own
-        # add: the diff applies add_column before alter_column, so a source column being
-        # cast to text in the same run still holds its old type when its companion lands.
-        backfill_companions!(changes, context.mapping)
-
-        update_registry(changes)
-        refresh_marker(context)
-
-        {%{status: status, ops: renames ++ changes}, upgraded}
+        {%{status: status, ops: ops}, upgraded}
       end)
 
     log_system_upgrades(upgraded)
@@ -568,17 +549,8 @@ defmodule Hologram.DB.SchemaReconciler do
     Enum.each(ops, &check_alien!(&1, registry))
   end
 
-  defp check_marker!(context) do
-    if not marker_table_exists?() do
-      raise_not_managed!()
-    end
-
-    marker = read_marker()
-
+  defp check_guard_facts!(marker, context) do
     cond do
-      marker == nil ->
-        raise_not_managed!()
-
       marker.otp_app != context.otp_app ->
         raise "the configured database belongs to app \"#{marker.otp_app}\" - " <>
                 "the current app is \"#{context.otp_app}\" - " <>
@@ -594,9 +566,33 @@ defmodule Hologram.DB.SchemaReconciler do
                 "schema reconciliation never touches it"
 
       true ->
-        check_system_schema_version!(marker, context)
-        :managed
+        :ok
     end
+  end
+
+  defp check_marker!(context) do
+    marker = existing_marker()
+
+    if marker == nil do
+      raise_not_managed!(context)
+    end
+
+    check_guard_facts!(marker, context)
+    with_reset_hint(context, fn -> check_system_schema_version!(marker, context) end)
+
+    :managed
+  end
+
+  # A marker left beside one Hologram schema still says whose database it is, and the reset
+  # refuses another app's, another env's or the migrator's database, so the refusal that names
+  # the reset waits until the marker's guard facts match.
+  defp check_partial!(context) do
+    case existing_marker() do
+      nil -> :ok
+      marker -> check_guard_facts!(marker, context)
+    end
+
+    raise_not_managed!(context)
   end
 
   defp claim(context) do
@@ -615,6 +611,44 @@ defmodule Hologram.DB.SchemaReconciler do
     })
 
     :claimed
+  end
+
+  # Everything past the guard: upgrade the system tables, then converge hologram_data to the
+  # mapping. Returns the applied ops and the system table versions upgraded to.
+  defp converge!(context) do
+    upgraded = upgrade_system_tables!(context)
+
+    actual = Introspection.schema()
+    target = Schema.from_mapping(context.mapping, index_plan(context))
+
+    {renames, changes} =
+      actual
+      |> Schema.diff(target)
+      |> Enum.split_with(&(&1.op in @rename_ops))
+
+    # The renames apply and register first, so the alien check and the preflight below see the
+    # database and the registry as the renames leave them - the changes name objects by their
+    # target names. A preflight refusal still rolls the renames back.
+    check_aliens!(renames, registry())
+    apply_ops(renames, context.mapping)
+    update_registry(renames)
+
+    renamed = if renames == [], do: actual, else: Introspection.schema()
+
+    check_aliens!(changes, registry())
+    Preflight.run!(changes, renamed, context.mapping)
+
+    apply_ops(changes, context.mapping)
+
+    # A companion this run adds is filled AFTER every op has applied, not at its own add: the
+    # diff applies add_column before alter_column, so a source column being cast to text in the
+    # same run still holds its old type when its companion lands.
+    backfill_companions!(changes, context.mapping)
+
+    update_registry(changes)
+    refresh_marker(context)
+
+    {renames ++ changes, upgraded}
   end
 
   defp deregister(kind, parent, name) do
@@ -643,6 +677,10 @@ defmodule Hologram.DB.SchemaReconciler do
         raise "upgrading the system tables to layout version #{version} failed - " <>
                 Exception.message(error)
     end
+  end
+
+  defp existing_marker do
+    if marker_table_exists?(), do: read_marker()
   end
 
   defp fill_column(table, column, encoded_value) do
@@ -725,11 +763,13 @@ defmodule Hologram.DB.SchemaReconciler do
             "move the object to another schema or remove it"
   end
 
-  defp raise_not_managed! do
-    raise "the configured database contains Hologram schemas but no managed-database " <>
-            "marker - it is not managed by schema reconciliation - drop the " <>
-            ~s("#{Mapper.system_schema()}" and "#{Mapper.data_schema()}" schemas or point the config ) <>
-            "at another database"
+  defp raise_not_managed!(context) do
+    with_reset_hint(context, fn ->
+      raise "the configured database contains Hologram schemas but no managed-database " <>
+              "marker - it is not managed by schema reconciliation - drop the " <>
+              ~s("#{Mapper.system_schema()}" and "#{Mapper.data_schema()}" schemas or point the config ) <>
+              "at another database"
+    end)
   end
 
   # The guard facts already match - ensure_managed!/1 checked them - and the layout version is
@@ -1037,4 +1077,15 @@ defmodule Hologram.DB.SchemaReconciler do
   defp system_upgrades(context) do
     Map.get(context, :system_upgrades, system_schema_upgrades())
   end
+
+  # RuntimeError only: the refusals raise it, and an error of another kind, like a failed match
+  # on a statement's result, is a Hologram bug the reset is no way out of.
+  defp with_reset_hint(%{env: "dev"}, fun) do
+    fun.()
+  rescue
+    error in RuntimeError ->
+      reraise RuntimeError, [message: error.message <> @reset_hint], __STACKTRACE__
+  end
+
+  defp with_reset_hint(_context, fun), do: fun.()
 end

@@ -527,8 +527,11 @@ defmodule HologramSyncTests.Consistency.Client do
     )
   end
 
+  # A row leaving takes the pairs naming it too - `Deltas.apply`.
   defp apply_one(state, op, type, id, _origin) when op in ["del_entity", "unsync_entity"] do
-    delete_row(state, type, id)
+    state
+    |> delete_row(type, id)
+    |> delete_facts_naming(type, [id])
   end
 
   # The numbers a patch carries are held back as a put's are, against the row as it's held.
@@ -748,7 +751,14 @@ defmodule HologramSyncTests.Consistency.Client do
   # Swept only the first time after a refill - `LocalDatabase.markAllSynced`.
   defp mark_all_synced(%{synced_all: true} = state), do: state
 
-  defp mark_all_synced(state), do: sweep(%{state | synced_all: true}, fn _type -> true end)
+  defp mark_all_synced(state) do
+    state.awaiting
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Enum.reduce(sweep(%{state | synced_all: true}, fn _type -> true end), fn {type, ids},
+                                                                                acc ->
+      delete_facts_naming(acc, type, ids)
+    end)
+  end
 
   # Each type marked for the first time sweeps its awaiting rows, and the pairs naming them, unless
   # everything already came - `LocalDatabase.markTypesSynced`.

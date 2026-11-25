@@ -14,6 +14,9 @@ defmodule Hologram.QueryTest do
   alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module5
 
+  # A name the update rule word new() shares: outside a rule a call of it is this module's own.
+  defp new(value), do: value * 2
+
   describe "filter/2" do
     test "appends to a query held in a variable" do
       query = filter(Module2, a: true)
@@ -52,6 +55,10 @@ defmodule Hologram.QueryTest do
 
     test "lowers a negated membership" do
       assert filter(Module2, c not in ["x"]).filter == [{:c, :not_in, ["x"]}]
+    end
+
+    test "reads a pinned call of new as the calling code's own function" do
+      assert filter(Module2, b == ^new(2)).filter == [{:b, :==, 4}]
     end
 
     test "lowers a pinned operand" do

@@ -59,10 +59,13 @@ defmodule Hologram.Compiler do
   # own types, filled first (first-render completeness), and, build-wide, that they sync at all.
   @permission_mfas [
     {Hologram.Auth, :can?, 3},
+    {Hologram.Auth, :can?, 4},
     {Hologram.Auth, :grant_role, 3},
+    {Hologram.Auth, :grant_role, 4},
     {Hologram.Auth, :has_role?, 2},
     {Hologram.Auth, :has_role?, 3},
-    {Hologram.Auth, :revoke_role, 3}
+    {Hologram.Auth, :revoke_role, 3},
+    {Hologram.Auth, :revoke_role, 4}
   ]
 
   # The functions that run only on the server: the SQL surface, which reads the database through
@@ -83,7 +86,7 @@ defmodule Hologram.Compiler do
 
   # The calls an app spells an entity operation at, each with the position of the argument the
   # operation is read from.
-  @operation_asks %{{Hologram.Auth, :can?, 3} => 1}
+  @operation_asks %{{Hologram.Auth, :can?, 3} => 1, {Hologram.Auth, :can?, 4} => 1}
 
   # The modules the runtime entry file always imports, by class and file under the js dir.
   @runtime_imports [
@@ -101,6 +104,18 @@ defmodule Hologram.Compiler do
 
   # The name the data model bundle's file starts with, and the bundle's name in a size error.
   @data_model_bundle_name "data-model"
+
+  # The struct a field of each attribute type is in the browser (see Model.boxValue in
+  # assets/js/model.mjs).
+  @field_struct_types %{date: Date, datetime: DateTime, time: Time}
+
+  # The structs a row holds whatever its type declares (see Model.box in assets/js/model.mjs): its
+  # metadata, and what stands in for a field it wasn't given.
+  @row_struct_types [
+    Hologram.Entity.Metadata,
+    Hologram.Entity.NotIncluded,
+    Hologram.Entity.ServerOnly
+  ]
 
   # The runtime's classes a page bundle, a chunk or the data model bundle is defined with (see
   # render_script_deps/1). The keys of Hologram.#deps in assets/js/hologram.mjs.
@@ -177,6 +192,28 @@ defmodule Hologram.Compiler do
         }
 
   @typedoc """
+  What the data layer reads of the MFAs a walk of protocol implementations lists (see
+  `read_impl_mfas/3`): the atoms they spell, the modules they name, the queries they write in one
+  piece, and whether they check permissions or read the session user.
+  """
+  @type impl_read :: %{
+          atoms: MapSet.t(atom),
+          checks_permissions?: boolean,
+          names: MapSet.t(module),
+          query_chains: [QueryChains.t()],
+          reads_session_user?: boolean
+        }
+
+  @typedoc """
+  The walks of each page's protocol implementations with the types it holds through rows (see
+  `fold_held_impls/5`), by page and by the held types of the walk: what it read, and the modules it
+  reached and named, an edit of which makes it stale.
+  """
+  @type held_impl_walks :: %{
+          module => %{MapSet.t(module) => %{modules: MapSet.t(module), read: impl_read}}
+        }
+
+  @typedoc """
   What the client's data layer is compiled with (see `build_sync_constants/2`).
   """
   @type sync_constants :: %{
@@ -208,7 +245,7 @@ defmodule Hologram.Compiler do
           | {:component, module}
 
   # A chunk whose rendered definitions are smaller than this many bytes is folded into another
-  # chunk (see fold_small_chunks/2), because shipping it as a file of its own costs more than it
+  # chunk (see fold_small_chunks/3), because shipping it as a file of its own costs more than it
   # holds. The measured part: a bundled chunk with no function is 403 bytes, and the response
   # headers of a static script are about 185 bytes, so a file costs about 590 bytes on the wire
   # before its first function. Rendered definitions minify to about 0.69 of their size (measured on
@@ -366,13 +403,13 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns every place the build spells an entity operation at, sorted by the calling function:
-  each call of `Hologram.Auth.can?/3` found in the IR of the functions the call graph names as
+  each call of `Hologram.Auth.can?/3` or `can?/4` found in the IR of the functions the call graph names as
   its callers, with the line of the call and the operation it names - a literal atom, a literal
   `{name, role}` tuple of atoms, a literal `{:update, field}` or `{:update, fields}` tuple, or
   `{:dynamic}` when the operation is computed and the build cannot read it - a tuple rather than an
   atom, so a name an allow line carries, `:dynamic` included, is never mistaken for it.
 
-  Takes the UNSPLIT call graph - `can?/3` is hand-ported, so the runtime graph no longer holds the
+  Takes the UNSPLIT call graph - `can?/3` and `can?/4` are hand-ported, so the runtime graph no longer holds the
   vertices whose callers this reads. The IR of a caller whose module the call graph's module info
   PLT holds is built into the IR PLT when it is missing (the compile task builds IR as it is read,
   see `build_missing_ir!/2`); a caller the IR PLT does not hold after that is skipped, as
@@ -651,13 +688,14 @@ defmodule Hologram.Compiler do
       signature holds the type. A type no chunk's signature holds has no entry.
 
     * `{:page, page}` - the digests of the chunks a page preloads, sorted: the ones its own types
-      need and the ones the given runtime types need. A page that preloads none has an empty list.
+      need and the ones the given shared types need. A page that preloads none has an empty list.
 
   A chunk's digest names its file (see `Hologram.Router.Helpers.chunk_bundle_path/1`).
 
   Takes the chunks' bundle infos by signature (see `bundle/4`), each page's types (see
-  `CallGraph.list_page_chunk_types/4`) and the struct types the runtime's code names (see
-  `CallGraph.runtime_analysis/1`).
+  `CallGraph.list_page_chunk_types/4`) and the types every page needs: the struct types the
+  runtime's code names (see `CallGraph.runtime_analysis/1`) and the ones whose implementations run
+  on synced rows (see `merge_held_chunks/2`).
   """
   @spec build_chunk_registry_plt(
           %{MapSet.t(module) => map},
@@ -668,7 +706,7 @@ defmodule Hologram.Compiler do
   def build_chunk_registry_plt(
         bundle_infos_by_signature,
         chunk_types_by_page,
-        runtime_types,
+        shared_types,
         opts
       ) do
     digests_by_type =
@@ -685,7 +723,7 @@ defmodule Hologram.Compiler do
       Enum.map(chunk_types_by_page, fn {page, types} ->
         digests =
           types
-          |> Enum.concat(runtime_types)
+          |> Enum.concat(shared_types)
           |> Enum.flat_map(&Map.get(digests_by_type, &1, []))
           |> Enum.uniq()
           |> Enum.sort()
@@ -848,7 +886,8 @@ defmodule Hologram.Compiler do
   same way, since they run in the browser too. The modules they count as naming are the ones they
   spell, not the ones they reach, and an implementation doesn't name the type it's written for: a
   `to_string` matching `%AuditLog{}` doesn't make a type only server code names sync. A query
-  written in one piece in such a function does name its root, its own type included.
+  written in one piece in such a function does name its root, its own type included. The
+  implementations of the types a page holds only through rows are read by `fold_held_impls/5`.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_kept_page_reach_4/README.md
   """
@@ -897,6 +936,111 @@ defmodule Hologram.Compiler do
 
       {page_module, kept_reach}
     end)
+  end
+
+  @doc """
+  Returns what the data layer reads of each given list of MFAs a walk of protocol implementations
+  listed (see `CallGraph.list_page_impl_mfas/5`), by the rules `build_kept_page_reach/4` reads a
+  page's implementations with: the modules they name are the ones they spell, minus an
+  implementation's own type, plus the roots of the queries they write in one piece.
+
+  Give it the call graph BEFORE manually ported MFAs are removed, which says which of the MFAs call
+  a permission function (see `pages_checking_permissions_in_impls/2`).
+  """
+  @spec read_impl_mfas(%{key => [mfa]}, CallGraph.t(), PLT.t()) :: %{key => impl_read}
+        when key: term
+  def read_impl_mfas(mfas_by_key, _call_graph, _ir_plt) when mfas_by_key == %{}, do: %{}
+
+  def read_impl_mfas(mfas_by_key, call_graph, ir_plt) do
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+    callers = CallGraph.list_callers(call_graph, @permission_mfas)
+
+    read_by_mfa =
+      mfas_by_key
+      |> Enum.map(fn {key, mfas} -> {key, %{mfas: mfas}} end)
+      |> read_by_mfa(module_info_plt, ir_plt)
+
+    Map.new(mfas_by_key, fn {key, mfas} ->
+      reads =
+        mfas
+        |> Enum.map(&Map.get(read_by_mfa, &1))
+        |> Enum.reject(&is_nil/1)
+
+      names = impl_named_modules(reads)
+
+      components =
+        mfas
+        |> MapSet.new(fn {module, _function, _arity} -> module end)
+        |> MapSet.union(names)
+        |> reached_components(module_info_plt)
+
+      read = %{
+        atoms: Enum.reduce(reads, MapSet.new(), &MapSet.union(&2, &1.atoms)),
+        checks_permissions?: Enum.any?(mfas, &MapSet.member?(callers, &1)),
+        names: names,
+        query_chains:
+          reads
+          |> Enum.flat_map(& &1.chains)
+          |> Enum.uniq(),
+        reads_session_user?: Enum.any?(components, &reads_session_user?/1)
+      }
+
+      {key, read}
+    end)
+  end
+
+  @doc """
+  Folds into each page's kept reach what the protocol implementations of the types it holds through
+  rows read, so that the synced types, the page types, the permission check and the query check
+  count that code like the page's own. Returns the folded reach and the walks it took.
+
+  A page holds the types its code reaches by name, a relationship's target included, which the
+  page's own walk of the implementations doesn't count (see `CallGraph.list_page_impl_mfas/5`). So
+  the page is walked again with them as extra types, by the same rules: an implementation is
+  entered per protocol function the code reaches, and only for a type the page can hold. A type
+  only rules read isn't held: no code reads its rows by a name the build sees, and rules run with no
+  protocol dispatch. Nor is a type no session may read, since no row of it reaches a browser. The
+  structs a held row's fields are count as held too (see `list_row_types/1`), so an implementation
+  an app writes for `Date` is read like one for an entity type.
+
+  What an implementation names can bring more types, whose implementations can name more, so it
+  repeats until no page's held types change. Each read goes onto the page's reach as given, so a
+  reach kept from before folding holds no name of an implementation or relationship since removed.
+
+  A walk among the given kept ones, by page and held types, is reused.
+
+  Give it the graph without the manually ported functions, as `CallGraph.list_page_impl_mfas/5`
+  asks, and the call graph before they are removed (see `read_impl_mfas/3`).
+  """
+  @spec fold_held_impls(
+          %{module => kept_page_reach},
+          held_impl_walks,
+          CallGraph.t(),
+          CallGraph.t(),
+          PLT.t()
+        ) :: {%{module => kept_page_reach}, held_impl_walks}
+  def fold_held_impls(reach_by_page, kept_walks, split_graph, call_graph, ir_plt) do
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+
+    analyses = PLT.start()
+
+    try do
+      CallGraph.with_shared_graph(split_graph, fn read_graph ->
+        context = %{
+          analyses: analyses,
+          call_graph: call_graph,
+          ir_plt: ir_plt,
+          kept_walks: kept_walks,
+          module_info_plt: module_info_plt,
+          read_graph: read_graph,
+          seeds: CallGraph.page_impl_seeds(read_graph.(), module_info_plt)
+        }
+
+        fold_held_impl_rounds(reach_by_page, reach_by_page, %{}, context)
+      end)
+    after
+      PLT.stop(analyses)
+    end
   end
 
   @doc """
@@ -1767,7 +1911,7 @@ defmodule Hologram.Compiler do
   Returns the chunks to bundle, by signature, with the size of each chunk given:
 
     * `:chunks` - the given MFAs by signature (see `group_mfas_by_signature/1`) with the small
-      chunks folded into others (see `fold_small_chunks/2`).
+      chunks folded into others (see `fold_small_chunks/3`).
 
     * `:sizes` - the size of each given chunk, keyed by its MFAs: the size of its definitions as
       rendered, which holds the Erlang functions and the protocol dispatchers too, so the encode
@@ -1777,7 +1921,8 @@ defmodule Hologram.Compiler do
   chunk whose functions are the ones it was sized with, and whose modules were not edited since.
   The other chunks are sized: the IR their functions need is built into the IR PLT, the functions
   are encoded into the encode PLT (`encode_reachable_functions/5`) and each chunk is rendered
-  once. Takes the options `create_chunk_entry_files/5` takes, plus `:sizes`.
+  once. Takes the options `create_chunk_entry_files/5` takes, plus `:sizes` and `:held_types`, which
+  `fold_small_chunks/3` takes.
   """
   @spec fold_chunks(%{MapSet.t(module) => [mfa]}, PLT.t(), PLT.t(), MapSet.t(mfa), T.opts()) ::
           %{chunks: %{MapSet.t(module) => [mfa]}, sizes: %{[mfa] => non_neg_integer}}
@@ -1809,7 +1954,9 @@ defmodule Hologram.Compiler do
     size_by_signature =
       Map.new(mfas_by_signature, fn {signature, mfas} -> {signature, sizes[mfas]} end)
 
-    %{chunks: fold_small_chunks(mfas_by_signature, size_by_signature), sizes: sizes}
+    held_types = opts[:held_types] || MapSet.new()
+
+    %{chunks: fold_small_chunks(mfas_by_signature, size_by_signature, held_types), sizes: sizes}
   end
 
   @doc """
@@ -1822,6 +1969,11 @@ defmodule Hologram.Compiler do
 
   The smallest chunks are folded first, and a chunk that grew to the bound by what was folded into
   it stays.
+
+  A chunk whose signature holds one of the given held types is the one every page preloads (see
+  `merge_held_chunks/2`), so nothing is folded into it: a small chunk of an unrelated type would
+  load on every page. It's never folded away either, since a signature holding all of its types
+  would hold a held type, and so be that chunk.
 
   ## Examples
 
@@ -1841,15 +1993,16 @@ defmodule Hologram.Compiler do
   """
   @spec fold_small_chunks(
           %{MapSet.t(module) => [mfa]},
-          %{MapSet.t(module) => non_neg_integer}
+          %{MapSet.t(module) => non_neg_integer},
+          MapSet.t(module)
         ) :: %{MapSet.t(module) => [mfa]}
-  def fold_small_chunks(mfas_by_signature, size_by_signature) do
+  def fold_small_chunks(mfas_by_signature, size_by_signature, held_types \\ MapSet.new()) do
     {folded_mfas_by_signature, _sizes} =
       size_by_signature
       |> Enum.filter(fn {_signature, size} -> size < @chunk_fold_bound end)
       |> Enum.sort_by(fn {signature, size} -> {size, Enum.sort(signature)} end)
       |> Enum.reduce({mfas_by_signature, size_by_signature}, fn {signature, _size}, acc ->
-        fold_small_chunk(signature, acc)
+        fold_small_chunk(signature, acc, held_types)
       end)
 
     folded_mfas_by_signature
@@ -1922,6 +2075,85 @@ defmodule Hologram.Compiler do
     |> Enum.group_by(fn {mfa, _type} -> mfa end, fn {_mfa, type} -> type end)
     |> Enum.group_by(fn {_mfa, types} -> MapSet.new(types) end, fn {mfa, _types} -> mfa end)
     |> Map.new(fn {signature, mfas} -> {signature, Enum.sort(mfas)} end)
+  end
+
+  @doc """
+  Merges every chunk whose signature holds one of the given held types into one chunk, keyed by the
+  union of their signatures, with its MFAs sorted. Every page preloads it, so that the
+  implementations of the types a synced row can hold are there before any code reads a row, in one
+  file however many types there are. A struct type that shares a helper with a held type is in the
+  merged signature, so its lookup still gets that helper. Each MFA stays in one chunk. With no
+  held type, or no chunk holding one, the chunks are returned as they are.
+
+  ## Examples
+
+      iex> merge_held_chunks(
+      ...>   %{
+      ...>     MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+      ...>     MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}],
+      ...>     MapSet.new([Version]) => [{Version, :__struct__, 0}]
+      ...>   },
+      ...>   MapSet.new([Date])
+      ...> )
+      %{
+        MapSet.new([Date, Time]) => [
+          {Calendar.ISO, :zero_pad, 2},
+          {String.Chars.Date, :to_string, 1}
+        ],
+        MapSet.new([Version]) => [{Version, :__struct__, 0}]
+      }
+  """
+  @spec merge_held_chunks(%{MapSet.t(module) => [mfa]}, MapSet.t(module)) ::
+          %{MapSet.t(module) => [mfa]}
+  def merge_held_chunks(mfas_by_signature, held_types) do
+    {held_chunks, other_chunks} =
+      Map.split_with(mfas_by_signature, fn {signature, _mfas} ->
+        not MapSet.disjoint?(signature, held_types)
+      end)
+
+    if held_chunks == %{} do
+      mfas_by_signature
+    else
+      signature =
+        held_chunks
+        |> Map.keys()
+        |> Enum.reduce(&MapSet.union/2)
+
+      mfas =
+        held_chunks
+        |> Map.values()
+        |> Enum.concat()
+        |> Enum.sort()
+
+      Map.put(other_chunks, signature, mfas)
+    end
+  end
+
+  @doc """
+  Returns the struct types a synced row of the given entity types can hold: the entity types, the
+  structs their fields are in the browser, for the attributes a browser gets, the system attributes
+  and the derived fields, and the structs every row holds, its metadata and the stand-ins for a
+  field it wasn't given. A server-only attribute's value never reaches a browser.
+  """
+  @spec list_row_types(Enumerable.t(module)) :: MapSet.t(module)
+  def list_row_types(entity_types) do
+    entity_types
+    |> Enum.flat_map(&[&1 | @row_struct_types ++ field_struct_types(&1)])
+    |> MapSet.new()
+  end
+
+  @doc """
+  Returns the struct types with an implementation of a client protocol, given the chunks' entry
+  vertices by type (see `CallGraph.list_chunk_entries/2`): the ones with an entry other than their
+  own struct functions.
+  """
+  @spec list_impl_types(%{module => [CallGraph.vertex()]}) :: MapSet.t(module)
+  def list_impl_types(entries_by_type) do
+    for {type, entries} <- entries_by_type,
+        Enum.any?(entries, &(not match?({^type, :__struct__, _arity}, &1))),
+        into: MapSet.new() do
+      type
+    end
   end
 
   @doc """
@@ -2466,8 +2698,9 @@ defmodule Hologram.Compiler do
   checks only rows of types it queries or mentions, and a rule's chains already follow its
   delegations. A chain's types stop before its first type no session may read (see
   `Hologram.Policy.readable_prefix/2`), since no client gets a row of it, nor any row reached
-  through it. Code in a protocol implementation the page can dispatch to counts as client code, but
-  an implementation doesn't name the type it's written for (see `build_kept_page_reach/4`). A type
+  through it. Code in a protocol implementation the page can dispatch to counts as client code,
+  that of a type it holds through rows once `fold_held_impls/5` has folded it into the given reach,
+  but an implementation doesn't name the type it's written for (see `build_kept_page_reach/4`). A type
   only server code names, like an audit log, is left out, rules or not, and never reaches a browser.
   A name the code only builds at run time names nothing here, and a derived query reading such a
   type is refused on its render (see
@@ -3157,7 +3390,7 @@ defmodule Hologram.Compiler do
   # are kept apart from the atoms: they name modules, and no relationship or derived field. An
   # implementation's own type is left out of its modules.
   defp read_by_mfa(reach_by_page, module_info_plt, ir_plt) do
-    elixir_lib_dir = elixir_lib_dir()
+    lib_dirs = lib_dirs()
 
     mfas_by_module =
       reach_by_page
@@ -3167,7 +3400,7 @@ defmodule Hologram.Compiler do
       |> Enum.uniq()
       |> Enum.group_by(fn {module, _function, _arity} -> module end)
       |> Enum.filter(fn {module, _mfas} ->
-        PLT.member?(module_info_plt, module) and app_module?(module, elixir_lib_dir)
+        PLT.member?(module_info_plt, module) and app_module?(module, lib_dirs, module_info_plt)
       end)
 
     build_missing_ir!(ir_plt, Enum.map(mfas_by_module, fn {module, _mfas} -> module end))
@@ -3267,6 +3500,107 @@ defmodule Hologram.Compiler do
 
   defp collect_atoms(_ir, acc), do: acc
 
+  # Walks the pages whose held types are new, and puts what each walk read on the page's reach as
+  # given to fold_held_impls/5, until no page's held types change. A later walk of a page holds more
+  # types, so what it read covers the earlier ones.
+  defp fold_held_impl_rounds(base_reach, reach, walks, context) do
+    to_walk =
+      for {page_module, types} <- held_types_by_page(reach, context.module_info_plt),
+          MapSet.size(types) > 0,
+          not is_map_key(Map.get(walks, page_module, %{}), types) do
+        {page_module, types}
+      end
+
+    if to_walk == [] do
+      {reach, walks}
+    else
+      new_walks = walk_held_impls(to_walk, context)
+
+      new_reach =
+        Enum.reduce(new_walks, reach, fn {page_module, _types, walk}, acc ->
+          Map.put(acc, page_module, put_impl_read(walk.read, base_reach[page_module]))
+        end)
+
+      all_walks =
+        Enum.reduce(new_walks, walks, fn {page_module, types, walk}, acc ->
+          Map.update(acc, page_module, %{types => walk}, &Map.put(&1, types, walk))
+        end)
+
+      fold_held_impl_rounds(base_reach, new_reach, all_walks, context)
+    end
+  end
+
+  # The types each page can hold through rows: the ones it reaches by name, without the ones only
+  # rules read and the ones no session may read, of which no row reaches a browser, and the structs
+  # those rows' fields are.
+  defp held_types_by_page(reach_by_page, module_info_plt) do
+    %{page_types: page_types} =
+      reach_by_page
+      |> Map.new(fn {page_module, reach} ->
+        {page_module, %{reach | checks_permissions?: false}}
+      end)
+      |> build_sync_constants(module_info_plt)
+
+    Map.new(reach_by_page, fn {page_module, _reach} ->
+      types =
+        page_types
+        |> Map.get(page_module, [])
+        |> Enum.filter(&Policy.readable_type?/1)
+        |> list_row_types()
+
+      {page_module, types}
+    end)
+  end
+
+  # The walk of each given page with its held types as extra types: a kept one, or one taken now.
+  defp walk_held_impls(to_walk, context) do
+    {kept, missing} =
+      Enum.split_with(to_walk, fn {page_module, types} ->
+        context.kept_walks
+        |> Map.get(page_module, %{})
+        |> is_map_key(types)
+      end)
+
+    mfas_by_key =
+      missing
+      |> TaskUtils.map_concurrently(fn {page_module, types} = key ->
+        seeds = %{context.seeds | types: MapSet.union(context.seeds.types, types)}
+
+        mfas =
+          CallGraph.list_page_impl_mfas(
+            context.read_graph.(),
+            page_module,
+            context.analyses,
+            context.module_info_plt,
+            seeds
+          )
+
+        {key, mfas}
+      end)
+      |> Map.new()
+
+    reads = read_impl_mfas(mfas_by_key, context.call_graph, context.ir_plt)
+
+    new_walks =
+      Enum.map(mfas_by_key, fn {{page_module, types} = key, mfas} ->
+        read = Map.fetch!(reads, key)
+
+        modules =
+          mfas
+          |> MapSet.new(fn {module, _function, _arity} -> module end)
+          |> MapSet.union(read.names)
+
+        {page_module, types, %{modules: modules, read: read}}
+      end)
+
+    kept_walks =
+      Enum.map(kept, fn {page_module, types} ->
+        {page_module, types, context.kept_walks[page_module][types]}
+      end)
+
+    kept_walks ++ new_walks
+  end
+
   # The IR of the callers the module info PLT holds, built into the IR PLT when it lacks it. A graph
   # without a module info PLT (a test's) has nothing to build from, and the IR PLT is read as it is.
   defp build_caller_ir!(_callers, nil, _ir_plt), do: :ok
@@ -3301,6 +3635,16 @@ defmodule Hologram.Compiler do
 
   # The type of the rows of the set a quantifier's source leads to, from the row it is read on - the
   # row the quantifier is about, the nearest of the given types, or the row that many out.
+  defp quantified_through_derived_set?({:outer, levels, hops}, types) do
+    types
+    |> Enum.at(levels)
+    |> Derived.through_set?(hops)
+  end
+
+  defp quantified_through_derived_set?(hops, [entity_type | _types_above]) do
+    Derived.through_set?(entity_type, hops)
+  end
+
   defp quantified_type({:outer, levels, hops}, types) do
     types
     |> Enum.at(levels)
@@ -3925,9 +4269,9 @@ defmodule Hologram.Compiler do
 
   # Merges the chunk of the given signature into its target (see fold_target/2), when it is still
   # under the bound with what was folded into it and has one.
-  defp fold_small_chunk(signature, {mfas_by_signature, size_by_signature} = acc) do
+  defp fold_small_chunk(signature, {mfas_by_signature, size_by_signature} = acc, held_types) do
     size = Map.fetch!(size_by_signature, signature)
-    target = fold_target(signature, Map.keys(mfas_by_signature))
+    target = fold_target(signature, Map.keys(mfas_by_signature), held_types)
 
     if size < @chunk_fold_bound and target do
       {mfas, remaining_mfas_by_signature} = Map.pop!(mfas_by_signature, signature)
@@ -3944,11 +4288,26 @@ defmodule Hologram.Compiler do
   end
 
   # The signature a small chunk is folded into: its strict superset with the fewest types, the
-  # first by its sorted types among several. Nil when no signature is a strict superset.
-  defp fold_target(signature, signatures) do
+  # first by its sorted types among several, leaving out the chunk every page preloads. Nil when
+  # no signature is left.
+  defp fold_target(signature, signatures, held_types) do
     signatures
-    |> Enum.filter(&(&1 != signature and MapSet.subset?(signature, &1)))
+    |> Enum.filter(fn candidate ->
+      candidate != signature and MapSet.subset?(signature, candidate) and
+        MapSet.disjoint?(candidate, held_types)
+    end)
     |> Enum.min_by(&{MapSet.size(&1), Enum.sort(&1)}, fn -> nil end)
+  end
+
+  defp field_struct_types(entity_type) do
+    server_only_names = Entity.server_only_attribute_names(entity_type)
+
+    entity_type.__attributes__()
+    |> Enum.reject(fn {name, _type, _opts} -> name in server_only_names end)
+    |> Enum.concat(entity_type.__system_attributes__())
+    |> Enum.concat(entity_type.__derived__())
+    |> Enum.map(fn {_name, type, _opts} -> @field_struct_types[type] end)
+    |> Enum.reject(&is_nil/1)
   end
 
   defp function_encoded?(encode_plt, module, {function, arity}) do
@@ -4756,15 +5115,24 @@ defmodule Hologram.Compiler do
   # of a delegation or of a grant reference, the set of a quantifier - whose model a client needs to
   # follow them, whether or not they declare a rule or a role of their own. The dependency edges
   # name every one, a set's rows by the chain its pairs are named with when the condition reads
-  # nothing on them.
+  # nothing on them. They leave out what only a condition on the row after a change walks.
   defp related_checked_entity_types(checked_types) do
-    checked_types
-    |> Enum.to_list()
-    |> Edges.derive()
-    |> Enum.flat_map(fn {{checked_type, _operation}, edges} ->
-      Enum.flat_map(edges, &edge_entity_types(checked_type, &1))
-    end)
-    |> MapSet.new()
+    edge_types =
+      checked_types
+      |> Enum.to_list()
+      |> Edges.derive()
+      |> Enum.flat_map(fn {{checked_type, _operation}, edges} ->
+        Enum.flat_map(edges, &edge_entity_types(checked_type, &1))
+      end)
+
+    new_row_types =
+      Enum.flat_map(checked_types, fn checked_type ->
+        checked_type
+        |> Policy.new_row_chains()
+        |> Enum.flat_map(&chain_types(checked_type, &1))
+      end)
+
+    MapSet.new(edge_types ++ new_row_types)
   end
 
   # The given entity types with every type their derived fields holding rows and their inverses
@@ -5263,7 +5631,16 @@ defmodule Hologram.Compiler do
       {"roles", render_roles(entity_type)},
       {"serverOnly", server_only},
       {"verdicts", render_verdicts(entity_type)}
-    ]
+    ] ++ render_update_names(entity_type)
+  end
+
+  # The names update lines carry, which a check of one specific change can ask. Left out for a type
+  # with none.
+  defp render_update_names(entity_type) do
+    case Policy.update_names(entity_type) do
+      [] -> []
+      names -> [{"updateNames", Jason.encode!(names)}]
+    end
   end
 
   # A type with no enum attributes carries an empty object rather than nothing at all - the reader
@@ -5479,29 +5856,41 @@ defmodule Hologram.Compiler do
   defp render_policy_rule(entity_type, operation, rule) do
     verdict_context = {entity_type, operation}
 
-    render_json_object([
-      {"predicates", render_policy_predicates([entity_type], rule.predicates, verdict_context)},
-      {"to", render_policy_references(entity_type, rule.to, verdict_context)},
-      {"via", render_policy_delegation(rule.via, verdict_context)}
-    ])
+    render_json_object(
+      render_policy_exact(entity_type, rule) ++
+        [
+          {"predicates", render_policy_predicates([entity_type], rule.predicates)},
+          {"to", render_policy_references(entity_type, rule.to, verdict_context)},
+          {"via", render_policy_delegation(rule.via, verdict_context)}
+        ]
+    )
   end
+
+  # The clauses a rule reading the row after the change holds as written, which only a check of one
+  # specific change reads. They're read with that row one level above the rule's own.
+  defp render_policy_exact(entity_type, %{exact: %{predicates: predicates}}) do
+    predicates_js = render_policy_predicates([entity_type, entity_type], predicates)
+
+    [{"new", render_json_object([{"predicates", predicates_js}])}]
+  end
+
+  defp render_policy_exact(_entity_type, _rule), do: []
 
   # Triples, the same shape the client's query filters take - name, operator, value - so one
   # reader spells both. The types are those of the rows the clauses are read on, nearest first: the
-  # rule's own row alone outside any quantifier. The verdict context is the rule's type and
-  # operation for the clauses standing in its predicates, and nil inside a quantifier.
-  defp render_policy_predicates(types, predicates, verdict_context \\ nil) do
+  # rule's own row alone outside any quantifier.
+  defp render_policy_predicates(types, predicates) do
     predicates
-    |> Enum.map_join(",", &render_policy_clause(types, &1, verdict_context))
+    |> Enum.map_join(",", &render_policy_clause(types, &1))
     |> then(&"[#{&1}]")
   end
 
   # A disjunction is an object beside the triple arrays, holding its alternatives - the shape the
   # query kernel's filters take, so one reader tells the two apart by whether a clause is an array.
-  defp render_policy_clause(types, {:or, alternatives}, verdict_context) do
+  defp render_policy_clause(types, {:or, alternatives}) do
     alternatives_js =
       alternatives
-      |> Enum.map_join(",", &render_policy_predicates(types, &1, verdict_context))
+      |> Enum.map_join(",", &render_policy_predicates(types, &1))
       |> then(&"[#{&1}]")
 
     render_json_object([{"or", alternatives_js}])
@@ -5509,44 +5898,66 @@ defmodule Hologram.Compiler do
 
   # A quantifier is an object too, in the shape the kernel's filters take it: the set its source
   # leads to, read on the row it is about or on one above it, and the condition each of the set's
-  # rows is matched with, read on that row with the rows above it. A deciding one renders the same:
-  # the rows the client holds of its set decide what one row can and leave the rest unknown, and
-  # over a derived set they decide nothing.
-  defp render_policy_clause(types, {quantifier, {source, clauses}}, _verdict_context)
+  # rows is matched with, read on that row with the rows above it. A deciding one renders the same,
+  # its predicates reading a server-only attribute each the marker (see the triple head): the rows
+  # the client holds of its set decide what one row can and leave the rest unknown. Over a derived
+  # set they decide nothing, so the whole quantifier is the marker a client answers as unknown, and
+  # what its condition compares stays off the bundle.
+  defp render_policy_clause(types, {quantifier, {source, clauses}})
        when quantifier in [:all, :any, :none] do
-    related_type = quantified_type(source, types)
+    if quantified_through_derived_set?(source, types) do
+      render_json_object([{"server", "true"}])
+    else
+      related_type = quantified_type(source, types)
 
-    quantifier_js =
-      quantifier
-      |> Atom.to_string()
-      |> Jason.encode!()
+      quantifier_js =
+        quantifier
+        |> Atom.to_string()
+        |> Jason.encode!()
 
-    members = [
-      {"filter", render_policy_predicates([related_type | types], clauses)},
-      {"quantifier", quantifier_js},
-      {"source", render_derived_name(source)}
-    ]
+      members = [
+        {"filter", render_policy_predicates([related_type | types], clauses)},
+        {"quantifier", quantifier_js},
+        {"source", render_derived_name(source)}
+      ]
 
-    render_json_object(members)
+      render_json_object(members)
+    end
   end
 
-  # A predicate standing in a rule's predicates that reads a server-only attribute, whose value no
-  # client holds, is a marker the client answers as unknown - its compared value stays off the
-  # bundle. Every other predicate is its triple: one reading a row of a type no client holds reads
-  # it as unknown unless an empty reference on its path reads no row.
-  #
-  # A clause reading a server-only attribute is deciding for that alone, so only whether it stands
-  # in a rule's predicates is left to ask - inside a quantifier, with no context, it stays a triple.
-  defp render_policy_clause(types, {_name, _operator, _value} = clause, {entity_type, _operation}) do
-    if Policy.reads_server_only?(entity_type, clause) do
+  # A role asked of the row after the change: the chain to the row it's held on, that row's type and
+  # the roles that count, spelled as a role reference through a chain is.
+  defp render_policy_clause([entity_type | _types_above], {:has_role, {role_names, chain}}) do
+    members = [
+      render_policy_name(chain),
+      render_entity_type_label(Entity.path_target(entity_type, chain)),
+      render_policy_roles(role_names)
+    ]
+
+    render_json_object([{"hasRole", "[#{Enum.join(members, ",")}]"}])
+  end
+
+  # An operation asked of the row the row after the change leads to, spelled as a delegation is.
+  defp render_policy_clause(_types, {:can, {operation, chain}}) do
+    operation_js =
+      operation
+      |> Policy.operation_key()
+      |> Jason.encode!()
+
+    render_json_object([{"can", "[#{operation_js},#{render_policy_name(chain)}]"}])
+  end
+
+  # A predicate reading a server-only attribute, whose value no client holds, is a marker the client
+  # answers as unknown - its compared value stays off the bundle - wherever it stands: in a rule's
+  # predicates, in a quantifier's condition or in a nested one. Every other predicate is its triple:
+  # one reading a row of a type no client holds reads it as unknown unless an empty reference on its
+  # path reads no row.
+  defp render_policy_clause(types, {_name, _operator, _value} = clause) do
+    if reads_server_only?(types, clause) do
       render_json_object([{"server", "true"}])
     else
       render_policy_triple(types, clause)
     end
-  end
-
-  defp render_policy_clause(types, {_name, _operator, _value} = clause, nil) do
-    render_policy_triple(types, clause)
   end
 
   defp render_policy_triple(types, {name, operator, value}) do
@@ -5758,14 +6169,38 @@ defmodule Hologram.Compiler do
   # module's name and where its code is rather than by the application holding it, which need not
   # be loaded while the app compiles. Asked only of a module the module info PLT records, which is
   # an Elixir module: nothing here reads its BEAM file.
-  defp app_module?(module, elixir_lib_dir) do
+  defp app_module?(module, lib_dirs, module_info_plt) do
     name = Atom.to_string(module)
 
     cond do
       String.starts_with?(name, "Elixir.Hologram.Test.") -> true
       String.starts_with?(name, "Elixir.Hologram.") -> false
-      true -> not loaded_from?(module, elixir_lib_dir)
+      hologram_impl?(module, lib_dirs.hologram, module_info_plt) -> false
+      true -> not loaded_from?(module, lib_dirs.elixir)
     end
+  end
+
+  # Whether the module is an implementation Hologram ships for one of its own types, like
+  # Inspect.Hologram.Entity.Metadata, whose name starts with the protocol's. One an app writes for
+  # such a type is the app's code, and lives in the app's build dir.
+  defp hologram_impl?(module, hologram_lib_dir, module_info_plt) do
+    type_name =
+      module
+      |> implementation_type(module_info_plt)
+      |> Atom.to_string()
+
+    String.starts_with?(type_name, "Elixir.Hologram.") and
+      not String.starts_with?(type_name, "Elixir.Hologram.Test.") and
+      loaded_from?(module, hologram_lib_dir)
+  end
+
+  defp lib_dirs do
+    hologram_lib_dir =
+      :hologram
+      |> :code.lib_dir()
+      |> to_string()
+
+    %{elixir: elixir_lib_dir(), hologram: hologram_lib_dir <> "/"}
   end
 
   # The directory Elixir's own applications are installed under, elixir, eex, ex_unit, iex, logger
@@ -5785,14 +6220,23 @@ defmodule Hologram.Compiler do
   end
 
   defp loaded_from?(module, dir) do
-    case :code.which(module) do
+    case beam_path(module) do
       path when is_list(path) ->
         path
         |> to_string()
         |> String.starts_with?(dir)
 
-      _cover_compiled_or_missing ->
+      _missing ->
         false
+    end
+  end
+
+  # Where the module's BEAM file is, for a cover-compiled module too, which :code.which/1 gives no
+  # path for.
+  defp beam_path(module) do
+    case :code.which(module) do
+      :cover_compiled -> :code.where_is_file(~c"#{module}.beam")
+      path -> path
     end
   end
 
@@ -5821,6 +6265,31 @@ defmodule Hologram.Compiler do
       {_name, type, _opts} when is_atom(type) -> type
       _other -> :uuid
     end
+  end
+
+  # Whether the given predicate, read on the rows of the given types nearest first, reads a
+  # server-only attribute - of the row it is read on, of one a path leads to, or of a row above
+  # inside a quantifier - by its name or by an attribute operand. A predicate this renders as the
+  # marker has its client answer wait for the operation's verdict, so Policy.reads_server_only?/2
+  # must find it too, or the operation gets no verdict and the client never grants it.
+  defp reads_server_only?(types, {name, _operator, {:attribute, other}}) do
+    server_only_name?(name, types) or server_only_name?(other, types)
+  end
+
+  defp reads_server_only?(types, {name, _operator, _value}), do: server_only_name?(name, types)
+
+  defp server_only_name?({:outer, levels, name}, types) do
+    server_only_name?(name, [Enum.at(types, levels)])
+  end
+
+  defp server_only_name?(path, [entity_type | _types_above]) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    server_only_name?(name, [Entity.path_target(entity_type, relationship_names)])
+  end
+
+  defp server_only_name?(name, [entity_type | _types_above]) do
+    name in Entity.server_only_attribute_names(entity_type)
   end
 
   # The components among the given modules, as the module info PLT records them: a module it does
@@ -6194,6 +6663,17 @@ defmodule Hologram.Compiler do
 
   defp declared_roles_description(role_names) do
     "declared roles are: #{Enum.map_join(role_names, ", ", &inspect/1)}"
+  end
+
+  defp put_impl_read(read, reach) do
+    %{
+      reach
+      | atoms: MapSet.union(reach.atoms, read.atoms),
+        checks_permissions?: reach.checks_permissions? or read.checks_permissions?,
+        modules: MapSet.union(reach.modules, read.names),
+        query_chains: Enum.uniq(reach.query_chains ++ read.query_chains),
+        reads_session_user?: reach.reads_session_user? or read.reads_session_user?
+    }
   end
 
   defp put_page_user_type(entity_types, user_entity, %{reads_session_user?: true})

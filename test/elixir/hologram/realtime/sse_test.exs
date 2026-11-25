@@ -1184,7 +1184,7 @@ defmodule Hologram.Realtime.SSETest do
     test "halts when the sync session ended" do
       conn = prepared_test_conn()
       session = spawn(fn -> :ok end)
-      send(self(), {:EXIT, session, :behind_the_ring})
+      send(self(), {:EXIT, session, :client_stalled})
 
       assert {:halt, ^conn} = process_message(conn, nil, nil, sync_session: session)
     end

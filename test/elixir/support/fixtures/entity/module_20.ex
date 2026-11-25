@@ -8,4 +8,5 @@ defmodule Hologram.Test.Fixtures.Entity.Module20 do
 
   allow :read
   allow :update
+  allow :delete
 end

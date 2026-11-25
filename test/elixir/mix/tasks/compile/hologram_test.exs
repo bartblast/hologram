@@ -24,13 +24,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Reflection
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity12, as: ImplEntity12
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity3, as: ImplEntity3
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity4, as: ImplEntity4
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity6, as: ImplEntity6
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity7, as: ImplEntity7
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity8, as: ImplEntity8
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Helper, as: ImplHelper
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Page1, as: ImplPage1
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Page6, as: ImplPage6
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page7, as: ImplPage7
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol, as: ImplProtocol
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol3, as: ImplProtocol3
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol4, as: ImplProtocol4
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct1, as: ImplStruct1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct3, as: ImplStruct3
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct4, as: ImplStruct4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, as: QueryExtractorModule53
   alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
@@ -507,6 +515,71 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     assert entity in cache_state().data_layer.pages[page].modules
     assert_data_layer_pages_match_cold(opts)
+  end
+
+  # Compiles with the module and again without its beam. Returns its module info and a function that
+  # puts the beam back, as a compile reports it.
+  defp compile_without_beam(module, opts) do
+    run(opts)
+
+    module_info = cache_state().module_infos[module]
+    beam_path = :code.which(module)
+    bytecode = File.read!(beam_path)
+
+    remove_beam(module)
+    run(opts)
+
+    put_beam_back = fn ->
+      File.write!(beam_path, bytecode)
+      report_compiled(module)
+    end
+
+    {module_info, put_beam_back}
+  end
+
+  # Compiles with the kept entry of a held type's implementation saying it was what the given fields
+  # say, with no walk having entered it, so that its beam reads as an edit of that module. What it
+  # names then syncs.
+  defp assert_edited_impl_syncs(previous_fields, opts) do
+    impl = Module.safe_concat(ImplProtocol3, ImplEntity7)
+    {impl_info, put_beam_back} = compile_without_beam(impl, opts)
+
+    refute ImplEntity8 in synced_types(opts)
+
+    %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+      cache_state()
+
+    previous_info =
+      impl_info
+      |> Map.merge(previous_fields)
+      |> Map.put(:digest, "previous")
+
+    put_kept_module_infos(
+      Map.put(module_infos, impl, previous_info),
+      dumped_at,
+      MapSet.put(editable_modules, impl)
+    )
+
+    put_beam_back.()
+    run(opts)
+
+    assert ImplEntity8 in synced_types(opts)
+  end
+
+  # The modules the walks of the implementations of the types the given page holds through rows name.
+  defp held_impl_names(page) do
+    cache_state().data_layer.held_impl_walks
+    |> Map.get(page, %{})
+    |> Map.values()
+    |> Enum.reduce(MapSet.new(), &MapSet.union(&2, &1.read.names))
+  end
+
+  defp synced_types(opts) do
+    plt = PLT.start()
+
+    PLT.load(plt, Path.join(opts[:build_dir], Reflection.queries_plt_dump_file_name()))
+
+    PLT.get!(plt, :synced_types)
   end
 
   defp assert_data_layer_pages_match_cold(opts) do
@@ -2168,6 +2241,270 @@ defmodule Mix.Tasks.Compile.HologramTest do
       impl = Module.safe_concat(String.Chars, ImplStruct4)
 
       assert_added_impl_names(impl, ImplPage6, ImplEntity4, opts)
+    end
+
+    test "syncs what the implementation of a type a page holds through rows names", %{opts: opts} do
+      run(opts)
+
+      assert ImplEntity8 in held_impl_names(ImplPage7)
+      assert ImplEntity8 in synced_types(opts)
+    end
+
+    test "keeps the page reach from before the held types' implementations were folded in", %{
+      opts: opts
+    } do
+      run(opts)
+
+      refute ImplEntity8 in cache_state().data_layer.pages[ImplPage7].modules
+    end
+
+    test "walks no page again when nothing changed", %{opts: opts} do
+      run(opts)
+
+      assert count_calls({CallGraph, :list_page_impl_mfas, 5}, fn -> run(opts) end) == 0
+    end
+
+    test "every page preloads the one chunk of the held types", %{opts: opts} do
+      run(opts)
+
+      %{chunks: chunks} = cache_state()
+      items = load_chunk_registry_items(opts)
+
+      assert ImplEntity7 in chunks.held_types
+
+      assert [signature] =
+               chunks.mfas_by_signature
+               |> Map.keys()
+               |> Enum.reject(&MapSet.disjoint?(&1, chunks.held_types))
+
+      digest = chunks.bundle_infos[signature].digest
+
+      for {{:page, _page_module}, digests} <- items do
+        assert digest in digests
+      end
+
+      for type <- signature do
+        assert digest in items[{:type, type}]
+      end
+    end
+
+    test "holds the structs of a synced row's fields", %{opts: opts} do
+      run(opts)
+
+      assert DateTime in cache_state().chunks.held_types
+    end
+
+    test "puts each function in one chunk when the held types' chunks merge", %{opts: opts} do
+      run(opts)
+
+      mfas =
+        cache_state().chunks.mfas_by_signature
+        |> Map.values()
+        |> Enum.concat()
+
+      assert mfas == Enum.uniq(mfas)
+    end
+
+    test "a synced type with no implementation of a client protocol isn't held", %{opts: opts} do
+      run(opts)
+
+      assert ImplEntity6 in synced_types(opts)
+      refute ImplEntity6 in cache_state().chunks.held_types
+    end
+
+    test "a type with an implementation that doesn't sync isn't held", %{opts: opts} do
+      run(opts)
+
+      refute ImplEntity12 in synced_types(opts)
+      refute ImplEntity12 in cache_state().chunks.held_types
+    end
+
+    test "keeps the merged chunk when the data layer is kept", %{opts: opts} do
+      run(opts)
+
+      %{chunks: chunks} = cache_state()
+
+      assert count_calls({Compiler, :merge_held_chunks, 2}, fn -> run(opts) end) == 0
+      assert cache_state().chunks == chunks
+    end
+
+    test "groups the chunks again when the held types moved on an unchanged graph", %{opts: opts} do
+      run(opts)
+
+      %{chunks: chunks} = cache_state()
+      Cache.put_chunks(%{chunks | held_types: MapSet.new()})
+
+      assert count_calls({Compiler, :merge_held_chunks, 2}, fn -> run(opts) end) == 1
+
+      new_chunks = cache_state().chunks
+
+      assert new_chunks.held_types == chunks.held_types
+      assert new_chunks.mfas_by_signature == chunks.mfas_by_signature
+    end
+
+    test "a regroup lists the chunks on a graph holding what its walk built", %{opts: opts} do
+      run(opts)
+
+      %{call_graph: call_graph, chunks: chunks, data_layer: data_layer, ir_plt: ir_plt} =
+        cache_state()
+
+      # An implementation calling a helper, so that a copy of the graph without it loses the helper.
+      CallGraph.patch(call_graph, ir_plt, %{
+        added_modules: [],
+        edited_modules: [],
+        removed_modules: [Module.safe_concat(ImplProtocol, ImplStruct3)]
+      })
+
+      # A data layer to derive makes the runtime graph's copy before the regroup's walk.
+      data_layer
+      |> Map.delete(:held_impl_walks)
+      |> Cache.put_data_layer()
+
+      Cache.put_chunks(%{chunks | held_types: MapSet.new()})
+      run(opts)
+
+      assert cache_state().chunks.mfas_by_signature == chunks.mfas_by_signature
+    end
+
+    test "reuses a kept page's walks when an edit doesn't touch them", %{opts: opts} do
+      run(opts)
+
+      # A walk made again wouldn't have this atom, so the walk seen below is the kept one.
+      kept_walks =
+        Map.new(cache_state().data_layer.held_impl_walks[ImplPage7], fn {types, walk} ->
+          {types, update_in(walk.read.atoms, &MapSet.put(&1, :kept_walk_marker))}
+        end)
+
+      cache_state().data_layer
+      |> put_in([:held_impl_walks, ImplPage7], kept_walks)
+      |> Cache.put_data_layer()
+
+      fake_edit(PageModule18)
+      run(opts)
+
+      assert cache_state().data_layer.held_impl_walks[ImplPage7] == kept_walks
+    end
+
+    test "a module edited into an implementation of a held type syncs what it names", %{
+      opts: opts
+    } do
+      assert_edited_impl_syncs(
+        %{implemented_protocol: nil, protocol_implementation?: false},
+        opts
+      )
+    end
+
+    test "an implementation edited to implement another protocol syncs what it names", %{
+      opts: opts
+    } do
+      assert_edited_impl_syncs(%{implemented_protocol: ImplProtocol4}, opts)
+    end
+
+    test "a module edited into an implementation between two VMs syncs what it names", %{
+      opts: opts
+    } do
+      impl = Module.safe_concat(ImplProtocol3, ImplEntity7)
+      {impl_info, put_beam_back} = compile_without_beam(impl, opts)
+
+      refute ImplEntity8 in synced_types(opts)
+
+      plain_info = %{
+        impl_info
+        | digest: "plain",
+          implemented_protocol: nil,
+          mtime: impl_info.mtime - 100,
+          protocol_implementation?: false
+      }
+
+      rewrite_module_info_dump(opts, &Map.put(&1, impl, plain_info))
+      put_beam_back.()
+      Cache.reset()
+      fake_recompile()
+      run(opts)
+
+      assert ImplEntity8 in synced_types(opts)
+    end
+
+    test "an implementation no walk entered, edited between two VMs, walks no page again", %{
+      opts: opts
+    } do
+      run(opts)
+
+      fake_edit_in_dump(Module.safe_concat(ImplProtocol, ImplEntity12), opts)
+      Cache.reset()
+      fake_recompile()
+
+      assert count_calls({CallGraph, :list_page_impl_mfas, 5}, fn -> run(opts) end) == 0
+    end
+
+    test "an edit of a held type's implementation no page's own reach names derives again", %{
+      opts: opts
+    } do
+      run(opts)
+      impl = Module.safe_concat(ImplProtocol3, ImplEntity7)
+
+      refute Enum.any?(cache_state().data_layer.pages, fn {_page, reach} ->
+               MapSet.member?(reach.impl_modules, impl)
+             end)
+
+      fake_edit(impl)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+      assert ImplEntity8 in held_impl_names(ImplPage7)
+    end
+
+    test "a removed implementation of a held type stops syncing what it named", %{opts: opts} do
+      run(opts)
+      impl = Module.safe_concat(ImplProtocol3, ImplEntity7)
+
+      remove_beam(impl)
+      run(opts)
+
+      refute ImplEntity8 in held_impl_names(ImplPage7)
+      refute ImplEntity8 in synced_types(opts)
+    end
+
+    test "an added implementation of a held type syncs what it names", %{opts: opts} do
+      impl = Module.safe_concat(ImplProtocol3, ImplEntity7)
+      beam_path = :code.which(impl)
+      bytecode = File.read!(beam_path)
+
+      remove_beam(impl)
+      run(opts)
+
+      refute ImplEntity8 in synced_types(opts)
+
+      File.write!(beam_path, bytecode)
+      report_compiled(impl)
+      run(opts)
+
+      assert ImplEntity8 in synced_types(opts)
+    end
+
+    test "refuses a query a held type's implementation writes", %{opts: opts} do
+      run(opts)
+
+      %{data_layer: data_layer} = cache_state()
+
+      chain = %{
+        final_sort?: false,
+        line: 1,
+        mfa: {PageModule18, :template, 0},
+        root: Hologram.Test.Fixtures.Entity.Module1,
+        steps: []
+      }
+
+      data_layer
+      |> update_in([:held_impl_walks, ImplPage7], fn walks_by_types ->
+        Map.new(walks_by_types, fn {types, walk} ->
+          {types, update_in(walk.read.query_chains, &[chain | &1])}
+        end)
+      end)
+      |> Cache.put_data_layer()
+
+      fake_edit(PageModule18)
+
+      assert_raise Hologram.CompileError, ~r/declares no allow lines/, fn -> run(opts) end
     end
 
     test "a kept data layer with no implementation seeds lists every page", %{opts: opts} do

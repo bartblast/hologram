@@ -165,6 +165,7 @@ describe("Overlay", () => {
           "actor_id",
           "attempt",
           "error",
+          "run_as_server",
           "scheduled_at",
           "status",
         ],
@@ -798,6 +799,21 @@ describe("Overlay", () => {
       });
     });
 
+    // A delete that lost, answered with no row because a later delete of the batch took it.
+    it("takes the row away under a dropped delete answered with nothing", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(
+        {id: "t1", op: "delete", stamp: 5, type: TODO},
+        {id: "t1", op: "delete", stamp, type: TODO},
+      );
+
+      Overlay.promote(batch, {}, {dropped: {0: {done: null, title: null}}});
+
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+      assert.isFalse(Overlay.names(TODO, "t1"));
+    });
+
     describe("a write the answer withholds", () => {
       const withheld = {0: {$withheld: true}};
 
@@ -961,6 +977,104 @@ describe("Overlay", () => {
       assert.equal(LocalDatabase.baseRow(TODO, "t1").votes, 5);
     });
 
+    it("leaves a column that lost with no value sent back as the base holds it", () => {
+      LocalDatabase.putRow(TODO, base({title: "stored"}));
+
+      const batch = pushed(updateWrite({data: {title: "refused"}}));
+
+      Overlay.promote(batch, {}, {dropped: {0: {title: "refused"}}});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "stored");
+    });
+
+    it("still promotes the columns of the write that weren't dropped", () => {
+      LocalDatabase.putRow(TODO, base({title: "stored", votes: 1}));
+
+      const batch = pushed(updateWrite({data: {title: "refused", votes: 2}}));
+
+      Overlay.promote(batch, {}, {dropped: {0: {title: "refused"}}});
+
+      const row = LocalDatabase.baseRow(TODO, "t1");
+
+      assert.equal(row.title, "stored");
+      assert.equal(row.votes, 2);
+    });
+
+    it("leaves out a dropped column named like an inherited property", () => {
+      LocalDatabase.putRow(
+        TODO,
+        base({$revisions: {constructor: 1}, constructor: "stored"}),
+      );
+
+      const batch = pushed(updateWrite({data: {constructor: "refused"}}));
+
+      Overlay.promote(batch, {}, {dropped: {0: {constructor: "refused"}}});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").constructor, "stored");
+    });
+
+    it("lands a write on a column named like an inherited property", () => {
+      LocalDatabase.putRow(TODO, base({constructor: "stored"}));
+
+      const batch = pushed(updateWrite({data: {constructor: "written"}}));
+
+      Overlay.promote(batch, {});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").constructor, "written");
+    });
+
+    it("takes a value sent back for a column named like an inherited property", () => {
+      LocalDatabase.putRow(TODO, base({constructor: "stored"}));
+
+      const batch = pushed(updateWrite({data: {constructor: "lost"}}));
+
+      Overlay.promote(
+        batch,
+        {
+          0: {
+            constructor: "winner",
+            $revisions: {constructor: Number.MAX_SAFE_INTEGER},
+          },
+        },
+        {dropped: {0: {constructor: "lost"}}},
+      );
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").constructor, "winner");
+    });
+
+    // The server answers the lost column less the later delta, at the revision the batch left it.
+    it("lands a later delta and skips a later set on a value sent back for a dropped column", () => {
+      LocalDatabase.putRow(TODO, base({votes: 3}));
+
+      const batch = pushed(
+        updateWrite({data: {votes: 9}, stamp: 5}),
+        updateWrite({deltas: {votes: 2}, stamp: 5}),
+        updateWrite({data: {votes: 20}}),
+      );
+
+      Overlay.promote(
+        batch,
+        {0: {votes: 18, $revisions: {votes: stamp}}},
+        {dropped: {0: {votes: 9}}},
+      );
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").votes, 20);
+    });
+
+    it("takes the value the server sent back for a dropped column", () => {
+      LocalDatabase.putRow(TODO, base({title: "stored"}));
+
+      const batch = pushed(updateWrite({data: {title: "lost"}}));
+
+      Overlay.promote(
+        batch,
+        {0: {title: "winner", $revisions: {title: Number.MAX_SAFE_INTEGER}}},
+        {dropped: {0: {title: "lost"}}},
+      );
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "winner");
+    });
+
     describe("of an edge an inverse of a to-many reads", () => {
       const LABEL = "MyApp.Label";
 
@@ -991,14 +1105,102 @@ describe("Overlay", () => {
         };
 
         Model.reset();
+
+        LocalDatabase.putRow(TODO, base());
+        LocalDatabase.putRow(LABEL, {id: "l1", name: "Urgent"});
       });
 
-      const labelEdge = (op) => ({
-        id: "t1",
-        op,
-        relationship: "labels",
-        target_id: "l1",
-        type: TODO,
+      const labelEdge = (op, overrides = {}) =>
+        Object.assign(
+          {
+            id: "t1",
+            op,
+            relationship: "labels",
+            target_id: "l1",
+            type: TODO,
+          },
+          overrides,
+        );
+
+      // The label left while the batch waited, and sync tells nothing of a pair naming a row the
+      // client doesn't hold, so a pair filed here would stay.
+      it("files neither side of a pair whose target the base doesn't hold", () => {
+        LocalDatabase.deleteRow(LABEL, "l1");
+        LocalDatabase.replaceFacts(LABEL, "todos", "l1", ["t2"]);
+
+        Overlay.promote(pushed(labelEdge("add_relationship")), {});
+
+        assert.isFalse(LocalDatabase.hasFacts(TODO, "labels", "t1"));
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(LABEL, "todos", "l1"),
+          new Set(["t2"]),
+        );
+      });
+
+      it("files neither side of a pair whose source the base doesn't hold", () => {
+        LocalDatabase.replaceFacts(LABEL, "todos", "l1", ["t2"]);
+        LocalDatabase.deleteRow(TODO, "t1");
+
+        Overlay.promote(pushed(labelEdge("add_relationship")), {});
+
+        assert.isFalse(LocalDatabase.hasFacts(TODO, "labels", "t1"));
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(LABEL, "todos", "l1"),
+          new Set(["t2"]),
+        );
+      });
+
+      it("files a pair to a row the batch created, but not to one a marker ruled out", () => {
+        const create = (id) =>
+          createWrite({data: {name: "New"}, id, type: LABEL});
+
+        const batch = pushed(
+          create("l2"),
+          create("l3"),
+          labelEdge("add_relationship", {target_id: "l2"}),
+          labelEdge("add_relationship", {target_id: "l3"}),
+        );
+
+        batch.landed.add(1);
+
+        Overlay.promote(batch, {});
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(TODO, "labels", "t1"),
+          new Set(["l2"]),
+        );
+      });
+
+      it("judges only a pair whose target type the model names", () => {
+        globalThis.Hologram.sync.model[TODO].relationships.notes = {
+          optional: false,
+          toMany: true,
+          type: "MyApp.Note",
+        };
+
+        Model.reset();
+
+        LocalDatabase.deleteRow(LABEL, "l1");
+
+        Overlay.promote(
+          pushed(
+            labelEdge("add_relationship"),
+            labelEdge("add_relationship", {
+              relationship: "notes",
+              target_id: "n1",
+            }),
+          ),
+          {},
+        );
+
+        assert.isFalse(LocalDatabase.hasFacts(TODO, "labels", "t1"));
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(TODO, "notes", "t1"),
+          new Set(["n1"]),
+        );
       });
 
       // The answer can land before the frame carrying the same edge on the label, and the label's

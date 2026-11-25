@@ -475,10 +475,19 @@ defmodule Hologram.Mutation.EnvelopeTest do
                 ~s(write 0: type "Hologram.Mutation.Envelope" is not an entity type of this build)}
     end
 
-    test "refuses an id that is not an entity id" do
+    # A browser can queue one, and a bad request would hold its queue for good.
+    test "answers an id that is text but no entity id as a refused value" do
       entry = create(Module2, %{"c" => "x"}, id: "nope")
 
-      assert parse(raw([entry])) == {:error, "write 0: id must be an entity id"}
+      assert {:refused, %Envelope{writes: []}, 0, %{id: [{:type, :uuid}]}} = parse(raw([entry]))
+    end
+
+    test "refuses an id that isn't text as a bad request" do
+      for id <- [nil, 7] do
+        entry = create(Module2, %{"c" => "x"}, id: id)
+
+        assert parse(raw([entry])) == {:error, "write 0: id must be an entity id"}
+      end
     end
 
     test "refuses data that is not an object" do
@@ -559,6 +568,14 @@ defmodule Hologram.Mutation.EnvelopeTest do
                 ~s[write 0: "scheduled_at" is not a field of Hologram.Test.Fixtures.Job.Module1 a client can write]}
     end
 
+    test "refuses a job's server mark as a field" do
+      entry = create(JobModule1, %{"run_as_server" => true})
+
+      assert parse(raw([entry])) ==
+               {:error,
+                ~s[write 0: "run_as_server" is not a field of Hologram.Test.Fixtures.Job.Module1 a client can write]}
+    end
+
     test "refuses a job's error as a field" do
       entry = create(JobModule1, %{"error" => "boom"})
 
@@ -576,6 +593,54 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert parse(raw([create(Module3, %{"c_id" => 1})])) ==
                {:error, ~s(write 0: "c_id" is not a valid entity id)}
+    end
+
+    # A browser could queue one of these before its own validator refused it, and a bad request
+    # would hold its queue for good.
+    test "answers a date or datetime it can't read as a refused value of the write" do
+      for {name, field, type, value} <- [
+            {"a", :a, :date, "-10000-01-01"},
+            {"a", :a, :date, "6000000-01-01"},
+            {"a", :a, :date, "NaN-NaN-NaN"},
+            {"b", :b, :datetime, "10000-01-01T00:00:00.000000Z"},
+            {"b", :b, :datetime, "-10000-01-01T00:00:00.000000Z"},
+            {"b", :b, :datetime, "0NaN-NaN-NaNTNaN:NaN:NaN.000000Z"}
+          ] do
+        writes = [create(Module2, %{"b" => 1}), create(Module4, %{name => value})]
+
+        assert {:refused, %Envelope{seq: 1, writes: []}, 1, violations} = parse(raw(writes))
+        assert violations == %{field => [{:type, type}]}
+      end
+    end
+
+    test "answers an update's date it can't read as a refused value too" do
+      assert {:refused, %Envelope{}, 0, %{a: [{:type, :date}]}} =
+               parse(raw([update(Module4, %{"a" => "-10000-01-01"})]))
+    end
+
+    test "keeps the envelope's identity beside a refused value" do
+      entries = [create(Module4, %{"a" => "-10000-01-01"})]
+      batch = raw(entries)
+
+      assert {:refused, envelope, 0, _violations} = parse(batch)
+
+      assert %Envelope{
+               instance_id: instance_id,
+               model_hash: model_hash,
+               replica_id: replica_id,
+               seq: seq
+             } = envelope
+
+      assert {instance_id, model_hash, replica_id, seq} ==
+               {batch["instance_id"], batch["model_hash"], batch["replica_id"], batch["seq"]}
+    end
+
+    test "still answers a date or datetime that isn't text as a bad request" do
+      assert parse(raw([create(Module4, %{"a" => 20_260_101})])) ==
+               {:error, ~s(write 0: "a" is not a valid date)}
+
+      assert parse(raw([create(Module4, %{"b" => true})])) ==
+               {:error, ~s(write 0: "b" is not a valid datetime)}
     end
 
     test "reads an integer past what a number holds exactly from its text" do
@@ -780,8 +845,40 @@ defmodule Hologram.Mutation.EnvelopeTest do
                 ~s[write 0: "c" is not a to-many relationship of Hologram.Test.Fixtures.Entity.Module3]}
     end
 
-    test "refuses a target id that is not an entity id" do
+    # A browser can queue one, and a bad request would hold its queue for good.
+    test "answers a target id that is text but no entity id as a refused value" do
       entry = edge("add_relationship", Module16, "secrets", target_id: "nope")
+
+      assert {:refused, %Envelope{writes: []}, 0, %{secrets: [{:type, :uuid}]}} =
+               parse(raw([entry]))
+    end
+
+    test "names the write a call starts at when a later edge of it holds a bad target" do
+      other = create(Module2, %{"c" => "x"})
+      lead = edge("add_relationship", Module16, "secrets")
+      good = same_call(edge("add_relationship", Module16, "secrets"))
+      bad = same_call(edge("add_relationship", Module16, "secrets", target_id: "nope"))
+
+      assert {:refused, %Envelope{}, 1, %{secrets: [{:type, :uuid}]}} =
+               parse(raw([other, lead, good, bad]))
+    end
+
+    test "counts back only through the call the bad edge belongs to" do
+      lead = edge("add_relationship", Module16, "secrets")
+      follower = same_call(edge("add_relationship", Module16, "secrets"))
+      bad = same_call(edge("add_relationship", Module16, "secrets", target_id: "nope"))
+
+      assert {:refused, %Envelope{}, 2, _violations} = parse(raw([lead, follower, lead, bad]))
+    end
+
+    test "names the write itself when a bad edge marked same_call has nothing before it" do
+      bad = same_call(edge("add_relationship", Module16, "secrets", target_id: "nope"))
+
+      assert {:refused, %Envelope{}, 0, _violations} = parse(raw([bad]))
+    end
+
+    test "refuses a target id that isn't text as a bad request" do
+      entry = edge("add_relationship", Module16, "secrets", target_id: 7)
 
       assert parse(raw([entry])) == {:error, "write 0: target_id must be an entity id"}
     end

@@ -341,7 +341,7 @@ defmodule Hologram.DB.SchemaTest do
           ~s{(actual: ["id", "name"], target: ["id"]) - } <>
           "no derivable schema can produce this, the database was edited by hand"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error RuntimeError, expected_msg, fn ->
         diff(actual, target)
       end
     end

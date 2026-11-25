@@ -3,7 +3,7 @@ defmodule Hologram.Auth.RoleGrant do
   The role store: one row per granted role.
 
   A grant states a fact - this user holds this role here - and the row IS that fact. Rows are
-  written by `Hologram.Auth.grant_role/2,3` and removed by `Hologram.Auth.revoke_role/2,3`, and
+  written by `Hologram.Auth.grant_role/2,3,4` and removed by `Hologram.Auth.revoke_role/2,3,4`, and
   never constructed: `new/1` raises, the way it does for any entity the framework owns.
 
   ## What a row says
@@ -12,7 +12,8 @@ defmodule Hologram.Auth.RoleGrant do
     * `entity_type` - the entity type module the role is held on, or nil for a global role.
     * `entity_id` - the id of the row it is held on, or nil for a type-wide or global grant.
     * `role` - an entity role name (`:organizer`) or a global role module (`MyApp.Roles.Admin`).
-    * `granted_by_id` - the acting user who granted it, or nil when trusted code did.
+    * `granted_by_id` - the signed-in user who passed the grant's gate or created the row it is on,
+      or nil for a grant made outside a session or through a `grant_role` trust claim.
 
   The two scope columns tell the three kinds of grant apart by which of them are set:
 
