@@ -224,8 +224,11 @@ defmodule Hologram.Sync.SessionTest do
   # An edge at the given seq and a published limit at the other. The edge is read once before the
   # session registers, to see whether it has one, and again once it has, so the limit's read tells
   # the test whether the session was registered then, and whether the last edge read before it was.
+  # The fill and the held ids, read in processes of their own, tell whether the limit was read
+  # before them.
   defp ordered_reads(edge_seq, final_seq) do
     test_pid = self()
+    final_read = :atomics.new(1, [])
 
     read_edge = fn ->
       Process.put(:edge_read_registered?, registered?())
@@ -234,12 +237,27 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     read_final = fn ->
+      :atomics.put(final_read, 1, 1)
       send(test_pid, {:final_read, registered?(), Process.get(:edge_read_registered?, false)})
 
       final_seq
     end
 
-    [read_edge: read_edge, read_final: read_final]
+    read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
+      send(test_pid, {:data_read, :atomics.get(final_read, 1) == 1})
+
+      read_fill_in_sandbox(entity_type, actor_user_id, replica_id, synced_types)
+    end
+
+    read_ids = read_ids_in_sandbox()
+
+    read_held_ids = fn entity_type, actor_user_id ->
+      send(test_pid, {:data_read, :atomics.get(final_read, 1) == 1})
+
+      read_ids.(entity_type, actor_user_id)
+    end
+
+    [read_edge: read_edge, read_final: read_final, read_fill: read_fill, read_ids: read_held_ids]
   end
 
   defp registered? do
@@ -3302,6 +3320,8 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(ordered_reads(200, 209))
 
       assert_receive {:final_read, true, true}
+      assert_receive {:data_read, final_read_first?}
+      assert final_read_first?
       assert_receive {:sync_synced, {:types, [Module2], _applied_seq}, nil, 209}
       assert_receive {:sync_synced, :all, cursor, 209}
       assert {:ok, {200, _tx, _at}, _log_id, _policy_hash, _types_hash} = Cursor.decode(cursor)
@@ -3318,6 +3338,8 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([gap: gap] ++ ordered_reads(300, 309))
 
       assert_receive {:final_read, true, true}
+      assert_receive {:data_read, final_read_first?}
+      assert final_read_first?
 
       assert [
                {:sync_deltas, _cursor, [%{id: _id}], _seq, 300},
