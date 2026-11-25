@@ -1,6 +1,6 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
 import Batch from "../../assets/js/batch.mjs";
 import Clock from "../../assets/js/clock.mjs";
@@ -2187,6 +2187,38 @@ describe("LocalDatabase", () => {
         numbers: {server_updated_seq: 15},
         own: false,
       });
+    });
+
+    // A take-up puts every stored row, so each one settles only itself: settling the whole
+    // waiting list per row would read rows times entries.
+    it("settles only the stored row it puts", () => {
+      LocalDatabase.takeStoredFinal(10);
+
+      const baseRow = sinon.spy(LocalDatabase, "baseRow");
+
+      try {
+        for (let i = 0; i < 100; i++) {
+          LocalDatabase.putStored(TASK, row(`t${i}`, 15, 15), null);
+        }
+
+        assert.isBelow(baseRow.callCount, 1000);
+      } finally {
+        baseRow.restore();
+      }
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t0"), {
+        numbers: {server_created_seq: 15, server_updated_seq: 15},
+        own: false,
+      });
+    });
+
+    it("files a number the page showed that the store's point reaches", () => {
+      LocalDatabase.carryNumbers(TASK, row("t1", 8, 8));
+      LocalDatabase.putRow(TASK, row("t1", null, null));
+
+      LocalDatabase.takeStoredFinal(10);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 8);
     });
 
     it("files a stored row's waiting number the store's point reaches", () => {

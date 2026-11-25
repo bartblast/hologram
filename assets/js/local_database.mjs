@@ -915,7 +915,14 @@ export default class LocalDatabase {
 
     LocalDatabase.#takeWaiting(type, row.id, waiting);
     LocalDatabase.#holdStoredAbove(type, row.id);
-    LocalDatabase.#fileFinal();
+
+    // Only this row's numbers can have changed, and a take-up puts every stored row this way, so
+    // settling the whole waiting list here would cost rows times entries.
+    const entry = LocalDatabase.#waiting[type]?.[row.id];
+
+    if (entry !== undefined) {
+      LocalDatabase.#fileEntry(type, row.id, entry);
+    }
   }
 
   // The numbers a page showed for each row, keyed "<type> <id>" as vouchedRowKeys are, for a tab
@@ -968,6 +975,10 @@ export default class LocalDatabase {
 
       LocalDatabase.putRow(type, row);
     }
+
+    // A number the page showed can be final under the store's point: the stored rows put after
+    // this settle only themselves (see putStored).
+    LocalDatabase.#fileFinal();
   }
 
   // The overlay is deliberately NOT reset here. This runs on a resync, which replaces what the
@@ -1198,47 +1209,53 @@ export default class LocalDatabase {
   static #fileFinal() {
     for (const [type, entries] of Object.entries(LocalDatabase.#waiting)) {
       for (const [id, entry] of Object.entries(entries)) {
-        const held = LocalDatabase.baseRow(type, id);
-
-        if (held === null) {
-          continue;
-        }
-
-        let row = null;
-
-        for (const field of SEQUENCE_FIELDS) {
-          let filed = null;
-
-          for (const numbers of [entry.numbers, entry.shown ?? {}]) {
-            const number = numbers[field];
-
-            if (number !== undefined && LocalDatabase.#isFinal(type, number)) {
-              delete numbers[field];
-
-              if (filed === null || BigInt(number) > BigInt(filed)) {
-                filed = number;
-              }
-            }
-          }
-
-          const current = held[field] ?? null;
-
-          if (
-            filed !== null &&
-            (current === null || BigInt(filed) > BigInt(current))
-          ) {
-            row ??= Object.assign({}, held);
-            row[field] = filed;
-          }
-        }
-
-        if (row !== null) {
-          LocalDatabase.putRow(type, Model.readIntegers(type, row));
-        }
-
-        LocalDatabase.#settleEntry(type, id);
+        LocalDatabase.#fileEntry(type, id, entry);
       }
     }
+  }
+
+  // Files one row's waiting or shown numbers at or below the final point, as #fileFinal does for
+  // every row.
+  static #fileEntry(type, id, entry) {
+    const held = LocalDatabase.baseRow(type, id);
+
+    if (held === null) {
+      return;
+    }
+
+    let row = null;
+
+    for (const field of SEQUENCE_FIELDS) {
+      let filed = null;
+
+      for (const numbers of [entry.numbers, entry.shown ?? {}]) {
+        const number = numbers[field];
+
+        if (number !== undefined && LocalDatabase.#isFinal(type, number)) {
+          delete numbers[field];
+
+          if (filed === null || BigInt(number) > BigInt(filed)) {
+            filed = number;
+          }
+        }
+      }
+
+      const current = held[field] ?? null;
+
+      if (
+        filed !== null &&
+        (current === null || BigInt(filed) > BigInt(current))
+      ) {
+        row ??= Object.assign({}, held);
+        row[field] = filed;
+      }
+    }
+
+    if (row !== null) {
+      LocalDatabase.putRow(type, Model.readIntegers(type, row));
+    }
+
+    LocalDatabase.#settleEntry(type, id);
   }
 
   // Moves each number a stored row holds above the point back beside it, unless a newer one waits
