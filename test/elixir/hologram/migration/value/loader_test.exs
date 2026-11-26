@@ -82,7 +82,9 @@ defmodule Hologram.Migration.Value.LoaderTest do
       "id",
       "created_at",
       "server_created_at",
+      "server_created_seq",
       "server_updated_at",
+      "server_updated_seq",
       "updated_at",
       "$revisions"
     ]
@@ -99,7 +101,7 @@ defmodule Hologram.Migration.Value.LoaderTest do
 
     statement = """
     INSERT INTO "hologram_data"."#{table}" (#{columns})
-    VALUES ($1, now(), now(), now(), now(), '{}'#{separator}#{slots})
+    VALUES ($1, now(), now(), 0, now(), 0, now(), '{}'#{separator}#{slots})
     """
 
     {:ok, _result} =
@@ -246,7 +248,9 @@ defmodule Hologram.Migration.Value.LoaderTest do
                    :owner_id,
                    :parent_id,
                    :server_created_at,
+                   :server_created_seq,
                    :server_updated_at,
+                   :server_updated_seq,
                    :starts_on,
                    :state,
                    :title,

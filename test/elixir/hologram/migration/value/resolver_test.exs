@@ -214,8 +214,9 @@ defmodule Hologram.Migration.Value.ResolverTest do
       assert refusal({:name, [:nope]}, attribute_target(:string)) ==
                "reads :nope, which MyApp.Trip doesn't have at this op - it has: budget, " <>
                  "created_at, destination, external_id, id, kind, nickname, owner, owner_id, " <>
-                 "parent, parent_id, seats, server_created_at, server_updated_at, state, stops, " <>
-                 "tags, updated_at, wide_state"
+                 "parent, parent_id, seats, server_created_at, server_created_seq, " <>
+                 "server_updated_at, server_updated_seq, state, stops, tags, updated_at, " <>
+                 "wide_state"
     end
 
     test "refuses a name the hop's type doesn't have" do

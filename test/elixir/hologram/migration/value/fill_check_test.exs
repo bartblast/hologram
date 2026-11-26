@@ -34,8 +34,9 @@ defmodule Hologram.Migration.Value.FillCheckTest do
     {:ok, _result} =
       Connection.query(
         ~s|INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", | <>
-          ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
-          ~s|VALUES ($2::text::uuid, $1, now(), now(), now(), now(), '{}')|,
+          ~s|"server_created_at", "server_created_seq", "server_updated_at", | <>
+          ~s|"server_updated_seq", "updated_at", "$revisions") | <>
+          ~s|VALUES ($2::text::uuid, $1, now(), now(), 0, now(), 0, now(), '{}')|,
         [title, id]
       )
   end

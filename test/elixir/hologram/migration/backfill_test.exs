@@ -777,9 +777,10 @@ defmodule Hologram.Migration.BackfillTest do
           {:ok, %{rows: [[tag_id]]}} =
             Connection.query(
               ~s|INSERT INTO "hologram_data"."my_app_tag" ("id", "raw", "raw_$sort", | <>
-                ~s|"created_at", "server_created_at", "server_updated_at", "updated_at", | <>
-                ~s|"$revisions") VALUES (gen_random_uuid(), $1, $2, now(), now(), now(), now(), | <>
-                ~s|'{}') RETURNING "id"|,
+                ~s|"created_at", "server_created_at", "server_created_seq", | <>
+                ~s|"server_updated_at", "server_updated_seq", "updated_at", | <>
+                ~s|"$revisions") VALUES (gen_random_uuid(), $1, $2, now(), now(), 0, now(), 0, | <>
+                ~s|now(), '{}') RETURNING "id"|,
               [raw, SortKey.compute(raw)]
             )
 
@@ -853,8 +854,9 @@ defmodule Hologram.Migration.BackfillTest do
       statement =
         ~s|INSERT INTO "hologram_data"."#{table}" | <>
           ~s|("id", #{Enum.join(columns, ", ")}, "created_at", "server_created_at", | <>
-          ~s|"server_updated_at", "updated_at", "$revisions") VALUES (gen_random_uuid(), | <>
-          ~s|#{Enum.join(placeholders, ", ")}, now(), now(), now(), now(), '{}') RETURNING "id"|
+          ~s|"server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", | <>
+          ~s|"$revisions") VALUES (gen_random_uuid(), #{Enum.join(placeholders, ", ")}, | <>
+          ~s|now(), now(), 0, now(), 0, now(), '{}') RETURNING "id"|
 
       {:ok, %{rows: [[id]]}} = Connection.query(statement, params)
 
@@ -1198,8 +1200,10 @@ defmodule Hologram.Migration.BackfillTest do
         {:ok, _result} =
           Connection.query(
             ~s|INSERT INTO "hologram_data"."my_app_task" ("id", "code", "created_at", | <>
-              ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
-              ~s|SELECT gen_random_uuid(), #{@paged_value}, now(), now(), now(), now(), '{}' | <>
+              ~s|"server_created_at", "server_created_seq", | <>
+              ~s|"server_updated_at", "server_updated_seq", "updated_at", "$revisions") | <>
+              ~s|SELECT gen_random_uuid(), #{@paged_value}, now(), now(), 0, now(), 0, now(), | <>
+              ~s|'{}' | <>
               ~s|FROM generate_series(1, 1005) AS n|
           )
       end
@@ -1564,8 +1568,10 @@ defmodule Hologram.Migration.BackfillTest do
       {:ok, %{rows: [[id]]}} =
         Connection.query(
           ~s|INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", | <>
-            ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
-            ~s|VALUES (gen_random_uuid(), now(), now(), now(), now(), '{}') RETURNING "id"::text|
+            ~s|"server_created_at", "server_created_seq", | <>
+            ~s|"server_updated_at", "server_updated_seq", "updated_at", "$revisions") | <>
+            ~s|VALUES (gen_random_uuid(), now(), now(), 0, now(), 0, now(), '{}') | <>
+            ~s|RETURNING "id"::text|
         )
 
       id
@@ -2228,8 +2234,10 @@ defmodule Hologram.Migration.BackfillTest do
         {:ok, _result} =
           Connection.query(
             ~s|INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", | <>
-              ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
-              ~s|SELECT gen_random_uuid(), #{@paged_value}, now(), now(), now(), now(), '{}' | <>
+              ~s|"server_created_at", "server_created_seq", | <>
+              ~s|"server_updated_at", "server_updated_seq", "updated_at", "$revisions") | <>
+              ~s|SELECT gen_random_uuid(), #{@paged_value}, now(), now(), 0, now(), 0, now(), | <>
+              ~s|'{}' | <>
               ~s|FROM generate_series(1, 1005) AS n|
           )
       end
@@ -2273,16 +2281,19 @@ defmodule Hologram.Migration.BackfillTest do
         {:ok, _result} =
           Connection.query(
             ~s|INSERT INTO "hologram_data"."my_app_task" ("id", "code", "created_at", | <>
-              ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
-              ~s|SELECT gen_random_uuid(), 'code ' \|\| n, now(), now(), now(), now(), '{}' | <>
+              ~s|"server_created_at", "server_created_seq", | <>
+              ~s|"server_updated_at", "server_updated_seq", "updated_at", "$revisions") | <>
+              ~s|SELECT gen_random_uuid(), 'code ' \|\| n, now(), now(), 0, now(), 0, now(), | <>
+              ~s|'{}' | <>
               ~s|FROM generate_series(1, 1004) AS n|
           )
 
         {:ok, _result} =
           Connection.query(
             ~s|INSERT INTO "hologram_data"."my_app_task" ("id", "code", "created_at", | <>
-              ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
-              ~s|VALUES ($1::text::uuid, 'bad', now(), now(), now(), now(), '{}')|,
+              ~s|"server_created_at", "server_created_seq", | <>
+              ~s|"server_updated_at", "server_updated_seq", "updated_at", "$revisions") | <>
+              ~s|VALUES ($1::text::uuid, 'bad', now(), now(), 0, now(), 0, now(), '{}')|,
             [last_id]
           )
 
@@ -2590,8 +2601,9 @@ defmodule Hologram.Migration.BackfillTest do
         {:ok, _result} =
           Connection.query(
             ~s|INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", | <>
-              ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
-              ~s|VALUES ($1::text::uuid, now(), now(), now(), now(), '{}')|,
+              ~s|"server_created_at", "server_created_seq", | <>
+              ~s|"server_updated_at", "server_updated_seq", "updated_at", "$revisions") | <>
+              ~s|VALUES ($1::text::uuid, now(), now(), 0, now(), 0, now(), '{}')|,
             [creator]
           )
 
