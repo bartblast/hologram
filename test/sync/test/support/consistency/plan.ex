@@ -19,6 +19,7 @@ defmodule HologramSyncTests.Consistency.Plan do
 
   alias Hologram.Auth
   alias Hologram.DB
+  alias Hologram.DB.Codec
   alias HologramSyncTests.Entities.Board
   alias HologramSyncTests.Entities.Card
   alias HologramSyncTests.Entities.Notice
@@ -627,10 +628,7 @@ defmodule HologramSyncTests.Consistency.Plan do
     random_b = :rand.uniform(4_611_686_018_427_387_904) - 1
     uuid = <<1_800_000_000_000 + count::48, 7::4, random_a::12, 2::2, random_b::62>>
 
-    <<a::binary-size(8), b::binary-size(4), c::binary-size(4), d::binary-size(4),
-      e::binary-size(12)>> = Base.encode16(uuid, case: :lower)
-
-    "#{a}-#{b}-#{c}-#{d}-#{e}"
+    Codec.decode(uuid, :id)
   end
 
   defp next_value(label) do
