@@ -12,6 +12,65 @@ defmodule Hologram.Migration.CallCheckTest do
                        "compile time - if that is the case here, write the module in the op " <>
                        "itself."
 
+  describe "validate!/2, a computed backfill" do
+    test "passes the data form" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :city, :string, backfill: coalesce(title, ^String.upcase("none"))
+      end
+      """
+
+      assert compile_migration("20260813091522", body)
+    end
+
+    test "refuses a refused call inside a pin" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :city, :string, backfill: coalesce(title, ^System.get_env("CITY"))
+      end
+      """
+
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          compile_migration("20260813091522", body)
+        end
+
+      assert error.message =~ "System.get_env/1"
+    end
+
+    test "refuses a refused call pinned as a separator" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :city, :string,
+          backfill: title |> split(^System.get_env("SEPARATOR")) |> at(0)
+      end
+      """
+
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          compile_migration("20260813091522", body)
+        end
+
+      assert error.message =~ "System.get_env/1"
+    end
+
+    test "refuses a refused call pinned as a position" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :city, :string,
+          backfill: title |> split(",") |> at(^System.schedulers())
+      end
+      """
+
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          compile_migration("20260813091522", body)
+        end
+
+      assert error.message =~ "System.schedulers/0"
+    end
+  end
+
   describe "validate!/2" do
     test "passes a migration using Elixir's and Erlang's standard libraries and its own functions" do
       body = """
@@ -758,6 +817,60 @@ defmodule Hologram.Migration.CallCheckTest do
       defmacro name_of(value), do: quote(do: unquote(value).name)
 
       def via_macro(row), do: name_of(row)
+
+      defp name_code(value), do: quote(do: unquote(value).name)
+
+      defmacrop name_through(value), do: name_code(value)
+
+      def via_helper(row), do: name_through(row)
+
+      defmacrop name_or_nil(value) do
+        quote(do: unquote(value).name)
+      rescue
+        _error -> nil
+      end
+
+      def via_rescue(row), do: name_or_nil(row)
+
+      defmacrop as_text, do: Macro.to_string(quote(do: x.y))
+
+      def quoted_text, do: as_text()
+      def quoted_code(row), do: Macro.to_string(quote(do: unquote(row.name)))
+
+      defmacrop stringify(code), do: Macro.to_string(code)
+
+      def stringified, do: stringify(x.y)
+      def piped_stringified, do: x.y |> stringify()
+      def bare_piped_stringified, do: x.y |> stringify
+      def kernel_piped_stringified, do: Kernel.|>(x.y, stringify())
+
+      def guarded(row) when stringify(row.y) == "row.y" and is_map(row), do: :ok
+      def guarded(_row), do: :no
+
+      def defaulted(text \\ stringify(x.y)), do: text
+
+      defguardp stringified_guard(value) when stringify(value.y) == "value.y" and is_map(value)
+
+      def via_guard(row) when stringified_guard(row), do: :ok
+      def via_guard(_row), do: :no
+
+      defmacrop twice(value), do: quote(do: unquote(value) <> unquote(value))
+
+      def via_arg(row), do: twice(row.name)
+
+      defp tier, unquote(do: "standard")
+
+      def via_tier, do: tier()
+
+      def unquoted_body(row), unquote([do: quote(do: var!(row).z)])
+
+      def unquoted_rescue,
+        unquote(do: quote(do: raise("x")), rescue: quote(do: (_error -> :rescued)))
+
+      defmacrop unquoted_macro(value),
+        unquote(do: quote(unquote: false, do: quote(do: unquote(var!(value)).z)))
+
+      def via_unquoted_macro(row), do: unquoted_macro(row)
       """
 
       module = compile_migration("20260813091522", body)
@@ -779,6 +892,22 @@ defmodule Hologram.Migration.CallCheckTest do
       assert module.title(%{title: "a"}) == "a"
       assert module.pi() == :math.pi()
       assert module.via_macro(%{name: "b"}) == "b"
+      assert module.via_helper(%{name: "c"}) == "c"
+      assert module.via_rescue(%{name: "d"}) == "d"
+      assert module.quoted_text() == "x.y"
+      assert module.quoted_code(%{name: "e"}) == ~s("e")
+      assert module.stringified() == "x.y"
+      assert module.piped_stringified() == "x.y"
+      assert module.bare_piped_stringified() == "x.y"
+      assert module.kernel_piped_stringified() == "x.y"
+      assert module.guarded(%{}) == :ok
+      assert module.defaulted() == "x.y"
+      assert module.via_guard(%{}) == :ok
+      assert module.via_arg(%{name: "f"}) == "ff"
+      assert module.via_tier() == "standard"
+      assert module.unquoted_body(%{z: 1}) == 1
+      assert module.unquoted_rescue() == :rescued
+      assert module.via_unquoted_macro(%{z: 2}) == 2
 
       assert_raise BadMapError, fn -> module.data(Hologram.Test.Fixtures.Migration.Module1) end
 
@@ -790,7 +919,113 @@ defmodule Hologram.Migration.CallCheckTest do
         module.via_macro(Hologram.Test.Fixtures.Migration.Module1)
       end
 
+      assert_raise BadMapError, fn ->
+        module.via_helper(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
+      assert_raise BadMapError, fn ->
+        module.via_rescue(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
+      assert_raise BadMapError, fn ->
+        module.quoted_code(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
+      assert_raise BadMapError, fn ->
+        module.via_arg(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
       assert_raise BadMapError, fn -> module.title(Hologram.Test.Fixtures.Migration.Module1) end
+
+      assert_raise BadMapError, fn ->
+        module.unquoted_body(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
+      assert_raise BadMapError, fn ->
+        module.via_unquoted_macro(Hologram.Test.Fixtures.Migration.Module1)
+      end
+    end
+
+    test "reads a pipe in a macro's code by the import it was written with" do
+      body = ~S"""
+      defmacrop piped_text, do: quote(do: Macro.to_string([do: x.y] |> quote()))
+
+      import Kernel,
+        except: [
+          def: 1,
+          def: 2,
+          defguard: 1,
+          defguardp: 1,
+          defmacro: 1,
+          defmacro: 2,
+          defmacrop: 1,
+          defmacrop: 2,
+          defp: 1,
+          defp: 2,
+          |>: 2
+        ]
+
+      def left |> right, do: {left, right}
+
+      def quoted_text, do: piped_text()
+      """
+
+      assert compile_migration("20260813091522", body).quoted_text() == "x.y"
+    end
+
+    test "reads a pipe into a quote in a macro's code by the import it was written with" do
+      body = ~S"""
+      defmacrop left |> right, do: {left, right}
+
+      defmacrop bound(row), do: quote(do: [bind_quoted: [x: unquote(row).name]] |> quote(do: x))
+
+      def name(row), do: bound(row)
+      """
+
+      module = compile_migration("20260813091522", body)
+
+      code = module.name(%{name: "Alice"})
+
+      assert {"Alice", _binding} = Code.eval_quoted(code)
+
+      assert_raise BadMapError, fn -> module.name(Hologram.Test.Fixtures.Migration.Module1) end
+    end
+
+    test "passes a pipe to the migration's own pipe macro as written" do
+      body = ~S"""
+      import Kernel, only: []
+
+      defmacrop left |> _right, do: Macro.to_string(left)
+
+      def piped_text, do: [do: x.y] |> quote()
+      """
+
+      assert compile_migration("20260813091522", body).piped_text() == "[do: x.y]"
+    end
+
+    test "refuses the field access rewrite anywhere but around the code a macro returns" do
+      body = """
+      alias Hologram.Migration.FieldAccess.Definitions
+
+      def rewritten(code, env), do: Definitions.__code__(code, env)
+
+      defmacrop rewritten_text(code), do: Macro.to_string(Definitions.__code__(code, __CALLER__))
+
+      defmacrop rewritten_in(code, env), do: Definitions.__code__(code, env)
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex:6 - calls " <>
+          "Hologram.Migration.FieldAccess.Definitions.__code__/2\n" <>
+          "  app/migrations/20260813091522.ex:8 - calls " <>
+          "Hologram.Migration.FieldAccess.Definitions.__code__/2\n" <>
+          "  app/migrations/20260813091522.ex:10 - calls " <>
+          "Hologram.Migration.FieldAccess.Definitions.__code__/2"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
     end
 
     test "takes a path apart in an op, Kernel-qualified or piped" do
@@ -869,6 +1104,17 @@ defmodule Hologram.Migration.CallCheckTest do
       """
 
       assert compile_migration("20260813091522", body).check(2) == 4
+    end
+
+    test "passes destructure" do
+      body = ~S"""
+      def first_two(list) do
+        destructure([first, second], list)
+        {first, second}
+      end
+      """
+
+      assert compile_migration("20260813091522", body).first_two([1]) == {1, nil}
     end
 
     test "passes the other value modules and field access" do

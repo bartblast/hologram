@@ -6,6 +6,7 @@ defmodule Hologram.DB.Preflight do
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
   alias Hologram.DB.Introspection
+  alias Hologram.Migration.Value.SQL
 
   @doc """
   Validates that the existing rows can follow the given op, against the database as it
@@ -19,11 +20,12 @@ defmodule Hologram.DB.Preflight do
 
   A column counts as filled only when the op carries its fill - the renderer stamps a
   declared default where the op sits, as :backfill on an add and :fill on a tightening. A
-  lookup in the mapping the file leaves would find the column under the name of whatever
-  holds it at the end of the file: nothing, after a rename, or another column that took
-  the name over, and the check would pass a fill the migrator never runs. Whether a
-  tightening's fill makes rows repeat a unique key is asked when the fill runs (see
-  check_fill!/1).
+  required add nothing fills carries :unfilled instead. It and a tightening's :tightening say
+  what the member can take, which decides the ways out the refusal offers. A lookup in the
+  mapping the file leaves would find the column under the name of whatever holds it at the
+  end of the file: nothing, after a rename, or another column that took the name over, and
+  the check would pass a fill the migrator never runs. Whether a tightening's fill makes rows
+  repeat a unique key is asked when the fill runs (see check_fill!/1).
 
   The schema is read only for an op the checks can refuse, so a file of renames, plain
   indexes or safe casts costs no catalog reads.
@@ -90,7 +92,7 @@ defmodule Hologram.DB.Preflight do
     mapping
     |> unique_indexes(table)
     |> Enum.filter(&(column_name in &1.columns))
-    |> check_filled_keys!(table, column_name, encoded_value)
+    |> check_filled_keys!(table, column_name, encoded_value, :default)
   end
 
   @doc """
@@ -132,12 +134,58 @@ defmodule Hologram.DB.Preflight do
   check_cast!/1 does, and skipping the hand-made indexes it skips. An invalid index that
   takes no writes is skipped too: the fill doesn't go through it, and whoever builds it
   later counts the keys then.
+
+  A tightening's default its enum doesn't hold yet is refused here rather than when the file
+  renders, since it's only written when a row holds NULL.
   """
   @spec check_fill!(%{atom => any}) :: :ok
+  def check_fill!(%{default_held: false} = op) do
+    raise unheld_default_message(op.table, op.column, op.fill, :tighten)
+  end
+
   def check_fill!(op) do
+    fill = if op[:fill_source] == :backfill, do: {:backfill, filled_member(op)}, else: :default
+
     op.table
     |> standing_unique_indexes(op.column, not_ready_invalid_indexes())
-    |> check_filled_keys!(op.table, op.column, op.fill)
+    |> check_filled_keys!(op.table, op.column, op.fill, fill)
+  end
+
+  @doc """
+  Validates that filling the NULLs of the given fill_column op's column with its expression makes
+  no rows repeat a key of a unique index standing over the column at this moment, as check_fill!/1
+  does for one value. Each filled row can take its own value, so the keys are counted with the
+  column read as the expression wherever it holds NULL.
+
+  Returns :ok, or raises naming the column, the key and how many keys would repeat.
+  """
+  @spec check_computed_fill!(%{atom => any}) :: :ok
+  def check_computed_fill!(op) do
+    {fragment, joins, params} = op.sql
+
+    op.table
+    |> standing_unique_indexes(op.column, not_ready_invalid_indexes())
+    |> Enum.each(fn index ->
+      statement =
+        SQL.filled_repeat_statement(
+          op.table,
+          index.columns,
+          op.column,
+          index.nulls_distinct,
+          fragment,
+          joins
+        )
+
+      {:ok, %{rows: [[count]]}} = Connection.query(statement, params)
+
+      raise_filled_duplicate_keys!(
+        op.table,
+        op.column,
+        index.columns,
+        count,
+        {:backfill, filled_member(op)}
+      )
+    end)
   end
 
   @doc """
@@ -260,6 +308,43 @@ defmodule Hologram.DB.Preflight do
     Enum.each(ops, &check_op!(&1, actual, mapping))
   end
 
+  @doc """
+  Returns the refusal of a default its enum doesn't hold yet where the given column fills, by the
+  op filling it: a tightening, or an add. An added column's type is new, so the value comes from
+  an addition or a rename further down the same file, and moving the add to the next file would
+  leave that op naming an attribute not there yet.
+  """
+  @spec unheld_default_message(String.t(), String.t(), any, :add | :tighten) :: String.t()
+  def unheld_default_message(table, column, value, filled_by) do
+    ~s(the default #{inspect(value)} of column "#{column}" on table "#{table}" is an enum value ) <>
+      "its type doesn't hold yet when the column fills - #{unheld_default_remedy(filled_by)}"
+  end
+
+  # A migration's add nothing fills is one its chunk makes required, so it takes a backfill on the
+  # op doing that, though not beside a type change. The renderer stamps what its member can take,
+  # since a migration checks without a mapping. Schema reconciliation reads the member from the
+  # mapping it converges to, and has no op to add a backfill to.
+  defp add_ways_out(%{unfilled: %{type_stated: true} = unfilled}, _mapping) do
+    "change the type in an op of its own, then add backfill: " <>
+      "#{backfill_spelling(unfilled)} to the op making it required, " <>
+      cleared_ways_out(unfilled, "keep")
+  end
+
+  defp add_ways_out(%{unfilled: unfilled}, _mapping) do
+    "add backfill: #{backfill_spelling(unfilled)} to the op making it required, " <>
+      cleared_ways_out(unfilled, "keep")
+  end
+
+  defp add_ways_out(op, mapping) do
+    mapping
+    |> mapped_member(op.table, op.column)
+    |> cleared_ways_out("make")
+  end
+
+  defp backfill_spelling(%{kind: :attribute}), do: "<value or expression>"
+
+  defp backfill_spelling(%{kind: :relationship}), do: "<id or expression>"
+
   defp check_op!(%{op: :add_column} = op, actual, mapping) do
     # An op carrying its own backfill needs no declared default - a migration states what
     # the rows that predate the column receive.
@@ -277,7 +362,7 @@ defmodule Hologram.DB.Preflight do
     if count > 0 do
       raise ~s(cannot add required column "#{op.column}" to table "#{op.table}" - ) <>
               "#{count} existing #{pluralize_rows(count)} would have no value - " <>
-              "declare default: <value>, make the attribute optional: true, or clear the rows"
+              add_ways_out(op, mapping)
     end
   end
 
@@ -330,7 +415,8 @@ defmodule Hologram.DB.Preflight do
 
   defp refusable?(%{op: :alter_column} = op) do
     DDL.cast_class(op.before.type, op.after.type) != :safe or
-      (op.before.null and not op.after.null and not Map.has_key?(op, :fill))
+      (op.before.null and not op.after.null and not Map.has_key?(op, :fill) and
+         not Map.has_key?(op, :filled))
   end
 
   defp refusable?(%{op: :create_index, unique: true}), do: true
@@ -339,7 +425,7 @@ defmodule Hologram.DB.Preflight do
 
   defp refusable?(_op), do: false
 
-  defp check_filled_keys!(indexes, table, column_name, encoded_value) do
+  defp check_filled_keys!(indexes, table, column_name, encoded_value, fill) do
     Enum.each(indexes, fn index ->
       statement =
         DDL.filled_duplicate_check_statement(
@@ -351,7 +437,7 @@ defmodule Hologram.DB.Preflight do
 
       {:ok, %{rows: [[count]]}} = Connection.query(statement, [encoded_value])
 
-      raise_filled_duplicate_keys!(table, column_name, index.columns, count)
+      raise_filled_duplicate_keys!(table, column_name, index.columns, count, fill)
     end)
   end
 
@@ -378,11 +464,12 @@ defmodule Hologram.DB.Preflight do
   end
 
   defp check_null_tightening!(op, actual, mapping) do
-    # A migration's tightening carries its fill, stamped by the renderer; schema
-    # reconciliation's is looked up in the mapping.
+    # A migration's tightening carries its fill, stamped by the renderer, or is marked filled
+    # when a computed fill counted its NULLs already; schema reconciliation's is looked up in the
+    # mapping.
     fillable? =
       op.before.type == op.after.type and
-        (Map.has_key?(op, :fill) or
+        (Map.has_key?(op, :fill) or Map.has_key?(op, :filled) or
            match?({:ok, _value}, fill_value(mapping, op.table, op.column)))
 
     checked? = op.before.null and not op.after.null and not fillable?
@@ -391,8 +478,7 @@ defmodule Hologram.DB.Preflight do
 
     if count > 0 do
       raise ~s(cannot make column "#{op.column}" on table "#{op.table}" required - ) <>
-              "found #{count} #{pluralize_rows(count)} with NULL - " <>
-              "declare default: <value>, keep the attribute optional: true, or fix the data"
+              "found #{count} #{pluralize_rows(count)} with NULL - #{null_ways_out(op, mapping)}"
     end
   end
 
@@ -425,6 +511,16 @@ defmodule Hologram.DB.Preflight do
       end
     end
   end
+
+  defp cleared_ways_out(%{kind: :attribute, takes_default: true}, verb) do
+    "declare default: <value>, #{verb} the attribute optional: true, or clear the rows"
+  end
+
+  defp cleared_ways_out(%{kind: kind}, verb),
+    do: "#{verb} the #{kind} optional: true, or clear the rows"
+
+  # A column no member declares, like the id, takes neither a default nor optional: true.
+  defp cleared_ways_out(nil, _verb), do: "clear the rows"
 
   # Every check here counts the rows that cannot follow a change, and a table the ops
   # create has none to count - absent from the schema this runs against, the query would
@@ -469,6 +565,13 @@ defmodule Hologram.DB.Preflight do
     |> Enum.find(&(&1.table == table))
   end
 
+  defp fill_name(:default), do: "the default"
+
+  defp fill_name({:backfill, _member}), do: "the backfill"
+
+  # A fill's op names a target only when it fills a relationship.
+  defp filled_member(op), do: if(op[:fill_target], do: "relationship", else: "attribute")
+
   defp goes_through?({:rewrite, columns}, %{live?: live?}, index_columns) do
     live? or Enum.any?(index_columns, &(&1 in columns))
   end
@@ -503,8 +606,69 @@ defmodule Hologram.DB.Preflight do
     end
   end
 
+  # What the member a mapped column stores can take, as the renderer stamps it on a migration's
+  # add: a unique attribute declares no default. Nil for a column no member declares, or one the
+  # mapping doesn't hold, like a join table's.
+  defp mapped_member(mapping, table, column_name) do
+    entry = entity_mapping(mapping, table)
+    column = entry && Enum.find(entry.columns, &(&1.name == column_name))
+
+    case column && column.source do
+      {:relationship, _name} ->
+        %{kind: :relationship, takes_default: false}
+
+      {:attribute, _name} ->
+        unique? =
+          mapping
+          |> unique_indexes(table)
+          |> Enum.any?(&(&1.columns == [column_name]))
+
+        %{kind: :attribute, takes_default: not unique?}
+
+      _system_or_unmapped ->
+        nil
+    end
+  end
+
   defp not_ready_invalid_indexes do
     for {index, %{ready?: false}} <- invalid_indexes(), into: MapSet.new(), do: index
+  end
+
+  # A migration's op can take a backfill, but not beside a type change, and only an attribute that
+  # isn't unique can declare a default. Schema reconciliation has no op to add a backfill to,
+  # and reads the member from the mapping it converges to.
+  defp null_ways_out(%{tightening: %{type_stated: true} = tightening}, _mapping) do
+    "change the type in an op of its own, then add backfill: " <>
+      "#{backfill_spelling(tightening)} to the op making it required, " <>
+      optional_ways_out(tightening)
+  end
+
+  defp null_ways_out(%{tightening: tightening}, _mapping) do
+    "add backfill: #{backfill_spelling(tightening)} to the op, #{optional_ways_out(tightening)}"
+  end
+
+  # A declared default fills a tightening only when the column keeps its type.
+  defp null_ways_out(op, mapping) do
+    case mapped_member(mapping, op.table, op.column) do
+      nil ->
+        "fix the data"
+
+      member ->
+        takes_default = member.takes_default and op.before.type == op.after.type
+        optional_ways_out(%{member | takes_default: takes_default})
+    end
+  end
+
+  defp optional_ways_out(%{kind: :attribute, takes_default: true}) do
+    "declare default: <value>, keep the attribute optional: true, or fix the data"
+  end
+
+  defp optional_ways_out(%{kind: :attribute}) do
+    "keep the attribute optional: true, or fix the data"
+  end
+
+  defp optional_ways_out(%{kind: :relationship}) do
+    "keep the relationship optional: true, or fix the data"
   end
 
   defp raise_cast_duplicate_keys!(_op, _columns, 0), do: :ok
@@ -540,15 +704,14 @@ defmodule Hologram.DB.Preflight do
             "the unique index over it is not built yet, #{reason} - update the rows"
   end
 
-  defp raise_filled_duplicate_keys!(_table, _column, _columns, 0), do: :ok
+  defp raise_filled_duplicate_keys!(_table, _column, _columns, 0, _fill), do: :ok
 
-  defp raise_filled_duplicate_keys!(table, column, columns, count) do
+  defp raise_filled_duplicate_keys!(table, column, columns, count, fill) do
     key = Enum.map_join(columns, ", ", &~s("#{&1}"))
 
     raise ~s(cannot make column "#{column}" on table "#{table}" required - ) <>
-            "filling its NULLs with the default would make #{count} " <>
-            "#{pluralize_keys(count)} repeat over (#{key}) - " <>
-            "fix the data, keep the attribute optional: true, or drop the unique declaration"
+            "filling its NULLs with #{fill_name(fill)} would make #{count} " <>
+            "#{pluralize_keys(count)} repeat over (#{key}) - #{repeat_ways_out(fill)}"
   end
 
   defp pluralize_keys(1), do: "key"
@@ -563,6 +726,19 @@ defmodule Hologram.DB.Preflight do
 
   defp pluralize_values(_values), do: "values"
 
+  defp repeat_ways_out(:default) do
+    "fix the data, keep the attribute optional: true, or drop the unique declaration before " <>
+      "making it required"
+  end
+
+  # A member staying optional takes the whole tightening out of the op, backfill included, as the
+  # NULL refusal of a backfill says.
+  defp repeat_ways_out({:backfill, member}) do
+    "fix the data or the backfill, drop the unique declaration before the op, or keep " <>
+      "optional: true on the #{member} in the entity type and remove optional: false and " <>
+      "backfill: from the op, or the whole op when it changes nothing else"
+  end
+
   defp standing_unique_indexes(table, column, skipped_names \\ MapSet.new()) do
     Introspection.schema().tables[table].indexes
     |> Enum.sort_by(fn {name, _index} -> name end)
@@ -573,6 +749,17 @@ defmodule Hologram.DB.Preflight do
 
   # The mapping derives unique indexes alone - the others are the index plan's - so the entity's
   # own index entries hold every unique index of its table.
+  defp unheld_default_remedy(:add) do
+    "list the value in the values: of the op adding the attribute, and drop the op adding it " <>
+      "to the type further down - or, when a rename further down gives the value its label, " <>
+      "list the label in place of the value renamed and drop the rename"
+  end
+
+  defp unheld_default_remedy(:tighten) do
+    "move the change filling the column to the next migration file, under the names things " <>
+      "have there"
+  end
+
   defp unique_indexes(mapping, table) do
     indexes =
       case entity_mapping(mapping, table) do

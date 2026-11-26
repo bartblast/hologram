@@ -65,18 +65,22 @@ defmodule Hologram.DB do
       import Hologram.Query,
         only: [
           add_relationship: 3,
+          average: 2,
           count: 1,
           decrement: 3,
           delete_relationship: 3,
           filter: 2,
           include: 2,
           increment: 3,
+          inverse: 2,
+          most_common: 2,
           one: 1,
           paginate: 2,
           put_attribute: 2,
           put_attribute: 3,
           skip: 2,
           sort: 2,
+          sum: 2,
           take: 2,
           trust: 1
         ]

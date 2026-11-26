@@ -235,6 +235,13 @@ defmodule Hologram.DB.Mapper do
   end
 
   @doc """
+  Returns the name of the column holding the given to-one relationship's reference.
+  """
+  @spec reference_column_name(atom) :: String.t()
+  def reference_column_name(relationship),
+    do: fit_identifier([], [Atom.to_string(relationship)], "id")
+
+  @doc """
   Returns the entity type and relationship whose reference the given foreign key constraint
   enforces - a to-one reference column's `<table>_<relationship>_id_$fk`, or a join table's
   `<join table>_target_id_$fk` - or nil when no relationship in the given mapping derives it.
@@ -795,9 +802,6 @@ defmodule Hologram.DB.Mapper do
       source: :revisions
     }
   end
-
-  defp reference_column_name(relationship),
-    do: fit_identifier([], [Atom.to_string(relationship)], "id")
 
   defp search_key_columns(attributes) do
     attributes

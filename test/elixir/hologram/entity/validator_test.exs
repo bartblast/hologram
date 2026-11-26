@@ -349,6 +349,52 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
+  describe "requirement_description/1" do
+    test "says what a reason requires" do
+      assert requirement_description({:type, :string}) == "must be of type :string"
+      assert requirement_description({:values, [:a]}) == "must be one of [:a]"
+      assert requirement_description({:min, 1}) == "must be at least 1"
+      assert requirement_description({:max, 2}) == "must be at most 2"
+      assert requirement_description({:in, 1..2}) == "must be in 1..2"
+      assert requirement_description({:length, 3}) == "must be exactly 3 characters"
+      assert requirement_description({:min_length, 4}) == "must be at least 4 characters"
+      assert requirement_description({:max_length, 5}) == "must be at most 5 characters"
+      assert requirement_description({:format, ~r/a/}) == "must match ~r/a/"
+
+      assert requirement_description({:max_bytes, 6}) ==
+               "must hold at most 6 bytes (the most its unique index can carry)"
+    end
+  end
+
+  describe "unique_string_max_bytes/2" do
+    test "bounds a unique string by the whole of a btree entry" do
+      attributes = [{:code, :string, [unique: true]}, {:title, :string, []}]
+
+      assert unique_string_max_bytes(attributes, []) == %{code: 2692}
+    end
+
+    test "splits a key between its strings" do
+      attributes = [{:a, :string, []}, {:b, :string, []}, {:n, :integer, []}]
+
+      assert unique_string_max_bytes(attributes, [[:a, :b, :n]]) == %{a: 1331, b: 1331}
+    end
+
+    test "takes the smallest of a string's bounds" do
+      attributes = [{:a, :string, [unique: true]}, {:b, :string, []}]
+
+      assert %{a: bound} = unique_string_max_bytes(attributes, [[:a, :b]])
+      assert bound < 2692
+    end
+
+    test "gives what the module form gives" do
+      assert unique_string_max_bytes(Hologram.Test.Fixtures.Entity.Module52) ==
+               unique_string_max_bytes(
+                 Module52.__attributes__(),
+                 Module52.__uniques__()
+               )
+    end
+  end
+
   describe "unique_string_max_bytes/1" do
     test "gives a unique string the whole index entry" do
       assert unique_string_max_bytes(Module19) == %{code: 2692, slug: 2692}
@@ -4322,6 +4368,28 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity, user: false
         end
       end
+    end
+  end
+
+  describe "value_errors/4" do
+    test "gives no errors for a value that holds" do
+      assert value_errors(:code, "ab", :string, max_length: 2) == []
+    end
+
+    test "reports a wrong type alone" do
+      assert value_errors(:code, 1, :string, max_length: 2) == [{:code, {:type, :string}}]
+    end
+
+    test "reports a broken constraint" do
+      assert value_errors(:code, "abc", :string, max_length: 2) == [{:code, {:max_length, 2}}]
+    end
+
+    test "reports a value outside an enum" do
+      assert value_errors(:state, :nope, :enum, values: [:a]) == [{:state, {:values, [:a]}}]
+    end
+
+    test "gives no errors for a value of the enum" do
+      assert value_errors(:state, :a, :enum, values: [:a]) == []
     end
   end
 

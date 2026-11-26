@@ -1437,6 +1437,62 @@ defmodule Hologram.Entity.ModelTest do
       assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
     end
 
+    test "raises when a required to-one is added to a type the file didn't create" do
+      ops = [
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          type: MyApp.Task,
+          opts: [],
+          line: 3
+        }
+      ]
+
+      expected_msg =
+        "required to-one relationships added without a value for existing rows - " <>
+          ":owner on MyApp.Task - declare backfill: <id> for a one-time value, or " <>
+          "optional: true to leave them empty"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
+    end
+
+    test "accepts a to-one that is optional, carries a backfill or is a to-many" do
+      for {type, opts} <- [
+            {MyApp.Task, [optional: true]},
+            {MyApp.Task, [backfill: "018f0000-0000-7000-8000-000000000000"]},
+            {[MyApp.Task], []}
+          ] do
+        op = %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          type: type,
+          opts: opts,
+          line: 3
+        }
+
+        assert %{entities: %{MyApp.Task => %{relationships: [{:owner, ^type, _opts}]}}} =
+                 fold(task_model(%{}), [op])
+      end
+    end
+
+    test "accepts a required to-one on a type the file creates" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Job, line: 2},
+        %{
+          op: :add_relationship,
+          entity: MyApp.Job,
+          name: :task,
+          type: MyApp.Task,
+          opts: [],
+          line: 3
+        }
+      ]
+
+      assert %{entities: %{MyApp.Job => _entry}} = fold(task_model(%{}), ops)
+    end
+
     test "raises when a required attribute is added with a default carrying no value" do
       ops = [
         %{
@@ -2036,6 +2092,78 @@ defmodule Hologram.Entity.ModelTest do
           "empties the role grant store in the same migration"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+  end
+
+  describe "fold/2, backfills" do
+    test "leaves the backfill out of the model" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Task, line: 1},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :code,
+          type: :string,
+          opts: [backfill: "ok"],
+          line: 2
+        }
+      ]
+
+      assert fold(empty(), ops).entities[MyApp.Task].attributes == [{:code, :string, []}]
+    end
+
+    test "doesn't judge a backfill, so an applied file replays whatever the rules are now" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Task, line: 1},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :code,
+          type: :string,
+          opts: [max_length: 2, backfill: "long"],
+          line: 2
+        }
+      ]
+
+      assert fold(empty(), ops).entities[MyApp.Task].attributes ==
+               [{:code, :string, [max_length: 2]}]
+    end
+  end
+
+  describe "fold_op/2" do
+    test "applies the op" do
+      model = fold(empty(), [%{op: :create_entity, entity: MyApp.Task, line: 1}])
+
+      op = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :title,
+        type: :string,
+        opts: [],
+        line: 2
+      }
+
+      assert fold_op(model, op).entities[MyApp.Task].attributes == [{:title, :string, []}]
+    end
+
+    test "leaves out the checks over a whole list of ops" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Task, line: 1},
+        %{op: :create_entity, entity: MyApp.User, line: 2},
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          type: MyApp.User,
+          opts: [optional: true],
+          line: 3
+        }
+      ]
+
+      model = fold(empty(), ops)
+      delete_op = %{op: :delete_entity, entity: MyApp.User, line: 4}
+
+      refute Map.has_key?(fold_op(model, delete_op).entities, MyApp.User)
     end
   end
 
