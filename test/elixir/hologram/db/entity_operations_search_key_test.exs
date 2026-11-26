@@ -16,7 +16,7 @@ defmodule Hologram.DB.EntityOperationsSearchKeyTest do
   defp search_key(table, id) do
     sql = ~s(SELECT "c_$search" FROM "hologram_data"."#{table}" WHERE "id" = $1)
 
-    {:ok, %{rows: [[value]]}} = Connection.query(sql, [Codec.encode(id, :uuid)])
+    {:ok, %{rows: [[value]]}} = Connection.query(sql, [Codec.encode(id, :id)])
 
     value
   end

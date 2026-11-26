@@ -140,6 +140,17 @@ defmodule Hologram.Query do
   @spec add_relationship(Entity.t(), atom, Entity.id()) :: Entity.t()
   defdelegate add_relationship(entity, relationship_name, target_id), to: Stage
 
+  # TODO(#1438): replace this with the real aggregate. Importing it now means a function of this
+  # name that an app calls fails today rather than when the aggregate arrives.
+  @doc false
+  @spec average(Macro.t(), Macro.t()) :: no_return
+  defmacro average(_query, _attribute) do
+    reserved_error!(
+      "average/2 is reserved for a query word Hologram doesn't have yet",
+      __CALLER__
+    )
+  end
+
   @doc """
   Marks the given query as counting and returns the resulting query term.
 
@@ -309,7 +320,7 @@ defmodule Hologram.Query do
   set, and an ordering comparison matches no row with either side missing. Two strings compare
   through their sort keys, as a string does against a literal, and `==` stays exact.
 
-  Ordering comparisons require an orderable attribute - every type but boolean and uuid - and a
+  Ordering comparisons require an orderable attribute - every type but boolean, id and uuid - and a
   non-nil operand - SQL comparisons with NULL never match, so a nil operand would mean different
   things on the two execution tiers. A comparison on an enum attribute reads the declared
   `values:` order, so `priority >= :medium` on `[:low, :medium, :high]` means medium or high. A
@@ -321,9 +332,9 @@ defmodule Hologram.Query do
   attribute's type, and so does each element of a membership list and each bound of a range: a
   string for a string attribute, `true` or `false` for a boolean, a `Date`, `DateTime` or `Time`
   struct for those types, an integer that fits in 64 bits for an integer, one of the declared
-  values for an enum, and for a uuid or a reference field the lowercase hyphenated spelling ids are
-  stored in. A float attribute takes a float or such an integer, the same number compared. Nil fits
-  any type where the operator takes it.
+  values for an enum, the 22 base62 characters of an entity id for an id or a reference field, and
+  the lowercase hyphenated spelling for a uuid. A float attribute takes a float or such an integer,
+  the same number compared. Nil fits any type where the operator takes it.
 
   An integer range (`priority in 3..10`) is shorthand for the inclusive bounds - it expands into
   a `>=` triple and a `<=` triple. Ranges require an integer attribute, step 1, and at least one
@@ -484,6 +495,26 @@ defmodule Hologram.Query do
   @spec increment(Entity.t(), atom, integer) :: Entity.t()
   defdelegate increment(entity, name, amount), to: Stage
 
+  # TODO(#1854): replace these two with the real words. Importing them now means a function of
+  # either name that an app calls fails today rather than when the words arrive.
+  @doc false
+  @spec inverse(Macro.t(), Macro.t()) :: no_return
+  defmacro inverse(_type, _reference) do
+    reserved_error!(
+      "inverse/2 is reserved for a query word Hologram doesn't have yet",
+      __CALLER__
+    )
+  end
+
+  @doc false
+  @spec most_common(Macro.t(), Macro.t()) :: no_return
+  defmacro most_common(_set, _attribute) do
+    reserved_error!(
+      "most_common/2 is reserved - if you meant the query word most_common, it works only in a migration's backfill: for now",
+      __CALLER__
+    )
+  end
+
   @doc """
   Marks the given query as single-result and returns the resulting query term.
 
@@ -640,6 +671,14 @@ defmodule Hologram.Query do
     end
   end
 
+  # TODO(#1438): replace this with the real aggregate. Importing it now means a function of this
+  # name that an app calls fails today rather than when the aggregate arrives.
+  @doc false
+  @spec sum(Macro.t(), Macro.t()) :: no_return
+  defmacro sum(_query, _attribute) do
+    reserved_error!("sum/2 is reserved for a query word Hologram doesn't have yet", __CALLER__)
+  end
+
   @doc """
   Sets how many results the given query takes at most and returns the resulting query term.
 
@@ -727,5 +766,13 @@ defmodule Hologram.Query do
     defp field_doc({name, value}, opts) do
       concat([Atom.to_string(name), ": ", to_doc(value, opts)])
     end
+  end
+
+  @spec reserved_error!(String.t(), Macro.Env.t()) :: no_return
+  defp reserved_error!(message, env) do
+    raise Hologram.CompileError,
+      message: "#{message} - if this is your own function, rename it",
+      file: env.file,
+      line: env.line
   end
 end

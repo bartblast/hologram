@@ -9,6 +9,7 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
+  alias Hologram.Entity
   alias Hologram.Policy
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -470,7 +471,7 @@ defmodule Hologram.Sync.RecheckTest do
 
     test "leaves out a row none of the given users may read, and an id with no row", context do
       project = create(Module1)
-      gone_id = Ecto.UUID.generate()
+      gone_id = Entity.generate_id()
 
       assert run(%{Module1 => [project.id, gone_id]}, context.users) == %{Module1 => %{}}
     end
@@ -533,8 +534,8 @@ defmodule Hologram.Sync.RecheckTest do
       shared = create(PolicyModule6, %{shared: true})
       authored = create(PolicyModule6, %{author_id: context.alice})
 
-      shouted = String.upcase(context.alice)
-      user_ids = [shouted, "not-a-uuid", context.alice <> "\n", 7, context.bob]
+      other_spelling = Entity.id_to_uuid(context.alice)
+      user_ids = [other_spelling, "not-a-uuid", context.alice <> "\n", 7, context.bob]
 
       readable =
         run(%{Module5 => [owned.id], PolicyModule6 => [shared.id, authored.id]}, user_ids)
@@ -845,17 +846,17 @@ defmodule Hologram.Sync.RecheckTest do
     test "answers a user id in another spelling as an anonymous user", context do
       {board, _empty} = boards(context)
 
-      shouted = String.upcase(context.alice)
-      readable = run(%{Module15 => [board.id]}, [shouted, context.bob])
+      other_spelling = Entity.id_to_uuid(context.alice)
+      readable = run(%{Module15 => [board.id]}, [other_spelling, context.bob])
       row_verdicts = verdicts_of(readable[Module15], board)
 
-      assert verdicts(row_verdicts, shouted) == Auth.verdicts(nil, board)
-      assert verdicts(row_verdicts, shouted) == verdicts(row_verdicts, nil)
+      assert verdicts(row_verdicts, other_spelling) == Auth.verdicts(nil, board)
+      assert verdicts(row_verdicts, other_spelling) == verdicts(row_verdicts, nil)
     end
   end
 
-  @alice_id "018f4571-a1b2-7c3d-8e4f-000000000001"
-  @bob_id "018f4571-a1b2-7c3d-8e4f-000000000002"
+  @alice_id "02wSyz8E9khZO7aC2RayBN"
+  @bob_id "02wSyz8E9khZO7aC2RayBO"
 
   describe "verdicts/2" do
     @row_verdicts %{
@@ -874,7 +875,7 @@ defmodule Hologram.Sync.RecheckTest do
 
     test "answers an anonymous user, and a user id in another spelling, as anonymous" do
       assert verdicts(@row_verdicts, nil) == %{"archive:a" => false}
-      assert verdicts(@row_verdicts, String.upcase(@bob_id)) == %{"archive:a" => false}
+      assert verdicts(@row_verdicts, Entity.id_to_uuid(@bob_id)) == %{"archive:a" => false}
     end
 
     test "raises for an anonymous user when none was given" do
@@ -918,8 +919,8 @@ defmodule Hologram.Sync.RecheckTest do
     end
 
     test "a user id in a spelling Hologram doesn't generate reads as an anonymous user" do
-      assert reads?(MapSet.new([nil]), String.upcase(@alice_id))
-      refute reads?(MapSet.new([@alice_id]), String.upcase(@alice_id))
+      assert reads?(MapSet.new([nil]), Entity.id_to_uuid(@alice_id))
+      refute reads?(MapSet.new([@alice_id]), Entity.id_to_uuid(@alice_id))
     end
   end
 

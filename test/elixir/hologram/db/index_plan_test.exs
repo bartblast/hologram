@@ -186,7 +186,7 @@ defmodule Hologram.DB.IndexPlanTest do
     end
 
     test "needs nothing for equalities fixing every column of a unique index" do
-      id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+      id = "02wSyz8E9khZO82QLJOgGt"
 
       assert term_needs(filter(Module19, slug == "x" and code == "y")) == []
       assert term_needs(filter(Module52, workspace_id == ^id and slug == "x")) == []
@@ -198,7 +198,7 @@ defmodule Hologram.DB.IndexPlanTest do
     end
 
     test "needs a to-one's reference column and a system column" do
-      id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+      id = "02wSyz8E9khZO82QLJOgGt"
       created_at = ~U[2026-01-01 00:00:00Z]
 
       assert term_needs(filter(Module3, b_id == ^id and created_at > ^created_at)) == [
@@ -298,7 +298,7 @@ defmodule Hologram.DB.IndexPlanTest do
     end
 
     test "needs nothing for the primary key, which serves an equality on the id" do
-      id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+      id = "02wSyz8E9khZO82QLJOgGt"
 
       assert term_needs(filter(Module2, id == ^id and a == true)) == []
     end
@@ -367,7 +367,7 @@ defmodule Hologram.DB.IndexPlanTest do
     end
 
     test "counts no need toward the cap for an arm a key serves" do
-      id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+      id = "02wSyz8E9khZO82QLJOgGt"
       eight = [:bio, :count, :email, :handle, :percent, :priority, :rating, :username]
       arms = [[{:id, :==, id}] | Enum.map(eight, &[{&1, :==, value(&1)}])]
 
@@ -441,7 +441,7 @@ defmodule Hologram.DB.IndexPlanTest do
     end
 
     test "orders by a unique index's later columns after the ones its equalities fix" do
-      id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+      id = "02wSyz8E9khZO82QLJOgGt"
 
       query =
         Module52
@@ -983,7 +983,7 @@ defmodule Hologram.DB.IndexPlanTest do
       |> needs(@mapping, %{anonymous?: anonymous?, rules: rules})
     end
 
-    @owner "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+    @owner "02wSyz8E9khZO82QLJOgGt"
 
     test "needs what a rule's predicates fix" do
       rules = [rule(Module2, a: true)]

@@ -115,7 +115,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     defstruct __meta__: %Metadata{},
               created_at: nil,
               id: nil,
-              owner: %NotIncluded{relationship: :owner},
+              owner: %NotIncluded{__meta__: %{field: :owner}},
               owner_id: nil,
               server_created_at: nil,
               server_created_seq: nil,
@@ -166,7 +166,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     def __system_attributes__ do
       [
         {:created_at, :datetime, []},
-        {:id, :uuid, []},
+        {:id, :id, []},
         {:server_created_at, :datetime, []},
         {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},
@@ -188,7 +188,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     defstruct __meta__: %Metadata{},
               created_at: nil,
               id: nil,
-              b_c: %NotIncluded{relationship: :b_c},
+              b_c: %NotIncluded{__meta__: %{field: :b_c}},
               b_c_id: nil,
               server_created_at: nil,
               server_created_seq: nil,
@@ -239,7 +239,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     def __system_attributes__ do
       [
         {:created_at, :datetime, []},
-        {:id, :uuid, []},
+        {:id, :id, []},
         {:server_created_at, :datetime, []},
         {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},
@@ -259,7 +259,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     defstruct __meta__: %Metadata{},
               created_at: nil,
               id: nil,
-              c: %NotIncluded{relationship: :c},
+              c: %NotIncluded{__meta__: %{field: :c}},
               c_id: nil,
               server_created_at: nil,
               server_created_seq: nil,
@@ -310,7 +310,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     def __system_attributes__ do
       [
         {:created_at, :datetime, []},
-        {:id, :uuid, []},
+        {:id, :id, []},
         {:server_created_at, :datetime, []},
         {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},

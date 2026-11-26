@@ -19,6 +19,7 @@ import {deriveGrantId} from "../../../../assets/js/elixir/hologram/auth.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
 import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
+import Utils from "../../../../assets/js/utils.mjs";
 
 defineRuntimeGlobals();
 
@@ -57,10 +58,10 @@ describe("Elixir_Hologram_DB", () => {
   const read = Elixir_Hologram_DB["read/1"];
   const readById = Elixir_Hologram_DB["read/2"];
 
-  const ID_1 = "018f0000-0000-7000-8000-000000000001";
-  const ID_2 = "018f0000-0000-7000-8000-000000000002";
-  const TAG_1 = "018f0000-0000-7000-8000-000000000011";
-  const TAG_2 = "018f0000-0000-7000-8000-000000000012";
+  const ID_1 = "02wLIRxqmq3AUo6vl2OW37";
+  const ID_2 = "02wLIRxqmq3AUo6vl2OW38";
+  const TAG_1 = "02wLIRxqmq3AUo6vl2OW3N";
+  const TAG_2 = "02wLIRxqmq3AUo6vl2OW3O";
 
   const field = (struct, name) =>
     struct.data[Type.encodeMapKey(Type.atom(name))][1];
@@ -86,7 +87,7 @@ describe("Elixir_Hologram_DB", () => {
           attributes: {
             api_token: "string",
             created_at: "datetime",
-            id: "uuid",
+            id: "id",
             title: "string",
             updated_at: "datetime",
           },
@@ -110,7 +111,7 @@ describe("Elixir_Hologram_DB", () => {
         },
         // A counter with a floor, to show a move past it is still sent.
         [ITEM]: {
-          attributes: {id: "uuid", stock: "integer"},
+          attributes: {id: "id", stock: "integer"},
           constraints: {stock: {min: Type.integer(0)}},
           defaults: {},
           enumValues: {},
@@ -121,7 +122,7 @@ describe("Elixir_Hologram_DB", () => {
         // A type handing its creator a role, which a create writes into its own batch. The
         // resource type is what a grant row spells it by, and part of every grant's derived id.
         [NOTE]: {
-          attributes: {id: "uuid", title: "string"},
+          attributes: {id: "id", title: "string"},
           constraints: {},
           creatorRoles: ["owner"],
           defaults: {},
@@ -133,9 +134,9 @@ describe("Elixir_Hologram_DB", () => {
         // A job type - the attributes its framework fills are what tells one apart here.
         [NOTIFY]: {
           attributes: {
-            actor_id: "uuid",
+            actor_id: "id",
             error: "string",
-            id: "uuid",
+            id: "id",
             reason: "string",
             status: "string",
           },
@@ -154,7 +155,7 @@ describe("Elixir_Hologram_DB", () => {
           serverOnly: [],
         },
         [ROLE_GRANT]: {
-          attributes: {id: "uuid", role: "string"},
+          attributes: {id: "id", role: "string"},
           constraints: {},
           defaults: {},
           enumValues: {},
@@ -166,7 +167,7 @@ describe("Elixir_Hologram_DB", () => {
           attributes: {
             created_at: "datetime",
             done: "boolean",
-            id: "uuid",
+            id: "id",
             title: "string",
             updated_at: "datetime",
           },
@@ -203,7 +204,7 @@ describe("Elixir_Hologram_DB", () => {
         // A counter the client is never shown, so a move naming it is refused by name the way a
         // put is - which the row alone cannot say, since it carries no column for it at all.
         [VAULT]: {
-          attributes: {balance: "integer", id: "uuid"},
+          attributes: {balance: "integer", id: "id"},
           constraints: {},
           defaults: {},
           enumValues: {},
@@ -227,7 +228,7 @@ describe("Elixir_Hologram_DB", () => {
   });
 
   describe("create/1", () => {
-    const ACTOR = "018f0000-0000-7000-8000-00000000000a";
+    const ACTOR = "02wLIRxqmq3AUo6vl2OW3G";
     const NOW_MS = 1_756_100_000_123;
     const STAMP = NOW_MS * 1024;
     const TIMESTAMP = "2025-08-25T05:33:20.123000Z";
@@ -445,7 +446,7 @@ describe("Elixir_Hologram_DB", () => {
       assertBoxedError(
         () => create(entity),
         "Hologram.MisuseError",
-        'invalid id "NOT-AN-ID" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+        'invalid id "NOT-AN-ID" - entity ids are strings of 22 base62 characters',
       );
 
       assert.deepStrictEqual(Batches.current().writes, []);
@@ -662,7 +663,7 @@ describe("Elixir_Hologram_DB", () => {
       assertBoxedError(
         () => update(entity),
         "Hologram.MisuseError",
-        'invalid id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+        'invalid id "nope" - entity ids are strings of 22 base62 characters',
       );
 
       assert.deepStrictEqual(Batches.current().writes, []);
@@ -689,6 +690,26 @@ describe("Elixir_Hologram_DB", () => {
           ["add_relationship", TAG_1],
           ["add_relationship", TAG_2],
         ],
+      );
+    });
+
+    // A locale's order puts a lowercase letter before its uppercase one, and the server sorts by
+    // code point, where uppercase comes first.
+    it("orders edges whose ids differ only in letter case by code point", () => {
+      const lower = "02y1zRviSAYGVwSyzxs4qa";
+      const upper = "02y1zRviSAYGVwSyzxs4qA";
+
+      const entity = addRelationship(
+        addRelationship(held(), Type.atom("tags"), Type.bitstring(lower)),
+        Type.atom("tags"),
+        Type.bitstring(upper),
+      );
+
+      update(entity);
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => write.target_id),
+        [upper, lower],
       );
     });
 
@@ -1136,7 +1157,7 @@ describe("Elixir_Hologram_DB", () => {
             putAttribute(invalid, pairs([["title", Type.bitstring("y")]])),
           ),
         "Hologram.MisuseError",
-        'invalid id "constructor" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+        'invalid id "constructor" - entity ids are strings of 22 base62 characters',
       );
     });
 
@@ -1202,13 +1223,13 @@ describe("Elixir_Hologram_DB", () => {
   // What the browser refuses by itself is what the values a call states can't pass, whatever the
   // server holds. Everything else goes to the server, which judges every write.
   describe("update/1 of rules reading the row after the change", () => {
-    const ACTOR = "018f0000-0000-7000-8000-00000000000a";
+    const ACTOR = "02wLIRxqmq3AUo6vl2OW3G";
     const BOARD = "MyApp.Board";
-    const BOARD_1 = "018f0000-0000-7000-8000-00000000000b";
-    const BOARD_2 = "018f0000-0000-7000-8000-00000000000c";
+    const BOARD_1 = "02wLIRxqmq3AUo6vl2OW3H";
+    const BOARD_2 = "02wLIRxqmq3AUo6vl2OW3I";
     const CARD = "MyApp.Card";
     const LABEL = "MyApp.Label";
-    const LABEL_1 = "018f0000-0000-7000-8000-00000000000d";
+    const LABEL_1 = "02wLIRxqmq3AUo6vl2OW3J";
 
     const rule = (overrides = {}) => ({
       predicates: [],
@@ -1270,15 +1291,15 @@ describe("Elixir_Hologram_DB", () => {
 
       globalThis.Hologram.sync.model[BOARD] = plain({
         archived: "boolean",
-        id: "uuid",
+        id: "id",
       });
 
-      globalThis.Hologram.sync.model[LABEL] = plain({id: "uuid"});
+      globalThis.Hologram.sync.model[LABEL] = plain({id: "id"});
 
       globalThis.Hologram.sync.model[CARD] = {
         ...plain({
           count: "integer",
-          id: "uuid",
+          id: "id",
           code: "string",
           held_at: "datetime",
           held_on: "date",
@@ -2150,7 +2171,7 @@ describe("Elixir_Hologram_DB", () => {
               "constructor",
             ),
           "Hologram.MisuseError",
-          'invalid id "constructor" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+          'invalid id "constructor" - entity ids are strings of 22 base62 characters',
         );
       });
 
@@ -2165,7 +2186,7 @@ describe("Elixir_Hologram_DB", () => {
               changes([["title", Type.bitstring("Ship it")]]),
             ),
           "Hologram.MisuseError",
-          `invalid id ${Interpreter.inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
+          `invalid id ${Interpreter.inspect(id)} - entity ids are strings of 22 base62 characters`,
         );
       });
 
@@ -2183,7 +2204,7 @@ describe("Elixir_Hologram_DB", () => {
               changes([["title", Type.bitstring("Ship it")]]),
             ),
           "Hologram.MisuseError",
-          "invalid id %{alpha: 2, zeta: 1} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings",
+          "invalid id %{alpha: 2, zeta: 1} - entity ids are strings of 22 base62 characters",
         );
       });
 
@@ -2196,7 +2217,7 @@ describe("Elixir_Hologram_DB", () => {
               changes([["title", Type.bitstring("Ship it")]]),
             ),
           "Hologram.MisuseError",
-          "invalid id nil - entity ids are canonical lowercase 8-4-4-4-12 UUID strings",
+          "invalid id nil - entity ids are strings of 22 base62 characters",
         );
       });
 
@@ -2672,7 +2693,7 @@ describe("Elixir_Hologram_DB", () => {
       create(
         Model.box(TASK, {
           done: false,
-          id: "018f0000-0000-7000-8000-000000000009",
+          id: "02wLIRxqmq3AUo6vl2OW3F",
           title: "alpha",
         }),
       );
@@ -3113,13 +3134,15 @@ describe("Elixir_Hologram_DB", () => {
       assertBoxedError(
         () => readById(task, Type.bitstring("nope")),
         "Hologram.MisuseError",
-        'invalid id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+        'invalid id "nope" - entity ids are strings of 22 base62 characters',
       );
 
+      const uuid = Utils.entityIdToUuid(ID_1);
+
       assertBoxedError(
-        () => readById(task, Type.bitstring(ID_1.toUpperCase())),
+        () => readById(task, Type.bitstring(uuid)),
         "Hologram.MisuseError",
-        `invalid id "${ID_1.toUpperCase()}" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
+        `invalid id "${uuid}" - entity ids are strings of 22 base62 characters`,
       );
     });
 

@@ -29,12 +29,6 @@ defmodule Hologram.Auth do
   # assets/js/elixir/hologram/auth.mjs) - a hand-ported pair, pinned on both tiers.
   @operation_shape_message "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
-  # In ASCII order, so that owner texts of the same width sort the way their ids do.
-  @base62_digits "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-  # The digits any 128-bit id fits in.
-  @base62_id_width 22
-
   # Marks a struct as a row of the database as a change would leave it. Kept on the struct rather
   # than in its metadata, whose fields travel to the browser with every entity: a marked row lives
   # only for the length of a rule's evaluation.
@@ -96,7 +90,7 @@ defmodule Hologram.Auth do
   Returns true when the given user may perform the given operation on the given entity, or false otherwise.
 
   Takes the user entity or a bare user id, and nil for an anonymous session - rules referencing
-  the acting user never match then. A user id in any spelling other than the lowercase uuid
+  the acting user never match then. A user id in any spelling other than the 22 base62 characters
   Hologram generates names no user entity, so it is answered as an anonymous session too - as
   somebody holding nothing, an inequality on the acting user would grant it every row it doesn't
   own. A framework operation the entity type declares no rule for is
@@ -539,16 +533,13 @@ defmodule Hologram.Auth do
   end
 
   @doc false
-  # The given id when it is one Hologram generates - the canonical lowercase uuid an entity id is -
-  # and nil otherwise, for any value. A session's user id may be any UTF-8 string or integer (see
+  # The given id when it is one Hologram generates - 22 base62 characters an entity id is - and
+  # nil otherwise, for any value. A session's user id may be any UTF-8 string or integer (see
   # Hologram.Server.put_user_id/2), and one that names no user entity is anonymous to the rules,
   # the way the render's session user is nil for it.
-  # The validator's pattern also takes a canonical id followed by a newline, which the uuid encoder
-  # refuses - hence the size.
   @spec canonical_id(any) :: Entity.id() | nil
   def canonical_id(id) do
-    if is_binary(id) and byte_size(id) == 36 and Validator.attribute_value_valid?(id, :uuid),
-      do: id
+    if Validator.attribute_value_valid?(id, :id), do: id
   end
 
   @doc false
@@ -569,8 +560,7 @@ defmodule Hologram.Auth do
         "s" <> user_id
 
       entity_id ->
-        <<number::128>> = Codec.encode(entity_id, :uuid)
-        "u" <> base62(number, @base62_id_width, [])
+        "u" <> entity_id
     end
   end
 
@@ -702,13 +692,6 @@ defmodule Hologram.Auth do
     end
 
     :ok
-  end
-
-  defp base62(_number, 0, digits), do: List.to_string(digits)
-
-  defp base62(number, width, digits) do
-    digit = :binary.at(@base62_digits, rem(number, 62))
-    base62(div(number, 62), width - 1, [digit | digits])
   end
 
   # The per-role question both gates ask, with the answer held until the transaction ends: the
@@ -878,7 +861,7 @@ defmodule Hologram.Auth do
     read_opts = delegation_read_opts(source)
 
     for {{name, target_id} = edge, :add} <- edges,
-        Validator.attribute_value_valid?(target_id, :uuid),
+        Validator.attribute_value_valid?(target_id, :id),
         target_type = Entity.related_type(entity_type, name),
         EntityOperations.get(target_type, target_id, read_opts) == nil do
       edge
@@ -1222,9 +1205,9 @@ defmodule Hologram.Auth do
     """
 
     params = [
-      Codec.encode(user_id, :uuid),
+      Codec.encode(user_id, :id),
       entity_type && Codec.encode_enum_value(entity_type),
-      Codec.encode(entity_id, :uuid),
+      Codec.encode(entity_id, :id),
       Codec.encode(role, :enum)
     ]
 
@@ -1237,7 +1220,7 @@ defmodule Hologram.Auth do
           end
 
         Enum.each(rows, fn [id] ->
-          :ok = EntityOperations.delete(RoleGrant, Codec.decode(id, :uuid))
+          :ok = EntityOperations.delete(RoleGrant, Codec.decode(id, :id))
         end)
       end)
 
@@ -1544,7 +1527,7 @@ defmodule Hologram.Auth do
     """
 
     role_values = Enum.map(role_names, &Codec.encode(&1, :enum))
-    params = Enum.concat([[Codec.encode(actor_user_id, :uuid)], scope_params, [role_values]])
+    params = Enum.concat([[Codec.encode(actor_user_id, :id)], scope_params, [role_values]])
 
     statement = grant_statement(selection, source)
 
@@ -1629,14 +1612,14 @@ defmodule Hologram.Auth do
       ~s|"entity_type" = $2::#{qualified_enum_type("entity_type")} | <>
         ~s|AND ("entity_id" = $3 OR "entity_id" IS NULL)|
 
-    {condition, [entity_type_value(entity_type), Codec.encode(entity_id, :uuid)]}
+    {condition, [entity_type_value(entity_type), Codec.encode(entity_id, :id)]}
   end
 
   defp scope_condition({:instance, entity_type, entity_id}) do
     condition =
       ~s|"entity_type" = $2::#{qualified_enum_type("entity_type")} AND "entity_id" = $3|
 
-    {condition, [entity_type_value(entity_type), Codec.encode(entity_id, :uuid)]}
+    {condition, [entity_type_value(entity_type), Codec.encode(entity_id, :id)]}
   end
 
   defp scope_condition({:type, entity_type}) do
@@ -1827,7 +1810,7 @@ defmodule Hologram.Auth do
   defp validate_id!(id, subject) do
     if canonical_id(id) == nil do
       raise MisuseError,
-            "invalid #{subject} id #{inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+            "invalid #{subject} id #{inspect(id)} - entity ids are strings of 22 base62 characters"
     end
 
     id

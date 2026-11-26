@@ -40,6 +40,7 @@ defmodule Hologram.Migration.GrantStoreTest do
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Connection
+  alias Hologram.Entity
   alias Hologram.Entity.Model
 
   @context %{
@@ -51,6 +52,19 @@ defmodule Hologram.Migration.GrantStoreTest do
 
   @user_id "00000000-0000-0000-0000-0000000000a1"
 
+  # The grant id the given labels derive, its ids written as the store's text reads them - in the
+  # 36-character form.
+  defp derived_id(user_id, entity_type, entity_id, role) do
+    user_id
+    |> Entity.uuid_to_id()
+    |> RoleGrant.derive_id_from_labels(
+      entity_type,
+      entity_id && Entity.uuid_to_id(entity_id),
+      role
+    )
+    |> Entity.id_to_uuid()
+  end
+
   # Every grant in the store holds the id its stored labels derive.
   defp assert_ids_derived do
     statement = """
@@ -61,7 +75,7 @@ defmodule Hologram.Migration.GrantStoreTest do
     {:ok, %{rows: rows}} = Connection.query(statement)
 
     for [id, user_id, entity_type, entity_id, role] <- rows do
-      assert id == RoleGrant.derive_id_from_labels(user_id, entity_type, entity_id, role)
+      assert id == derived_id(user_id, entity_type, entity_id, role)
     end
   end
 
@@ -117,7 +131,7 @@ defmodule Hologram.Migration.GrantStoreTest do
     VALUES ($1, $2, $3, $4, $5, now(), now(), 0, now(), 0, now(), '{}')
     """
 
-    id = RoleGrant.derive_id_from_labels(@user_id, entity_type, entity_id, role)
+    id = derived_id(@user_id, entity_type, entity_id, role)
 
     params = [
       Ecto.UUID.dump!(id),
@@ -345,7 +359,7 @@ defmodule Hologram.Migration.GrantStoreTest do
         assert run([create, renamed], full_model, @context) == :ok
 
         assert grant_id("MyApp.Task", task_id, "reviewer") ==
-                 RoleGrant.derive_id_from_labels(@user_id, "MyApp.Task", task_id, "reviewer")
+                 derived_id(@user_id, "MyApp.Task", task_id, "reviewer")
 
         assert grant_id("MyApp.User", @user_id, "editor") == user_grant_id
         assert_ids_derived()
@@ -377,7 +391,10 @@ defmodule Hologram.Migration.GrantStoreTest do
         assert run([create, added, renamed], full_model, @context) == :ok
 
         assert grant_id(nil, nil, "MyApp.Roles.Maintainer") ==
-                 RoleGrant.derive_id(@user_id, nil, nil, MyApp.Roles.Maintainer)
+                 @user_id
+                 |> Entity.uuid_to_id()
+                 |> RoleGrant.derive_id(nil, nil, MyApp.Roles.Maintainer)
+                 |> Entity.id_to_uuid()
 
         assert_ids_derived()
       end)

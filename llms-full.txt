@@ -1248,6 +1248,7 @@ Supported parameter types:
 
 - `:atom` - converts to atom
 - `:float` - converts to float
+- `:id` - keeps the parameter as a string, after checking it's an entity ID (22 letters and digits)
 - `:integer` - converts to integer
 - `:string` - keeps the parameter as string
 

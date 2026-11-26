@@ -16,15 +16,15 @@ defmodule Hologram.Auth.RoleGrantTest do
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
-  @other_user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13"
-  @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+  @other_user_id "02y1zRviSAYGVwSyzxs4qB"
+  @entity_id "02y1zRviSAYGVwSyzxs4q8"
   @entity_type Policy.Module2
-  @user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12"
+  @user_id "02y1zRviSAYGVwSyzxs4qA"
 
   describe "__attributes__/0" do
     test "computes the enum value sets from the compiled data model" do
       assert RoleGrant.__attributes__() == [
-               {:entity_id, :uuid, [optional: true]},
+               {:entity_id, :id, [optional: true]},
                {:entity_type, :enum,
                 [
                   values: [
@@ -95,6 +95,7 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Entity.Module55,
                     Entity.Module56,
                     Entity.Module57,
+                    Entity.Module58,
                     Entity.Module6,
                     Entity.Module7,
                     Entity.Module8,
@@ -270,7 +271,7 @@ defmodule Hologram.Auth.RoleGrantTest do
       assert Map.from_struct(entity) == %{
                __meta__: %Metadata{},
                created_at: nil,
-               granted_by: %NotIncluded{relationship: :granted_by},
+               granted_by: %NotIncluded{__meta__: %{field: :granted_by}},
                granted_by_id: nil,
                id: nil,
                entity_id: nil,
@@ -281,7 +282,7 @@ defmodule Hologram.Auth.RoleGrantTest do
                server_updated_at: nil,
                server_updated_seq: nil,
                updated_at: nil,
-               user: %NotIncluded{relationship: :user},
+               user: %NotIncluded{__meta__: %{field: :user}},
                user_id: nil
              }
     end
@@ -321,7 +322,7 @@ defmodule Hologram.Auth.RoleGrantTest do
   test "__system_attributes__/0" do
     assert RoleGrant.__system_attributes__() == [
              {:created_at, :datetime, []},
-             {:id, :uuid, []},
+             {:id, :id, []},
              {:server_created_at, :datetime, []},
              {:server_created_seq, :integer, []},
              {:server_updated_at, :datetime, []},
@@ -357,14 +358,14 @@ defmodule Hologram.Auth.RoleGrantTest do
     test "answers an id the entity id validator accepts" do
       id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
-      assert Validator.attribute_value_valid?(id, :uuid)
+      assert Validator.attribute_value_valid?(id, :id)
     end
 
     test "answers a version 5 id under the RFC variant" do
       id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
       <<_time_low_and_mid::binary-size(14), version::binary-size(1), _rest::binary-size(4),
-        variant::binary-size(1), _tail::binary>> = id
+        variant::binary-size(1), _tail::binary>> = Hologram.Entity.id_to_uuid(id)
 
       assert version == "5"
       assert variant in ["8", "9", "a", "b"]
@@ -374,20 +375,21 @@ defmodule Hologram.Auth.RoleGrantTest do
       type_wide_id = RoleGrant.derive_id(@user_id, @entity_type, nil, :member)
       instance_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
 
-      assert Validator.attribute_value_valid?(type_wide_id, :uuid)
+      assert Validator.attribute_value_valid?(type_wide_id, :id)
       assert type_wide_id != instance_id
     end
 
     test "derives a global grant, which names neither and whose role is a module" do
       global_id = RoleGrant.derive_id(@user_id, nil, nil, Role.Module1)
 
-      assert Validator.attribute_value_valid?(global_id, :uuid)
+      assert Validator.attribute_value_valid?(global_id, :id)
     end
 
     # The vector the client's hand-written twin asserts against - deriveGrantId in
-    # assets/js/elixir/hologram/auth.mjs answers these same two strings from these same inputs,
-    # which is what keeps the pair from drifting. Both were cross-checked against a reference
-    # UUIDv5 implementation, so either side can be rewritten against the standard alone.
+    # assets/js/elixir/hologram/auth.mjs answers these same strings from these same inputs,
+    # which is what keeps the pair from drifting. They are the numbers a reference UUIDv5
+    # implementation gives over the ids' 8-4-4-4-12 spelling, so either side can be rewritten
+    # against the standard alone.
     test "answers the pinned vectors the client twin is held to" do
       instance_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
       global_id = RoleGrant.derive_id(@user_id, nil, nil, Role.Module1)
@@ -395,9 +397,9 @@ defmodule Hologram.Auth.RoleGrantTest do
       # UTF-16 code units would get wrong while passing the two vectors above.
       accented_id = RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :café)
 
-      assert instance_id == "2c56252b-0c90-5cd9-b15d-91c5e5bf968e"
-      assert global_id == "f0fd8d8d-3d3f-5dd8-9027-2441a5a93040"
-      assert accented_id == "84121d8c-09a3-57fa-96e3-bd966906ce20"
+      assert instance_id == "1Lf1ua2cLkzFFU7EXpk9WA"
+      assert global_id == "7Kk20ttSQPWqmKPr4oRnay"
+      assert accented_id == "41DGUEuAJu7pquECzp0tqS"
     end
   end
 

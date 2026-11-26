@@ -968,6 +968,24 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture19]) end
     end
 
+    test "raises on an id value that isn't a canonical id" do
+      line = __ENV__.line + 5
+
+      defmodule Fixture300 do
+        use Hologram.Entity
+
+        derived :ref, :id, fn -> "not-an-id" end
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :ref in Hologram.Entity.Derived.ValidatorTest.Fixture300 is declared :id, but its definition is the value "not-an-id"\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture300]) end
+    end
+
     test "raises on one row declared as a set" do
       line = __ENV__.line + 9
 

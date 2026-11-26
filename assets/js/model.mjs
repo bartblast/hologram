@@ -14,7 +14,7 @@ import Utils from "./utils.mjs";
 // something transpiled Elixir can read.
 //
 // The database holds rows as the wire spells them - plain values, dates and datetimes and enums
-// and uuids as strings - because that is the form the kernel matches and sorts on. A boxed entity
+// and ids and uuids as strings - because that is the form the kernel matches and sorts on. A boxed entity
 // struct is built only when a result leaves for a template, which is the only form that can be
 // read there.
 //
@@ -22,7 +22,7 @@ import Utils from "./utils.mjs";
 // to carry it whole, and is held as a BigInt. Every other integer is a Number, so one value has one
 // form and === still tells two apart.
 //
-// A value's type is not recoverable from the value itself, since a date, an enum and a uuid all
+// A value's type is not recoverable from the value itself, since a date, an enum and an id all
 // arrive as strings, so reading one back means knowing the attribute it belongs to. That is what
 // the build bakes into the bundle constants, for every type this client can hold.
 //
@@ -121,7 +121,7 @@ export default class Model {
 
         data.push([
           Type.atom(referenceField),
-          Model.boxValue(row[referenceField], "uuid"),
+          Model.boxValue(row[referenceField], "id"),
         ]);
       }
 
@@ -305,12 +305,16 @@ export default class Model {
     return entry;
   }
 
-  // What a relationship nobody asked for holds, naming itself - a read of one reports which
-  // relationship was not included rather than answering nil, which is a different fact.
+  // What a field nobody asked for holds, naming the field in its internal __meta__ map - a read
+  // of one reports which field was not included rather than answering nil, which is a different
+  // fact.
   static notIncluded(name) {
     return Type.map([
       [Type.atom("__struct__"), Type.alias("Hologram.Entity.NotIncluded")],
-      [Type.atom("relationship"), Type.atom(name)],
+      [
+        Type.atom("__meta__"),
+        Type.map([[Type.atom("field"), Type.atom(name)]]),
+      ],
     ]);
   }
 
@@ -537,7 +541,7 @@ export default class Model {
   }
 
   // A boxed entity struct as the wire spells its settable fields - the object a create's data
-  // carries. A reference field has no attribute type of its own and is always a uuid, which is
+  // carries. A reference field has no attribute type of its own and is always an id, which is
   // what the server's own field_types/1 says about it.
   static unboxRow(type, struct) {
     const boxed = Object.fromEntries(
@@ -551,14 +555,14 @@ export default class Model {
   }
 
   // The same boundary for SOME of a row's fields - what an update sets rather than what a create
-  // carries. A reference field has no attribute type of its own and is always a uuid.
+  // carries. A reference field has no attribute type of its own and is always an id.
   static unboxChanges(type, changes) {
     const entry = Model.entry(type);
 
     return Object.fromEntries(
       Object.entries(changes).map(([name, value]) => [
         name,
-        Model.unbox(value, entry.attributes[name] ?? "uuid"),
+        Model.unbox(value, entry.attributes[name] ?? "id"),
       ]),
     );
   }
@@ -717,13 +721,16 @@ export default class Model {
   }
 
   // A value the client may not have is not a value it is missing: the model says the attribute
-  // exists and is not for this client, which is what the sentinel says in its place - and it
-  // names the attribute, so a read of one reports which.
+  // exists and is not for this client, which is what the placeholder says in its place - and its
+  // internal __meta__ map names the attribute, so a read of one reports which.
   static #boxAttribute(entry, name, attributeType, row) {
     if (entry.serverOnly.has(name)) {
       return Type.map([
         [Type.atom("__struct__"), Type.alias("Hologram.Entity.ServerOnly")],
-        [Type.atom("attribute"), Type.atom(name)],
+        [
+          Type.atom("__meta__"),
+          Type.map([[Type.atom("field"), Type.atom(name)]]),
+        ],
       ]);
     }
 
@@ -1167,6 +1174,7 @@ export default class Model {
       [Type.atom("relationship_ops"), Type.map([])],
       [Type.atom("revisions"), revisions],
       [Type.atom("stamp"), Type.nil()],
+      [Type.atom("waiting"), Type.map([])],
     ]);
   }
 

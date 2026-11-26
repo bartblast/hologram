@@ -44,7 +44,7 @@ describe("Batches", () => {
       attributes: {
         created_at: "datetime",
         done: "boolean",
-        id: "uuid",
+        id: "id",
         title: "string",
         updated_at: "datetime",
       },
@@ -2689,7 +2689,7 @@ describe("Batches", () => {
           [TAG]: {
             attributes: {
               created_at: "datetime",
-              id: "uuid",
+              id: "id",
               title: "string",
               updated_at: "datetime",
             },

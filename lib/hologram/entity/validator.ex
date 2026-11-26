@@ -48,13 +48,14 @@ defmodule Hologram.Entity.Validator do
 
   # What a column that is not a string takes of a compound key's index entry, in bytes: its
   # width rounded up to 8, which covers the padding between it and a fixed-width column ahead
-  # of it. A to-one's reference is a uuid.
+  # of it. A to-one's reference is an id.
   @unique_key_column_bytes %{
     boolean: 8,
     date: 8,
     datetime: 8,
     enum: 8,
     float: 8,
+    id: 16,
     integer: 8,
     reference: 16,
     time: 8,
@@ -93,11 +94,15 @@ defmodule Hologram.Entity.Validator do
     :datetime,
     :enum,
     :float,
+    :id,
     :integer,
     :string,
     :time,
     :uuid
   ]
+
+  # 2^128 - 1 in base62, the largest id.
+  @max_id "7n42DGM5Tflk9n8mt7Fhc7"
 
   @valid_relationship_opts [:inverse, :optional, :sort, :unique]
 
@@ -203,10 +208,19 @@ defmodule Hologram.Entity.Validator do
 
   def attribute_value_valid?(_value, :time, _opts), do: false
 
-  # Only the canonical lowercase 8-4-4-4-12 form is valid - the framework
-  # generates and stores ids in that spelling, and the client tier compares ids
-  # as strings, so any alternative spelling would match on one tier only. The
-  # pattern ends in \z, not $, which also matches before a final newline.
+  # An id is the 128-bit number written in 22 base62 digits, 0-9, A-Z and a-z in ASCII order, zero
+  # padded - so ids compare as strings the way their numbers do. The largest 22-digit text that
+  # fits in 128 bits is 2^128 - 1, and at a fixed width the string comparison is the range check.
+  # The pattern ends in \z, not $, which also matches before a final newline.
+  def attribute_value_valid?(value, :id, _opts) when is_binary(value) do
+    String.match?(value, ~r/\A[0-9A-Za-z]{22}\z/) and value <= @max_id
+  end
+
+  def attribute_value_valid?(_value, :id, _opts), do: false
+
+  # Only the canonical lowercase 8-4-4-4-12 form is valid - a uuid is read back from its column in
+  # that spelling, and the client tier compares uuids as strings, so any alternative spelling would
+  # match on one tier only. The pattern ends in \z, not $, which also matches before a final newline.
   def attribute_value_valid?(value, :uuid, _opts) when is_binary(value) do
     String.match?(value, ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/)
   end
@@ -225,6 +239,61 @@ defmodule Hologram.Entity.Validator do
   end
 
   @doc """
+  Returns what the given violation reason requires of a value, as an error message says it.
+  """
+  @spec requirement_description({atom, any}) :: String.t()
+  def requirement_description({:type, type}), do: "must be of type #{inspect(type)}"
+
+  def requirement_description({:values, values}), do: "must be one of #{inspect(values)}"
+
+  def requirement_description({:min, min}), do: "must be at least #{inspect(min)}"
+
+  def requirement_description({:max, max}), do: "must be at most #{inspect(max)}"
+
+  def requirement_description({:in, range}), do: "must be in #{inspect(range)}"
+
+  def requirement_description({:length, length}), do: "must be exactly #{length} characters"
+
+  def requirement_description({:min_length, min_length}),
+    do: "must be at least #{min_length} characters"
+
+  def requirement_description({:max_length, max_length}),
+    do: "must be at most #{max_length} characters"
+
+  def requirement_description({:format, format}), do: "must match #{inspect(format)}"
+
+  def requirement_description({:max_bytes, max_bytes}),
+    do: "must hold at most #{max_bytes} bytes (the most its unique index can carry)"
+
+  @doc """
+  Returns the violations of the given attribute's type and constraints by the given value, each a
+  {name, reason} pair, for a value that isn't nil. The options are the attribute's, with a `format:`
+  as a compiled regex.
+
+  WARNING: every replay of a migration history judges its constant backfills through this, and an
+  applied file can't be edited. Refusing a value it accepts today refuses files that already
+  passed, so the boundaries are pinned in Hologram.Migration.Value.CheckTest.
+  """
+  @spec value_errors(atom, any, atom, keyword) :: list({atom, {atom, any}})
+  def value_errors(name, value, :enum, opts) do
+    values = Keyword.fetch!(opts, :values)
+
+    if is_atom(value) and value in values do
+      []
+    else
+      [{name, {:values, values}}]
+    end
+  end
+
+  def value_errors(name, value, type, opts) do
+    if attribute_value_valid?(value, type) do
+      constraint_errors(name, value, type, opts)
+    else
+      [{name, {:type, type}}]
+    end
+  end
+
+  @doc """
   Returns the most bytes each string attribute of the given entity type may hold so that every
   unique index over it can carry the value, by attribute name. A string no unique index holds
   is absent.
@@ -238,7 +307,22 @@ defmodule Hologram.Entity.Validator do
   """
   @spec unique_string_max_bytes(module) :: %{atom => pos_integer}
   def unique_string_max_bytes(entity_type) do
-    attributes = entity_type.__attributes__()
+    unique_string_max_bytes(entity_type.__attributes__(), entity_type.__uniques__())
+  end
+
+  @doc """
+  Returns the most bytes each string of the given attributes may hold so that every unique index
+  over it can carry the value, given the keys declared with unique (see
+  `unique_string_max_bytes/1`). Takes them as data for a model at a point in a migration's
+  history, which has no compiled module to ask.
+
+  WARNING: every replay of a migration history judges its constant backfills through this, and an
+  applied file can't be edited. Lowering a bound refuses files that already passed, so the
+  boundaries are pinned in Hologram.Migration.Value.CheckTest.
+  """
+  @spec unique_string_max_bytes(list({atom, atom, keyword}), list(list(atom))) ::
+          %{atom => pos_integer}
+  def unique_string_max_bytes(attributes, uniques) do
     types = attribute_types(attributes)
 
     own_bounds =
@@ -246,7 +330,7 @@ defmodule Hologram.Entity.Validator do
         {name, @unique_string_max_bytes}
       end
 
-    Enum.reduce(entity_type.__uniques__(), own_bounds, fn fields, bounds ->
+    Enum.reduce(uniques, own_bounds, fn fields, bounds ->
       fields
       |> key_string_bounds(types)
       |> Map.merge(bounds, fn _name, key_bound, bound -> min(key_bound, bound) end)
@@ -261,7 +345,7 @@ defmodule Hologram.Entity.Validator do
   Constraint options are checked only on type-valid values - a type violation suppresses the attribute's constraint checks.
   A non-optional attribute must be present regardless of its declared default - defaults are not applied here.
   An absent or nil optional attribute is valid.
-  To-one reference fields (`<name>_id`) validate alongside attributes: a non-optional reference must be present and non-nil (:required), and a present value must be a canonical entity id ({:type, :uuid}).
+  To-one reference fields (`<name>_id`) validate alongside attributes: a non-optional reference must be present and non-nil (:required), and a present value must be an entity id ({:type, :id}).
   """
   @spec validate(module, %{atom => any}) :: :ok | {:error, list({atom, atom | {atom, any}})}
   def validate(entity_type, data) do
@@ -330,7 +414,7 @@ defmodule Hologram.Entity.Validator do
   Validates the given partial changes map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} in the validate/2 shape and reason vocabulary.
   Only present pairs are validated - absence is legal in a partial map. A nil value for a non-optional attribute reports :required - a nil value for an optional attribute is valid (clearing).
-  To-one reference field pairs (`<name>_id`) follow the same rules: nil is valid only for an optional relationship, and a present value must be a canonical entity id.
+  To-one reference field pairs (`<name>_id`) follow the same rules: nil is valid only for an optional relationship, and a present value must be an entity id ({:type, :id}).
   """
   @spec validate_changes(module, %{atom => any}) ::
           :ok | {:error, list({atom, atom | {atom, any}})}
@@ -1070,7 +1154,7 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp reference_change_errors(field, value, _optional?) do
-    if attribute_value_valid?(value, :uuid), do: [], else: [{field, {:type, :uuid}}]
+    if attribute_value_valid?(value, :id), do: [], else: [{field, {:type, :id}}]
   end
 
   defp reference_data_errors(data, {field, optional?}) do
@@ -1079,7 +1163,7 @@ defmodule Hologram.Entity.Validator do
         if optional?, do: [], else: [{field, :required}]
 
       {:ok, value} ->
-        if attribute_value_valid?(value, :uuid), do: [], else: [{field, {:type, :uuid}}]
+        if attribute_value_valid?(value, :id), do: [], else: [{field, {:type, :id}}]
 
       :error ->
         if optional?, do: [], else: [{field, :required}]
@@ -1133,29 +1217,6 @@ defmodule Hologram.Entity.Validator do
   defp relationship_type_valid?([type]), do: Reflection.alias?(type)
 
   defp relationship_type_valid?(_type), do: false
-
-  defp requirement_description({:type, type}), do: "must be of type #{inspect(type)}"
-
-  defp requirement_description({:values, values}), do: "must be one of #{inspect(values)}"
-
-  defp requirement_description({:min, min}), do: "must be at least #{inspect(min)}"
-
-  defp requirement_description({:max, max}), do: "must be at most #{inspect(max)}"
-
-  defp requirement_description({:in, range}), do: "must be in #{inspect(range)}"
-
-  defp requirement_description({:length, length}), do: "must be exactly #{length} characters"
-
-  defp requirement_description({:min_length, min_length}),
-    do: "must be at least #{min_length} characters"
-
-  defp requirement_description({:max_length, max_length}),
-    do: "must be at most #{max_length} characters"
-
-  defp requirement_description({:format, format}), do: "must match #{inspect(format)}"
-
-  defp requirement_description({:max_bytes, max_bytes}),
-    do: "must hold at most #{max_bytes} bytes (the most its unique index can carry)"
 
   defp role_extension_edges(roles) do
     Map.new(roles, fn {name, opts} -> {name, List.wrap(Keyword.get(opts, :extends, []))} end)
@@ -2370,24 +2431,6 @@ defmodule Hologram.Entity.Validator do
 
       :error ->
         :ok
-    end
-  end
-
-  defp value_errors(name, value, :enum, opts) do
-    values = Keyword.fetch!(opts, :values)
-
-    if is_atom(value) and value in values do
-      []
-    else
-      [{name, {:values, values}}]
-    end
-  end
-
-  defp value_errors(name, value, type, opts) do
-    if attribute_value_valid?(value, type) do
-      constraint_errors(name, value, type, opts)
-    else
-      [{name, {:type, type}}]
     end
   end
 

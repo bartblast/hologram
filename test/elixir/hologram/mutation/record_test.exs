@@ -34,7 +34,7 @@ defmodule Hologram.Mutation.RecordTest do
 
     Enum.map(rows, fn [replica_id, seq, actor_id, model_hash, result, envelope, answered_at] ->
       %{
-        actor_id: Codec.decode(actor_id, :uuid),
+        actor_id: Codec.decode(actor_id, :id),
         answered_at: answered_at,
         replica_id: replica_id,
         envelope: envelope,

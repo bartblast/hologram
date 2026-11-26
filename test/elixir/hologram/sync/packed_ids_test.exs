@@ -3,11 +3,11 @@ defmodule Hologram.Sync.PackedIdsTest do
 
   import Hologram.Sync.PackedIds
 
-  @id_1 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e01"
-  @id_2 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e02"
-  @id_3 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e03"
-  @id_4 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e04"
-  @id_5 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e05"
+  @id_1 "02y1zRviSAYGVwSyzxs4pt"
+  @id_2 "02y1zRviSAYGVwSyzxs4pu"
+  @id_3 "02y1zRviSAYGVwSyzxs4pv"
+  @id_4 "02y1zRviSAYGVwSyzxs4pw"
+  @id_5 "02y1zRviSAYGVwSyzxs4px"
 
   describe "delete/2" do
     test "takes the given ids out, wherever they are" do
@@ -106,8 +106,8 @@ defmodule Hologram.Sync.PackedIdsTest do
       assert unpack(pack([@id_2, @id_1, @id_2])) == [@id_1, @id_2]
     end
 
-    test "refuse something that isn't a uuid" do
-      assert_raise MatchError, fn -> pack(["0192b1e9"]) end
+    test "refuse something that isn't an entity id" do
+      assert_raise FunctionClauseError, fn -> pack(["0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"]) end
     end
 
     test "refuse a binary that isn't whole ids" do
@@ -132,8 +132,10 @@ defmodule Hologram.Sync.PackedIdsTest do
       assert unpack_pairs(pack_pairs([{@id_1, @id_2}, {@id_1, @id_2}])) == [{@id_1, @id_2}]
     end
 
-    test "refuse a pair with something that isn't a uuid" do
-      assert_raise MatchError, fn -> pack_pairs([{@id_1, "0192b1e9"}]) end
+    test "refuse a pair with something that isn't an entity id" do
+      assert_raise FunctionClauseError, fn ->
+        pack_pairs([{@id_1, "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"}])
+      end
     end
 
     test "refuse a binary that isn't whole pairs" do

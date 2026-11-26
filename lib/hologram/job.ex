@@ -150,7 +150,7 @@ defmodule Hologram.Job do
       # treat them as they treat any attribute - and guarded from being set by anything else:
       # Entity.new/2 refuses them, the wire refuses them from a client, and the enqueue stamps
       # the actor from the ambient context and the due time from the node's clock.
-      attribute :actor_id, :uuid, optional: true
+      attribute :actor_id, :id, optional: true
       attribute :attempt, :integer, default: 0
       attribute :error, :string, optional: true, server_only: true
       attribute :run_as_server, :boolean, default: false

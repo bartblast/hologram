@@ -407,7 +407,7 @@ defmodule HologramSyncTests.Consistency.Run do
 
     %{rows: [[serial]]} =
       DB.sql!(
-        ~s(SELECT "server_created_seq" FROM "hologram_data"."#{DB.table_name(Tag)}" WHERE "id"::text = $1),
+        ~s(SELECT "server_created_seq" FROM "hologram_data"."#{DB.table_name(Tag)}" WHERE "id" = $1),
         [warm_up.id]
       )
 

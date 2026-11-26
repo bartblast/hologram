@@ -648,14 +648,18 @@ function referenceErrors(data, field, optional) {
 }
 
 function referenceValueErrors(field, value) {
-  return uuidValue(value)
+  return idValue(value)
     ? []
-    : [errorTuple(field, Type.tuple([Type.atom("type"), Type.atom("uuid")]))];
+    : [errorTuple(field, Type.tuple([Type.atom("type"), Type.atom("id")]))];
 }
 
-// Only the canonical lowercase 8-4-4-4-12 spelling, as on the server: the framework writes ids
-// that way and both tiers compare them as strings, so any other spelling would match on one tier
-// only.
+// An entity id, 22 base62 characters, as on the server: the framework writes ids that way and
+// both tiers compare them as strings, so any other spelling would match on one tier only.
+function idValue(value) {
+  return Type.isBinary(value) && Utils.isEntityId(Bitstring.toText(value));
+}
+
+// Only the canonical lowercase 8-4-4-4-12 spelling, as on the server, for the same reason.
 function uuidValue(value) {
   if (!Type.isBinary(value)) {
     return false;
@@ -798,6 +802,9 @@ export function typeValid(value, attributeType) {
     case "float":
       return Type.isFloat(value) && Number.isFinite(Number(value.value));
 
+    case "id":
+      return idValue(value);
+
     // Postgres int8 bounds, which is what an integer attribute is stored in.
     case "integer":
       return (
@@ -898,7 +905,7 @@ export function defineStructFunctions() {
 }
 
 const Elixir_Hologram_Entity = {
-  "generate_id/0": () => Type.bitstring(Utils.uuidv7()),
+  "generate_id/0": () => Type.bitstring(Utils.entityId()),
 
   "new/1": (entityType) => newEntity(entityType, Type.map([])),
 

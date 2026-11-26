@@ -235,6 +235,13 @@ defmodule Hologram.DB.Mapper do
   end
 
   @doc """
+  Returns the name of the column holding the given to-one relationship's reference.
+  """
+  @spec reference_column_name(atom) :: String.t()
+  def reference_column_name(relationship),
+    do: fit_identifier([], [Atom.to_string(relationship)], "id")
+
+  @doc """
   Returns the entity type and relationship whose reference the given foreign key constraint
   enforces - a to-one reference column's `<table>_<relationship>_id_$fk`, or a join table's
   `<join table>_target_id_$fk` - or nil when no relationship in the given mapping derives it.
@@ -409,7 +416,7 @@ defmodule Hologram.DB.Mapper do
 
         %{
           name: column_name,
-          type: :uuid,
+          type: :id,
           sql_type: "uuid",
           collation: nil,
           enum_values: nil,
@@ -635,7 +642,7 @@ defmodule Hologram.DB.Mapper do
   defp id_column do
     %{
       name: "id",
-      type: :uuid,
+      type: :id,
       sql_type: "uuid",
       collation: nil,
       enum_values: nil,
@@ -757,7 +764,7 @@ defmodule Hologram.DB.Mapper do
 
     %{
       attributes: [
-        {:entity_id, :uuid, [optional: true]},
+        {:entity_id, :id, [optional: true]},
         {:entity_type, :enum, [optional: true, values: entity_type_values]},
         {:role, :enum, [values: role_values]}
       ],
@@ -795,9 +802,6 @@ defmodule Hologram.DB.Mapper do
       source: :revisions
     }
   end
-
-  defp reference_column_name(relationship),
-    do: fit_identifier([], [Atom.to_string(relationship)], "id")
 
   defp search_key_columns(attributes) do
     attributes
@@ -859,6 +863,8 @@ defmodule Hologram.DB.Mapper do
     do: fit_identifier(segments, [Atom.to_string(name)], "$enum")
 
   defp sql_type(:float, _segments, _name), do: "float8"
+
+  defp sql_type(:id, _segments, _name), do: "uuid"
 
   defp sql_type(:integer, _segments, _name), do: "int8"
 

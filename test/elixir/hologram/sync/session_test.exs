@@ -1203,7 +1203,7 @@ defmodule Hologram.Sync.SessionTest do
       """
 
       {:ok, %Postgrex.Result{rows: [[seq]]}} =
-        Connection.query(statement, [Codec.encode(grant["id"], :uuid), grant])
+        Connection.query(statement, [Codec.encode(grant["id"], :id), grant])
 
       logged(:del_entity, RoleGrant, grant["id"], grant, seq)
     end
@@ -3522,7 +3522,7 @@ defmodule Hologram.Sync.SessionTest do
       project: project
     } do
       page_types(%{})
-      never_sent_id = Ecto.UUID.generate()
+      never_sent_id = Entity.generate_id()
 
       read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
         {rows, applied_seq} =
@@ -3995,7 +3995,7 @@ defmodule Hologram.Sync.SessionTest do
     params = [
       log_seq,
       Codec.encode_enum_value(row.__struct__),
-      Codec.encode(row.id, :uuid),
+      Codec.encode(row.id, :id),
       %{"replica_id" => @replica_id, "seq" => batch_seq}
     ]
 

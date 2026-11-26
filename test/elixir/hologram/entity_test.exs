@@ -302,8 +302,8 @@ defmodule Hologram.EntityTest do
                :updated_at
              ]
 
-      assert %Module26{}.messages == %NotIncluded{relationship: :messages}
-      assert %Module26{}.topic == %NotIncluded{relationship: :topic}
+      assert %Module26{}.messages == %NotIncluded{__meta__: %{field: :messages}}
+      assert %Module26{}.topic == %NotIncluded{__meta__: %{field: :topic}}
     end
 
     test "derives one field per derived field, holding the sentinel" do
@@ -330,8 +330,8 @@ defmodule Hologram.EntityTest do
                :updated_at
              ]
 
-      assert %Module32{}.message_count == %NotIncluded{relationship: :message_count}
-      assert %Module32{}.recent_messages == %NotIncluded{relationship: :recent_messages}
+      assert %Module32{}.message_count == %NotIncluded{__meta__: %{field: :message_count}}
+      assert %Module32{}.recent_messages == %NotIncluded{__meta__: %{field: :recent_messages}}
     end
 
     test "includes declared attribute fields" do
@@ -374,9 +374,9 @@ defmodule Hologram.EntityTest do
     test "defaults relationship embed and to-many fields to the NotIncluded sentinel" do
       entity = %Module3{}
 
-      assert entity.a == %NotIncluded{relationship: :a}
-      assert entity.b == %NotIncluded{relationship: :b}
-      assert entity.c == %NotIncluded{relationship: :c}
+      assert entity.a == %NotIncluded{__meta__: %{field: :a}}
+      assert entity.b == %NotIncluded{__meta__: %{field: :b}}
+      assert entity.c == %NotIncluded{__meta__: %{field: :c}}
       assert entity.b_id == nil
       assert entity.c_id == nil
     end
@@ -410,7 +410,7 @@ defmodule Hologram.EntityTest do
     test "returns system attribute definitions sorted by name on every entity type" do
       expected = [
         {:created_at, :datetime, []},
-        {:id, :uuid, []},
+        {:id, :id, []},
         {:server_created_at, :datetime, []},
         {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},
@@ -664,11 +664,15 @@ defmodule Hologram.EntityTest do
   end
 
   # IMPORTANT!
-  # Each test in this describe block has a related JavaScript test in test/javascript/utils_test.mjs (describe "uuidv7()")
+  # Each test in this describe block has a related JavaScript test in test/javascript/utils_test.mjs (describe "entityId()")
   # Always update both together.
   describe "generate_id/0" do
-    test "returns a version 7 UUID string" do
-      assert generate_id() =~
+    test "returns 22 base62 characters holding the bits of a version 7 UUID" do
+      id = generate_id()
+
+      assert id =~ ~r/^[0-9A-Za-z]{22}$/
+
+      assert id_to_uuid(id) =~
                ~r/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
     end
 
@@ -683,12 +687,59 @@ defmodule Hologram.EntityTest do
 
       embedded_unix_ms =
         id
+        |> id_to_uuid()
         |> String.replace("-", "")
         |> String.slice(0, 12)
         |> String.to_integer(16)
 
       assert embedded_unix_ms >= unix_ms_before
       assert embedded_unix_ms <= unix_ms_after
+    end
+
+    test "returns ids that sort as strings in the order they were made, across milliseconds" do
+      ids =
+        Enum.map(1..3, fn _index ->
+          id = generate_id()
+          Process.sleep(2)
+          id
+        end)
+
+      assert Enum.sort(ids) == ids
+    end
+  end
+
+  describe "id_to_uuid/1" do
+    test "returns the 36-character spelling of the same number" do
+      assert id_to_uuid("02y9GOZb4QYpMlaccFSmK2") == "0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6a"
+    end
+
+    test "converts the smallest and the largest id" do
+      assert id_to_uuid("0000000000000000000000") == "00000000-0000-0000-0000-000000000000"
+      assert id_to_uuid("7n42DGM5Tflk9n8mt7Fhc7") == "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    end
+
+    test "is undone by uuid_to_id/1" do
+      id = generate_id()
+
+      assert uuid_to_id(id_to_uuid(id)) == id
+    end
+
+    test "raises on an id past the largest 128-bit number" do
+      assert_error ArgumentError,
+                   ~s[expected an entity id (22 base62 characters), got: "7n42DGM5Tflk9n8mt7Fhc8"],
+                   fn -> id_to_uuid("7n42DGM5Tflk9n8mt7Fhc8") end
+    end
+
+    test "raises on the 36-character form" do
+      assert_error ArgumentError,
+                   ~s[expected an entity id (22 base62 characters), got: "0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6a"],
+                   fn -> id_to_uuid("0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6a") end
+    end
+
+    test "raises on a value that is not a string" do
+      assert_error ArgumentError,
+                   "expected an entity id (22 base62 characters), got: 123",
+                   fn -> id_to_uuid(123) end
     end
   end
 
@@ -715,6 +766,32 @@ defmodule Hologram.EntityTest do
 
     test "returns no names for an entity type with no relationships" do
       assert includable_names(Module1) == []
+    end
+  end
+
+  describe "included?/1" do
+    test "returns false for a not-included placeholder" do
+      refute included?(%NotIncluded{__meta__: %{field: :project}})
+    end
+
+    test "returns true for nil" do
+      assert included?(nil)
+    end
+
+    test "returns true for a list" do
+      assert included?([])
+    end
+
+    test "returns true for an entity" do
+      assert included?(new(Module2, a: true, b: 5, c: "abc"))
+    end
+
+    test "returns true for a server-only placeholder" do
+      assert included?(%ServerOnly{__meta__: %{field: :token}})
+    end
+
+    test "returns true for a plain value" do
+      assert included?("abc")
     end
   end
 
@@ -854,8 +931,7 @@ defmodule Hologram.EntityTest do
 
       assert is_struct(entity, Module2)
 
-      assert entity.id =~
-               ~r/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      assert entity.id =~ ~r/^[0-9A-Za-z]{22}$/
 
       assert entity.a == false
       assert entity.c == "text_4"
@@ -871,8 +947,7 @@ defmodule Hologram.EntityTest do
 
       assert is_struct(entity, Module1)
 
-      assert entity.id =~
-               ~r/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      assert entity.id =~ ~r/^[0-9A-Za-z]{22}$/
     end
 
     test "builds a job through its own type" do
@@ -927,15 +1002,16 @@ defmodule Hologram.EntityTest do
 
       assert is_struct(entity, Module1)
 
-      assert entity.id =~
-               ~r/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      assert entity.id =~ ~r/^[0-9A-Za-z]{22}$/
 
       assert entity.created_at == nil
       assert entity.updated_at == nil
     end
 
     test "leaves a derived field at the sentinel" do
-      assert new(Module33, body: "hi").later_count == %NotIncluded{relationship: :later_count}
+      assert new(Module33, body: "hi").later_count == %NotIncluded{
+               __meta__: %{field: :later_count}
+             }
     end
 
     test "applies declared defaults to absent attributes" do
@@ -1012,7 +1088,7 @@ defmodule Hologram.EntityTest do
         ":actor_id of Hologram.Test.Fixtures.Job.Module1 is set by the framework - a job is enqueued as queued, and the worker records the rest"
 
       assert_error MisuseError, expected_msg, fn ->
-        new(JobModule1, %{actor_id: "018f4c11-1111-7111-8111-111111111111"})
+        new(JobModule1, %{actor_id: "02wTiQpCtbKJxz7pUTfNFB"})
       end
     end
 
@@ -1259,6 +1335,32 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "server_only?/1" do
+    test "returns true for a server-only placeholder" do
+      assert server_only?(%ServerOnly{__meta__: %{field: :token}})
+    end
+
+    test "returns false for nil" do
+      refute server_only?(nil)
+    end
+
+    test "returns false for a list" do
+      refute server_only?([])
+    end
+
+    test "returns false for an entity" do
+      refute server_only?(new(Module2, a: true, b: 5, c: "abc"))
+    end
+
+    test "returns false for a not-included placeholder" do
+      refute server_only?(%NotIncluded{__meta__: %{field: :project}})
+    end
+
+    test "returns false for a plain value" do
+      refute server_only?("abc")
+    end
+  end
+
   describe "server_only_attribute_names/1" do
     test "returns the server-only attribute names sorted" do
       assert server_only_attribute_names(Module15) == [:secret_note, :token]
@@ -1275,8 +1377,8 @@ defmodule Hologram.EntityTest do
 
       stripped = strip_server_only(entity)
 
-      assert stripped.secret_note == %ServerOnly{attribute: :secret_note}
-      assert stripped.token == %ServerOnly{attribute: :token}
+      assert stripped.secret_note == %ServerOnly{__meta__: %{field: :secret_note}}
+      assert stripped.token == %ServerOnly{__meta__: %{field: :token}}
       assert stripped.label == "Report"
       assert stripped.id == entity.id
     end
@@ -1335,6 +1437,20 @@ defmodule Hologram.EntityTest do
       term = %{a: [1, {:b, "c"}], d: nil}
 
       assert strip_server_only_deep(term) == term
+    end
+  end
+
+  describe "system_attributes/0" do
+    test "returns the attributes every entity type has" do
+      assert system_attributes() == [
+               {:created_at, :datetime, []},
+               {:id, :id, []},
+               {:server_created_at, :datetime, []},
+               {:server_created_seq, :integer, []},
+               {:server_updated_at, :datetime, []},
+               {:server_updated_seq, :integer, []},
+               {:updated_at, :datetime, []}
+             ]
     end
   end
 
@@ -1507,6 +1623,41 @@ defmodule Hologram.EntityTest do
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
+    end
+  end
+
+  describe "uuid_to_id/1" do
+    test "returns the entity id spelling of the same number" do
+      assert uuid_to_id("0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6a") == "02y9GOZb4QYpMlaccFSmK2"
+    end
+
+    test "converts the smallest and the largest UUID" do
+      assert uuid_to_id("00000000-0000-0000-0000-000000000000") == "0000000000000000000000"
+      assert uuid_to_id("ffffffff-ffff-ffff-ffff-ffffffffffff") == "7n42DGM5Tflk9n8mt7Fhc7"
+    end
+
+    test "is undone by id_to_uuid/1" do
+      uuid = id_to_uuid(generate_id())
+
+      assert id_to_uuid(uuid_to_id(uuid)) == uuid
+    end
+
+    test "raises on an uppercase UUID" do
+      assert_error ArgumentError,
+                   ~s(expected a lowercase 8-4-4-4-12 UUID, got: "0192F3A0-7B1E-7C2D-9A4B-1F2E3D4C5B6A"),
+                   fn -> uuid_to_id("0192F3A0-7B1E-7C2D-9A4B-1F2E3D4C5B6A") end
+    end
+
+    test "raises on an entity id" do
+      assert_error ArgumentError,
+                   ~s(expected a lowercase 8-4-4-4-12 UUID, got: "02y9GOZb4QYpMlaccFSmK2"),
+                   fn -> uuid_to_id("02y9GOZb4QYpMlaccFSmK2") end
+    end
+
+    test "raises on a value that is not a string" do
+      assert_error ArgumentError, "expected a lowercase 8-4-4-4-12 UUID, got: nil", fn ->
+        uuid_to_id(nil)
+      end
     end
   end
 

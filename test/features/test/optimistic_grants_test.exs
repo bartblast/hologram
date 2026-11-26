@@ -216,7 +216,7 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
     {:ok, _result} =
       Connection.query(
         ~s|DELETE FROM "hologram_data"."hologram_role_grant" WHERE "id" = $1|,
-        [Codec.encode(owner_grant_id, :uuid)]
+        [Codec.encode(owner_grant_id, :id)]
       )
 
     session

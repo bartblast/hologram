@@ -29,7 +29,8 @@ defmodule Hologram.DB.QueryRunner do
 
   `server_created_seq` and `server_updated_seq` read nil where they are above the limit (see
   `Hologram.Sync.FinalSeq.current/0`), in what the query returns and in what it filters, orders and
-  computes by. `raw: true` reads them as stored, as sync does.
+  computes by. Each number a returned struct's field hides that way is kept by field name in its
+  `__meta__.waiting`. `raw: true` reads them as stored, as sync does.
 
   Raises Hologram.MisuseError when the term holds a placeholder (see
   `Hologram.Query.Stage.assert_no_placeholders!/1`).
@@ -129,10 +130,10 @@ defmodule Hologram.DB.QueryRunner do
     values =
       Enum.map(compiled.params, fn
         :ids ->
-          Enum.map(ids, &Codec.encode(&1, :uuid))
+          Enum.map(ids, &Codec.encode(&1, :id))
 
         :users ->
-          Enum.map(signed_in_user_ids, &Codec.encode(&1, :uuid))
+          Enum.map(signed_in_user_ids, &Codec.encode(&1, :id))
 
         {:value, encoded_value} ->
           encoded_value
@@ -179,18 +180,13 @@ defmodule Hologram.DB.QueryRunner do
   defp decode_embedded_map(object, sub_term, mapping, limit) do
     target_mapping = Map.fetch!(mapping, sub_term.entity)
 
-    base_fields =
+    {base_fields, waiting} =
       target_mapping.columns
       |> Enum.reject(&(&1.source == :revisions or Mapper.derived?(&1)))
-      |> Map.new(fn column ->
-        value =
-          object
-          |> Map.fetch!(column.name)
-          |> decode_embedded_value(column.type)
-          |> masked(column, limit)
-
-        {field_name(column), value}
+      |> Enum.map(fn column ->
+        {column, decode_embedded_value(Map.fetch!(object, column.name), column.type)}
       end)
+      |> masked_fields(limit)
 
     nested_fields =
       Map.new(sub_term.include, fn {name, nested_sub_term} ->
@@ -219,7 +215,7 @@ defmodule Hologram.DB.QueryRunner do
       sub_term.entity,
       base_fields
       |> Map.merge(nested_fields)
-      |> Map.put(:__meta__, %Metadata{revisions: revisions})
+      |> Map.put(:__meta__, %Metadata{revisions: revisions, waiting: waiting})
     )
   end
 
@@ -248,6 +244,14 @@ defmodule Hologram.DB.QueryRunner do
   # JSON writes a whole float as a whole number, so 7.0 arrives as 7 - read back as the float the
   # column holds.
   defp decode_embedded_value(value, :float) when is_integer(value), do: value * 1.0
+
+  # jsonb spells a uuid column in the 8-4-4-4-12 form, where the column path reads an id's 22
+  # base62 characters - read back as the column holds it. A :uuid stays as jsonb spells it.
+  defp decode_embedded_value(value, :id) do
+    value
+    |> Codec.encode(:uuid)
+    |> Codec.decode(:id)
+  end
 
   # Same story as :datetime one type over - JSON drops a fraction's trailing zeros, so a time
   # arriving this way is spelled shorter than the same time read from its own column, which is
@@ -300,11 +304,10 @@ defmodule Hologram.DB.QueryRunner do
     {[{revisions_column, revisions_value}], value_pairs} =
       Enum.split_with(column_pairs, fn {column, _value} -> column.source == :revisions end)
 
-    base_fields =
-      Map.new(value_pairs, fn {column, value} ->
-        decoded = Codec.decode(value, column.type)
-        {field_name(column), masked(decoded, column, limit)}
-      end)
+    {base_fields, waiting} =
+      value_pairs
+      |> Enum.map(fn {column, value} -> {column, Codec.decode(value, column.type)} end)
+      |> masked_fields(limit)
 
     include_fields =
       term.include
@@ -324,7 +327,7 @@ defmodule Hologram.DB.QueryRunner do
       term.entity,
       base_fields
       |> Map.merge(include_fields)
-      |> Map.put(:__meta__, %Metadata{revisions: revisions})
+      |> Map.put(:__meta__, %Metadata{revisions: revisions, waiting: waiting})
     )
   end
 
@@ -343,15 +346,24 @@ defmodule Hologram.DB.QueryRunner do
   end
 
   # A number above the limit is not final yet, so the row holds it as nil, the way the browser holds
-  # it until it is.
-  defp masked(value, column, limit) do
-    if is_integer(value) and value > limit and Mapper.sequence?(column), do: nil, else: value
+  # it until it is. The metadata keeps the number by field name, under waiting, so a page can tell
+  # the browser what its render hid as $waiting, and the browser shows it once it is final there.
+  defp masked_fields(decoded_pairs, limit) do
+    Enum.reduce(decoded_pairs, {%{}, %{}}, fn {column, value}, {fields, waiting} ->
+      name = field_name(column)
+
+      if is_integer(value) and value > limit and Mapper.sequence?(column) do
+        {Map.put(fields, name, nil), Map.put(waiting, name, value)}
+      else
+        {Map.put(fields, name, value), waiting}
+      end
+    end)
   end
 
   defp readers(true, _anonymous, _reader_ids), do: :all
 
   defp readers(false, anonymous, reader_ids) do
-    readers = MapSet.new(reader_ids, &Codec.decode(&1, :uuid))
+    readers = MapSet.new(reader_ids, &Codec.decode(&1, :id))
 
     if anonymous, do: MapSet.put(readers, nil), else: readers
   end
@@ -380,7 +392,7 @@ defmodule Hologram.DB.QueryRunner do
 
   # The actor slot never appears in an anonymous statement - actor-referencing rules are
   # elided at composition, so there is no nil to bind.
-  defp resolve_param(:actor, actor_user_id, _limit), do: Codec.encode(actor_user_id, :uuid)
+  defp resolve_param(:actor, actor_user_id, _limit), do: Codec.encode(actor_user_id, :id)
 
   defp resolve_param(:final_seq, _actor_user_id, limit), do: limit
 
@@ -435,7 +447,7 @@ defmodule Hologram.DB.QueryRunner do
         Enum.reduce(user_ids, acc, fn user_id, user_acc ->
           Map.update(
             user_acc,
-            Codec.decode(user_id, :uuid),
+            Codec.decode(user_id, :id),
             %{key => true},
             &Map.put(&1, key, true)
           )

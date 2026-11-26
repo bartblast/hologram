@@ -49,7 +49,7 @@ describe("DataLayer", () => {
       globalThis.Hologram.sync = {
         model: {
           [TASK]: {
-            attributes: {done: "boolean", id: "uuid", title: "string"},
+            attributes: {done: "boolean", id: "id", title: "string"},
             relationships: {},
             serverOnly: [],
           },
@@ -1496,7 +1496,7 @@ describe("DataLayer", () => {
       globalThis.Hologram.sync = {
         model: {
           [TASK]: {
-            attributes: {id: "uuid", title: "string"},
+            attributes: {id: "id", title: "string"},
             relationships: {},
             serverOnly: [],
           },
@@ -2863,7 +2863,7 @@ describe("DataLayer", () => {
       globalThis.Hologram.sync = {
         model: {
           [TASK]: {
-            attributes: {id: "uuid", title: "string"},
+            attributes: {id: "id", title: "string"},
             relationships: {},
             serverOnly: [],
           },
@@ -3241,7 +3241,7 @@ describe("DataLayer", () => {
       globalThis.Hologram.sync = {
         model: {
           "MyApp.Task": {
-            attributes: {id: "uuid"},
+            attributes: {id: "id"},
             relationships: {},
             serverOnly: [],
           },
@@ -3274,7 +3274,7 @@ describe("DataLayer", () => {
       globalThis.Hologram.sync = {
         model: {
           "MyApp.Task": {
-            attributes: {id: "uuid", token: "string"},
+            attributes: {id: "id", token: "string"},
             relationships: {},
             serverOnly: ["token"],
           },
@@ -3306,7 +3306,7 @@ describe("DataLayer", () => {
       globalThis.Hologram.sync = {
         model: {
           "MyApp.Task": {
-            attributes: {id: "uuid", token: "string"},
+            attributes: {id: "id", token: "string"},
             relationships: {},
             serverOnly: ["token"],
           },
@@ -3352,7 +3352,7 @@ describe("DataLayer", () => {
         globalThis.Hologram.sync = {
           model: {
             "MyApp.Task": {
-              attributes: {id: "uuid", title: "string"},
+              attributes: {id: "id", title: "string"},
               relationships: {},
               serverOnly: [],
             },
@@ -3591,7 +3591,7 @@ describe("DataLayer", () => {
           [USER]: {
             attributes: {
               email: "string",
-              id: "uuid",
+              id: "id",
               password_hash: "string",
             },
             relationships: {},
@@ -3652,7 +3652,10 @@ describe("DataLayer", () => {
         field(DataLayer.sessionUser(), "password_hash"),
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Entity.ServerOnly")],
-          [Type.atom("attribute"), Type.atom("password_hash")],
+          [
+            Type.atom("__meta__"),
+            Type.map([[Type.atom("field"), Type.atom("password_hash")]]),
+          ],
         ]),
       );
     });

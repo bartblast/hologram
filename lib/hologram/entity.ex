@@ -1,6 +1,7 @@
 defmodule Hologram.Entity do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
+  alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.DerivedExpression
@@ -13,11 +14,22 @@ defmodule Hologram.Entity do
   alias Hologram.Policy.Expression, as: PolicyExpression
   alias Hologram.Reflection
 
-  @attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid]
+  @attribute_types [
+    :boolean,
+    :date,
+    :datetime,
+    :enum,
+    :float,
+    :id,
+    :integer,
+    :string,
+    :time,
+    :uuid
+  ]
 
   @system_attributes [
     {:created_at, :datetime, []},
-    {:id, :uuid, []},
+    {:id, :id, []},
     {:server_created_at, :datetime, []},
     {:server_created_seq, :integer, []},
     {:server_updated_at, :datetime, []},
@@ -28,7 +40,7 @@ defmodule Hologram.Entity do
   @sequence_attributes [:server_created_seq, :server_updated_seq]
 
   @typedoc """
-  An entity id - the canonical lowercase 8-4-4-4-12 spelling generate_id/0 mints.
+  An entity id - the 128-bit number written in 22 base62 characters (0-9, A-Z, a-z), the spelling generate_id/0 mints.
   """
   @type id :: String.t()
 
@@ -454,7 +466,8 @@ defmodule Hologram.Entity do
   end
 
   @doc """
-  Generates a new entity id - a UUIDv7 string built from the number of milliseconds since the Unix epoch (1970-01-01 UTC, 48 bits) followed by random bits (74 bits).
+  Generates a new entity id - the bits of a UUIDv7, the number of milliseconds since the Unix epoch (1970-01-01 UTC, 48 bits) followed by random bits (74 bits), written in 22 base62 characters.
+  Ids of different milliseconds sort as strings in the order they were made.
   Entity ids come only from this function, on the server and on the client alike.
   """
   @spec generate_id() :: id
@@ -462,13 +475,36 @@ defmodule Hologram.Entity do
     unix_ms = System.system_time(:millisecond)
     <<rand_a::12, rand_b::62, _discarded::6>> = :crypto.strong_rand_bytes(10)
 
-    uuid = <<unix_ms::48, 7::4, rand_a::12, 2::2, rand_b::62>>
-
-    <<part_1::binary-size(8), part_2::binary-size(4), part_3::binary-size(4),
-      part_4::binary-size(4), part_5::binary-size(12)>> = Base.encode16(uuid, case: :lower)
-
-    "#{part_1}-#{part_2}-#{part_3}-#{part_4}-#{part_5}"
+    Codec.decode(<<unix_ms::48, 7::4, rand_a::12, 2::2, rand_b::62>>, :id)
   end
+
+  @doc """
+  Returns the 36-character UUID spelling of the given entity id - the same 128-bit number, in the
+  lowercase 8-4-4-4-12 form DB.sql/3 returns uuid columns in and SQL consoles show.
+  Raises ArgumentError for a value that is not an entity id.
+  """
+  @spec id_to_uuid(id) :: String.t()
+  def id_to_uuid(id) do
+    if Validator.attribute_value_valid?(id, :id) do
+      id
+      |> Codec.encode(:id)
+      |> Codec.decode(:uuid)
+    else
+      raise ArgumentError, "expected an entity id (22 base62 characters), got: #{inspect(id)}"
+    end
+  end
+
+  @doc """
+  Returns `false` when the given entity field value is the `Hologram.Entity.NotIncluded`
+  placeholder, and `true` for anything else, `nil` and lists included.
+  A relationship or a derived field holds the placeholder when the query that read the entity
+  didn't include it, and in an entity no query read, like one built with `new/1` or one a create
+  returns. Works on the server and in the browser, and is imported into pages and components.
+  """
+  @spec included?(any) :: boolean
+  def included?(%NotIncluded{}), do: false
+
+  def included?(_value), do: true
 
   @doc """
   Builds a new entity struct of the given entity type from the given values (a map or a keyword list).
@@ -486,6 +522,36 @@ defmodule Hologram.Entity do
     fields = Map.put_new(values_map, :id, generate_id())
 
     struct!(entity_type, fields)
+  end
+
+  @doc """
+  Returns `true` when the given entity field value is the `Hologram.Entity.ServerOnly`
+  placeholder, and `false` for anything else.
+  Returns `true` in the browser and in any template, since Hologram removes server-only values
+  from the entities it sends to the browser. Returns `false` on an entity your server code reads
+  through `DB`, which holds the real value.
+  Works on the server and in the browser, and is imported into pages and components.
+  """
+  @spec server_only?(any) :: boolean
+  def server_only?(%ServerOnly{}), do: true
+
+  def server_only?(_value), do: false
+
+  @doc """
+  Returns the entity id spelling of the given UUID - the same 128-bit number in 22 base62
+  characters, for an id a uuid column returned through DB.sql/3 or one copied from an SQL console.
+  Takes the lowercase 8-4-4-4-12 form only. Raises ArgumentError for any other value.
+  """
+  @spec uuid_to_id(String.t()) :: id
+  def uuid_to_id(uuid) do
+    if Validator.attribute_value_valid?(uuid, :uuid) do
+      uuid
+      |> Codec.encode(:uuid)
+      |> Codec.decode(:id)
+    else
+      raise ArgumentError,
+            "expected a lowercase 8-4-4-4-12 UUID, got: #{inspect(uuid)}"
+    end
   end
 
   # The body is kept as the definition function will run it, so the function is built once every
@@ -694,7 +760,8 @@ defmodule Hologram.Entity do
   # One row read twice - at the root and as another row's embed, or by two queries of one render -
   # arrives as two copies whose includes differ. The kept copy keeps its values and takes every
   # relationship it did not include from the other one, so whichever copy is met first, the row
-  # carries what either included.
+  # carries what either included. Two statements can read different versions of the row, so the
+  # kept copy keeps its own metadata too - the revisions and the hidden numbers of its own values.
   @doc false
   @spec merge_copies(struct, struct) :: struct
   def merge_copies(%entity_type{} = kept, copy) do
@@ -896,7 +963,7 @@ defmodule Hologram.Entity do
     attribute_names = server_only_attribute_names(entity.__struct__)
 
     Enum.reduce(attribute_names, entity, fn name, stripped ->
-      %{stripped | name => %ServerOnly{attribute: name}}
+      %{stripped | name => %ServerOnly{__meta__: %{field: name}}}
     end)
   end
 
@@ -944,6 +1011,13 @@ defmodule Hologram.Entity do
 
   def strip_server_only_deep(term), do: term
 
+  @doc """
+  Returns the attributes every entity type has beside the ones it declares, in the shape
+  `__attributes__/0` returns.
+  """
+  @spec system_attributes() :: list({atom, atom, keyword})
+  def system_attributes, do: @system_attributes
+
   # Everything the entity DECLARES, sorted by name. The framework's own __meta__ field is added
   # by the caller rather than here, so that its struct is expanded in the entity's module.
   # An attribute field holds what its declaration declares as the default, so a bare struct
@@ -966,25 +1040,25 @@ defmodule Hologram.Entity do
       |> Module.get_attribute(:__relationships__)
       |> Enum.flat_map(fn
         {name, [_target], _opts} ->
-          [{name, %NotIncluded{relationship: name}}]
+          [{name, %NotIncluded{__meta__: %{field: name}}}]
 
         {name, _target, _opts} ->
           # Compile-time atom creation - the reference field atoms are being defined here.
           # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-          [{:"#{name}_id", nil}, {name, %NotIncluded{relationship: name}}]
+          [{:"#{name}_id", nil}, {name, %NotIncluded{__meta__: %{field: name}}}]
       end)
 
     # An inverse stores no reference, so it holds the one field its rows are embedded in.
     inverse_fields =
       module
       |> Module.get_attribute(:__inverse_relationships__)
-      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{relationship: name}} end)
+      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{__meta__: %{field: name}}} end)
 
     # A derived field holds nothing until a query includes it.
     derived_fields =
       module
       |> Module.get_attribute(:__derived__)
-      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{relationship: name}} end)
+      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{__meta__: %{field: name}}} end)
 
     Enum.sort(
       system_attribute_fields ++
@@ -1035,8 +1109,8 @@ defmodule Hologram.Entity do
     type_union(union_types)
   end
 
-  # The Elixir types an attribute's field holds, from the type its declaration names. A uuid is a
-  # string here - the canonical id format is a declaration check, not something a type can state.
+  # The Elixir types an attribute's field holds, from the type its declaration names. An id or a uuid
+  # is a string here - the canonical format is a declaration check, not something a type can state.
   # An enum answers with its values rather than with a union of them, so that the field's own
   # union stays flat: a nested one is equivalent but renders as ":x | :y | nil" wrapped in
   # parentheses, and this type is what ExDoc shows on every entity's page.
@@ -1045,10 +1119,11 @@ defmodule Hologram.Entity do
   defp attribute_type_asts(:datetime, _opts), do: [remote_type_ast(DateTime)]
   defp attribute_type_asts(:enum, opts), do: Keyword.fetch!(opts, :values)
   defp attribute_type_asts(:float, _opts), do: [quote(do: float())]
+  defp attribute_type_asts(:id, _opts), do: [remote_type_ast(Entity, :id)]
   defp attribute_type_asts(:integer, _opts), do: [quote(do: integer())]
   defp attribute_type_asts(:string, _opts), do: [remote_type_ast(String)]
   defp attribute_type_asts(:time, _opts), do: [remote_type_ast(Time)]
-  defp attribute_type_asts(:uuid, _opts), do: [remote_type_ast(Entity, :id)]
+  defp attribute_type_asts(:uuid, _opts), do: [remote_type_ast(String)]
 
   # An entity type with no derived field defines no definition function, which nothing asks of it.
   defp definition_function_clauses([]), do: []

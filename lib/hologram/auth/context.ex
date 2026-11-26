@@ -50,8 +50,8 @@ defmodule Hologram.Auth.Context do
   end
 
   @doc """
-  Returns the actor's id as the data layer stores a user - the canonical uuid a user entity's id
-  is - or nil when no actor is set and when the actor's id is one no user entity can have, like an
+  Returns the actor's id as the data layer stores a user - the 22 base62 characters a user entity's
+  id is - or nil when no actor is set and when the actor's id is one no user entity can have, like an
   app's own serial id. Such an actor is still set, so its work is judged rather than trusted, but
   the data layer reads it as a session with no user: nothing records it as anyone.
   """

@@ -145,7 +145,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> filter(c_id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        |> filter(c_id: "02wSyz8E9khZO82QLJOgGt")
         |> Stage.normalize()
 
       assert compile(term, mapping) == %{
@@ -401,7 +401,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> filter(c_id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        |> filter(c_id: "02wSyz8E9khZO82QLJOgGt")
         |> Stage.normalize()
 
       rules = [%{predicates: [{:b_id, :==, {:actor}}], to: nil, via: nil}]
@@ -1605,7 +1605,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> filter(id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        |> filter(id: "02wSyz8E9khZO82QLJOgGt")
         |> narrowed_include(:a, &filter(&1, a: true))
         |> Stage.normalize()
 

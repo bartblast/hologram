@@ -229,7 +229,7 @@ describe("Renderer derived fields", () => {
             b: "integer",
             c: "string",
             created_at: "datetime",
-            id: "uuid",
+            id: "id",
             updated_at: "datetime",
           },
           relationships: {},
@@ -878,7 +878,7 @@ describe("Renderer derived fields", () => {
       const other = "Hologram.Test.Fixtures.Entity.Module1";
 
       globalThis.Hologram.sync.model[other] = {
-        attributes: {id: "uuid"},
+        attributes: {id: "id"},
         relationships: {},
         serverOnly: [],
       };
@@ -1016,7 +1016,7 @@ describe("Renderer derived fields", () => {
                 Type.list([
                   Type.tuple([
                     Type.atom("id"),
-                    Type.bitstring("018f0000-0000-7000-8000-0000000000ff"),
+                    Type.bitstring("02wLIRxqmq3AUo6vl2OW7D"),
                   ]),
                 ]),
               ),
@@ -1179,7 +1179,7 @@ describe("Renderer derived fields", () => {
         );
       };
 
-      const ROW_ID = "018f0000-0000-7000-8000-000000000001";
+      const ROW_ID = "02wLIRxqmq3AUo6vl2OW37";
 
       const rowProp = (a) =>
         Type.struct(ROW, [
@@ -1270,13 +1270,13 @@ describe("Renderer derived fields", () => {
 
       beforeEach(() => {
         globalThis.Hologram.sync.model[PROJECT] = {
-          attributes: {id: "uuid", name: "string"},
+          attributes: {id: "id", name: "string"},
           relationships: {tasks: {toMany: true, type: TASK}},
           serverOnly: [],
         };
 
         globalThis.Hologram.sync.model[TASK] = {
-          attributes: {done: "boolean", id: "uuid", title: "string"},
+          attributes: {done: "boolean", id: "id", title: "string"},
           relationships: {project: {toMany: false, type: PROJECT}},
           serverOnly: [],
         };
@@ -1757,7 +1757,7 @@ describe("Renderer derived fields", () => {
 
     beforeEach(() => {
       globalThis.Hologram.sync.model[USER] = {
-        attributes: {email: "string", id: "uuid"},
+        attributes: {email: "string", id: "id"},
         relationships: {},
         serverOnly: [],
       };

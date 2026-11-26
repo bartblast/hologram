@@ -65,18 +65,22 @@ defmodule Hologram.DB do
       import Hologram.Query,
         only: [
           add_relationship: 3,
+          average: 2,
           count: 1,
           decrement: 3,
           delete_relationship: 3,
           filter: 2,
           include: 2,
           increment: 3,
+          inverse: 2,
+          most_common: 2,
           one: 1,
           paginate: 2,
           put_attribute: 2,
           put_attribute: 3,
           skip: 2,
           sort: 2,
+          sum: 2,
           take: 2,
           trust: 1
         ]
@@ -344,8 +348,8 @@ defmodule Hologram.DB do
   raw. A by-id read carries no claim, so a trusted one is
   `type |> filter(id: ^id) |> one() |> trust() |> DB.read()`.
 
-  Raises Hologram.MisuseError when the id is not a canonical entity id (a lowercase
-  8-4-4-4-12 UUID string), or when the first argument is not an entity type module.
+  Raises Hologram.MisuseError when the id is not an entity id (a string of 22 base62
+  characters), or when the first argument is not an entity type module.
   """
   @spec read(module, Entity.id()) :: Entity.t() | nil
   def read(entity_type, id) do
@@ -405,10 +409,12 @@ defmodule Hologram.DB do
   {:error, %Hologram.SQLError{}} carrying the server's condition name as its code and the server's
   message.
 
-  A uuid column or uuid array comes back as canonical id strings, the spelling every entity
-  carries, and an id string given for a uuid parameter or uuid array parameter is encoded for the
-  driver - a 16-byte binary passes through either way. The conversion goes by the types PostgreSQL
-  reports for the statement, so a text column holding a uuid-shaped string stays as it is. Other
+  A uuid column or uuid array comes back in the 36-character lowercase 8-4-4-4-12 form, since
+  PostgreSQL can't tell an entity id from another system's UUID - Hologram.Entity.uuid_to_id/1
+  gives the entity id spelling, to compare with an entity's id. A uuid parameter or uuid array
+  parameter takes either spelling, an entity id or the 36-character form, and a 16-byte binary
+  passes through. The conversion goes by the types PostgreSQL reports for the statement, so a text
+  column holding a uuid-shaped string stays as it is. Other
   types arrive as the driver decodes them: `int8` as an integer, `float8` as a float, `text` as a
   string, `boolean`, `date` as a Date, `time` as a Time, `timestamptz` as a DateTime, an enum as
   its label string and `jsonb` as a map.

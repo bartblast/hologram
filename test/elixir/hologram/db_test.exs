@@ -163,6 +163,86 @@ defmodule Hologram.DBTest do
       assert module.job_fields() ==
                [:actor_id, :attempt, :error, :run_as_server, :scheduled_at, :status]
     end
+
+    test "refuses a call to an own function named like a reserved query word" do
+      code = """
+      defmodule Hologram.Test.Fixtures.DB.ReservedLocal do
+        use Hologram.DB
+
+        def run, do: most_common(1, 2)
+
+        def most_common(a, b), do: {a, b}
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:4: most_common/2 is reserved - if you meant the query word most_common, it works only in a migration's backfill: for now - if this is your own function, rename it",
+                   fn -> Code.eval_string(code) end
+    end
+
+    test "refuses the same call from a nested module" do
+      code = """
+      defmodule Hologram.Test.Fixtures.DB.ReservedOuter do
+        use Hologram.DB
+
+        defmodule Inner do
+          def run, do: inverse(1, 2)
+
+          def inverse(a, b), do: {a, b}
+        end
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:5: inverse/2 is reserved for a query word Hologram doesn't have yet - if this is your own function, rename it",
+                   fn -> Code.eval_string(code) end
+    end
+
+    test "refuses a call to an own function named like a reserved aggregate" do
+      for name <- ["average", "sum"] do
+        code = """
+        defmodule Hologram.Test.Fixtures.DB.Reserved#{Macro.camelize(name)} do
+          use Hologram.DB
+
+          def run, do: #{name}(1, 2)
+
+          def #{name}(a, b), do: {a, b}
+        end
+        """
+
+        assert_error Hologram.CompileError,
+                     "nofile:4: #{name}/2 is reserved for a query word Hologram doesn't have yet - if this is your own function, rename it",
+                     fn -> Code.eval_string(code) end
+      end
+    end
+
+    test "leaves an own function nothing calls unqualified" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.DB.ReservedUncalled do
+          use Hologram.DB
+
+          def most_common(a, b), do: {a, b}
+        end
+        """)
+
+      assert module.most_common(1, 2) == {1, 2}
+    end
+
+    test "leaves a function of the same name with another arity alone" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.DB.ReservedOtherArity do
+          use Hologram.DB
+
+          def run, do: inverse(1)
+
+          def inverse(a), do: {:inverse, a}
+        end
+        """)
+
+      assert module.run() == {:inverse, 1}
+    end
   end
 
   describe "init/1" do
@@ -796,7 +876,7 @@ defmodule Hologram.DBTest do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
       assert_error MisuseError, expected_msg, fn ->
-        delete(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        delete(RoleGrant, "02wSyz8E9khZO82QLJOgGt")
       end
     end
   end
@@ -1089,13 +1169,14 @@ defmodule Hologram.DBTest do
       end
     end
 
-    test "reads an entity id as the string the entity carries" do
+    test "reads an entity id in the 36-character form" do
       {:ok, entity} = create(Module1.new())
 
       statement =
         ~s|SELECT "id" FROM "hologram_data"."test_fixtures_entity_module1" WHERE "id" = $1|
 
-      assert sql(statement, [entity.id]) == {:ok, %{columns: ["id"], rows: [[entity.id]]}}
+      assert sql(statement, [entity.id]) ==
+               {:ok, %{columns: ["id"], rows: [[Hologram.Entity.id_to_uuid(entity.id)]]}}
     end
 
     test "refuses a delete" do
@@ -1349,7 +1430,7 @@ defmodule Hologram.DBTest do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
       assert_error MisuseError, expected_msg, fn ->
-        update(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f", role: :owner)
+        update(RoleGrant, "02wSyz8E9khZO82QLJOgGt", role: :owner)
       end
     end
 

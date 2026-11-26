@@ -12,6 +12,9 @@ defmodule Hologram.DB.CodecTest do
   @uuid_binary Base.decode16!("0192b1e97a2b7c3d8e4f5a6b7c8d9e0f", case: :lower)
   @uuid_string "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
 
+  # The same 128-bit number as @uuid_binary, in its id form.
+  @id_string "02y1zRviSAYGVwSyzxs4q7"
+
   describe "decode/2" do
     test "passes nil through for any type" do
       assert decode(nil, :string) == nil
@@ -39,6 +42,19 @@ defmodule Hologram.DB.CodecTest do
 
     test "passes :float values through" do
       assert decode(1.5, :float) == 1.5
+    end
+
+    test "decodes :id values from 16-byte binaries to 22 base62 digits" do
+      assert decode(@uuid_binary, :id) == @id_string
+    end
+
+    test "pads small :id values with zeros to 22 digits" do
+      assert decode(<<0::128>>, :id) == "0000000000000000000000"
+      assert decode(<<1::128>>, :id) == "0000000000000000000001"
+    end
+
+    test "decodes the largest :id value" do
+      assert decode(<<2 ** 128 - 1::128>>, :id) == "7n42DGM5Tflk9n8mt7Fhc7"
     end
 
     test "passes :integer values through" do
@@ -132,6 +148,10 @@ defmodule Hologram.DB.CodecTest do
       assert decode_json("Hologram.Test.Fixtures.Role.Module1", :enum) == {:ok, Module1}
     end
 
+    test "reads :id values back as they are spelled" do
+      assert decode_json(@id_string, :id) == {:ok, @id_string}
+    end
+
     test "reads :float values back" do
       assert decode_json(2.5, :float) == {:ok, 2.5}
     end
@@ -170,6 +190,7 @@ defmodule Hologram.DB.CodecTest do
         {~U[2026-07-18 08:30:00.123456Z], :datetime},
         {Module1, :enum},
         {2.5, :float},
+        {@id_string, :id},
         {11, :integer},
         {%{"title" => 3}, :map},
         {"xyz", :string},
@@ -224,6 +245,7 @@ defmodule Hologram.DB.CodecTest do
       assert decode_json("no_such_label_for_codec_test", :enum) == :error
       assert decode_json("No.Such.Module.For.Codec.Test", :enum) == :error
       assert decode_json("2.5", :float) == :error
+      assert decode_json(1, :id) == :error
       assert decode_json("1", :integer) == :error
       assert decode_json([], :map) == :error
       assert decode_json(1, :string) == :error
@@ -278,6 +300,43 @@ defmodule Hologram.DB.CodecTest do
 
     test "passes :float values through" do
       assert encode(2.5, :float) == 2.5
+    end
+
+    test "encodes :id values from 22 base62 digits to 16-byte binaries" do
+      assert encode(@id_string, :id) == @uuid_binary
+    end
+
+    test "round trips :id values at both ends of the range" do
+      for number <- [0, 1, 2 ** 128 - 1] do
+        binary = <<number::128>>
+
+        assert encode(decode(binary, :id), :id) == binary
+      end
+    end
+
+    test "round trips the bytes of a UUIDv7" do
+      binary = encode(Hologram.Entity.generate_id(), :id)
+
+      assert encode(decode(binary, :id), :id) == binary
+    end
+
+    # Ids are written at a fixed width in digits that are in ASCII order, so the strings
+    # sort exactly as the numbers do - and so as the time order of UUIDv7 bytes.
+    test "spells :id values so that their string order is their byte order" do
+      edge_binaries =
+        Enum.map([0, 9, 10, 35, 36, 61, 62, 3843, 2 ** 64, 2 ** 127, 2 ** 128 - 1], &<<&1::128>>)
+
+      random_binaries = Enum.map(1..50, fn _index -> :crypto.strong_rand_bytes(16) end)
+
+      ids = Enum.map(edge_binaries ++ random_binaries, &decode(&1, :id))
+
+      ids_by_bytes =
+        ids
+        |> Enum.map(&encode(&1, :id))
+        |> Enum.sort()
+        |> Enum.map(&decode(&1, :id))
+
+      assert Enum.sort(ids) == ids_by_bytes
     end
 
     test "passes :integer values through" do
@@ -429,6 +488,10 @@ defmodule Hologram.DB.CodecTest do
       assert encode_json(2.5, :float) == 2.5
     end
 
+    test "keeps :id values as they are spelled" do
+      assert encode_json(@id_string, :id) == @id_string
+    end
+
     test "passes :integer values through" do
       assert encode_json(11, :integer) == 11
     end
@@ -461,6 +524,7 @@ defmodule Hologram.DB.CodecTest do
         {~U[2026-07-18 08:30:00.123456Z], :datetime},
         {Module1, :enum},
         {2.5, :float},
+        {@id_string, :id},
         {11, :integer},
         {%{"title" => 3}, :map},
         {"xyz", :string},
@@ -471,7 +535,7 @@ defmodule Hologram.DB.CodecTest do
       encoded = Enum.map(values, fn {value, type} -> encode_json(value, type) end)
 
       assert Jason.encode!(encoded) ==
-               ~s([false,"2026-07-19","2026-07-18T08:30:00.123456Z","Hologram.Test.Fixtures.Role.Module1",2.5,11,{"title":3},"xyz","11:00:00.123456","#{@uuid_string}"])
+               ~s([false,"2026-07-19","2026-07-18T08:30:00.123456Z","Hologram.Test.Fixtures.Role.Module1",2.5,"#{@id_string}",11,{"title":3},"xyz","11:00:00.123456","#{@uuid_string}"])
     end
   end
 

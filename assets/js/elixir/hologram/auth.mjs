@@ -17,6 +17,7 @@ import Sha1 from "../../sha1.mjs";
 import SortKey from "../../sort_key.mjs";
 import StringOrder from "../../string_order.mjs";
 import Type from "../../type.mjs";
+import Utils from "../../utils.mjs";
 
 // Whether the acting user may do something, answered here rather than asked of the server.
 //
@@ -40,11 +41,6 @@ const GRANT_TYPE = "Hologram.Auth.RoleGrant";
 
 // The server's refusal of an update of a grant row, which can? with values gives too.
 const GRANT_UPDATE_MESSAGE = `cannot update ${GRANT_TYPE} - a role grant is never changed in place, revoke the role and grant the new one instead`;
-
-// The one spelling Hologram gives entity ids, the server validator's own pattern - without the
-// multiline flag, $ matches only at the very end, so a trailing newline is no match here either.
-const CANONICAL_ID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // What a condition, a role reference or a delegation holds as when this client cannot tell: a
 // related row it would read is one it does not hold - one its user may not read, which the server
@@ -1013,9 +1009,9 @@ function storedAsBase(entityType, entity, row) {
 }
 
 // A stored field's value off the boxed entity, as the wire spells it - an attribute by its declared
-// type, a reference field as the uuid it holds.
+// type, a reference field as the entity id it holds.
 function storedValue(entityType, entity, name) {
-  const attributeType = Model.entry(entityType).attributes[name] ?? "uuid";
+  const attributeType = Model.entry(entityType).attributes[name] ?? "id";
   const key = Type.encodeMapKey(Type.atom(name));
   const entry = entity.data[key];
 
@@ -1043,7 +1039,7 @@ function throughDerivedSet(entityType, names) {
 
 // The acting user as rules read it, taken from the user entity or the id itself - the twin of
 // acting_user_id/1 in Hologram.Auth. It is null, a visitor, for nil and for an id in any spelling
-// but the canonical lowercase uuid an entity id is. A session's user id may be any string or
+// but the 22 base62 characters an entity id is. A session's user id may be any string or
 // integer, and one naming no user entity is anonymous to the rules. Read as somebody holding
 // nothing, it would pass an inequality on the acting user for every row it doesn't own.
 function unboxActorUserId(userOrId) {
@@ -1051,12 +1047,13 @@ function unboxActorUserId(userOrId) {
     ? (userOrId.data[Type.encodeMapKey(Type.atom("id"))]?.[1] ?? Type.nil())
     : userOrId;
 
-  return Type.isBitstring(term) ? canonicalId(Model.unbox(term, "uuid")) : null;
+  return Type.isBitstring(term) ? canonicalId(Model.unbox(term, "id")) : null;
 }
 
-// The given plain value when it is an id Hologram generates, and null otherwise.
+// The given plain value when it is an entity id, the one spelling Hologram gives them (the server
+// validator's own check), and null otherwise.
 function canonicalId(value) {
-  return typeof value === "string" && CANONICAL_ID.test(value) ? value : null;
+  return Utils.isEntityId(value) ? value : null;
 }
 
 // The server's verdict on an operation whose rules the rows this client holds leave open - a
@@ -1514,7 +1511,7 @@ function statedValues(entityType, values) {
       !invalid.includes(name) &&
       (Object.hasOwn(attributes, name) || Type.isNil(value))
     ) {
-      stated.set(name, Model.unbox(value, attributes[name] ?? "uuid"));
+      stated.set(name, Model.unbox(value, attributes[name] ?? "id"));
     }
   }
 
@@ -1823,7 +1820,7 @@ function unheldReferences(entityType, entity, changes) {
         return [];
       }
 
-      const id = Model.unbox(changes.get(field), "uuid");
+      const id = Model.unbox(changes.get(field), "id");
 
       return id === null ||
         id === storedValue(entityType, entity, field) ||
@@ -2305,11 +2302,13 @@ const Elixir_Hologram_Auth = {
 // A grant's id is a function of the grant - this user, this entity, this role - so a grant made
 // here and the same grant made anywhere else are one row, and nothing about it is reconciled
 // after the fact. UUIDv5 (RFC 9562): SHA-1 over the namespace and the name, the name being the
-// four parts joined with a newline, each spelled as the store spells it - ids as they are, the
-// entity type's label, a role name or a global role module without its "Elixir." prefix, and
-// "" for a part that is null. Hashed as UTF-8, which is what the server hashes.
+// four parts joined with a newline - the ids in the lowercase 8-4-4-4-12 form of their number,
+// the spelling ids had when grant ids were first derived, so a grant keeps the number it was
+// given then, the entity type's label, a role name or a global role module without its "Elixir."
+// prefix, and "" for a part that is null. Hashed as UTF-8, which is what the server hashes. The
+// ids it takes are entity ids, and so is the one it returns.
 export function deriveGrantId(userId, entityType, entityId, role) {
-  const name = [userId, entityType, entityId, role]
+  const name = [uuidSpelling(userId), entityType, uuidSpelling(entityId), role]
     .map((part) => part ?? "")
     .join("\n");
 
@@ -2324,11 +2323,13 @@ export function deriveGrantId(userId, entityType, entityId, role) {
   bytes[6] = (bytes[6] & 0x0f) | 0x50;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
-  const hex = Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
+  return Utils.entityIdFromBytes(bytes);
+}
 
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+// An id deriveGrantId hashes, in the lowercase 8-4-4-4-12 form. The caller has checked it is an
+// entity id - its number is taken as it is spelled.
+function uuidSpelling(id) {
+  return typeof id === "string" ? Utils.entityIdToUuid(id) : id;
 }
 
 // The batch entry a grant is written as: the store's five columns, and the id derived from four
@@ -2538,14 +2539,14 @@ function validateDeclaredRole(entityType, role) {
   return roleName;
 }
 
-// An id the server would accept: the canonical lowercase spelling, and nothing else - the
-// validator's own regex, since the two tiers compare ids as strings.
+// An id the server would accept: 22 base62 characters, and nothing else - the validator's own
+// check, since the two tiers compare ids as strings.
 function validateId(term, subject) {
   const value = Type.isBitstring(term) ? Bitstring.toText(term) : null;
 
-  if (value === null || !CANONICAL_ID.test(value)) {
+  if (!Utils.isEntityId(value)) {
     Interpreter.raiseMisuseError(
-      `invalid ${subject} id ${Interpreter.inspect(term)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
+      `invalid ${subject} id ${Interpreter.inspect(term)} - entity ids are strings of 22 base62 characters`,
     );
   }
 

@@ -2,7 +2,7 @@
 defmodule Hologram.Test.Fixtures.Policy.Readers.Module25 do
   use Hologram.Entity
 
-  attribute :keeper_id, :uuid, optional: true
+  attribute :keeper_id, :id, optional: true
   attribute :open, :boolean, default: false
 
   role :member

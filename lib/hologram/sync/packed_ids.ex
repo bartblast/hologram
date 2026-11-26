@@ -95,7 +95,7 @@ defmodule Hologram.Sync.PackedIds do
   def lefts_in(index, right_id) do
     index
     |> Map.get(encode(right_id), [])
-    |> Enum.map(&Codec.decode(&1, :uuid))
+    |> Enum.map(&Codec.decode(&1, :id))
   end
 
   @doc """
@@ -112,8 +112,8 @@ defmodule Hologram.Sync.PackedIds do
   end
 
   @doc """
-  Returns the given ids packed: each id's 16 bytes, in order, an id given twice packed once. An id
-  that doesn't encode to 16 bytes raises.
+  Returns the given ids packed: each id's 16 bytes, in order, an id given twice packed once. The
+  ids are entity ids as the store reads them back - a value with a character outside base62 raises.
   """
   @spec pack(Enumerable.t()) :: binary
   def pack(ids) do
@@ -214,7 +214,7 @@ defmodule Hologram.Sync.PackedIds do
   """
   @spec unpack(binary) :: list(String.t())
   def unpack(packed) when ids?(packed) do
-    for <<id::binary-size(16) <- packed>>, do: Codec.decode(id, :uuid)
+    for <<id::binary-size(16) <- packed>>, do: Codec.decode(id, :id)
   end
 
   @doc """
@@ -223,13 +223,13 @@ defmodule Hologram.Sync.PackedIds do
   @spec unpack_pairs(binary) :: list({String.t(), String.t()})
   def unpack_pairs(packed) when pairs?(packed) do
     for <<left::binary-size(16), right::binary-size(16) <- packed>> do
-      {Codec.decode(left, :uuid), Codec.decode(right, :uuid)}
+      {Codec.decode(left, :id), Codec.decode(right, :id)}
     end
   end
 
-  # Something that isn't a uuid would pack to more or fewer bytes and shift every id after it.
+  # Every id packs to 16 bytes, which each offset into a packed binary counts on.
   defp encode(id) do
-    <<_bytes::binary-size(16)>> = Codec.encode(id, :uuid)
+    <<_bytes::binary-size(16)>> = Codec.encode(id, :id)
   end
 
   defp finish(packed, slices, from, count) do
@@ -274,7 +274,7 @@ defmodule Hologram.Sync.PackedIds do
   defp take_rights(packed_pairs, left, index, count, rights) when index < count do
     case binary_part(packed_pairs, index * 32, 32) do
       <<^left::binary-size(16), right::binary-size(16)>> ->
-        take_rights(packed_pairs, left, index + 1, count, [Codec.decode(right, :uuid) | rights])
+        take_rights(packed_pairs, left, index + 1, count, [Codec.decode(right, :id) | rights])
 
       _other_left ->
         Enum.reverse(rights)

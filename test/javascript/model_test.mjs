@@ -54,7 +54,7 @@ describe("Model", () => {
     globalThis.Hologram.sync = {
       model: {
         [PROJECT]: {
-          attributes: {id: "uuid", name: "string"},
+          attributes: {id: "id", name: "string"},
           constraints: {},
           defaults: {},
           // A derived field of each kind: a count, an enum, one task, and the tasks an if chooses -
@@ -140,10 +140,10 @@ describe("Model", () => {
         // to write.
         [NOTIFY]: {
           attributes: {
-            actor_id: "uuid",
+            actor_id: "id",
             created_at: "datetime",
             error: "string",
-            id: "uuid",
+            id: "id",
             reason: "enum",
             status: "enum",
           },
@@ -165,7 +165,7 @@ describe("Model", () => {
           attributes: {
             done: "boolean",
             due_on: "date",
-            id: "uuid",
+            id: "id",
             internal_notes: "string",
             position: "integer",
             starts_at: "time",
@@ -287,6 +287,7 @@ describe("Model", () => {
             ]),
           ],
           [Type.atom("stamp"), Type.nil()],
+          [Type.atom("waiting"), Type.map([])],
         ]),
       );
     });
@@ -303,6 +304,7 @@ describe("Model", () => {
           [Type.atom("relationship_ops"), Type.map([])],
           [Type.atom("revisions"), Type.map([])],
           [Type.atom("stamp"), Type.nil()],
+          [Type.atom("waiting"), Type.map([])],
         ]),
       );
     });
@@ -644,7 +646,10 @@ describe("Model", () => {
         field(boxed, "internal_notes"),
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Entity.ServerOnly")],
-          [Type.atom("attribute"), Type.atom("internal_notes")],
+          [
+            Type.atom("__meta__"),
+            Type.map([[Type.atom("field"), Type.atom("internal_notes")]]),
+          ],
         ]),
       );
     });
@@ -655,7 +660,10 @@ describe("Model", () => {
       const notIncluded = (name) =>
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Entity.NotIncluded")],
-          [Type.atom("relationship"), Type.atom(name)],
+          [
+            Type.atom("__meta__"),
+            Type.map([[Type.atom("field"), Type.atom(name)]]),
+          ],
         ]);
 
       assert.deepEqual(field(boxed, "project"), notIncluded("project"));
@@ -1058,7 +1066,7 @@ describe("Model", () => {
 
     it("keeps the value of a declared attribute named like another attribute's sort key", () => {
       globalThis.Hologram.sync.model["MyApp.Book"] = {
-        attributes: {id: "uuid", title: "string", title_sort: "string"},
+        attributes: {id: "id", title: "string", title_sort: "string"},
         relationships: {},
         serverOnly: [],
       };
@@ -1499,7 +1507,7 @@ describe("Model", () => {
       );
     });
 
-    // Hologram.Entity.Metadata declares five fields, and a struct short of one answers a read of
+    // Hologram.Entity.Metadata declares six fields, and a struct short of one answers a read of
     // it with a KeyError where the server's struct answers nil.
     it("carries every field the entity metadata struct declares", () => {
       const metadata = Model.emptyMetadata();
@@ -1515,6 +1523,7 @@ describe("Model", () => {
           "relationship_ops",
           "revisions",
           "stamp",
+          "waiting",
         ],
       );
     });
@@ -1641,7 +1650,7 @@ describe("Model", () => {
   describe("notIncluded()", () => {
     // Equal to what boxing leaves in place of a relationship nobody asked for - the same sentinel
     // from both directions, so a struct built here reads like one built from a row.
-    it("builds the sentinel naming the relationship nobody asked for", () => {
+    it("builds the sentinel naming the field nobody asked for", () => {
       assert.deepEqual(
         Model.notIncluded("tags"),
         field(Model.box(TASK, row()), "tags"),
@@ -1772,7 +1781,7 @@ describe("Model", () => {
       globalThis.Hologram.sync = {
         model: {
           [TYPE]: {
-            attributes: {id: "uuid", label: "string", n: "integer"},
+            attributes: {id: "id", label: "string", n: "integer"},
             relationships: {},
             serverOnly: [],
           },
@@ -1809,7 +1818,7 @@ describe("Model", () => {
       globalThis.Hologram.sync = {
         model: {
           [TYPE]: {
-            attributes: {id: "uuid", n: "integer"},
+            attributes: {id: "id", n: "integer"},
             derived: {
               cap: {
                 definition: {value: literal},
@@ -1880,7 +1889,7 @@ describe("Model", () => {
       globalThis.Hologram.sync = {
         model: {
           [DOC]: {
-            attributes: {archived: "boolean", id: "uuid", public: "boolean"},
+            attributes: {archived: "boolean", id: "id", public: "boolean"},
             derived: {
               kept: {definition: {value: "k"}, kind: "scalar", type: "string"},
               label: {definition: {value: "a"}, kind: "scalar", type: "string"},
@@ -1899,7 +1908,7 @@ describe("Model", () => {
             relationships: {},
           },
           [TASK]: {
-            attributes: {id: "uuid"},
+            attributes: {id: "id"},
             derived: {},
             inverses: {},
             operations: [],
@@ -2116,7 +2125,7 @@ describe("Model", () => {
     it("keeps everything else of a held type the bundle baked", () => {
       Model.replaceRules({
         [DOC]: {
-          attributes: {id: "uuid"},
+          attributes: {id: "id"},
           derived: {},
           inverses: {},
           operations: [],
@@ -2126,7 +2135,7 @@ describe("Model", () => {
 
       assert.deepStrictEqual(globalThis.Hologram.sync.model[DOC].attributes, {
         archived: "boolean",
-        id: "uuid",
+        id: "id",
         public: "boolean",
       });
     });
@@ -2145,7 +2154,7 @@ describe("Model", () => {
     // Rules a deploy added can read a type the bundle never carried, whose rows arrive with them.
     it("takes the whole entry of a type the client does not hold", () => {
       const folder = {
-        attributes: {archived: "boolean", id: "uuid"},
+        attributes: {archived: "boolean", id: "id"},
         constraints: {},
         defaults: {},
         derived: {},
@@ -2168,7 +2177,7 @@ describe("Model", () => {
           attributes: {
             archived: "boolean",
             count: "integer",
-            id: "uuid",
+            id: "id",
             name: "string",
           },
           constraints: {
@@ -2245,7 +2254,7 @@ describe("Model", () => {
         archived: "boolean",
         count: "integer",
         due_on: "date",
-        id: "uuid",
+        id: "id",
         name: "string",
         note: "string",
         opened_at: "datetime",

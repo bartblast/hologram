@@ -31,12 +31,14 @@ defmodule Hologram.DB.EntityOperations do
   # sobelow_skip ["SQL.Query"]
   def add_relationship(entity_type, id, relationship_name, target_id) do
     join_table = fetch_join_table!(entity_type, relationship_name)
+    validate_id!(id)
+    validate_id!(target_id)
 
     statement =
       ~s|INSERT INTO #{qualified_table(join_table.name)} ("source_id", "target_id") VALUES ($1, $2) ON CONFLICT DO NOTHING|
 
-    encoded_id = Codec.encode(id, :uuid)
-    encoded_target_id = Codec.encode(target_id, :uuid)
+    encoded_id = Codec.encode(id, :id)
+    encoded_target_id = Codec.encode(target_id, :id)
 
     effect = %{
       op: :add_relationship,
@@ -151,9 +153,11 @@ defmodule Hologram.DB.EntityOperations do
   @doc false
   @spec delete(module, String.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity_type, id) do
+    validate_id!(id)
+
     %{table: table, join_tables: join_tables} = Map.fetch!(DB.mapping(), entity_type)
 
-    encoded_id = Codec.encode(id, :uuid)
+    encoded_id = Codec.encode(id, :id)
 
     transaction_result =
       Connection.transaction(fn ->
@@ -181,12 +185,14 @@ defmodule Hologram.DB.EntityOperations do
   # sobelow_skip ["SQL.Query"]
   def delete_relationship(entity_type, id, relationship_name, target_id) do
     join_table = fetch_join_table!(entity_type, relationship_name)
+    validate_id!(id)
+    validate_id!(target_id)
 
     statement =
       ~s|DELETE FROM #{qualified_table(join_table.name)} WHERE "source_id" = $1 AND "target_id" = $2|
 
-    encoded_id = Codec.encode(id, :uuid)
-    encoded_target_id = Codec.encode(target_id, :uuid)
+    encoded_id = Codec.encode(id, :id)
+    encoded_target_id = Codec.encode(target_id, :id)
 
     effect = %{
       op: :del_relationship,
@@ -231,7 +237,7 @@ defmodule Hologram.DB.EntityOperations do
     statement =
       ~s|SELECT #{column_list} FROM #{qualified_table(table)} WHERE "id" = $1#{lock_clause}|
 
-    encoded_id = Codec.encode(id, :uuid)
+    encoded_id = Codec.encode(id, :id)
 
     case Connection.query(statement, [encoded_id]) do
       {:ok, %Postgrex.Result{rows: []}} ->
@@ -286,7 +292,7 @@ defmodule Hologram.DB.EntityOperations do
     statement =
       ~s|SELECT #{column_list} FROM #{from_sql} ORDER BY "$r"."id"#{lock_clause(opts[:lock])}|
 
-    case Connection.query(statement, [Codec.encode(id, :uuid)]) do
+    case Connection.query(statement, [Codec.encode(id, :id)]) do
       {:ok, %Postgrex.Result{rows: rows}} -> Enum.map(rows, &decode_row(target_type, &1))
       {:error, error} -> raise error
     end
@@ -396,7 +402,7 @@ defmodule Hologram.DB.EntityOperations do
           server_updated_at = server_written_at(opts[:stamp], updated_at, clock_stamp)
           encoded_updated_at = Codec.encode(updated_at, :datetime)
           encoded_server_updated_at = Codec.encode(server_updated_at, :datetime)
-          encoded_id = Codec.encode(id, :uuid)
+          encoded_id = Codec.encode(id, :id)
 
           params =
             changed_values ++ [stamp, encoded_updated_at, encoded_server_updated_at, encoded_id]
@@ -438,9 +444,9 @@ defmodule Hologram.DB.EntityOperations do
   @doc false
   @spec validate_id!(any) :: :ok
   def validate_id!(id) do
-    if not Validator.attribute_value_valid?(id, :uuid) do
+    if not Validator.attribute_value_valid?(id, :id) do
       raise MisuseError,
-            "invalid id #{KernelUtils.inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+            "invalid id #{KernelUtils.inspect(id)} - entity ids are strings of 22 base62 characters"
     end
 
     :ok
@@ -967,7 +973,7 @@ defmodule Hologram.DB.EntityOperations do
     {conditions, params} =
       key.columns
       |> Enum.zip(key.fields)
-      |> Enum.reduce({[], [Codec.encode(id, :uuid)]}, fn {column, field}, {conditions, params} ->
+      |> Enum.reduce({[], [Codec.encode(id, :id)]}, fn {column, field}, {conditions, params} ->
         quoted_column = Mapper.quote_identifier(column.name)
         stored = ~s|(SELECT #{quoted_column} FROM #{qualified_table} WHERE "id" = $1)|
         placeholder = "$#{length(params) + 1}"
@@ -1183,7 +1189,7 @@ defmodule Hologram.DB.EntityOperations do
   defp reference_taken?(table, columns, relationship_name, target_id, id) do
     column = Enum.find(columns, &(&1.source == {:relationship, relationship_name}))
 
-    unique_value_taken?(table, column.name, target_id, :uuid, id)
+    unique_value_taken?(table, column.name, target_id, :id, id)
   end
 
   # Whether the row a reference names is there, asked of the TARGET type's own table - the one
@@ -1194,7 +1200,7 @@ defmodule Hologram.DB.EntityOperations do
 
     statement = ~s|SELECT EXISTS (SELECT 1 FROM #{qualified_table(table)} WHERE "id" = $1)|
 
-    case Connection.query(statement, [Codec.encode(id, :uuid)]) do
+    case Connection.query(statement, [Codec.encode(id, :id)]) do
       {:ok, %Postgrex.Result{rows: [[exists?]]}} -> exists?
       {:error, error} -> raise error
     end
@@ -1274,7 +1280,7 @@ defmodule Hologram.DB.EntityOperations do
 
   defp removed_edge_effects(entity_type, id, relationship_name, rows) do
     rows
-    |> Enum.map(fn [target_id] -> Codec.decode(target_id, :uuid) end)
+    |> Enum.map(fn [target_id] -> Codec.decode(target_id, :id) end)
     |> Enum.sort()
     |> Enum.map(fn target_id ->
       %{
@@ -1312,7 +1318,7 @@ defmodule Hologram.DB.EntityOperations do
     statement =
       ~s|SELECT EXISTS (SELECT 1 FROM #{qualified_table(table)} WHERE #{Mapper.quote_identifier(column_name)} = $1 AND "id" != $2)|
 
-    params = [Codec.encode(value, type), Codec.encode(id, :uuid)]
+    params = [Codec.encode(value, type), Codec.encode(id, :id)]
 
     case Connection.query(statement, params) do
       {:ok, %Postgrex.Result{rows: [[taken?]]}} -> taken?

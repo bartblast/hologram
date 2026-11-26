@@ -30,7 +30,7 @@ defmodule Hologram.DB.MapperTest do
       assert columns(Module1) == [
                %{
                  name: "id",
-                 type: :uuid,
+                 type: :id,
                  sql_type: "uuid",
                  collation: nil,
                  enum_values: nil,
@@ -345,7 +345,7 @@ defmodule Hologram.DB.MapperTest do
       assert relationship_columns == [
                %{
                  name: "b_id",
-                 type: :uuid,
+                 type: :id,
                  sql_type: "uuid",
                  collation: nil,
                  enum_values: nil,
@@ -357,7 +357,7 @@ defmodule Hologram.DB.MapperTest do
                },
                %{
                  name: "c_id",
-                 type: :uuid,
+                 type: :id,
                  sql_type: "uuid",
                  collation: nil,
                  enum_values: nil,

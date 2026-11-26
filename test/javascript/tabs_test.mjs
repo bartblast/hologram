@@ -624,7 +624,7 @@ describe("Tabs", () => {
       globalThis.Hologram.sync = {
         model: {
           "MyApp.Task": {
-            attributes: {id: "uuid", title: "string"},
+            attributes: {id: "id", title: "string"},
             enumValues: {},
             relationships: {},
             serverOnly: [],
@@ -2392,22 +2392,28 @@ describe("Tabs", () => {
         );
       });
 
-      // The rows the stream vouched for go before the store's come in, and the numbers the page
-      // showed for them are final on the server whatever the store holds.
+      // The rows the stream vouched for go before the store's come in, and a number the page
+      // showed for one is final on the server, so it stays where the store holds the same version.
       it("keeps the numbers the page showed for the rows it takes up", async () => {
         LocalDatabase.raiseFinal(10);
 
-        LocalDatabase.putRow("MyApp.Task", {id: "t-stored", title: "vouched"});
-
-        LocalDatabase.carryNumbers("MyApp.Task", {
-          id: "t-stored",
-          server_updated_seq: 14,
-        });
+        LocalDatabase.putRow(
+          "MyApp.Task",
+          LocalDatabase.carryNumbers("MyApp.Task", {
+            id: "t-stored",
+            server_updated_seq: 14,
+            title: "vouched",
+          }),
+        );
 
         sinon.stub(Durability, "readBase").resolves({
           cursor: "place-2",
           finalSeq: 10,
-          records: [record("t-stored", "stored")],
+          records: [
+            Object.assign(record("t-stored", "stored"), {
+              waiting: {numbers: {server_updated_seq: 14}, own: false},
+            }),
+          ],
         });
 
         await follow();
@@ -2759,7 +2765,7 @@ describe("Tabs", () => {
       // takes up the store, then takes the lead, and the server confirms the batch it sends again.
       it("moves a counter the store already holds moved only once, when it takes the lead after reading the store", async () => {
         globalThis.Hologram.sync.model["MyApp.Task"] = {
-          attributes: {count: "integer", id: "uuid"},
+          attributes: {count: "integer", id: "id"},
           enumValues: {},
           relationships: {},
           serverOnly: [],
@@ -4133,7 +4139,7 @@ describe("Tabs", () => {
       globalThis.Hologram.sync = {
         model: {
           "MyApp.Task": {
-            attributes: {count: "integer", id: "uuid"},
+            attributes: {count: "integer", id: "id"},
             enumValues: {},
             relationships: {},
             serverOnly: [],

@@ -18,8 +18,8 @@ defmodule Hologram.Sync.WireDataTest do
   alias Hologram.Test.Fixtures.Entity.Module4
 
   @created_at ~U[2026-08-16 15:18:13.022508Z]
-  @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
-  @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+  @entity_id "02y1zRviSAYGVwSyzxs4q7"
+  @target_id "02y1zRviSAYGVwSyzxs4q8"
   @updated_at ~U[2026-08-16 16:20:00.000000Z]
 
   defp module_2(overrides \\ %{}) do
@@ -65,7 +65,10 @@ defmodule Hologram.Sync.WireDataTest do
     end
 
     test "leaves out a value the client may not have" do
-      changes = %{email: "user@test.com", password_hash: %ServerOnly{attribute: :password_hash}}
+      changes = %{
+        email: "user@test.com",
+        password_hash: %ServerOnly{__meta__: %{field: :password_hash}}
+      }
 
       assert patch(Module14, changes) == %{email: "user@test.com"}
     end
@@ -134,7 +137,7 @@ defmodule Hologram.Sync.WireDataTest do
           created_at: @created_at,
           email: "user@test.com",
           id: @entity_id,
-          password_hash: %ServerOnly{attribute: :password_hash},
+          password_hash: %ServerOnly{__meta__: %{field: :password_hash}},
           updated_at: @updated_at
         })
 
@@ -178,7 +181,7 @@ defmodule Hologram.Sync.WireDataTest do
     test "keeps the reference field of a relationship it left out" do
       entity =
         struct(Module3, %{
-          b: %NotIncluded{relationship: :b},
+          b: %NotIncluded{__meta__: %{field: :b}},
           b_id: @target_id,
           created_at: @created_at,
           id: @entity_id,
@@ -308,6 +311,30 @@ defmodule Hologram.Sync.WireDataTest do
       refute Map.has_key?(wire, :__meta__)
       assert wire[:"$revisions"] == %{a: 3}
       assert wire.c == "text"
+    end
+
+    test "writes the sequence numbers the read hid beside the row's data" do
+      entity = %{
+        module_2()
+        | __meta__: %Metadata{waiting: %{server_created_seq: 5, server_updated_seq: 8}}
+      }
+
+      assert row(entity)[:"$waiting"] == %{server_created_seq: 5, server_updated_seq: 8}
+    end
+
+    test "writes a hidden sequence number past what a JavaScript number holds as its decimal text" do
+      entity = %{
+        module_2()
+        | __meta__: %Metadata{waiting: %{server_updated_seq: 9_007_199_254_740_993}}
+      }
+
+      assert row(entity)[:"$waiting"] == %{server_updated_seq: "9007199254740993"}
+    end
+
+    test "leaves out the hidden numbers when the read hid none" do
+      wire = row(module_2())
+
+      refute Map.has_key?(wire, :"$waiting")
     end
 
     test "leaves a server-only attribute out of the revisions" do

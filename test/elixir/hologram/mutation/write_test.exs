@@ -14,11 +14,11 @@ defmodule Hologram.Mutation.WriteTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
-  @actor_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13"
-  @granter_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
-  @id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
-  @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
-  @user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12"
+  @actor_id "02y1zRviSAYGVwSyzxs4qB"
+  @granter_id "02y1zRviSAYGVwSyzxs4q9"
+  @id "02y1zRviSAYGVwSyzxs4q7"
+  @target_id "02y1zRviSAYGVwSyzxs4q8"
+  @user_id "02y1zRviSAYGVwSyzxs4qA"
 
   defp grant_write do
     %Write{
@@ -168,7 +168,7 @@ defmodule Hologram.Mutation.WriteTest do
                created_at: nil,
                id: @id,
                name: nil,
-               secrets: %Hologram.Entity.NotIncluded{relationship: :secrets},
+               secrets: %Hologram.Entity.NotIncluded{__meta__: %{field: :secrets}},
                updated_at: nil
              }
     end
@@ -226,14 +226,14 @@ defmodule Hologram.Mutation.WriteTest do
       assert entity == %RoleGrant{
                __meta__: %Metadata{stamp: 5},
                created_at: nil,
-               granted_by: %NotIncluded{relationship: :granted_by},
+               granted_by: %NotIncluded{__meta__: %{field: :granted_by}},
                granted_by_id: @actor_id,
                id: @id,
                entity_id: @target_id,
                entity_type: PolicyModule2,
                role: :member,
                updated_at: nil,
-               user: %NotIncluded{relationship: :user},
+               user: %NotIncluded{__meta__: %{field: :user}},
                user_id: @user_id
              }
     end
@@ -252,14 +252,14 @@ defmodule Hologram.Mutation.WriteTest do
       assert entity == %RoleGrant{
                __meta__: %Metadata{revisions: %{role: 3}, stamp: 5},
                created_at: nil,
-               granted_by: %NotIncluded{relationship: :granted_by},
+               granted_by: %NotIncluded{__meta__: %{field: :granted_by}},
                granted_by_id: nil,
                id: @id,
                entity_id: @target_id,
                entity_type: PolicyModule2,
                role: :member,
                updated_at: nil,
-               user: %NotIncluded{relationship: :user},
+               user: %NotIncluded{__meta__: %{field: :user}},
                user_id: @user_id
              }
     end

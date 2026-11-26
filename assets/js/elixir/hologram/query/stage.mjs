@@ -47,6 +47,7 @@ const TYPE_VALUES = {
   datetime:
     "an ISO DateTime from -4713-11-24T00:00:00Z to 9999-12-31T23:59:59.999999Z",
   float: "a float, or an integer that fits in 64 bits",
+  id: 'an entity id, 22 base62 characters like "02wLIRxqmq3AUo6vl2OW37"',
   integer: "an integer that fits in 64 bits",
   string: "a UTF-8 string with no NUL byte",
   time: "an ISO Time",
@@ -133,7 +134,7 @@ function attributeType(entityType, name) {
   const derivedType = derived?.kind === "scalar" ? derived.type : null;
 
   return (
-    Model.own(Model.entry(entityType).attributes, name) ?? derivedType ?? "uuid"
+    Model.own(Model.entry(entityType).attributes, name) ?? derivedType ?? "id"
   );
 }
 
@@ -436,7 +437,7 @@ function field(struct, name) {
 }
 
 // The names a predicate may read: the attributes plus the reference field of every to-one
-// relationship, which carries an entity id and so filters like any uuid attribute.
+// relationship, which carries an entity id and so filters like any id attribute.
 function filterableNames(entityType) {
   return [
     ...attributeNames(entityType),
@@ -1870,7 +1871,7 @@ function validateOperandValue(name, value, entityType) {
   }
 }
 
-// The types an ordering line can be drawn through: every type but boolean and uuid has an order
+// The types an ordering line can be drawn through: every type but boolean, id and uuid has an order
 // to compare by. An enum's is the list it declares, on every tier. A string's is the same derived
 // key its ordering uses, which the kernel reads off the row.
 function validateOrderableAttribute(name, entityType, operator) {
@@ -1884,7 +1885,7 @@ function validateOrderableAttribute(name, entityType, operator) {
 
   if (!ORDERABLE_TYPES.includes(type)) {
     Interpreter.raiseMisuseError(
-      `operator :${operator} requires an orderable attribute - attribute ${inspectName(name)} in ${entityType} has type :${type}, and boolean and uuid attributes have no order to compare by`,
+      `operator :${operator} requires an orderable attribute - attribute ${inspectName(name)} in ${entityType} has type :${type}, and boolean, id and uuid attributes have no order to compare by`,
     );
   }
 }

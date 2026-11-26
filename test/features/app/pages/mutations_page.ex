@@ -99,7 +99,7 @@ defmodule HologramFeatureTests.MutationsPage do
     Note
     |> take(10)
     |> wrap_term()
-    |> DB.read("018f0000-0000-7000-8000-000000000001")
+    |> DB.read("02wLIRxqmq3AUo6vl2OW37")
 
     component
   end

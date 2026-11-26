@@ -2,6 +2,7 @@ defmodule Hologram.Migration.CallCheck do
   @moduledoc false
 
   alias Hologram.Migration.FieldAccess.Definitions
+  alias Hologram.Migration.Value
 
   # What a migration does to a row must never change after it is applied, so its code
   # may call only what gives the same result for the same arguments, whatever the app, the
@@ -278,8 +279,8 @@ defmodule Hologram.Migration.CallCheck do
       :tuple_size,
       :update_in
     ],
-    # raise/1 with a message held in a variable.
-    Kernel.Utils => [:raise],
+    # raise/1 with a message held in a variable, and destructure/2 padding the list it's given.
+    Kernel.Utils => [:destructure, :raise],
     Keyword => :all,
     List => [
       :ascii_printable?,
@@ -756,6 +757,10 @@ defmodule Hologram.Migration.CallCheck do
 
   defp allowed?({:struct, migration, _line}, migration), do: true
 
+  # The data form of a computed backfill, which `backfill:` writes into the op. It has no
+  # functions the migration calls, and the pinned code in its fields is walked like any other.
+  defp allowed?({:struct, Value, _line}, _migration), do: true
+
   defp allowed?({:struct, module, _line}, _migration) do
     module not in @refused_structs and
       (Map.has_key?(@allowed_functions, module) or exception?(module))
@@ -776,8 +781,8 @@ defmodule Hologram.Migration.CallCheck do
 
   defp collect_references(definitions, migration) do
     definitions
-    |> Enum.reduce([], fn {_name_arity, _kind, line, [args, guards, body]}, acc ->
-      walk([args, body], line, guard_references(guards, line) ++ acc)
+    |> Enum.reduce([], fn {_name_arity, kind, line, [args, guards, body]}, acc ->
+      walk([args, macro_code(kind, body)], line, guard_references(guards, line) ++ acc)
     end)
     |> walk_struct_fields(migration)
   end
@@ -962,6 +967,20 @@ defmodule Hologram.Migration.CallCheck do
   defp location(file, nil), do: file
 
   defp location(file, line), do: "#{file}:#{line}"
+
+  # A migration's macro returns its code rewritten where it expands (see
+  # Hologram.Migration.FieldAccess.define/4), which computes on that code alone. The
+  # rewrite is allowed only there, around the whole body, where it gets the env the macro
+  # expands in - __CALLER__ can't be bound to anything else.
+  defp macro_code(
+         kind,
+         {{:., _dot_meta, [Definitions, :__code__]}, _meta,
+          [code, {:__CALLER__, _caller_meta, context}]}
+       )
+       when kind in [:defmacro, :defmacrop] and is_atom(context),
+       do: code
+
+  defp macro_code(_kind, body), do: body
 
   # Each refused module is judged once - :environment for a standard module the module body
   # used that reads the environment (one only required, as Elixir requires Application in

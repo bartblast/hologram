@@ -19,7 +19,7 @@ describe("QueryCheck", () => {
     " - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API.";
 
   const entry = (overrides) => ({
-    attributes: {id: "uuid", label: "string", token: "string"},
+    attributes: {id: "id", label: "string", token: "string"},
     derived: {},
     inverses: {},
     policy: {read: [{predicates: [], to: null, via: null}]},

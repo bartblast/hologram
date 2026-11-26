@@ -228,6 +228,26 @@ defmodule Hologram.Entity.ValidatorTest do
              )
     end
 
+    test "validates :id values" do
+      assert attribute_value_valid?("02y1zRviSAYGVwSyzxs4q7", :id)
+      assert attribute_value_valid?("0000000000000000000000", :id)
+      assert attribute_value_valid?("7n42DGM5Tflk9n8mt7Fhc7", :id)
+      refute attribute_value_valid?("02y1zRviSAYGVwSyzxs4q", :id)
+      refute attribute_value_valid?("02y1zRviSAYGVwSyzxs4q70", :id)
+      refute attribute_value_valid?("02y1zRviSAYGVwSyzxs4q-", :id)
+      refute attribute_value_valid?("0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f", :id)
+      refute attribute_value_valid?(5, :id)
+    end
+
+    test "refuses an :id value past 2^128 - 1" do
+      refute attribute_value_valid?("7n42DGM5Tflk9n8mt7Fhc8", :id)
+      refute attribute_value_valid?("zzzzzzzzzzzzzzzzzzzzzz", :id)
+    end
+
+    test "refuses an :id value followed by a newline" do
+      refute attribute_value_valid?("02y1zRviSAYGVwSyzxs4q7\n", :id)
+    end
+
     test "validates :uuid values" do
       assert attribute_value_valid?("018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f", :uuid)
       refute attribute_value_valid?("018f4571a1b27c3d8e4f5a6b7c8d9e0f", :uuid)
@@ -346,6 +366,52 @@ defmodule Hologram.Entity.ValidatorTest do
         """)
 
       assert error_message(Module10, data, errors) == expected
+    end
+  end
+
+  describe "requirement_description/1" do
+    test "says what a reason requires" do
+      assert requirement_description({:type, :string}) == "must be of type :string"
+      assert requirement_description({:values, [:a]}) == "must be one of [:a]"
+      assert requirement_description({:min, 1}) == "must be at least 1"
+      assert requirement_description({:max, 2}) == "must be at most 2"
+      assert requirement_description({:in, 1..2}) == "must be in 1..2"
+      assert requirement_description({:length, 3}) == "must be exactly 3 characters"
+      assert requirement_description({:min_length, 4}) == "must be at least 4 characters"
+      assert requirement_description({:max_length, 5}) == "must be at most 5 characters"
+      assert requirement_description({:format, ~r/a/}) == "must match ~r/a/"
+
+      assert requirement_description({:max_bytes, 6}) ==
+               "must hold at most 6 bytes (the most its unique index can carry)"
+    end
+  end
+
+  describe "unique_string_max_bytes/2" do
+    test "bounds a unique string by the whole of a btree entry" do
+      attributes = [{:code, :string, [unique: true]}, {:title, :string, []}]
+
+      assert unique_string_max_bytes(attributes, []) == %{code: 2692}
+    end
+
+    test "splits a key between its strings" do
+      attributes = [{:a, :string, []}, {:b, :string, []}, {:n, :integer, []}]
+
+      assert unique_string_max_bytes(attributes, [[:a, :b, :n]]) == %{a: 1331, b: 1331}
+    end
+
+    test "takes the smallest of a string's bounds" do
+      attributes = [{:a, :string, [unique: true]}, {:b, :string, []}]
+
+      assert %{a: bound} = unique_string_max_bytes(attributes, [[:a, :b]])
+      assert bound < 2692
+    end
+
+    test "gives what the module form gives" do
+      assert unique_string_max_bytes(Hologram.Test.Fixtures.Entity.Module52) ==
+               unique_string_max_bytes(
+                 Module52.__attributes__(),
+                 Module52.__uniques__()
+               )
     end
   end
 
@@ -641,17 +707,17 @@ defmodule Hologram.Entity.ValidatorTest do
     end
 
     test "validates reference fields" do
-      target_id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+      target_id = "02wSyz8E9khZO82QLJOgGt"
 
       assert validate(Module3, %{c_id: target_id}) == :ok
       assert validate(Module3, %{b_id: nil, c_id: target_id}) == :ok
       assert validate(Module3, %{}) == {:error, [{:c_id, :required}]}
       assert validate(Module3, %{c_id: nil}) == {:error, [{:c_id, :required}]}
-      assert validate(Module3, %{c_id: "garbage"}) == {:error, [{:c_id, {:type, :uuid}}]}
+      assert validate(Module3, %{c_id: "garbage"}) == {:error, [{:c_id, {:type, :id}}]}
     end
 
     test "reports to-many relationship names as unknown" do
-      target_id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+      target_id = "02wSyz8E9khZO82QLJOgGt"
 
       assert validate(Module3, %{a: [target_id], c_id: target_id}) ==
                {:error, [{:a, :unknown}]}
@@ -1231,7 +1297,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute type" do
       expected_msg =
-        "invalid type :text for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid"
+        "invalid type :text for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :id, :integer, :string, :time, :uuid"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture1 do
@@ -1244,7 +1310,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects module used as attribute type" do
       expected_msg =
-        "invalid type DateTime for attribute :happened_at in Hologram.Entity.ValidatorTest.InlineEntityFixture2 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid"
+        "invalid type DateTime for attribute :happened_at in Hologram.Entity.ValidatorTest.InlineEntityFixture2 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :id, :integer, :string, :time, :uuid"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture2 do
@@ -2179,12 +2245,12 @@ defmodule Hologram.Entity.ValidatorTest do
     end
 
     test "validates reference field pairs" do
-      target_id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+      target_id = "02wSyz8E9khZO82QLJOgGt"
 
       assert validate_changes(Module3, %{c_id: target_id}) == :ok
       assert validate_changes(Module3, %{b_id: nil}) == :ok
       assert validate_changes(Module3, %{c_id: nil}) == {:error, [{:c_id, :required}]}
-      assert validate_changes(Module3, %{c_id: "garbage"}) == {:error, [{:c_id, {:type, :uuid}}]}
+      assert validate_changes(Module3, %{c_id: "garbage"}) == {:error, [{:c_id, {:type, :id}}]}
     end
 
     test "reports unknown names" do
@@ -2418,7 +2484,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a list of several entity type modules" do
       expected_msg =
-        "invalid type [Hologram.Test.Fixtures.Entity.Module1, Hologram.Test.Fixtures.Entity.Module2] for derived field :rows in Hologram.Entity.ValidatorTest.InlineEntityFixture160 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
+        "invalid type [Hologram.Test.Fixtures.Entity.Module1, Hologram.Test.Fixtures.Entity.Module2] for derived field :rows in Hologram.Entity.ValidatorTest.InlineEntityFixture160 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :id, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture160 do
@@ -2431,7 +2497,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects an unknown type" do
       expected_msg =
-        "invalid type :text for derived field :title in Hologram.Entity.ValidatorTest.InlineEntityFixture147 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
+        "invalid type :text for derived field :title in Hologram.Entity.ValidatorTest.InlineEntityFixture147 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :id, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture147 do
@@ -2444,7 +2510,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a list of something other than an entity type module" do
       expected_msg =
-        "invalid type [:integer] for derived field :counts in Hologram.Entity.ValidatorTest.InlineEntityFixture148 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
+        "invalid type [:integer] for derived field :counts in Hologram.Entity.ValidatorTest.InlineEntityFixture148 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :id, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture148 do
@@ -4322,6 +4388,28 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity, user: false
         end
       end
+    end
+  end
+
+  describe "value_errors/4" do
+    test "gives no errors for a value that holds" do
+      assert value_errors(:code, "ab", :string, max_length: 2) == []
+    end
+
+    test "reports a wrong type alone" do
+      assert value_errors(:code, 1, :string, max_length: 2) == [{:code, {:type, :string}}]
+    end
+
+    test "reports a broken constraint" do
+      assert value_errors(:code, "abc", :string, max_length: 2) == [{:code, {:max_length, 2}}]
+    end
+
+    test "reports a value outside an enum" do
+      assert value_errors(:state, :nope, :enum, values: [:a]) == [{:state, {:values, [:a]}}]
+    end
+
+    test "gives no errors for a value of the enum" do
+      assert value_errors(:state, :a, :enum, values: [:a]) == []
     end
   end
 

@@ -273,7 +273,7 @@ describe("QueryKernel", () => {
       globalThis.Hologram.sync = {
         model: {
           [PROJECT]: {
-            attributes: {id: "uuid", name: "string"},
+            attributes: {id: "id", name: "string"},
             enumValues: {},
             relationships: {
               owner: {toMany: false, type: USER},
@@ -283,7 +283,7 @@ describe("QueryKernel", () => {
           },
           [TASK]: {
             attributes: {
-              id: "uuid",
+              id: "id",
               position: "integer",
               priority: "enum",
               title: "string",
@@ -293,7 +293,7 @@ describe("QueryKernel", () => {
             serverOnly: [],
           },
           [USER]: {
-            attributes: {email: "string", id: "uuid"},
+            attributes: {email: "string", id: "id"},
             enumValues: {},
             relationships: {manager: {toMany: false, type: USER}},
             serverOnly: [],
@@ -489,6 +489,23 @@ describe("QueryKernel", () => {
         });
 
         assert.deepEqual(titles(QueryKernel.run(ordered)), ["\uFFFD", "😀"]);
+      });
+
+      // An id orders by its characters, as the server's Ordering does, where a string's derived
+      // key would fold the letter case two ids differ in.
+      it("orders ids that differ only in letter case by their characters", () => {
+        LocalDatabase.reset();
+
+        LocalDatabase.putRow(TASK, {
+          id: "02y1zRviSAYGVwSyzxs4qa",
+          title: "lower",
+        });
+        LocalDatabase.putRow(TASK, {
+          id: "02y1zRviSAYGVwSyzxs4qA",
+          title: "upper",
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(term())), ["upper", "lower"]);
       });
     });
 
@@ -879,7 +896,7 @@ describe("QueryKernel", () => {
       globalThis.Hologram.sync = {
         model: {
           [CHANNEL]: {
-            attributes: {id: "uuid", name: "string"},
+            attributes: {id: "id", name: "string"},
             enumValues: {},
             inverses: {
               messages: {
@@ -901,7 +918,7 @@ describe("QueryKernel", () => {
             serverOnly: [],
           },
           [LABEL]: {
-            attributes: {id: "uuid", name: "string"},
+            attributes: {id: "id", name: "string"},
             enumValues: {},
             inverses: {
               messages: {
@@ -916,7 +933,7 @@ describe("QueryKernel", () => {
             serverOnly: [],
           },
           [MESSAGE]: {
-            attributes: {body: "string", id: "uuid", position: "integer"},
+            attributes: {body: "string", id: "id", position: "integer"},
             enumValues: {},
             relationships: {
               channel: {optional: true, toMany: false, type: CHANNEL},
@@ -925,7 +942,7 @@ describe("QueryKernel", () => {
             serverOnly: [],
           },
           [TOPIC]: {
-            attributes: {id: "uuid", summary: "string"},
+            attributes: {id: "id", summary: "string"},
             enumValues: {},
             relationships: {
               channel: {optional: true, toMany: false, type: CHANNEL},
@@ -1214,7 +1231,7 @@ describe("QueryKernel", () => {
       globalThis.Hologram.sync = {
         model: {
           [POST]: {
-            attributes: {body: "string", id: "uuid"},
+            attributes: {body: "string", id: "id"},
             enumValues: {},
             inverses: {
               followers: {
@@ -2233,7 +2250,7 @@ describe("QueryKernel", () => {
       globalThis.Hologram.sync = {
         model: {
           [BOOKING]: {
-            attributes: {id: "uuid", level: "enum", priority: "enum"},
+            attributes: {id: "id", level: "enum", priority: "enum"},
             enumValues: {
               level: ["low", "medium", "high"],
               priority: ["low", "medium", "high"],
@@ -2466,7 +2483,7 @@ describe("QueryKernel", () => {
       globalThis.Hologram.sync = {
         model: {
           [TICKET]: {
-            attributes: {id: "uuid", priority: "enum", title: "string"},
+            attributes: {id: "id", priority: "enum", title: "string"},
             enumValues: {priority: ["low", "medium", "high"]},
             relationships: {},
             serverOnly: [],
@@ -2595,7 +2612,7 @@ describe("QueryKernel", () => {
       globalThis.Hologram.sync = {
         model: {
           [CHANNEL]: {
-            attributes: {id: "uuid", name: "string"},
+            attributes: {id: "id", name: "string"},
             enumValues: {},
             inverses: {
               messages: {
@@ -2610,7 +2627,7 @@ describe("QueryKernel", () => {
             serverOnly: [],
           },
           [MESSAGE]: {
-            attributes: {body: "string", id: "uuid", position: "integer"},
+            attributes: {body: "string", id: "id", position: "integer"},
             enumValues: {},
             relationships: {
               channel: {optional: true, toMany: false, type: CHANNEL},
@@ -2818,13 +2835,13 @@ describe("QueryKernel", () => {
       globalThis.Hologram.sync = {
         model: {
           [BOX]: {
-            attributes: {id: "uuid"},
+            attributes: {id: "id"},
             enumValues: {},
             relationships: {items: {toMany: true, type: ITEM}},
             serverOnly: [],
           },
           [CHANNEL]: {
-            attributes: {id: "uuid", name: "string"},
+            attributes: {id: "id", name: "string"},
             enumValues: {},
             inverses: {
               messages: {
@@ -2846,19 +2863,19 @@ describe("QueryKernel", () => {
             serverOnly: [],
           },
           [GADGET]: {
-            attributes: {id: "uuid", priority: "enum"},
+            attributes: {id: "id", priority: "enum"},
             enumValues: {priority: ["low", "medium", "high"]},
             relationships: {},
             serverOnly: [],
           },
           [ITEM]: {
-            attributes: {b: "integer", id: "uuid"},
+            attributes: {b: "integer", id: "id"},
             enumValues: {},
             relationships: {},
             serverOnly: [],
           },
           [LABEL]: {
-            attributes: {id: "uuid", name: "string"},
+            attributes: {id: "id", name: "string"},
             enumValues: {},
             inverses: {
               messages: {
@@ -2873,7 +2890,7 @@ describe("QueryKernel", () => {
             serverOnly: [],
           },
           [MESSAGE]: {
-            attributes: {body: "string", id: "uuid", position: "integer"},
+            attributes: {body: "string", id: "id", position: "integer"},
             enumValues: {},
             relationships: {
               channel: {optional: true, toMany: false, type: CHANNEL},
@@ -2882,7 +2899,7 @@ describe("QueryKernel", () => {
             serverOnly: [],
           },
           [POST]: {
-            attributes: {body: "string", id: "uuid"},
+            attributes: {body: "string", id: "id"},
             enumValues: {},
             inverses: {
               replies: {
@@ -2899,13 +2916,13 @@ describe("QueryKernel", () => {
             serverOnly: [],
           },
           [SHELF]: {
-            attributes: {floor: "enum", id: "uuid"},
+            attributes: {floor: "enum", id: "id"},
             enumValues: {floor: ["low", "medium", "high"]},
             relationships: {items: {toMany: true, type: GADGET}},
             serverOnly: [],
           },
           [TOPIC]: {
-            attributes: {id: "uuid", summary: "string"},
+            attributes: {id: "id", summary: "string"},
             enumValues: {},
             relationships: {
               channel: {optional: true, toMany: false, type: CHANNEL},
@@ -3410,7 +3427,7 @@ describe("QueryKernel", () => {
           [CHANNEL]: {
             attributes: {
               archived: "boolean",
-              id: "uuid",
+              id: "id",
               kind: "enum",
               name: "string",
               opened_on: "date",
@@ -3423,13 +3440,13 @@ describe("QueryKernel", () => {
             serverOnly: [],
           },
           [MESSAGE]: {
-            attributes: {created_on: "date", id: "uuid"},
+            attributes: {created_on: "date", id: "id"},
             enumValues: {},
             relationships: {channel: {toMany: false, type: CHANNEL}},
             serverOnly: [],
           },
           [ORG]: {
-            attributes: {id: "uuid", name: "string"},
+            attributes: {id: "id", name: "string"},
             enumValues: {},
             relationships: {},
             serverOnly: [],
@@ -3651,7 +3668,7 @@ describe("QueryKernel", () => {
               ends_on: "date",
               held_at: "datetime",
               held_on: "date",
-              id: "uuid",
+              id: "id",
               title: "string",
             },
             derived: {
@@ -3670,13 +3687,13 @@ describe("QueryKernel", () => {
             serverOnly: [],
           },
           [SESSION]: {
-            attributes: {id: "uuid", starts_on: "date"},
+            attributes: {id: "id", starts_on: "date"},
             enumValues: {},
             relationships: {},
             serverOnly: [],
           },
           [VENUE]: {
-            attributes: {id: "uuid", opened_on: "date"},
+            attributes: {id: "id", opened_on: "date"},
             enumValues: {},
             relationships: {},
             serverOnly: [],

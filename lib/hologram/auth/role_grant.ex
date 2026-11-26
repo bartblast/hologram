@@ -85,7 +85,7 @@ defmodule Hologram.Auth.RoleGrant do
             created_at: nil,
             entity_id: nil,
             entity_type: nil,
-            granted_by: %NotIncluded{relationship: :granted_by},
+            granted_by: %NotIncluded{__meta__: %{field: :granted_by}},
             granted_by_id: nil,
             id: nil,
             role: nil,
@@ -94,7 +94,7 @@ defmodule Hologram.Auth.RoleGrant do
             server_updated_at: nil,
             server_updated_seq: nil,
             updated_at: nil,
-            user: %NotIncluded{relationship: :user},
+            user: %NotIncluded{__meta__: %{field: :user}},
             user_id: nil
 
   @type t :: %__MODULE__{
@@ -122,7 +122,7 @@ defmodule Hologram.Auth.RoleGrant do
   @spec __attributes__() :: list({atom, atom, keyword})
   def __attributes__ do
     [
-      {:entity_id, :uuid, [optional: true]},
+      {:entity_id, :id, [optional: true]},
       {:entity_type, :enum, [values: resolved(:entity_type_values), optional: true]},
       {:role, :enum, [values: resolved(:role_values)]}
     ]
@@ -211,7 +211,7 @@ defmodule Hologram.Auth.RoleGrant do
   def __system_attributes__ do
     [
       {:created_at, :datetime, []},
-      {:id, :uuid, []},
+      {:id, :id, []},
       {:server_created_at, :datetime, []},
       {:server_created_seq, :integer, []},
       {:server_updated_at, :datetime, []},
@@ -257,16 +257,19 @@ defmodule Hologram.Auth.RoleGrant do
   # derive_id/4 over the parts as the store spells them - the entity type's label and the role's,
   # the way a row read back as text holds them. The migrator reads a relabeled grant that way and
   # derives the id its new labels give it, so the derivation itself lives here alone.
+  # The ids it takes and the one it returns are entity ids; the two it hashes are spelled in the
+  # lowercase 8-4-4-4-12 form, the spelling ids had when grant ids were first derived, so that a
+  # grant keeps the number it was given then.
   # sobelow_skip ["Crypto.WeakHash"]
   def derive_id_from_labels(user_id, entity_type, entity_id, role) do
-    name = Enum.join([user_id, entity_type, entity_id, role], "\n")
+    name = Enum.join([uuid_spelling(user_id), entity_type, uuid_spelling(entity_id), role], "\n")
 
     # A nil part joins as the empty string, and no part can contain a newline - a uuid, an enum
     # label and a module name are all spelled without one - so the four are unambiguous.
     <<time_low_and_mid::48, _version::4, time_high::12, _variant::2, rest::62, _tail::binary>> =
       :crypto.hash(:sha, @namespace <> name)
 
-    format_id(<<time_low_and_mid::48, 5::4, time_high::12, 2::2, rest::62>>)
+    Codec.decode(<<time_low_and_mid::48, 5::4, time_high::12, 2::2, rest::62>>, :id)
   end
 
   @doc false
@@ -337,14 +340,14 @@ defmodule Hologram.Auth.RoleGrant do
     }
   end
 
-  # The canonical lowercase 8-4-4-4-12 spelling, which is the only one
-  # `Entity.Validator.attribute_value_valid?/2` admits for a :uuid - it checks the shape and not
-  # the version, so a v5 is as much an entity id as the v7 every other table carries.
-  defp format_id(uuid) do
-    <<part_1::binary-size(8), part_2::binary-size(4), part_3::binary-size(4),
-      part_4::binary-size(4), part_5::binary-size(12)>> = Base.encode16(uuid, case: :lower)
+  # An id the derivation hashes, in the lowercase 8-4-4-4-12 form. The caller has checked it is an
+  # entity id - its number is taken as it is spelled.
+  defp uuid_spelling(nil), do: nil
 
-    "#{part_1}-#{part_2}-#{part_3}-#{part_4}-#{part_5}"
+  defp uuid_spelling(id) do
+    id
+    |> Codec.encode(:id)
+    |> Codec.decode(:uuid)
   end
 
   # The resolution is derived from the model cache (see Hologram.Entity.Model), and definition
