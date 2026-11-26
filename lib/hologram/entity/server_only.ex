@@ -16,7 +16,8 @@ defmodule Hologram.Entity.ServerOnly do
 
   Your server code works with the real value. An entity that `init/3`, a command or a job reads
   through `DB` holds it, and you don't need to remove it yourself before putting the entity in
-  state or passing it as a prop.
+  state or passing it as a prop. A prop holds `%ServerOnly{}` in a component's `init/3` too, so
+  when `init/3` needs the real value, read the entity through `DB`.
 
   Browser code can't write a server-only attribute. Set it in a command or a job.
 

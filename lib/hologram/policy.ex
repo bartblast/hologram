@@ -288,6 +288,22 @@ defmodule Hologram.Policy do
     Map.get(policy, {:update, field}, []) ++ Map.get(policy, :update, [])
   end
 
+  # Whether a rule the given operation of the given entity type is judged by reads a server-only
+  # attribute (see reads_server_only?/2), the clauses it reads the row after a change with included
+  # (see read_clauses/1). An update, whole or of some fields, counts every update line's rules,
+  # since a field is judged by its own lines' and the whole row's. An operation of no shape the
+  # policy keys holds no rules, so it reads none.
+  @doc false
+  @spec operation_reads_server_only?(module, any) :: boolean
+  def operation_reads_server_only?(entity_type, operation) do
+    entity_type
+    |> build()
+    |> Enum.filter(fn {key, _rules} -> judges_operation?(key, operation) end)
+    |> Enum.flat_map(fn {_key, rules} -> rules end)
+    |> Enum.flat_map(&standing_clauses(read_clauses(&1)))
+    |> Enum.any?(&reads_server_only?(entity_type, &1))
+  end
+
   # The clauses a line's condition builds: an update line's are read with the row after the change
   # one level above the rule's own row, which is what new() lowers to.
   @doc false
@@ -2102,6 +2118,14 @@ defmodule Hologram.Policy do
       update_names: update_names(entity_type)
     }
   end
+
+  # Whether the rules under the given key of a compiled policy judge the given operation (see
+  # operation_reads_server_only?/2).
+  defp judges_operation?(key, operation)
+       when operation == :update or elem(operation, 0) == :update,
+       do: key == :update or (is_tuple(key) and elem(key, 0) == :update)
+
+  defp judges_operation?(key, operation), do: key == operation
 
   # Whether the given clause of a rule of the given entity type reads a server-only attribute - of
   # the row, of one a path or a set leads to, or of one above inside a quantifier. A derived field

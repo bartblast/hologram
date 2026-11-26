@@ -81,6 +81,9 @@ defmodule Hologram.Template.RendererDerivedTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module180
   alias Hologram.Test.Fixtures.Template.Renderer.Module182
   alias Hologram.Test.Fixtures.Template.Renderer.Module183
+  alias Hologram.Test.Fixtures.Template.Renderer.Module192
+  alias Hologram.Test.Fixtures.Template.Renderer.Module193
+  alias Hologram.Test.Fixtures.Template.Renderer.Module194
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -370,6 +373,50 @@ defmodule Hologram.Template.RendererDerivedTest do
 
       refute String.contains?(html, "note_secret_v7")
       refute String.contains?(html, "tok_R4mQ")
+    end
+
+    test "hands a template and a derived function reading the database themselves the row with its server-only attributes replaced by the sentinel" do
+      {:ok, entity} =
+        %{label: "Report", token: "tok_R4mQ"}
+        |> Module15.new()
+        |> create()
+
+      node =
+        {:component, Module192, [{"cid", [text: "my_component"]}, {"id", [text: entity.id]}], []}
+
+      {html, component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert html ==
+               "template = %Hologram.Entity.ServerOnly{__meta__: %{field: :token}}; " <>
+                 "derived = %Hologram.Entity.ServerOnly{__meta__: %{field: :token}}"
+
+      assert component_registry["my_component"].struct.state.init_token == "tok_R4mQ"
+    end
+
+    test "hands a stateless component's derived function reading the database the row with its server-only attributes replaced by the sentinel" do
+      {:ok, entity} =
+        %{label: "Report", token: "tok_R4mQ"}
+        |> Module15.new()
+        |> create()
+
+      node = {:component, Module192, [{"id", [text: entity.id]}], []}
+
+      assert {"template = %Hologram.Entity.ServerOnly{__meta__: %{field: :token}}; " <>
+                "derived = %Hologram.Entity.ServerOnly{__meta__: %{field: :token}}", _registry,
+              _server_struct} = render_dom(node, @env, @server)
+    end
+
+    test "hands a derived function reading state and the database the row with its server-only attributes replaced by the sentinel" do
+      {:ok, entity} =
+        %{label: "Report", token: "tok_R4mQ"}
+        |> Module15.new()
+        |> create()
+
+      node =
+        {:component, Module193, [{"cid", [text: "my_component"]}, {"id", [text: entity.id]}], []}
+
+      assert {"derived = %Hologram.Entity.ServerOnly{__meta__: %{field: :token}}", _registry,
+              _server_struct} = render_dom(node, @env, @server)
     end
 
     test "carries a count under the field's name and the query its function built" do
@@ -1069,7 +1116,8 @@ defmodule Hologram.Template.RendererDerivedTest do
         {Module178, :dummy_module_178_digest},
         {Module179, :dummy_module_179_digest},
         {Module182, :dummy_module_182_digest},
-        {Module183, :dummy_module_183_digest}
+        {Module183, :dummy_module_183_digest},
+        {Module194, :dummy_module_194_digest}
       ])
 
       dump_query_cache(QueryCacheStub)
@@ -1213,6 +1261,23 @@ defmodule Hologram.Template.RendererDerivedTest do
       assert String.contains?(html, "page = 1,2;")
       assert String.contains?(html, "entities = 1,2")
       assert boot_data(html)["actorUserId"] == Auth.owner_key(user.id)
+    end
+
+    test "hands a derived function the page computes again for the new user the row it reads with its server-only attributes replaced by the sentinel",
+         %{user: user} do
+      {:ok, entity} =
+        %{label: "Report", token: "tok_R4mQ"}
+        |> Module15.new()
+        |> create()
+
+      html = render_page_html(Module194, %Server{}, %{id: entity.id, user_id: user.id})
+
+      assert String.contains?(
+               html,
+               "derived = %Hologram.Entity.ServerOnly{__meta__: %{field: :token}}"
+             )
+
+      refute String.contains?(html, "tok_R4mQ")
     end
 
     test "leaves the server struct with the new user after rendering again", %{user: user} do

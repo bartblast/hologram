@@ -12,6 +12,7 @@ defmodule HologramFeatureTests.ServerOnlyTest do
   alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.PoliciesPage
+  alias HologramFeatureTests.ServerOnlyHtmlPage
 
   # All the tables truncate in one statement: the memo, note, project member and role grant tables'
   # foreign keys to the user table make Postgres reject truncating the referenced table alone.
@@ -49,5 +50,26 @@ defmodule HologramFeatureTests.ServerOnlyTest do
     assert String.contains?(html, "public_document")
 
     refute String.contains?(html, "api_token_5rL9")
+  end
+
+  feature "keeps the server-only value out of what the page, a component and a derived field render",
+          %{session: session} do
+    %{api_token: "api_token_8wQ3", public: true, title: "server_only_html"}
+    |> Document.new()
+    |> DB.create!()
+
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/server-only-html")
+
+    refute String.contains?(html, "api_token_8wQ3")
+
+    for id <- ["page_api_token", "component_api_token", "derived_api_token"] do
+      assert html =~ ~r/id="#{id}"><code>server_only<\/code>/
+    end
+
+    session
+    |> visit(ServerOnlyHtmlPage)
+    |> assert_text(css("#page_api_token"), "server_only")
+    |> assert_text(css("#component_api_token"), "server_only")
+    |> assert_text(css("#derived_api_token"), "server_only")
   end
 end

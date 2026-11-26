@@ -648,7 +648,7 @@ defmodule Hologram.Template.Renderer do
       #
       # WARNING: must match the client renderer's #renderComponent.
       derived =
-        ComponentDerived.compute(
+        compute_derived(
           module.__derived__(),
           module,
           props,
@@ -1038,6 +1038,15 @@ defmodule Hologram.Template.Renderer do
 
   defp component_key_scope(:error, _props, key_scope), do: key_scope
 
+  # A derived function reading the database itself gets the rows with their server-only attributes
+  # as placeholders, as the browser computes it, so nothing computed from a server-only value
+  # reaches the HTML.
+  defp compute_derived(entries, module, props, state, computed, opts) do
+    DB.with_server_only_stripped(fn ->
+      ComponentDerived.compute(entries, module, props, state, computed, opts)
+    end)
+  end
+
   defp contains_trusted_html?(nodes) do
     Enum.any?(nodes, fn
       {:trusted_html, _html} -> true
@@ -1165,9 +1174,19 @@ defmodule Hologram.Template.Renderer do
   # one the template holds or builds. The one way around it is a template handing the bare `vars`
   # on to a helper that reads a missing key from it. The marker costs a copy of the map per render,
   # the rescue nothing until something raises.
+  #
+  # Every template renders through here, so this is where the server-only values the server holds
+  # are replaced by their placeholders: what a template reads is what the browser's copy holds, and
+  # neither the HTML nor the props it passes on carry a value the browser never gets. A row the
+  # template reads from the database itself is stripped the same way. Text carries no origin, so
+  # the check can't sit on the HTML.
   defp evaluate_template(module, vars) do
-    marked_vars = Map.put(vars, :__hologram_vars__, true)
-    module.template().(marked_vars)
+    marked_vars =
+      vars
+      |> Entity.strip_server_only_deep()
+      |> Map.put(:__hologram_vars__, true)
+
+    DB.with_server_only_stripped(fn -> module.template().(marked_vars) end)
   rescue
     error in KeyError ->
       case error do
@@ -1430,7 +1449,7 @@ defmodule Hologram.Template.Renderer do
     compute_opts = derived_compute_opts(module)
 
     computed_before_init =
-      ComponentDerived.compute(before_init, module, props, state_defaults, %{}, compute_opts)
+      compute_derived(before_init, module, props, state_defaults, %{}, compute_opts)
 
     initial_component_struct = %Component{
       derived: Map.merge(computed_before_init, ComponentDerived.not_computed(after_init)),
@@ -1469,7 +1488,7 @@ defmodule Hologram.Template.Renderer do
         page? ->
           render_as_user(returned_server_struct.user_id)
 
-          ComponentDerived.compute(before_init, module, props, state_defaults, %{}, compute_opts)
+          compute_derived(before_init, module, props, state_defaults, %{}, compute_opts)
 
         true ->
           follow_user_change(module, server_struct, returned_server_struct)
@@ -1483,12 +1502,15 @@ defmodule Hologram.Template.Renderer do
       ComponentDerived.validate_state_computed!(component_struct.state, module, "init/3")
     end
 
+    # Computed over the state with its server-only values replaced by their placeholders, as the
+    # browser computes them, so nothing computed from a server-only value reaches the HTML. The
+    # struct keeps the real state for the server code that reads it.
     derived =
-      ComponentDerived.compute(
+      compute_derived(
         after_init,
         module,
         props,
-        component_struct.state,
+        Entity.strip_server_only_deep(component_struct.state),
         derived_before_init,
         compute_opts
       )
@@ -2020,13 +2042,24 @@ defmodule Hologram.Template.Renderer do
 
     layout_module = page_module.__layout_module__()
 
-    # The layout takes the page's state and derived fields as props, by name.
-    layout_props_dom = build_layout_props_dom(page_module, Map.merge(page_state, page_derived))
+    # The layout takes the page's state and derived fields as props, by name, with their
+    # server-only values replaced by placeholders, like any prop a template passes.
+    layout_props_dom =
+      page_state
+      |> Map.merge(page_derived)
+      |> Entity.strip_server_only_deep()
+      |> then(&build_layout_props_dom(page_module, &1))
+
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
 
+    # The context the page emitted keeps its real values on the page's struct, while the props the
+    # components below take from it hold placeholders, like the props a template passes.
     render_tree(
       layout_node,
-      %Env{context: page_emitted_context, parent_module: page_module},
+      %Env{
+        context: Entity.strip_server_only_deep(page_emitted_context),
+        parent_module: page_module
+      },
       server_struct
     )
   end
@@ -2049,7 +2082,10 @@ defmodule Hologram.Template.Renderer do
       |> Map.merge(component_struct.state)
       |> Map.merge(component_struct.derived)
 
-    merged_context = Map.merge(context, component_struct.emitted_context)
+    # The context the component emitted keeps its real values on its struct, while the props the
+    # components below take from it hold placeholders, like the props a template passes.
+    merged_context =
+      Map.merge(context, Entity.strip_server_only_deep(component_struct.emitted_context))
 
     {tree, children_component_registry, final_server_struct} =
       render_template(

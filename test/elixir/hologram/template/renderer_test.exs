@@ -16,6 +16,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Server.Metadata
   alias Hologram.Template.Renderer
   alias Hologram.Template.TrustedHTML
+  alias Hologram.Test.Fixtures.Entity.Module15, as: ServerOnlyEntity
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
@@ -50,7 +51,12 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module17
   alias Hologram.Test.Fixtures.Template.Renderer.Module176
   alias Hologram.Test.Fixtures.Template.Renderer.Module18
+  alias Hologram.Test.Fixtures.Template.Renderer.Module184
+  alias Hologram.Test.Fixtures.Template.Renderer.Module186
+  alias Hologram.Test.Fixtures.Template.Renderer.Module187
+  alias Hologram.Test.Fixtures.Template.Renderer.Module188
   alias Hologram.Test.Fixtures.Template.Renderer.Module19
+  alias Hologram.Test.Fixtures.Template.Renderer.Module190
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module21
   alias Hologram.Test.Fixtures.Template.Renderer.Module24
@@ -3232,6 +3238,113 @@ defmodule Hologram.Template.RendererTest do
       assert mount_data.sync_counts == %{}
       assert mount_data.sync_rows == %{}
       assert %{"page" => %{module: Module48}} = mount_data.component_registry
+    end
+  end
+
+  describe "server-only values" do
+    @token_placeholder "%Hologram.Entity.ServerOnly{__meta__: %{field: :token}}"
+
+    setup do
+      setup_asset_path_registry(AssetPathRegistryStub)
+      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
+      setup_chunk_registry(ChunkRegistryStub)
+
+      setup_page_digest_registry(PageDigestRegistryStub)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module184, :dummy_module_184_digest)
+
+      :ok
+    end
+
+    test "a page's template reads a state row with its server-only attributes as placeholders" do
+      {html, component_registry, _server_struct} =
+        render_page_without_tree(Module184, @params, @server, @opts)
+
+      assert String.contains?(html, "page = #{@token_placeholder};")
+      refute String.contains?(html, "tok_page_secret")
+
+      assert component_registry["page"].struct.state.row.token == "tok_page_secret"
+    end
+
+    test "a layout's template reads a page's state row with its server-only attributes as placeholders" do
+      {html, component_registry, _server_struct} =
+        render_page_without_tree(Module184, @params, @server, @opts)
+
+      assert String.contains?(html, "layout = #{@token_placeholder};")
+
+      assert component_registry["layout"].struct.props.row.token ==
+               %Hologram.Entity.ServerOnly{__meta__: %{field: :token}}
+    end
+
+    test "a page's derived field computed after init reads a state row's server-only attributes as placeholders" do
+      {html, _component_registry, _server_struct} =
+        render_page_without_tree(Module184, @params, @server, @opts)
+
+      assert String.contains?(html, "derived = true;")
+    end
+
+    test "a stateless component's template reads a prop row with its server-only attributes as placeholders" do
+      row = ServerOnlyEntity.new(%{token: "tok_prop_secret"})
+      node = {:component, Module186, [{"row", [expression: {row}]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"stateless = #{@token_placeholder}", %{}, @server}
+    end
+
+    test "a stateful component's template reads a state row with its server-only attributes as placeholders" do
+      row = ServerOnlyEntity.new(%{token: "tok_state_secret"})
+
+      node =
+        {:component, Module187, [{"cid", [text: "my_component"]}, {"row", [expression: {row}]}],
+         []}
+
+      {html, component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert String.starts_with?(html, "stateful = #{@token_placeholder};")
+      refute String.contains?(html, "tok_state_secret")
+
+      assert component_registry["my_component"].struct.state.copy.token == "tok_state_secret"
+    end
+
+    test "a stateful component's derived field computed after init reads a state row's server-only attributes as placeholders" do
+      row = ServerOnlyEntity.new(%{token: "tok_state_secret"})
+
+      node =
+        {:component, Module187, [{"cid", [text: "my_component"]}, {"row", [expression: {row}]}],
+         []}
+
+      {html, _component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert String.ends_with?(html, "derived = true")
+    end
+
+    test "a component's template reads a context row with its server-only attributes as placeholders" do
+      node = {:component, Module188, [{"cid", [text: "parent"]}], []}
+
+      {html, component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert String.starts_with?(html, "context = #{@token_placeholder};")
+      refute String.contains?(html, "tok_context_secret")
+
+      assert component_registry["parent"].struct.emitted_context[{:module_188, :row}].token ==
+               "tok_context_secret"
+    end
+
+    test "a derived field computed before init reads a context row's server-only attributes as placeholders" do
+      node = {:component, Module188, [{"cid", [text: "parent"]}], []}
+
+      {html, _component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert String.ends_with?(html, "derived = true")
+    end
+
+    test "a child's init/3 reads a row its parent's template passes with its server-only attributes as placeholders" do
+      node = {:component, Module190, [{"cid", [text: "parent"]}], []}
+
+      {html, component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert html == "child init = true"
+      assert component_registry["parent"].struct.state.row.token == "tok_parent_secret"
     end
   end
 

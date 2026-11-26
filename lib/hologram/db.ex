@@ -32,6 +32,10 @@ defmodule Hologram.DB do
 
   @mapping_key {__MODULE__, :mapping}
 
+  # Set while a template or a derived function runs, so what it reads holds its server-only
+  # attributes as placeholders, as what the template is handed does.
+  @strip_server_only_key {__MODULE__, :strip_server_only}
+
   # The index plan the last reconciliation this node ran converged the database to.
   @plan_key {__MODULE__, :plan}
 
@@ -330,10 +334,17 @@ defmodule Hologram.DB do
 
     assert_not_sourced!(term)
 
-    if term.trust or not Context.session?() do
-      QueryRunner.run(term, mapping())
+    result =
+      if term.trust or not Context.session?() do
+        QueryRunner.run(term, mapping())
+      else
+        QueryRunner.run_policied(term, mapping(), Context.actor_user_id())
+      end
+
+    if Process.get(@strip_server_only_key) do
+      Entity.strip_server_only_deep(result)
     else
-      QueryRunner.run_policied(term, mapping(), Context.actor_user_id())
+      result
     end
   end
 
@@ -924,6 +935,26 @@ defmodule Hologram.DB do
     end
 
     :ok
+  end
+
+  # Runs the function with every read/1 and read/2 it makes returning its rows with their
+  # server-only attributes replaced by placeholders. The renderer runs templates and derived
+  # functions through it: a row one reads itself would otherwise reach the HTML with values the
+  # browser never gets. A call inside another leaves the outer one's setting as it was.
+  @doc false
+  @spec with_server_only_stripped((-> result)) :: result when result: any
+  def with_server_only_stripped(fun) do
+    outer = Process.put(@strip_server_only_key, true)
+
+    try do
+      fun.()
+    after
+      if outer do
+        Process.put(@strip_server_only_key, outer)
+      else
+        Process.delete(@strip_server_only_key)
+      end
+    end
   end
 
   @doc """
