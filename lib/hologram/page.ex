@@ -3,6 +3,7 @@ defmodule Hologram.Page do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Component
+  alias Hologram.Entity.Validator
   alias Hologram.Page
   alias Hologram.Reflection
   alias Hologram.Server
@@ -163,6 +164,21 @@ defmodule Hologram.Page do
   defp cast_param(:float, value, name, page_module) do
     raise Hologram.ParamError,
       message: cast_error_msg(name, value, :float, page_module) <> @invalid_type_reason
+  end
+
+  # Only the 22-character entity id form passes, the same check an :id attribute makes, so a page
+  # never reads an entity by a value no entity id can have.
+  defp cast_param(:id, value, name, page_module) when is_binary(value) do
+    if Validator.attribute_value_valid?(value, :id) do
+      value
+    else
+      raise Hologram.ParamError, message: cast_error_msg(name, value, :id, page_module)
+    end
+  end
+
+  defp cast_param(:id, value, name, page_module) do
+    raise Hologram.ParamError,
+      message: cast_error_msg(name, value, :id, page_module) <> @invalid_type_reason
   end
 
   defp cast_param(:integer, value, _name, _page_module) when is_integer(value) do
