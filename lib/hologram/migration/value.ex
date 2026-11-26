@@ -504,16 +504,18 @@ defmodule Hologram.Migration.Value do
 
   defp bare_scope(env), do: %{args: [], env: env, in_fn: false}
 
-  defp call_shape({:|>, _meta, [_left, {name, _call_meta, args}]})
+  # The outermost call, the stage Kernel's pipe passes its left side to. The migration's own pipe
+  # is a call of its own.
+  defp call_shape({:|>, _meta, [_left, {name, _call_meta, args}]} = pipe, env)
        when is_atom(name) and is_list(args) do
-    {name, length(args) + 1}
+    if kernel_pipe?(pipe, env), do: {name, length(args) + 1}, else: {:|>, 2}
   end
 
-  defp call_shape({name, _meta, args}) when is_atom(name) and is_list(args) do
+  defp call_shape({name, _meta, args}, _env) when is_atom(name) and is_list(args) do
     {name, length(args)}
   end
 
-  defp call_shape(_ast), do: nil
+  defp call_shape(_ast, _env), do: nil
 
   defp call_taken?(call, reading, module) do
     call in reading.imported or Module.defines?(module, call)
@@ -689,11 +691,11 @@ defmodule Hologram.Migration.Value do
   end
 
   defp fn_kind(body, scope) do
-    shape = call_shape(body)
+    shape = call_shape(body, scope.env)
 
     cond do
       only_constant?(body) -> refuse_constant_fn(body, scope)
-      marked_inner(body) != nil -> :marked
+      marked_inner(body, scope.env) != nil -> :marked
       path(body) != nil -> :query
       shape != nil and elem(shape, 0) in @query_calls -> {:word, shape}
       not reads_argument?(body, scope.args, scope.env) -> refuse_constant_fn(body, scope)
@@ -888,12 +890,14 @@ defmodule Hologram.Migration.Value do
   defp map_reduce_unquoted(other, _unquotes, _splicing, acc, _fun), do: {other, acc}
 
   # What query(...) wraps, in a tuple since the wrapped expression can be nil, or nil when the body
-  # isn't marked.
-  defp marked_inner({:query, _meta, [inner]}), do: {inner}
+  # isn't marked. The migration's own pipe passes nothing to query().
+  defp marked_inner({:query, _meta, [inner]}, _env), do: {inner}
 
-  defp marked_inner({:|>, _meta, [left, {:query, _call_meta, []}]}), do: {left}
+  defp marked_inner({:|>, _meta, [left, {:query, _call_meta, []}]} = pipe, env) do
+    if kernel_pipe?(pipe, env), do: {left}
+  end
 
-  defp marked_inner(_body), do: nil
+  defp marked_inner(_body, _env), do: nil
 
   defp only_constant?({form, _meta, _args}) when form in [:@, :^], do: true
 
@@ -1126,7 +1130,7 @@ defmodule Hologram.Migration.Value do
   defp read_query(_body, :elixir, _scope), do: :none
 
   defp read_query(body, kind, scope) do
-    inner = if kind == :marked, do: elem(marked_inner(body), 0), else: body
+    inner = if kind == :marked, do: elem(marked_inner(body, scope.env), 0), else: body
     term = expression(inner, scope)
 
     validate_fn_term!(term, inner, scope)
@@ -1753,7 +1757,7 @@ defmodule Hologram.Migration.Value do
         name in @elixir_refused_words and not call_taken?(call, reading, module)
       end)
 
-    if words != [] and operator_call?(call_shape(reading.body)) and
+    if words != [] and operator_call?(call_shape(reading.body, reading.env)) and
          match?({:ok, _term}, read_query(reading.body, :query, scope)) do
       compile_error!(
         "a backfill fn mixes an operator with query words, got: " <>

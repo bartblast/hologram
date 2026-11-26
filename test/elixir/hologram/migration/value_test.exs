@@ -1473,6 +1473,20 @@ defmodule Hologram.Migration.ValueTest do
       assert module.__backfill_0__("!") == "abc!"
     end
 
+    test "reads a word or query() a migration's own pipe operator calls as Elixir" do
+      for {name, backfill} <- [{"at", "title |> at()"}, {"query", "title |> query()"}] do
+        {module, value} =
+          elixir_op(
+            "fn title -> #{backfill} end",
+            "import Kernel, except: [|>: 2]\n\ndefp left |> right, do: left <> right\n\n" <>
+              "defp #{name}, do: \"!\""
+          )
+
+        assert %Value{term: {:function, ^module, :__backfill_0__, [:title]}} = value
+        assert module.__backfill_0__("a") == "a!"
+      end
+    end
+
     test "compares a captured call's import too" do
       body = """
       change_entity MyApp.Trip do
