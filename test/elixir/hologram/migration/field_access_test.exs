@@ -111,6 +111,20 @@ defmodule Hologram.Migration.FieldAccessTest do
       assert rewritten("row.a |> (f() |> g())") == ":erlang.map_get(:a, row) |> f() |> g()"
     end
 
+    test "takes Kernel's pipe as a pipe's stage as that pipe's own stage" do
+      assert rewritten("row.a.b |> Kernel.|>(put_in(1))") == "row.a.b |> put_in(1)"
+      assert rewritten("row.a.b |> Kernel.|>(Kernel.|>(put_in(1)))") == "row.a.b |> put_in(1)"
+      assert rewritten("row.a.b |> Kernel.|>(put_in(1) |> f())") == "row.a.b |> put_in(1) |> f()"
+
+      assert rewritten("Kernel.|>(row.a.b, Kernel.|>(put_in(1)))") ==
+               "Kernel.|>(row.a.b, put_in(1))"
+
+      assert rewritten("row.a |> Kernel.|>(f())") == ":erlang.map_get(:a, row) |> f()"
+
+      assert rewritten("row.a.b |> Other.|>(put_in(1))") ==
+               ":erlang.map_get(:b, :erlang.map_get(:a, row)) |> Other.|>(put_in(1))"
+    end
+
     test "takes an alias of Kernel as Kernel, expanding only a module name" do
       aliased = %{env() | aliases: [{K, Kernel}]}
       ast = Code.string_to_quoted!("K.|>(row.a.b, put_in(1))")

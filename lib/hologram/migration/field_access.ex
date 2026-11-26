@@ -303,13 +303,21 @@ defmodule Hologram.Migration.FieldAccess do
   defp rewrite_args({form, meta, args}, env, splicing),
     do: {rewrite(form, env, splicing), meta, rewrite(args, env, splicing)}
 
-  # A pipe on the right side is the stages after the left side, the first of which takes it.
+  # A pipe on the right side is the stages after the left side, the first of which takes it. So is
+  # Kernel's pipe given only a stage, which passes the left side on to it.
   defp rewrite_kernel_pipe({form, meta, [left, right]} = pipe, env, splicing) do
-    case Value.regroup_pipe(pipe, env) do
-      ^pipe -> {form, meta, rewrite_pipe(left, right, env, splicing)}
-      regrouped -> rewrite(regrouped, env, splicing)
+    case {kernel_pipe_stage(right, env), Value.regroup_pipe(pipe, env)} do
+      {{:ok, stage}, _pipe} -> rewrite_kernel_pipe({form, meta, [left, stage]}, env, splicing)
+      {:error, ^pipe} -> {form, meta, rewrite_pipe(left, right, env, splicing)}
+      {:error, regrouped} -> rewrite(regrouped, env, splicing)
     end
   end
+
+  defp kernel_pipe_stage({{:., _dot_meta, [receiver, :|>]}, _meta, [stage]}, env) do
+    if kernel?(receiver, env), do: {:ok, stage}, else: :error
+  end
+
+  defp kernel_pipe_stage(_right, _env), do: :error
 
   # The left side and the call a pipe passes it to, which takes no parentheses when it takes
   # nothing else.
