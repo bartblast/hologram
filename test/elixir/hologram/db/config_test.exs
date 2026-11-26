@@ -260,6 +260,47 @@ defmodule Hologram.DB.ConfigTest do
              ]
     end
 
+    test "percent-decodes the url's user, password and database" do
+      config = [url: "postgres://al%69ce%3Aadmin:p%40ss%3Aw%2Bord+1@db.example.com/my%20db"]
+
+      assert resolve!(config, :dev) == [
+               database: "my db",
+               host: "db.example.com",
+               password: "p@ss:w+ord+1",
+               pool_size: 10,
+               port: 5432,
+               ssl: false,
+               user: "alice:admin"
+             ]
+    end
+
+    test "raises on a malformed percent-encoding in the url's user, password or database" do
+      for {url, component} <- [
+            {"postgres://al%zzice:secret@db.example.com/my_db", "user"},
+            {"postgres://alice:se%zcret@db.example.com/my_db", "password"},
+            {"postgres://alice:secret%@db.example.com/my_db", "password"},
+            {"postgres://alice:secret@db.example.com/my%2_db", "database"}
+          ] do
+        expected_msg =
+          "invalid url #{component} in config :hologram, :database - malformed percent-encoding"
+
+        assert_error ArgumentError, expected_msg, fn -> resolve!([url: url], :dev) end
+      end
+    end
+
+    test "raises on an encoded zero byte in the url's user, password or database" do
+      for {url, component} <- [
+            {"postgres://al%00ice:secret@db.example.com/my_db", "user"},
+            {"postgres://alice:se%00cret@db.example.com/my_db", "password"},
+            {"postgres://alice:secret@db.example.com/my%00db", "database"}
+          ] do
+        expected_msg =
+          "invalid url #{component} in config :hologram, :database - malformed percent-encoding"
+
+        assert_error ArgumentError, expected_msg, fn -> resolve!([url: url], :dev) end
+      end
+    end
+
     test "falls back for components absent from the url" do
       config = [url: "postgres://db.example.com/my_db"]
 

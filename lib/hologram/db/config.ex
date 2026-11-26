@@ -214,7 +214,8 @@ defmodule Hologram.DB.Config do
 
   Any other value, entry or entry value raises ArgumentError naming it.
 
-  The :url follows PostgreSQL's connection URI format, and its query takes libpq's TLS
+  The :url follows PostgreSQL's connection URI format: its user, password and database are
+  percent-decoded, so a password with `@` or `:` is written as `%40` or `%3A`, and its query takes libpq's TLS
   parameters, each replacing only its own :ssl entry, the way the url's host and port replace
   their keys:
 
@@ -559,6 +560,7 @@ defmodule Hologram.DB.Config do
   defp url_components!(url) do
     uri = URI.parse(url)
 
+    # Split before decoding, so an encoded colon stays in the password.
     {user, password} =
       case String.split(uri.userinfo || "", ":", parts: 2) do
         [user, password] -> {user, password}
@@ -567,16 +569,33 @@ defmodule Hologram.DB.Config do
 
     database = uri.path && String.trim_leading(uri.path, "/")
 
-    components = [
-      database: database,
-      host: uri.host,
-      password: password,
-      port: uri.port,
-      user: user
-    ]
+    components =
+      Enum.map(
+        [database: database, host: uri.host, password: password, port: uri.port, user: user],
+        fn
+          {key, value} when key in [:database, :password, :user] and is_binary(value) ->
+            {key, url_decode_component!(key, value)}
+
+          component ->
+            component
+        end
+      )
 
     {Enum.reject(components, fn {_key, value} -> value in [nil, ""] end), url_ssl!(uri.query)}
   end
+
+  # URI.decode/1 raises with the string in its message, which would show the password, and decodes
+  # %00 to a zero byte, both of which libpq refuses.
+  defp url_decode_component!(key, value) do
+    if malformed_percent_encoding?(value) do
+      raise ArgumentError,
+            "invalid url #{key} in config :hologram, :database - malformed percent-encoding"
+    end
+
+    URI.decode(value)
+  end
+
+  defp malformed_percent_encoding?(string), do: string =~ ~r/%(?![0-9A-Fa-f]{2})|%00/
 
   # The url's query, read the way libpq reads a connection URI's. The messages name the parameter
   # and never hold the url, which carries the password.
@@ -585,7 +604,7 @@ defmodule Hologram.DB.Config do
   defp url_ssl!(query) do
     # URI.query_decoder/2 keeps a malformed escape as it is and decodes %00 to a zero byte, both of
     # which libpq refuses.
-    for pair <- String.split(query, "&"), pair =~ ~r/%(?![0-9A-Fa-f]{2})|%00/ do
+    for pair <- String.split(query, "&"), malformed_percent_encoding?(pair) do
       [name | _value] = String.split(pair, "=", parts: 2)
 
       raise ArgumentError,
