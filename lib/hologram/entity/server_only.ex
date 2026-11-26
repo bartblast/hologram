@@ -1,15 +1,50 @@
 defmodule Hologram.Entity.ServerOnly do
-  @moduledoc false
+  @moduledoc """
+  The value of an attribute declared `server_only: true` where the real value isn't available,
+  because the server never sends it to the browser.
 
-  # The client-side value of an attribute declared server_only: true - it marks a value the
-  # server holds and never hands to the client. Sibling of NotIncluded, and the pair tells the
-  # reader WHY a value is absent: NotIncluded means "you didn't ask for it", fixable by including
-  # the relationship in the query, while ServerOnly means "you can't have it, it lives on the
-  # server", fixable only by remodeling. The internal __meta__ map names the attribute, as
-  # %{field: name}, so that a misuse error inspecting the placeholder names the attribute that
-  # is hidden.
+  In the browser, a server-only attribute always holds `%ServerOnly{}`. On the server, it holds
+  `%ServerOnly{}` in whatever is bound for the browser:
+
+    * the `{Hologram, :user}` context user
+    * the rows of a derived field read in a template
+    * anything Hologram serializes for the browser
+
+  Server code reading through `DB` gets the real value, and so does an entity put in state in
+  `init/3` during the server render.
+
+  Browser code can't write a server-only attribute. Set it in a command or a job.
+
+  `NotIncluded` means the query didn't ask for a field, and adding it to the query's `include`
+  fixes that. `ServerOnly` means the value lives on the server and is never sent to the browser,
+  whatever the query.
+
+  Tell a placeholder from a value by matching on the struct alone. The struct's `__meta__` key
+  is internal and may change, so don't read it or match on it.
+
+  ## Examples
+
+  In browser code:
+
+      case user.api_token do
+        %ServerOnly{} -> :hidden
+        token -> token
+      end
+
+  In a template:
+
+      {%if match?(%ServerOnly{}, @user.api_token)}
+        <p>Token hidden</p>
+      {/if}
+  """
+
+  # Sibling of NotIncluded. The internal __meta__ map names the attribute, as %{field: name}, so
+  # that a misuse error inspecting the placeholder names the attribute that is hidden.
 
   defstruct __meta__: %{}
 
+  @typedoc """
+  A server-only attribute's value, hidden. Match on the struct alone, `__meta__` is internal.
+  """
   @type t :: %__MODULE__{__meta__: map}
 end
