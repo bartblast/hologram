@@ -11,12 +11,19 @@ defmodule Hologram.Entity.NotIncluded do
   An entity no query read holds it too, like one built with `new/1` or one a create returns. To
   read such a field, read the entity through a query that includes it.
 
-  Tell a placeholder from a value by matching on the struct alone. The struct's `__meta__` key
-  is internal and may change, so don't read it or match on it.
+  Tell a placeholder from a value with `Hologram.Entity.included?/1`, which pages and components
+  import, or by matching on the struct alone. The struct's `__meta__` key is internal and may
+  change, so don't read it or match on it.
 
   ## Examples
 
-  In server or browser code:
+  In a template:
+
+      {%if !included?(@todo.project)}
+        <p>Project not loaded</p>
+      {/if}
+
+  Matching on the struct works too, in server or browser code:
 
       alias Hologram.Entity.NotIncluded
 
@@ -26,7 +33,7 @@ defmodule Hologram.Entity.NotIncluded do
         project -> project.name
       end
 
-  In a template:
+  Or in a template:
 
       {%if match?(%NotIncluded{}, @todo.project)}
         <p>Project not loaded</p>

@@ -20,12 +20,19 @@ defmodule Hologram.Entity.ServerOnly do
   fixes that. `ServerOnly` means the value lives on the server and is never sent to the browser,
   whatever the query.
 
-  Tell a placeholder from a value by matching on the struct alone. The struct's `__meta__` key
-  is internal and may change, so don't read it or match on it.
+  Tell a placeholder from a value with `Hologram.Entity.server_only?/1`, which pages and
+  components import, or by matching on the struct alone. The struct's `__meta__` key is internal
+  and may change, so don't read it or match on it.
 
   ## Examples
 
-  In browser code:
+  In a template:
+
+      {%if server_only?(@user.api_token)}
+        <p>Token hidden</p>
+      {/if}
+
+  Matching on the struct works too, in browser code:
 
       alias Hologram.Entity.ServerOnly
 
@@ -34,7 +41,7 @@ defmodule Hologram.Entity.ServerOnly do
         token -> token
       end
 
-  In a template:
+  Or in a template:
 
       {%if match?(%ServerOnly{}, @user.api_token)}
         <p>Token hidden</p>

@@ -718,6 +718,32 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "included?/1" do
+    test "returns false for a not-included placeholder" do
+      refute included?(%NotIncluded{__meta__: %{field: :project}})
+    end
+
+    test "returns true for nil" do
+      assert included?(nil)
+    end
+
+    test "returns true for a list" do
+      assert included?([])
+    end
+
+    test "returns true for an entity" do
+      assert included?(new(Module2, a: true, b: 5, c: "abc"))
+    end
+
+    test "returns true for a server-only placeholder" do
+      assert included?(%ServerOnly{__meta__: %{field: :token}})
+    end
+
+    test "returns true for a plain value" do
+      assert included?("abc")
+    end
+  end
+
   describe "inverse_relationship/2" do
     test "describes an inverse set of a to-one" do
       assert inverse_relationship(Module26, :messages) == %{
@@ -1258,6 +1284,32 @@ defmodule Hologram.EntityTest do
           role :owner, granted_to: false
         end
       end
+    end
+  end
+
+  describe "server_only?/1" do
+    test "returns true for a server-only placeholder" do
+      assert server_only?(%ServerOnly{__meta__: %{field: :token}})
+    end
+
+    test "returns false for nil" do
+      refute server_only?(nil)
+    end
+
+    test "returns false for a list" do
+      refute server_only?([])
+    end
+
+    test "returns false for an entity" do
+      refute server_only?(new(Module2, a: true, b: 5, c: "abc"))
+    end
+
+    test "returns false for a not-included placeholder" do
+      refute server_only?(%NotIncluded{__meta__: %{field: :project}})
+    end
+
+    test "returns false for a plain value" do
+      refute server_only?("abc")
     end
   end
 

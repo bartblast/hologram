@@ -471,6 +471,18 @@ defmodule Hologram.Entity do
   end
 
   @doc """
+  Returns `false` when the given entity field value is the `Hologram.Entity.NotIncluded`
+  placeholder, and `true` for anything else, `nil` and lists included.
+  A relationship or a derived field holds the placeholder when the query that read the entity
+  didn't include it. Works on the server and in the browser, and is imported into pages and
+  components.
+  """
+  @spec included?(any) :: boolean
+  def included?(%NotIncluded{}), do: false
+
+  def included?(_value), do: true
+
+  @doc """
   Builds a new entity struct of the given entity type from the given values (a map or a keyword list).
   The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
   To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
@@ -487,6 +499,17 @@ defmodule Hologram.Entity do
 
     struct!(entity_type, fields)
   end
+
+  @doc """
+  Returns `true` when the given entity field value is the `Hologram.Entity.ServerOnly`
+  placeholder, and `false` for anything else.
+  A server-only attribute holds the placeholder wherever its real value isn't available, like in
+  the browser. Works on the server and in the browser, and is imported into pages and components.
+  """
+  @spec server_only?(any) :: boolean
+  def server_only?(%ServerOnly{}), do: true
+
+  def server_only?(_value), do: false
 
   # The body is kept as the definition function will run it, so the function is built once every
   # field is declared - fields read in a body may be declared below it.
