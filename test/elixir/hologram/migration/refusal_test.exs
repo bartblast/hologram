@@ -652,7 +652,7 @@ defmodule Hologram.Migration.RefusalTest do
       expected_msg =
         ~s(cannot make column "amount" on table "my_app_task" required - ) <>
           ~s{filling its NULLs with the default would make 1 key repeat over ("amount", "status") - } <>
-          "fix the data, keep the attribute optional: true, or drop the unique declaration"
+          "fix the data, keep the attribute optional: true, or drop the unique declaration before making it required"
 
       route(scratch, fn ->
         insert_task("three", nil, "done")
