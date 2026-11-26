@@ -109,6 +109,8 @@ defmodule Hologram.Migration.Value.Evaluator do
 
   defp rank_map(nil), do: nil
 
+  defp rank_map(:characters), do: :characters
+
   defp rank_map(values) do
     values
     |> Enum.with_index()
