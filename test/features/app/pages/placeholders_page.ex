@@ -3,7 +3,6 @@ defmodule HologramFeatureTests.PlaceholdersPage do
   use Hologram.DB
 
   alias Hologram.Entity.NotIncluded
-  alias Hologram.Entity.ServerOnly
   alias HologramFeatureTests.Entities.Document
 
   route "/placeholders"
@@ -11,7 +10,8 @@ defmodule HologramFeatureTests.PlaceholdersPage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   # The same documents read twice, once without the folder and once with it, so each field holds
-  # a placeholder in one read and a value in the other.
+  # a placeholder in one read and a value in the other. The folder without include is checked by
+  # matching on the struct, the other fields through the included?/1 and server_only?/1 helpers.
   derived :documents, [Document], fn -> sort(Document, title) end
 
   derived :documents_with_folder, [Document], fn ->
@@ -35,13 +35,13 @@ defmodule HologramFeatureTests.PlaceholdersPage do
       Folder without include: <strong id="folder_without_include"><code>{%for document <- @documents}{%if match?(%NotIncluded{}, document.folder)}not_included{%else}value{/if}{/for}</code></strong>
     </p>
     <p>
-      Folder with include: <strong id="folder_with_include"><code>{%for document <- @documents_with_folder}{%if match?(%NotIncluded{}, document.folder)}not_included{%else}value{/if}{/for}</code></strong>
+      Folder with include: <strong id="folder_with_include"><code>{%for document <- @documents_with_folder}{%if included?(document.folder)}value{%else}not_included{/if}{/for}</code></strong>
     </p>
     <p>
-      API token: <strong id="api_token"><code>{%for document <- @documents}{%if match?(%ServerOnly{}, document.api_token)}server_only{%else}value{/if}{/for}</code></strong>
+      API token: <strong id="api_token"><code>{%for document <- @documents}{%if server_only?(document.api_token)}server_only{%else}value{/if}{/for}</code></strong>
     </p>
     <p>
-      Title: <strong id="title"><code>{%for document <- @documents}{%if match?(%ServerOnly{}, document.title)}server_only{%else}value{/if}{/for}</code></strong>
+      Title: <strong id="title"><code>{%for document <- @documents}{%if server_only?(document.title)}server_only{%else}value{/if}{/for}</code></strong>
     </p>
     <p>
       Result: <strong id="result"><code>{@result}</code></strong>
@@ -68,11 +68,11 @@ defmodule HologramFeatureTests.PlaceholdersPage do
     put_state(component, :result, result)
   end
 
-  defp folder_kind(%NotIncluded{}), do: :not_included
+  defp folder_kind(folder) do
+    if included?(folder), do: :value, else: :not_included
+  end
 
-  defp folder_kind(_folder), do: :value
-
-  defp attribute_kind(%ServerOnly{}), do: :server_only
-
-  defp attribute_kind(_value), do: :value
+  defp attribute_kind(value) do
+    if server_only?(value), do: :server_only, else: :value
+  end
 end
