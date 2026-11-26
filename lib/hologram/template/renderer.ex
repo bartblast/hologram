@@ -648,7 +648,7 @@ defmodule Hologram.Template.Renderer do
       #
       # WARNING: must match the client renderer's #renderComponent.
       derived =
-        ComponentDerived.compute(
+        compute_derived(
           module.__derived__(),
           module,
           props,
@@ -1038,6 +1038,15 @@ defmodule Hologram.Template.Renderer do
 
   defp component_key_scope(:error, _props, key_scope), do: key_scope
 
+  # A derived function reading the database itself gets the rows with their server-only attributes
+  # as placeholders, as the browser computes it, so nothing computed from a server-only value
+  # reaches the HTML.
+  defp compute_derived(entries, module, props, state, computed, opts) do
+    DB.with_server_only_stripped(fn ->
+      ComponentDerived.compute(entries, module, props, state, computed, opts)
+    end)
+  end
+
   defp contains_trusted_html?(nodes) do
     Enum.any?(nodes, fn
       {:trusted_html, _html} -> true
@@ -1168,15 +1177,16 @@ defmodule Hologram.Template.Renderer do
   #
   # Every template renders through here, so this is where the server-only values the server holds
   # are replaced by their placeholders: what a template reads is what the browser's copy holds, and
-  # neither the HTML nor the props it passes on carry a value the browser never gets. Text carries
-  # no origin, so the check can't sit on the HTML.
+  # neither the HTML nor the props it passes on carry a value the browser never gets. A row the
+  # template reads from the database itself is stripped the same way. Text carries no origin, so
+  # the check can't sit on the HTML.
   defp evaluate_template(module, vars) do
     marked_vars =
       vars
       |> Entity.strip_server_only_deep()
       |> Map.put(:__hologram_vars__, true)
 
-    module.template().(marked_vars)
+    DB.with_server_only_stripped(fn -> module.template().(marked_vars) end)
   rescue
     error in KeyError ->
       case error do
@@ -1439,7 +1449,7 @@ defmodule Hologram.Template.Renderer do
     compute_opts = derived_compute_opts(module)
 
     computed_before_init =
-      ComponentDerived.compute(before_init, module, props, state_defaults, %{}, compute_opts)
+      compute_derived(before_init, module, props, state_defaults, %{}, compute_opts)
 
     initial_component_struct = %Component{
       derived: Map.merge(computed_before_init, ComponentDerived.not_computed(after_init)),
@@ -1478,7 +1488,7 @@ defmodule Hologram.Template.Renderer do
         page? ->
           render_as_user(returned_server_struct.user_id)
 
-          ComponentDerived.compute(before_init, module, props, state_defaults, %{}, compute_opts)
+          compute_derived(before_init, module, props, state_defaults, %{}, compute_opts)
 
         true ->
           follow_user_change(module, server_struct, returned_server_struct)
@@ -1496,7 +1506,7 @@ defmodule Hologram.Template.Renderer do
     # browser computes them, so nothing computed from a server-only value reaches the HTML. The
     # struct keeps the real state for the server code that reads it.
     derived =
-      ComponentDerived.compute(
+      compute_derived(
         after_init,
         module,
         props,

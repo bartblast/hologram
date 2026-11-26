@@ -81,6 +81,7 @@ defmodule Hologram.Template.RendererDerivedTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module180
   alias Hologram.Test.Fixtures.Template.Renderer.Module182
   alias Hologram.Test.Fixtures.Template.Renderer.Module183
+  alias Hologram.Test.Fixtures.Template.Renderer.Module192
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -370,6 +371,24 @@ defmodule Hologram.Template.RendererDerivedTest do
 
       refute String.contains?(html, "note_secret_v7")
       refute String.contains?(html, "tok_R4mQ")
+    end
+
+    test "hands a template and a derived function reading the database themselves the row with its server-only attributes replaced by the sentinel" do
+      {:ok, entity} =
+        %{label: "Report", token: "tok_R4mQ"}
+        |> Module15.new()
+        |> create()
+
+      node =
+        {:component, Module192, [{"cid", [text: "my_component"]}, {"id", [text: entity.id]}], []}
+
+      {html, component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert html ==
+               "template = %Hologram.Entity.ServerOnly{__meta__: %{field: :token}}; " <>
+                 "derived = %Hologram.Entity.ServerOnly{__meta__: %{field: :token}}"
+
+      assert component_registry["my_component"].struct.state.init_token == "tok_R4mQ"
     end
 
     test "carries a count under the field's name and the query its function built" do
