@@ -35,6 +35,10 @@ const SAVED_COUNT_KEYS_LENGTH_LIMIT = 256_000;
 // Hologram.Sync.Frame.put_entity/3).
 const OWN = "$own";
 
+// What a page's row spells the numbers its render hid with, beside its data, because they weren't
+// final under the render's limit (see LocalDatabase.carryNumbers).
+const WAITING = "$waiting";
+
 // The numbers that place a row in the server's order, which a row holds only once they are final.
 const SEQUENCE_FIELDS = ["server_created_seq", "server_updated_seq"];
 
@@ -158,12 +162,13 @@ export default class LocalDatabase {
   static #typeFinalSeqs = {};
 
   // type -> id -> {numbers: {field: number}, shown?: {field: number}, own: boolean} - each number
-  // a row came with above the final point, held back from the row until the point reaches it. The
-  // row holds the number it had before, final, or null when it had none, so a number a reader
-  // finds is always final and no reader has to ask. Shown is the numbers a page carried above the
-  // point: final on the server, so a list orders the row by them (see orderingKey). Own is whether
-  // the row's own batch created it, kept while its created number waits: until then it is this
-  // client's own unnumbered row.
+  // a row came with above the final point, or a page's render hid from a row it carried (see
+  // carryNumbers), held back from the row until the point reaches it. The row holds the number it
+  // had before, final, or null when it had none, so a number a reader finds is always final and no
+  // reader has to ask. Shown is the numbers a page carried above the point: final on the server, so
+  // a list orders the row by them (see orderingKey), and kept only beside the page's version of the
+  // row (see holdNumbers and putStored). Own is whether the row's own batch created it, kept while
+  // its created number waits: until then it is this client's own unnumbered row.
   static #waiting = {};
 
   static addFact(type, relationship, sourceId, targetId) {
@@ -388,16 +393,28 @@ export default class LocalDatabase {
   }
 
   // The given row a page carried as the base files it: a copy with every number above the final
-  // point replaced by the one the row already holds, or null, as a stream row's is (see
-  // holdNumbers). The render showed only numbers final on the server, so each is kept beside the
-  // row as shown, and a list orders the row by it while the field reads as not final here (see
-  // orderingKey). A number at or below the point is the stream's to bring for a row held already.
+  // point replaced by null, as a stream row's is (see holdNumbers). The render showed only numbers
+  // final on the server, so each is kept beside the row as shown, and a list orders the row by it
+  // while the field reads as not final here (see orderingKey).
+  //
+  // The numbers the render hid, because they weren't final under its limit, come beside the row's
+  // data as `$waiting`, which doesn't reach the row. Each is its version's own number, held back
+  // like a stream row's: filed when the point here reaches it - the render's node was behind this
+  // one - and otherwise waiting beside the row until it does, so a reload whose stored place is
+  // past the number still gets it.
+  //
+  // A held row takes none of the page's numbers, shown or hidden: its values aren't the page's
+  // version, a number of which filed under them would pass comparisons their own fails, and the
+  // stream brings their own.
   static carryNumbers(type, row) {
     const filed = Object.assign({}, row);
 
     delete filed[OWN];
+    delete filed[WAITING];
 
-    const held = LocalDatabase.baseRow(type, row.id);
+    if (LocalDatabase.baseRow(type, row.id) !== null) {
+      return filed;
+    }
 
     for (const field of SEQUENCE_FIELDS) {
       if (
@@ -407,11 +424,12 @@ export default class LocalDatabase {
         continue;
       }
 
-      filed[field] = held?.[field] ?? null;
+      filed[field] = null;
 
       LocalDatabase.#show(type, row.id, field, row[field]);
     }
 
+    LocalDatabase.#holdHidden(type, row.id, row[WAITING] ?? {}, filed);
     LocalDatabase.#settleEntry(type, row.id);
 
     return filed;
@@ -457,11 +475,13 @@ export default class LocalDatabase {
   // number waits beside the row (see #waiting). A number at or below the point is filed as it
   // came, leaving one waiting for the same field to wait: a waiting number is above the point, so
   // it is the newer of the two, which a delivery sent again from an older place can put second.
-  // The own flag doesn't reach the row.
+  // The own flag doesn't reach the row. A number a page showed goes when the item names another for
+  // its field: the item's values are another version than the page's, whose number it isn't.
   static holdNumbers(type, item) {
     const filed = Object.assign({}, item);
 
     delete filed[OWN];
+    delete filed[WAITING];
 
     const held = LocalDatabase.baseRow(type, item.id);
     const entry = LocalDatabase.#waitingEntry(type, item.id);
@@ -474,6 +494,15 @@ export default class LocalDatabase {
       if (!LocalDatabase.#isFinal(type, item[field])) {
         entry.numbers[field] = item[field];
         filed[field] = held?.[field] ?? null;
+      }
+    }
+
+    for (const [field, number] of Object.entries(entry.shown ?? {})) {
+      if (
+        Object.hasOwn(item, field) &&
+        !LocalDatabase.#sameNumber(item[field], number)
+      ) {
+        delete entry.shown[field];
       }
     }
 
@@ -870,10 +899,12 @@ export default class LocalDatabase {
   // was away, so nothing would resend it.
   //
   // The final point comes in with the records, since it was written down with them, and so do the
-  // numbers they wait for. A row the page brought takes a stored number only when it is newer than
-  // the one the row holds, which a number the page's render could not call final yet is, and a
-  // created number the stored copy of the row holds where the page's holds none (see
-  // #takeStoredCreated).
+  // numbers they wait for. A row the page brought takes no stored number, waiting, shown or in the
+  // stored row: its numbers go with its values, which are the page's, and the page carried every
+  // number of that version it knew, including the ones its render hid (see carryNumbers). A stored
+  // number can be another version's, which filed under the page's would pass comparisons the
+  // page's own number fails. Only the stored own flag comes across, which lasts only while a
+  // created number the page hid waits above the restored point (see #settleEntry).
   // A stored row can hold a number the stored point doesn't reach, which goes back beside it (see
   // #holdStoredAbove).
   static restore(records, finalSeq = null) {
@@ -892,15 +923,11 @@ export default class LocalDatabase {
 
       if (stored) {
         LocalDatabase.putRow(type, row);
+        LocalDatabase.#takeWaiting(type, id, record.waiting);
+        LocalDatabase.#holdStoredAbove(type, id);
       } else {
         LocalDatabase.unmarkCarried(type, id);
-        LocalDatabase.#takeStoredCreated(type, id, row);
-      }
-
-      LocalDatabase.#takeWaiting(type, id, record.waiting);
-
-      if (stored) {
-        LocalDatabase.#holdStoredAbove(type, id);
+        LocalDatabase.#takeOwn(type, id, record.waiting);
       }
 
       for (const [relationship, targetIds] of Object.entries(facts)) {
@@ -917,15 +944,23 @@ export default class LocalDatabase {
 
   // Files a row the store holds as the store holds it, over anything held under its id, with the
   // numbers the store says it waits for - what a tab taking up the store's place does with each of
-  // its rows (see Tabs.#takeStore), after `takeStoredFinal`. The numbers this tab's page showed
-  // stay, since they are final on the server whatever the store holds: a list keeps ordering the
-  // row by them. They are the ones held beside the row now, and the given ones, which
-  // `shownNumbers` took before the row was dropped. A number the store's point doesn't reach goes
+  // its rows (see Tabs.#takeStore), after `takeStoredFinal`. A number this tab's page showed stays
+  // when the store's version has it too, in the row or waiting: it is final on the server, so a
+  // list keeps ordering the row by it. Any other is another version's, and goes. They are the ones
+  // held beside the row now, and the given ones, which `shownNumbers` took before the row was
+  // dropped. The numbers the page's render hid go with the page's row, since they are its
+  // version's, and the store's row brings its own. A number the store's point doesn't reach goes
   // back beside the row, as `restore` does with it.
   static putStored(type, row, waiting, shown = {}) {
     const kept = Object.entries(
       Object.assign({}, LocalDatabase.#waiting[type]?.[row.id]?.shown),
-    ).concat(Object.entries(shown));
+    )
+      .concat(Object.entries(shown))
+      .filter(([field, number]) =>
+        [row[field], waiting?.numbers?.[field]].some((own) =>
+          LocalDatabase.#sameNumber(own, number),
+        ),
+      );
 
     LocalDatabase.putRow(type, row);
 
@@ -966,7 +1001,9 @@ export default class LocalDatabase {
   // Takes up the final point the store holds, in place of the one held: the rows held from now on
   // are the store's, and its point is the one written down with them. A row only a page carried
   // stays, and a number of its filed under a higher point than the store's moves back beside it as
-  // shown, so a number in a row is still final here.
+  // shown, so a number in a row is still final here. It is one the row held itself, so it is no
+  // newer than the row's values, and it goes again when a stored row without it replaces the row
+  // (see putStored).
   static takeStoredFinal(finalSeq) {
     LocalDatabase.#finalSeq = finalSeq ?? null;
     LocalDatabase.#dropTypeFinals();
@@ -1227,7 +1264,10 @@ export default class LocalDatabase {
 
   // Files every waiting or shown number at or below the final point into its row, the higher of
   // the two when both are, on a copy of the row, since readers hold the rows they were handed. A
-  // shown number can be filed while a newer one waits: it is final, and older than what waits.
+  // shown number is a page's number of the version the row holds (see holdNumbers and putStored),
+  // or one the row held itself (see takeStoredFinal), so filing it puts no newer version's number
+  // on the row's values. It can be filed while a newer one waits: it is final, and older than what
+  // waits.
   static #fileFinal() {
     for (const [type, entries] of Object.entries(LocalDatabase.#waiting)) {
       for (const [id, entry] of Object.entries(entries)) {
@@ -1314,9 +1354,41 @@ export default class LocalDatabase {
     LocalDatabase.putRow(type, row);
   }
 
+  // Files each number a page's render hid into the given copy of a row not held yet when the point
+  // reaches it, and holds the rest back beside the row, in place of any waiting for the field: the
+  // page's is the number of the version it carries. Kept as the wire spelled them, as holdNumbers
+  // keeps a stream row's.
+  static #holdHidden(type, id, hidden, filed) {
+    for (const field of SEQUENCE_FIELDS) {
+      const number = hidden[field] ?? null;
+
+      if (number === null) {
+        continue;
+      }
+
+      if (LocalDatabase.#isFinal(type, number)) {
+        filed[field] = number;
+        continue;
+      }
+
+      LocalDatabase.#waitingEntry(type, id).numbers[field] = number;
+    }
+  }
+
   // A waiting number as the wire spelled it, which is a string past 2^53.
   static #readNumber(number) {
     return typeof number === "string" ? BigInt(number) : (number ?? null);
+  }
+
+  // Whether two numbers are the same one, either as the wire spelled it, and neither missing.
+  static #sameNumber(a, b) {
+    return (
+      a !== null &&
+      a !== undefined &&
+      b !== null &&
+      b !== undefined &&
+      BigInt(a) === BigInt(b)
+    );
   }
 
   // Whether a number of the given type is final here: at or below the point every type has, or the
@@ -1355,7 +1427,8 @@ export default class LocalDatabase {
     }
   }
 
-  // Keeps a number a page showed beside the row, unless one it showed before is newer.
+  // Keeps a number a page showed beside the row, unless one it showed before is newer. Only a row's
+  // own version's number is shown (see carryNumbers).
   static #show(type, id, field, number) {
     const entry = LocalDatabase.#waitingEntry(type, id);
     const shown = entry.shown?.[field];
@@ -1366,43 +1439,10 @@ export default class LocalDatabase {
     }
   }
 
-  // Takes the created number a stored row holds where the page's copy of it holds none, as a number
-  // it waits for. The page's render can hide a number its pin didn't reach - on a node behind this
-  // one, or one that just restarted - and the change that gave it can lie at or below the place
-  // this page resumes from, so nothing sends it again.
-  //
-  // Only the created number, because it never changes for a row: a stored updated number can be an
-  // older version's, which filed under the page's version would pass comparisons that version's own
-  // number fails, and a timestamp can't tell two writes in the same millisecond apart. A number the
-  // page showed beside the row is the page's, so a stored one no newer than it adds nothing.
-  static #takeStoredCreated(type, id, stored) {
-    const field = "server_created_seq";
-    const number = stored[field] ?? null;
-
-    if (
-      number === null ||
-      (LocalDatabase.baseRow(type, id)[field] ?? null) !== null
-    ) {
-      return;
-    }
-
-    const shown = LocalDatabase.#waiting[type]?.[id]?.shown?.[field];
-
-    if (shown !== undefined && BigInt(shown) >= BigInt(number)) {
-      return;
-    }
-
-    const entry = LocalDatabase.#waitingEntry(type, id);
-    const waiting = entry.numbers[field];
-
-    if (waiting === undefined || BigInt(waiting) < BigInt(number)) {
-      entry.numbers[field] = number;
-    }
-  }
-
-  // Takes the stored numbers a held row waits for, each only when the row holds an older one for
-  // the field, or none, and no page showed one for it at least as new: that one is the version the
-  // row holds, and an older version's number filed under it would pass comparisons its own fails.
+  // Takes the stored numbers a row the store filled waits for, each only when the row holds an
+  // older one for the field, or none, and no page showed one for it at least as new: that one is
+  // the version the row holds, and an older version's number filed under it would pass comparisons
+  // its own fails.
   static #takeWaiting(type, id, stored) {
     if (stored === undefined || stored === null) {
       return;
@@ -1439,6 +1479,18 @@ export default class LocalDatabase {
 
     entry.own ||= stored.own === true;
 
+    LocalDatabase.#settleEntry(type, id);
+  }
+
+  // Takes the stored own flag into a row the page brought: the row is this client's own while the
+  // created number the page hid waits, and the page can't say whose batch created it. With no
+  // created number waiting the flag is dropped again (see #settleEntry).
+  static #takeOwn(type, id, stored) {
+    if (stored?.own !== true) {
+      return;
+    }
+
+    LocalDatabase.#waitingEntry(type, id).own = true;
     LocalDatabase.#settleEntry(type, id);
   }
 

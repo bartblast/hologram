@@ -1027,6 +1027,32 @@ defmodule Hologram.DB.QueryRunnerTest do
                [{"banana", true}, {"cherry", false}]
     end
 
+    test "keeps the numbers it hides in the metadata, in the row and in what it includes", %{
+      limit: limit
+    } do
+      term =
+        Module3
+        |> narrowed_include(:a, fn related_query -> sort(related_query, c) end)
+        |> Stage.normalize()
+
+      assert [raw_source] = run(term, @mapping, raw: true)
+      assert [source] = FinalSeq.with_pinned(limit, fn -> run(term, @mapping) end)
+
+      assert source.__meta__.waiting == hidden_numbers(raw_source, limit)
+      assert source.__meta__.waiting.server_created_seq == raw_source.server_created_seq
+
+      assert Enum.map(source.a, & &1.__meta__.waiting) ==
+               Enum.map(raw_source.a, &hidden_numbers(&1, limit))
+
+      assert hd(source.a).__meta__.waiting == %{}
+    end
+
+    defp hidden_numbers(row, limit) do
+      row
+      |> Map.take([:server_created_seq, :server_updated_seq])
+      |> Map.filter(fn {_field, number} -> is_integer(number) and number > limit end)
+    end
+
     test "reads the numbers as stored when raw", %{limit: limit, third: third} do
       FinalSeq.with_pinned(limit, fn ->
         assert [%Module2{c: "cherry", server_created_seq: nil}] = run(pending_term(), @mapping)

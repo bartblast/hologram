@@ -22,5 +22,10 @@ defmodule Hologram.Entity.MetadataTest do
       assert inspect(%Metadata{stamp: 1_756_100_000_123_004}) ==
                "#Hologram.Entity.Metadata<stamp: 1756100000123004>"
     end
+
+    test "shows the hidden numbers when set" do
+      assert inspect(%Metadata{waiting: %{server_updated_seq: 8}}) ==
+               "#Hologram.Entity.Metadata<waiting: %{server_updated_seq: 8}>"
+    end
   end
 end
