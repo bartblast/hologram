@@ -55,7 +55,7 @@ defmodule Hologram.Migration.Value.Resolver do
   @time_types [:date, :datetime, :time]
 
   # The largest integer of the largest float, above which the conversion raises.
-  @max_float_integer trunc(1.7976931348623157e308)
+  @max_float_integer trunc(:math.pow(2, 1023) * (2 - :math.pow(2, -52)))
 
   @doc """
   Resolves the given backfill against the given model, the one standing right before the op, for

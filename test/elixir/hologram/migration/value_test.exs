@@ -251,7 +251,8 @@ defmodule Hologram.Migration.ValueTest do
       assert Value.normalize_constant(3, :float) === 3.0
       assert Value.normalize_constant(9_007_199_254_740_994, :float) === 9_007_199_254_740_994.0
       assert Value.normalize_constant(9_007_199_254_740_993, :float) === 9_007_199_254_740_993
-      assert Value.normalize_constant(10 ** 400, :float) === 10 ** 400
+      beyond_floats = 10 ** 400
+      assert Value.normalize_constant(beyond_floats, :float) === beyond_floats
     end
 
     test "leaves a value that isn't of the type for the check to refuse" do
