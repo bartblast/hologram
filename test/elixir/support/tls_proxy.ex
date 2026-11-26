@@ -260,12 +260,11 @@ defmodule Hologram.Test.TLSProxy do
     |> :public_key.pkix_sign(ca_key)
   end
 
-  # The key and digest are set, since the defaults can pick a curve or digest TLS 1.3 refuses.
+  # The key and digest are set, since the defaults can pick a curve or digest TLS 1.3 refuses. The
+  # server CA's key is generated here, so that common_name_only/2 can re-sign with it.
   defp generate_certs(cert) do
     key_opts = [digest: :sha256, key: {:namedCurve, :secp256r1}]
-
-    client_root = :public_key.pkix_test_root_cert(~c"Hologram test client CA", key_opts)
-    server_root = :public_key.pkix_test_root_cert(~c"Hologram test server CA", key_opts)
+    server_root_key = :public_key.generate_key({:namedCurve, :secp256r1})
 
     san_names =
       case cert do
@@ -277,26 +276,26 @@ defmodule Hologram.Test.TLSProxy do
 
     %{client_config: client_config, server_config: server_config} =
       :public_key.pkix_test_data(%{
-        client_chain: %{intermediates: [], peer: key_opts, root: client_root},
+        client_chain: %{intermediates: [], peer: key_opts, root: key_opts},
         server_chain: %{
           intermediates: [],
           peer: [extensions: [san]] ++ key_opts,
-          root: server_root
+          root: [digest: :sha256, key: server_root_key]
         }
       })
 
     server_cert =
       if cert == :common_name_only do
-        common_name_only(server_config[:cert], server_root.key)
+        common_name_only(server_config[:cert], server_root_key)
       else
         server_config[:cert]
       end
 
     %{
-      client_ca: client_root.cert,
+      client_ca: hd(server_config[:cacerts]),
       client_cert: client_config[:cert],
       client_key: client_config[:key],
-      server_ca: server_root.cert,
+      server_ca: hd(client_config[:cacerts]),
       server_cert: server_cert,
       server_key: server_config[:key]
     }
