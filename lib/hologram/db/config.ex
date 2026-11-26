@@ -17,7 +17,7 @@ defmodule Hologram.DB.Config do
   # connection per try, so not much shorter; below the idle interval, see held_connection_opts/1.
   @reconnect_backoff_ms :timer.seconds(2)
 
-  @discrete_keys [:database, :host, :password, :pool_size, :port, :user]
+  @discrete_keys [:database, :host, :password, :pool_size, :port, :ssl, :user]
 
   @first_statement_timeout_ms :timer.seconds(150)
 
@@ -31,6 +31,10 @@ defmodule Hologram.DB.Config do
 
   @required_keys [:database, :host, :password, :user]
 
+  @ssl_modes [:require, :verify_ca, :verify_full]
+
+  @ssl_path_entries [:ca_cert_path, :cert_path, :key_path]
+
   @doc """
   Returns the Postgrex options of the configured database in the current environment,
   with the given overrides applied.
@@ -40,21 +44,11 @@ defmodule Hologram.DB.Config do
   """
   @spec connection_opts(keyword) :: keyword
   def connection_opts(overrides \\ []) do
-    resolved =
-      :hologram
-      |> Application.get_env(:database, [])
-      |> resolve!(Hologram.env())
-
-    Keyword.merge(
-      [
-        database: resolved[:database],
-        hostname: resolved[:host],
-        password: resolved[:password],
-        port: resolved[:port],
-        username: resolved[:user]
-      ],
-      overrides
-    )
+    :hologram
+    |> Application.get_env(:database, [])
+    |> resolve!(Hologram.env())
+    |> postgrex_opts()
+    |> Keyword.merge(overrides)
   end
 
   @doc """
@@ -167,18 +161,62 @@ defmodule Hologram.DB.Config do
   def keepalive_statement, do: @keepalive_statement
 
   @doc """
+  Returns the Postgrex connection options of the given resolved database options (see
+  resolve!/2): :database, :hostname, :password, :port, :ssl and :username. Leaves :pool_size out,
+  which only the pool takes.
+
+  The one place the resolved options are turned into the driver's, so that every connection -
+  the pool's and those opened outside it - reaches the server the same way.
+
+  An :ssl list maps to Postgrex's :ssl list by its mode:
+
+    * `:require` - encrypts without checking the server's certificate
+    * `:verify_ca` - also checks that the certificate was signed by a trusted CA, but not the
+      host name it was issued for
+    * `:verify_full` - also checks the host name
+
+  The checking modes trust the CA in :ca_cert_path, or the system's CAs without it - Postgrex
+  adds no CAs to a list. Raises ArgumentError when the system's CAs fail to load. :cert_path and
+  :key_path give the client certificate and its key. The server name goes out in the handshake
+  under every mode.
+  """
+  @spec postgrex_opts(keyword) :: keyword
+  def postgrex_opts(resolved) do
+    [
+      database: resolved[:database],
+      hostname: resolved[:host],
+      password: resolved[:password],
+      port: resolved[:port],
+      ssl: postgrex_ssl_opts(resolved[:ssl]),
+      username: resolved[:user]
+    ]
+  end
+
+  @doc """
   Resolves the database connection options for the given environment from the given
   config keyword list (the value of `config :hologram, :database`).
 
-  Discrete keys (:database, :host, :password, :pool_size, :port, :user) are overlaid
-  on the environment defaults, and components present in :url win over both. In :dev
-  and :test the defaults are localhost with postgres/postgres credentials and the
+  Discrete keys (:database, :host, :password, :pool_size, :port, :ssl, :user) are
+  overlaid on the environment defaults, and components present in :url win over both.
+  In :dev and :test the defaults are localhost with postgres/postgres credentials and the
   "<otp_app>_<env>" database. Other environments have no identity defaults - a missing
-  :database, :host, :password or :user raises ArgumentError - while :port and
-  :pool_size default to 5432 and 10 everywhere.
+  :database, :host, :password or :user raises ArgumentError - while :port, :pool_size and
+  :ssl default to 5432, 10 and false everywhere.
 
-  Returns a keyword list with the :database, :host, :password, :pool_size, :port and
-  :user options.
+  :ssl is false for a plain connection, true for the same as `[mode: :verify_full]`, or a
+  keyword list with these entries:
+
+    * `:mode` - `:require`, `:verify_ca` or `:verify_full` (the default), see postgrex_opts/1
+    * `:ca_cert_path` - the file of the CA to trust instead of the system's, for the modes
+      that check the certificate
+    * `:cert_path` and `:key_path` - the files of a client certificate and its key, set
+      together
+
+  Any other value, entry or entry value raises ArgumentError naming it.
+
+  Returns a keyword list sorted by key with the :database, :host, :password, :pool_size,
+  :port, :ssl and :user options, :ssl holding false or the list sorted by entry, with its
+  mode.
   """
   @spec resolve!(keyword, atom) :: keyword
   def resolve!(config, env) do
@@ -194,11 +232,49 @@ defmodule Hologram.DB.Config do
       |> Keyword.merge(url_components)
       |> Keyword.put_new(:pool_size, @default_pool_size)
       |> Keyword.put_new(:port, @default_port)
+      |> Keyword.put_new(:ssl, false)
+      |> Keyword.update!(:ssl, &normalize_ssl!/1)
 
     validate_required!(resolved, env)
 
     Enum.sort(resolved)
   end
+
+  # The verify_fun of the :verify_ca mode, see postgrex_opts/1. Public, so that the pool's options
+  # hold a remote capture, which outlives a reload of this module.
+  #
+  # The ssl application's own handling of every event but the host name check failure - the
+  # clauses of the fun it wraps a one-argument verify_fun in (convert_verify_fun/0 in ssl_config),
+  # plus the rename of an expired root its default verify_fun makes (validate/4 in
+  # ssl_certificate), which has it look for a cross-signed root in its place. The default renames
+  # only for the trust anchor, which the fun can't see, so it renames for any self-signed
+  # certificate: a rename that finds no other root goes back to cert_expired.
+  #
+  # Any verify_fun skips what the default verify_fun checks on a certificate the path validation
+  # accepted: that it's signed with an algorithm among the handshake's, and the stapled OCSP
+  # status, which Postgrex doesn't ask for. It skips them for the chain's CAs, and accepting the
+  # host name failure skips them for the server certificate too. The signatures themselves are
+  # still verified, and the revocation checks still run.
+  @doc false
+  @spec verify_ca_event(term, term, term) ::
+          {:fail, {:bad_cert, term}} | {:unknown, term} | {:valid, term}
+  def verify_ca_event(_cert, {:bad_cert, :hostname_check_failed}, state), do: {:valid, state}
+
+  def verify_ca_event(cert, {:bad_cert, :cert_expired} = reason, _state) do
+    if :public_key.pkix_is_self_signed(cert) do
+      {:fail, {:bad_cert, :root_cert_expired}}
+    else
+      {:fail, reason}
+    end
+  end
+
+  def verify_ca_event(_cert, {:bad_cert, _reason} = reason, _state), do: {:fail, reason}
+
+  def verify_ca_event(_cert, {:extension, _extension}, state), do: {:unknown, state}
+
+  def verify_ca_event(_cert, :valid, state), do: {:valid, state}
+
+  def verify_ca_event(_cert, :valid_peer, state), do: {:valid, state}
 
   @doc """
   Logs that the database refused the keepalive settings (see keepalive_statement/0) with the given
@@ -224,6 +300,137 @@ defmodule Hologram.DB.Config do
   end
 
   defp defaults(_env), do: []
+
+  defp normalize_ssl!(false), do: false
+
+  defp normalize_ssl!(true), do: [mode: :verify_full]
+
+  defp normalize_ssl!(ssl) when is_list(ssl) do
+    if not Keyword.keyword?(ssl) do
+      raise_invalid_ssl!(ssl)
+    end
+
+    Enum.each(ssl, &validate_ssl_entry!/1)
+    validate_no_repeated_ssl_entries!(ssl)
+    validate_client_cert!(ssl)
+    validate_ca_cert_mode!(ssl)
+
+    ssl
+    |> Keyword.put_new(:mode, :verify_full)
+    |> Enum.sort()
+  end
+
+  defp normalize_ssl!(ssl), do: raise_invalid_ssl!(ssl)
+
+  defp postgrex_ssl_opts(false), do: false
+
+  defp postgrex_ssl_opts(ssl) do
+    mode = Keyword.fetch!(ssl, :mode)
+
+    client_cert_opts =
+      Enum.flat_map([cert_path: :certfile, key_path: :keyfile], fn {entry, opt} ->
+        case Keyword.fetch(ssl, entry) do
+          {:ok, path} -> [{opt, path}]
+          :error -> []
+        end
+      end)
+
+    postgrex_ssl_verify_opts(mode, ssl) ++ client_cert_opts
+  end
+
+  defp postgrex_ssl_verify_opts(:require, _ssl), do: [verify: :verify_none]
+
+  # The server name still goes out in the handshake - hosts like Neon route the connection by it -
+  # so the ssl application still checks the host name, and verify_ca_event/3 accepts its failure.
+  # Turning the check off with server_name_indication: :disable would drop the name, and a match
+  # function that accepts any name isn't asked about a certificate without a subjectAltName.
+  defp postgrex_ssl_verify_opts(:verify_ca, ssl) do
+    [verify: :verify_peer, verify_fun: {&__MODULE__.verify_ca_event/3, nil}] ++ ca_opts(ssl)
+  end
+
+  defp postgrex_ssl_verify_opts(:verify_full, ssl), do: [verify: :verify_peer] ++ ca_opts(ssl)
+
+  defp ca_opts(ssl) do
+    case Keyword.fetch(ssl, :ca_cert_path) do
+      {:ok, path} -> [cacertfile: path]
+      :error -> [cacerts: system_cacerts!()]
+    end
+  end
+
+  defp raise_invalid_ssl!(ssl) do
+    raise ArgumentError,
+          "invalid ssl in config :hologram, :database - expected false, true or a keyword list, got: #{inspect(ssl)}"
+  end
+
+  defp system_cacerts! do
+    :public_key.cacerts_get()
+  catch
+    :error, {:failed_load_cacerts, reason} ->
+      raise ArgumentError,
+            "ssl in config :hologram, :database checks the server's certificate against the system's CAs, which failed to load (#{inspect(reason)}) - set ssl entry :ca_cert_path to the CA to trust"
+  end
+
+  defp validate_ca_cert_mode!(ssl) do
+    if Keyword.has_key?(ssl, :ca_cert_path) and Keyword.get(ssl, :mode) == :require do
+      raise ArgumentError,
+            "ssl entry :ca_cert_path in config :hologram, :database needs mode :verify_ca or :verify_full - mode :require doesn't check the server's certificate"
+    end
+
+    :ok
+  end
+
+  defp validate_client_cert!(ssl) do
+    case {Keyword.has_key?(ssl, :cert_path), Keyword.has_key?(ssl, :key_path)} do
+      {true, false} ->
+        raise ArgumentError,
+              "ssl entry :cert_path in config :hologram, :database needs :key_path, the key of the client certificate"
+
+      {false, true} ->
+        raise ArgumentError,
+              "ssl entry :key_path in config :hologram, :database needs :cert_path, the client certificate of the key"
+
+      _both_or_neither ->
+        :ok
+    end
+  end
+
+  defp validate_no_repeated_ssl_entries!(ssl) do
+    repeated =
+      ssl
+      |> Keyword.keys()
+      |> Enum.frequencies()
+      |> Enum.find(fn {_key, count} -> count > 1 end)
+
+    case repeated do
+      {key, _n} ->
+        raise ArgumentError,
+              "ssl entry #{inspect(key)} in config :hologram, :database is given more than once"
+
+      nil ->
+        :ok
+    end
+  end
+
+  defp validate_ssl_entry!({:mode, mode}) when mode in @ssl_modes, do: :ok
+
+  defp validate_ssl_entry!({:mode, mode}) do
+    raise ArgumentError,
+          "invalid ssl entry :mode in config :hologram, :database - expected :require, :verify_ca or :verify_full, got: #{inspect(mode)}"
+  end
+
+  defp validate_ssl_entry!({entry, path}) when entry in @ssl_path_entries do
+    if is_binary(path) and path != "" do
+      :ok
+    else
+      raise ArgumentError,
+            "invalid ssl entry #{inspect(entry)} in config :hologram, :database - expected a non-empty string, got: #{inspect(path)}"
+    end
+  end
+
+  defp validate_ssl_entry!({entry, _value}) do
+    raise ArgumentError,
+          "unknown ssl entry #{inspect(entry)} in config :hologram, :database - supported: :ca_cert_path, :cert_path, :key_path, :mode"
+  end
 
   defp url_components(nil), do: []
 
