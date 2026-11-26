@@ -3313,8 +3313,9 @@ defmodule Hologram.Migration.RendererTest do
       result = render(ops, pre)
 
       assert %{op: :add_column, column: "seats", definition: %{type: "float8"}} =
-               Enum.find(result.transactional, &(&1[:column] == "seats"))
+               seats = Enum.find(result.transactional, &(&1[:column] == "seats"))
 
+      refute Map.has_key?(seats, :backfill)
       refute Enum.any?(result.transactional, &(&1.op == :alter_column))
     end
 
