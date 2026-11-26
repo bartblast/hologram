@@ -138,7 +138,7 @@ defmodule Hologram.Test.TLSProxy do
 
     ssl_opts = [cert: certs.server_cert, key: certs.server_key] ++ client_cert_opts
 
-    {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false])
+    {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false, ip: :loopback])
     {:ok, port} = :inet.port(listen_socket)
     proxy = self()
 
