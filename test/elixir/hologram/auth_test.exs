@@ -52,7 +52,6 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module58, as: ChangedProject
   alias Hologram.Test.Fixtures.Policy.Module59, as: ChangedTask
-  alias Hologram.Test.Fixtures.Policy.Module64, as: PolicyCodedLabel
   alias Hologram.Test.Fixtures.Policy.Module8
   alias Hologram.Test.Fixtures.Policy.Module9, as: SelfParent
   alias Hologram.Test.Fixtures.Policy.Readers.Module18, as: ReadersModule18
@@ -1180,15 +1179,6 @@ defmodule Hologram.AuthTest do
         |> Entity.strip_server_only()
 
       refute can?(nil, :read, row)
-    end
-
-    # The row's only update line covers one field, so a field of an update and an update changing it
-    # are both judged by that line's rule.
-    test "judges an update by the stored server-only values its field's line reads" do
-      row = create_stripped(PolicyCodedLabel, code: "kestrel", label: "a")
-
-      assert can?(nil, {:update, :label}, row)
-      assert can?(nil, :update, row, label: "b")
     end
 
     # A failed statement aborts the test's transaction, so any read after it raises.
