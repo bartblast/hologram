@@ -5,8 +5,12 @@ defmodule Hologram.Migration.Renderer do
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
+  alias Hologram.DB.QueryCompiler
   alias Hologram.DB.Schema
   alias Hologram.Entity.Model
+  alias Hologram.Migration.Value
+  alias Hologram.Migration.Value.Check
+  alias Hologram.Migration.Value.SQL
 
   # The ops that take an object away - a widening keeps them until its data has moved.
   @drop_ops [:drop_column, :drop_foreign_key, :drop_index]
@@ -20,6 +24,17 @@ defmodule Hologram.Migration.Renderer do
     :rename_relationship,
     :rename_role
   ]
+
+  # Each chunk with the op that cut it from the one before, nil when only the kind of op changed.
+  # Public for Check, which bounds a fill by the casts these chunks render.
+  @doc false
+  @spec chunks(list(%{atom => any})) :: list({%{atom => any} | nil, list(%{atom => any})})
+  def chunks(logical_ops) do
+    logical_ops
+    |> Enum.reduce([], &place_op/2)
+    |> Enum.reverse()
+    |> Enum.map(fn {cut, reversed_ops} -> {cut, Enum.reverse(reversed_ops)} end)
+  end
 
   @doc """
   Returns the physical ops applying the given logical ops to a database holding the
@@ -39,6 +54,12 @@ defmodule Hologram.Migration.Renderer do
   chunk counts, one declared after a later rename fills nothing - the column is required,
   and refused over rows, before it arrives.
 
+  An add with a computed backfill is a chunk of its own, so it reads the rows as the ops above
+  it leave them and no op beside it can change what it fills. An entity type deleted and created
+  again starts one too. A member deleted with another added under the same stored name stays in
+  its chunk, in either order, and renders as a drop and an add: read as one unchanged column, the
+  rows would keep the old values.
+
   The ops render through the mapping: the model before and after them project to physical
   schema terms, and their difference is what the database must do. Physical names
   therefore never enter the migration history - a change to the derived-name rules
@@ -53,14 +74,18 @@ defmodule Hologram.Migration.Renderer do
     # before it, so the chunks skip that check. They keep the others, which hold per chunk.
     _validated_model = Model.fold(pre_model, logical_ops)
 
-    {physical_ops, post_model} =
-      logical_ops
-      |> Enum.chunk_by(&segment_kind/1)
-      |> Enum.reduce({[], pre_model}, fn chunk, {acc, model} ->
-        {ops, next_model} = render_chunk(chunk, model)
+    # Judged here rather than in the fold, which every boot runs over the applied history: a rule
+    # that tightens in a later release must not stop a database that already applied the file.
+    Check.validate_ops!(logical_ops, pre_model)
 
-        {acc ++ ops, next_model}
-      end)
+    chunks =
+      logical_ops
+      |> Check.put_byte_bounds(pre_model)
+      |> chunks()
+
+    {physical_ops, post_model} = render_chunks(chunks, pre_model)
+
+    Check.validate_enum_uses!(physical_ops, cut?(chunks))
 
     physical_ops
     |> walk_ops()
@@ -69,26 +94,93 @@ defmodule Hologram.Migration.Renderer do
 
   # A backfill rides its logical op, never the model - the physical column it fills is
   # found by the name the mapper derives for that attribute.
-  defp attach_backfills(physical_ops, logical_ops) do
+  defp attach_backfills(physical_ops, logical_ops, next_model, next_mapping) do
     backfills =
-      for %{op: :add_attribute} = op <- logical_ops,
-          {:ok, value} <- [Keyword.fetch(op.opts, :backfill)],
+      for {op, index} <- Enum.with_index(logical_ops),
+          {:ok, value} <- [Value.fetch_backfill(op)],
+          not deleted_later?(op, Enum.drop(logical_ops, index + 1)),
+          %{} = entry <- [next_mapping[op.entity]],
+          %{} = column <- [member_column(entry, op)],
           into: %{} do
-        {{Mapper.table_name(op.entity), Atom.to_string(op.name)}, Codec.encode(value, op.type)}
+        type = filled_type(op, next_model)
+        normalized = Value.normalize_constant(value, type)
+
+        {{entry.table, column.name},
+         {Codec.encode(normalized, type), fill_target(op, next_model)}}
       end
 
     Enum.map(physical_ops, &put_backfill(&1, backfills))
+  end
+
+  # Clears what the given columns hold from the term a diff starts at: their foreign keys, the
+  # indexes over them and the enum types they alone use.
+  defp clear_columns(term, table, columns) do
+    names = Enum.map(columns, & &1.name)
+    enum_types = for %{enum_values: values, sql_type: type} <- columns, values, do: type
+
+    cleared_table =
+      term.tables
+      |> Map.fetch!(table)
+      |> Map.update!(:columns, &Map.drop(&1, names))
+      |> Map.update!(:foreign_keys, &Map.drop(&1, names))
+      |> Map.update!(:indexes, fn indexes ->
+        Map.reject(indexes, fn {_name, index} -> Enum.any?(index.columns, &(&1 in names)) end)
+      end)
+
+    %{
+      term
+      | enum_types: Map.drop(term.enum_types, enum_types),
+        tables: Map.put(term.tables, table, cleared_table)
+    }
+  end
+
+  defp clear_member(term, _op, nil, _next_entry, _next_join_tables), do: term
+
+  defp clear_member(term, %{op: :delete_entity}, pre_entry, _next_entry, next_join_tables) do
+    %{term | tables: Map.drop(term.tables, kept_join_tables(pre_entry, next_join_tables))}
+  end
+
+  defp clear_member(term, %{name: name} = op, pre_entry, next_entry, next_join_tables) do
+    next_columns =
+      next_entry
+      |> then(&if(&1, do: &1.columns, else: []))
+      |> MapSet.new(& &1.name)
+
+    columns =
+      for %{source: {kind, ^name}} = column <- pre_entry.columns,
+          kind in stored_kinds(op),
+          MapSet.member?(next_columns, column.name),
+          do: column
+
+    join_tables =
+      if op.op == :delete_relationship do
+        kept_join_tables(
+          %{join_tables: Enum.filter(pre_entry.join_tables, &(&1.relationship == name))},
+          next_join_tables
+        )
+      else
+        []
+      end
+
+    cleared = clear_columns(term, pre_entry.table, columns)
+
+    %{cleared | tables: Map.drop(cleared.tables, join_tables)}
   end
 
   defp companions(mapping, op) do
     {_entity_type, entity_mapping} =
       Enum.find(mapping, fn {_entity_type, entry} -> entry.table == op.table end)
 
-    {:attribute, name} = Enum.find(entity_mapping.columns, &(&1.name == op.column)).source
+    # A relationship's column holds an id, which has no companions.
+    case Enum.find(entity_mapping.columns, &(&1.name == op.column)).source do
+      {:attribute, name} ->
+        for %{source: {kind, ^name}} = column <- entity_mapping.columns,
+            kind in [:search_key, :sort_key],
+            do: {kind, column.name}
 
-    for %{source: {kind, ^name}} = column <- entity_mapping.columns,
-        kind in [:search_key, :sort_key],
-        do: {kind, column.name}
+      {:relationship, _name} ->
+        []
+    end
   end
 
   # The renamed member's derivations live under its new name afterwards, so the pairing
@@ -122,6 +214,67 @@ defmodule Hologram.Migration.Renderer do
   end
 
   defp corresponding_source(source, _entity_type, _op), do: source
+
+  defp computed?(%{op: kind, opts: opts}) when kind in [:add_attribute, :add_relationship] do
+    match?(%Value{}, opts[:backfill])
+  end
+
+  defp computed?(%{op: kind, changes: changes})
+       when kind in [:change_attribute, :change_relationship] do
+    match?(%Value{}, changes[:backfill])
+  end
+
+  defp computed?(_op), do: false
+
+  # A member added again under the name is another one, which the deleted add's backfill mustn't
+  # reach.
+  defp deleted_later?(%{entity: entity, name: name, op: kind}, later_ops) do
+    delete =
+      if kind in [:add_attribute, :change_attribute],
+        do: :delete_attribute,
+        else: :delete_relationship
+
+    Enum.any?(later_ops, &(&1.op == delete and &1.entity == entity and &1.name == name))
+  end
+
+  # A tightening's backfill, even a constant, fills the rows as the ops above it left them, so it
+  # never merges with a type change of the same attribute in the op next to it.
+  defp fills_apart?(%{op: kind, changes: changes})
+       when kind in [:change_attribute, :change_relationship] do
+    carries_backfill?(changes)
+  end
+
+  defp fills_apart?(op), do: computed?(op)
+
+  # The type a to-one's id must exist in, nil for an attribute.
+  defp fill_target(%{op: kind} = op, next_model)
+       when kind in [:add_relationship, :change_relationship] do
+    {:relationship, {_name, target, _opts}} = Value.fill_member(op, next_model)
+
+    target
+  end
+
+  defp fill_target(_op, _next_model), do: nil
+
+  defp filled_type(%{op: :add_attribute, type: type}, _next_model), do: type
+
+  defp filled_type(%{op: kind}, _next_model)
+       when kind in [:add_relationship, :change_relationship] do
+    :uuid
+  end
+
+  defp filled_type(op, next_model) do
+    {_name, type, _opts} = List.keyfind!(next_model.entities[op.entity].attributes, op.name, 0)
+
+    type
+  end
+
+  defp member_column(entry, %{op: kind, name: name}) do
+    source_kind =
+      if kind in [:add_attribute, :change_attribute], do: :attribute, else: :relationship
+
+    Enum.find(entry.columns, &(&1.source == {source_kind, name}))
+  end
 
   defp entity_after(entity_type, %{op: :rename_entity, from: entity_type} = op), do: op.to
 
@@ -340,9 +493,43 @@ defmodule Hologram.Migration.Renderer do
 
   defp name_op(kind, _table, from, to), do: [%{op: kind, from: from, to: to}]
 
+  defp place_op(op, []), do: [{if(fills_apart?(op), do: op), [op]}]
+
+  defp place_op(op, [{cut, [last | _earlier] = current} | done] = placed) do
+    cond do
+      fills_apart?(op) or recreates_entity?(op, current) or retypes_filled_add?(op, current) ->
+        [{op, [op]} | placed]
+
+      fills_apart?(last) or segment_kind(op) != segment_kind(last) ->
+        [{nil, [op]} | placed]
+
+      true ->
+        [{cut, [op | current]} | done]
+    end
+  end
+
   defp put_backfill(%{op: :add_column} = op, backfills) do
     case Map.fetch(backfills, {op.table, op.column}) do
-      {:ok, value} -> Map.put(op, :backfill, value)
+      {:ok, {value, _target}} -> Map.put(op, :backfill, value)
+      :error -> op
+    end
+  end
+
+  defp put_backfill(%{op: :alter_column} = op, backfills) do
+    case Map.fetch(backfills, {op.table, op.column}) do
+      {:ok, {value, target}} ->
+        Map.merge(op, %{fill: value, fill_source: :backfill, fill_target: target})
+
+      :error ->
+        op
+    end
+  end
+
+  # The constant is already in the column when the key is added, so the add is what meets an id
+  # no row holds.
+  defp put_backfill(%{op: :add_foreign_key} = op, backfills) do
+    case Map.fetch(backfills, {op.table, op.column}) do
+      {:ok, {_value, target}} -> Map.put(op, :fill_target, target)
       :error -> op
     end
   end
@@ -356,9 +543,18 @@ defmodule Hologram.Migration.Renderer do
   defp put_declared_default(%{op: :add_column, definition: %{null: false}} = op, mapping)
        when not is_map_key(op, :backfill) do
     case Preflight.fill_value(mapping, op.table, op.column) do
-      {:ok, value} -> Map.put(op, :backfill, value)
-      :none -> op
+      {:ok, value} ->
+        validate_default_held!(op, value, mapping)
+        Map.put(op, :backfill, value)
+
+      :none ->
+        op
     end
+  end
+
+  # A tightening's own backfill wins over the declared default, and only needs the companions.
+  defp put_declared_default(%{op: :alter_column, fill: _value} = op, mapping) do
+    Map.put(op, :fill_companions, companions(mapping, op))
   end
 
   # A column turning required the same way: its NULLs take the declared default before it
@@ -375,8 +571,15 @@ defmodule Hologram.Migration.Renderer do
          mapping
        ) do
     case Preflight.fill_value(mapping, op.table, op.column) do
-      {:ok, value} -> Map.merge(op, %{fill: value, fill_companions: companions(mapping, op)})
-      :none -> op
+      {:ok, value} ->
+        Map.merge(op, %{
+          default_held: default_held?(op, value, mapping),
+          fill: value,
+          fill_companions: companions(mapping, op)
+        })
+
+      :none ->
+        op
     end
   end
 
@@ -417,6 +620,48 @@ defmodule Hologram.Migration.Renderer do
       rename_enum_value_ops(post_mapping, attribute, from, to)
     end
   end
+
+  # By table, since two modules can derive one name, as MyApp.TaskItem and MyApp.Task.Item do.
+  defp recreates_entity?(%{op: :create_entity, entity: entity}, ops) do
+    table = Mapper.table_name(entity)
+
+    Enum.any?(ops, &(&1.op == :delete_entity and Mapper.table_name(&1.entity) == table))
+  end
+
+  # The create above it is left to stand alone, which the mapper refuses on the shared table.
+  defp recreates_entity?(%{op: :delete_entity, entity: entity}, ops) do
+    table = Mapper.table_name(entity)
+
+    Enum.any?(ops, fn op ->
+      op.op == :create_entity and op.entity != entity and Mapper.table_name(op.entity) == table
+    end)
+  end
+
+  defp recreates_entity?(_op, _ops), do: false
+
+  # A backfill holds a value of the type its add declares, so a type change of the attribute after
+  # it applies to the filled rows on its own, as a cast, rather than merging into the add. A change
+  # restating the add's type casts nothing, so it merges. The add is the one of the attribute as it
+  # stands, the latest op above that adds or deletes it - an add deleted since fills nothing the
+  # change meets.
+  defp retypes_filled_add?(%{op: :change_attribute, changes: changes} = op, ops) do
+    Keyword.has_key?(changes, :type) and
+      case Enum.find(ops, &adds_or_deletes?(&1, op.entity, op.name)) do
+        %{op: :add_attribute} = add ->
+          Keyword.has_key?(add.opts, :backfill) and add.type != changes[:type]
+
+        _deleted_or_none ->
+          false
+      end
+  end
+
+  defp retypes_filled_add?(_op, _ops), do: false
+
+  defp adds_or_deletes?(%{op: kind, entity: entity, name: name}, entity, name)
+       when kind in [:add_attribute, :delete_attribute],
+       do: true
+
+  defp adds_or_deletes?(_op, _entity, _name), do: false
 
   defp role_values(mapping) do
     case Map.fetch(mapping, RoleGrant) do
@@ -471,15 +716,28 @@ defmodule Hologram.Migration.Renderer do
   end
 
   defp render_chunk([%{op: :change_relationship} = first | _rest] = chunk, model) do
-    if retarget?(first) do
-      Enum.reduce(chunk, {[], model}, fn op, {acc, current_model} ->
-        next_model = Model.fold(current_model, [op])
+    cond do
+      # An op can state the target a relationship has, which retargets nothing. A backfill sits in
+      # a chunk of its own, so it fills even when its op states one. A chunk of other changes can
+      # cast an attribute, which is no retarget either.
+      retarget?(first) and retargets?(chunk, model) ->
+        Enum.reduce(chunk, {[], model}, fn op, {acc, current_model} ->
+          next_model = Model.fold(current_model, [op])
 
-        {acc ++ retarget_ops_for(op, current_model, next_model), next_model}
-      end)
-    else
-      render_plain_chunk(chunk, model)
+          {acc ++ retarget_ops_for(op, current_model, next_model), next_model}
+        end)
+
+      computed?(first) ->
+        render_computed_tightening(first, model)
+
+      true ->
+        render_plain_chunk(chunk, model)
     end
+  end
+
+  defp render_chunk([%{op: kind} = op] = chunk, model)
+       when kind in [:add_attribute, :add_relationship] do
+    if computed?(op), do: render_computed_add(op, model), else: render_plain_chunk(chunk, model)
   end
 
   defp render_chunk([%{op: kind} | _rest] = chunk, model) when kind in @rename_ops do
@@ -490,7 +748,283 @@ defmodule Hologram.Migration.Renderer do
     end)
   end
 
+  defp render_chunk([%{op: :change_attribute} = op] = chunk, model) do
+    if computed?(op),
+      do: render_computed_tightening(op, model),
+      else: render_plain_chunk(chunk, model)
+  end
+
   defp render_chunk(chunk, model), do: render_plain_chunk(chunk, model)
+
+  defp render_chunks(chunks, pre_model) do
+    validate_cuts!(chunks, pre_model)
+
+    Enum.reduce(chunks, {[], pre_model}, fn {_cut, chunk}, {acc, model} ->
+      {ops, next_model} = render_chunk(chunk, model)
+
+      {acc ++ mark_tightenings(ops, chunk, model, next_model), next_model}
+    end)
+  end
+
+  # A tightening nothing fills is refused over rows holding nil, naming what the member can take.
+  defp mark_tightenings(ops, chunk, model, next_model) do
+    if Enum.any?(ops, &unfilled_tightening?/1) do
+      # The chunk's start, where a column being altered stands: a later op of the chunk can drop it.
+      mapping = Mapper.derive_from_model!(model)
+
+      type_changes = type_changes(chunk, model)
+
+      Enum.map(ops, &mark_tightening(&1, type_changes, mapping, next_model))
+    else
+      ops
+    end
+  end
+
+  defp mark_tightening(op, type_changes, mapping, next_model) do
+    if unfilled_tightening?(op),
+      do: Map.put(op, :tightening, tightening(op, type_changes, mapping, next_model)),
+      else: op
+  end
+
+  defp tightening(op, type_changes, mapping, next_model) do
+    {entity_type, kind, name} = column_member(mapping, op.table, op.column)
+
+    # A declared default fills a tightening only when the column keeps its type.
+    takes_default =
+      kind == :attribute and op.before.type == op.after.type and
+        not unique_attribute?(next_model, entity_type, name)
+
+    %{
+      kind: kind,
+      takes_default: takes_default,
+      type_stated: MapSet.member?(type_changes, {entity_type, name})
+    }
+  end
+
+  # The members an op of the given chunk changes the type of, folded op by op from the given
+  # model. An op can state the type a member has, which changes nothing.
+  defp type_changes(chunk, model) do
+    {changed, _model} =
+      Enum.reduce(chunk, {MapSet.new(), model}, fn op, {changed, current} ->
+        next = Model.fold_op(current, op)
+
+        if changes_type?(op, current, next),
+          do: {MapSet.put(changed, {op.entity, op.name}), next},
+          else: {changed, next}
+      end)
+
+    changed
+  end
+
+  defp changes_type?(%{op: kind, changes: changes} = op, model, next_model)
+       when kind in [:change_attribute, :change_relationship] do
+    Keyword.has_key?(changes, :type) and
+      member_type(model, op) != member_type(next_model, op)
+  end
+
+  defp changes_type?(_op, _model, _next_model), do: false
+
+  defp member_type(model, %{op: kind, entity: entity_type, name: name}) do
+    list_key = if kind == :change_attribute, do: :attributes, else: :relationships
+
+    case List.keyfind(model.entities[entity_type][list_key], name, 0) do
+      {^name, type, _opts} -> type
+      nil -> nil
+    end
+  end
+
+  defp unique_attribute?(model, entity_type, name) do
+    case List.keyfind(model.entities[entity_type][:attributes] || [], name, 0) do
+      {^name, _type, opts} -> opts[:unique] == true
+      nil -> false
+    end
+  end
+
+  # A required add nothing fills is refused over rows the way a tightening is, naming what the
+  # member can take. A declared default fills an add whatever type the chunk gives it.
+  defp mark_unfilled_add(
+         %{op: :add_column, definition: %{null: false}} = op,
+         type_changes,
+         mapping,
+         model
+       )
+       when not is_map_key(op, :backfill) do
+    {entity_type, kind, name} = column_member(mapping, op.table, op.column)
+
+    unfilled = %{
+      kind: kind,
+      takes_default: kind == :attribute and not unique_attribute?(model, entity_type, name),
+      type_stated: MapSet.member?(type_changes, {entity_type, name})
+    }
+
+    Map.put(op, :unfilled, unfilled)
+  end
+
+  defp mark_unfilled_add(op, _type_changes, _mapping, _model), do: op
+
+  # The entity type, kind and name of the member the given table's column stores.
+  defp column_member(mapping, table, column) do
+    {entity_type, entry} = Enum.find(mapping, fn {_type, entry} -> entry.table == table end)
+    {kind, name} = Enum.find(entry.columns, &(&1.name == column)).source
+
+    {entity_type, kind, name}
+  end
+
+  defp unfilled_tightening?(
+         %{op: :alter_column, before: %{null: true}, after: %{null: false}} = op
+       ) do
+    not Map.has_key?(op, :fill) and not Map.has_key?(op, :filled)
+  end
+
+  defp unfilled_tightening?(_op), do: false
+
+  # Added nullable, filled, then tightened. The tightening is marked filled and takes no declared
+  # default: the expression said what each row holds, so a NULL it left is refused rather than
+  # replaced.
+  defp render_computed_add(op, model) do
+    next_model = Model.fold(model, [op], validate_filled_adds: false)
+    next_mapping = Mapper.derive_from_model!(next_model)
+    entry = Map.fetch!(next_mapping, op.entity)
+    column = member_column(entry, op)
+
+    diff_ops =
+      model
+      |> term()
+      |> Schema.diff(Schema.from_mapping(next_mapping), renames: false)
+
+    # A chunk of one add leaves its table standing, so the diff always adds the column.
+    %{definition: definition} =
+      add_op =
+      Enum.find(diff_ops, fn diff_op ->
+        diff_op.op == :add_column and diff_op.table == entry.table and
+          diff_op.column == column.name
+      end)
+
+    nullable = %{definition | null: true}
+
+    added_ops =
+      Enum.map(diff_ops, &if(&1 == add_op, do: %{add_op | definition: nullable}, else: &1))
+
+    fill_op =
+      op
+      |> fill_column_op(model, next_model, next_mapping, entry.table, column.name)
+      |> Map.put(:required, not definition.null)
+
+    tighten_ops =
+      if definition.null do
+        []
+      else
+        [
+          %{
+            op: :alter_column,
+            table: entry.table,
+            column: column.name,
+            before: nullable,
+            after: definition,
+            filled: true
+          }
+        ]
+      end
+
+    {added_ops ++ [fill_op] ++ tighten_ops, next_model}
+  end
+
+  # The column stands, so only the rows holding nil fill, right before it tightens. The fold has
+  # refused a member already required, so the diff always holds the tightening.
+  defp render_computed_tightening(op, model) do
+    next_model = Model.fold(model, [op], validate_filled_adds: false)
+    next_mapping = Mapper.derive_from_model!(next_model)
+    entry = Map.fetch!(next_mapping, op.entity)
+    table = entry.table
+    column = member_column(entry, op).name
+
+    fill_op =
+      op
+      |> fill_column_op(model, next_model, next_mapping, table, column)
+      |> Map.merge(%{
+        companions: companions(next_mapping, %{table: table, column: column}),
+        required: true
+      })
+
+    diff_ops =
+      model
+      |> term()
+      |> Schema.diff(Schema.from_mapping(next_mapping), renames: false)
+
+    %{op: :alter_column} =
+      tightening =
+      Enum.find(diff_ops, &match?(%{op: :alter_column, table: ^table, column: ^column}, &1))
+
+    physical_ops =
+      Enum.flat_map(diff_ops, fn
+        ^tightening -> [fill_op, Map.put(tightening, :filled, true)]
+        other -> [other]
+      end)
+
+    {physical_ops, next_model}
+  end
+
+  defp fill_column_op(op, model, next_model, mapping, table, column) do
+    [%{backfill: {:computed, value}, kind: kind, nulls_only: nulls_only}] =
+      Value.fills([op], model)
+
+    {^kind, {_name, type, rules} = member} = Value.fill_member(op, next_model)
+    target = Value.fill_target(kind, member, op)
+
+    Map.merge(
+      %{
+        op: :fill_column,
+        table: table,
+        column: column,
+        companions: [],
+        entity: op.entity,
+        fill_target: fill_target(op, next_model),
+        line: op.line,
+        mapping: mapping,
+        max_bytes: Map.get(op, :max_bytes),
+        member: op.name,
+        nulls_only: nulls_only,
+        rules: rules,
+        type: type
+      },
+      fill_source(value, op, mapping, column, target)
+    )
+  end
+
+  # An Elixir fn has no SQL, so the op names what the row-by-row fill reads and writes. It can
+  # return any value of an enum, so all of them count as used.
+  defp fill_source(
+         %{term: {:function, module, function, args, _type}},
+         op,
+         mapping,
+         column,
+         _target
+       ) do
+    entry = Map.fetch!(mapping, op.entity)
+    filled = Enum.find(entry.columns, &(&1.name == column))
+
+    %{
+      arg_columns:
+        Enum.map(args, fn name ->
+          arg_column = QueryCompiler.name_column(entry, name)
+
+          {arg_column.name, arg_column.type}
+        end),
+      column_sql_type: filled.sql_type,
+      column_type: filled.type,
+      enum_uses: Enum.map(filled.enum_values || [], &{filled.sql_type, &1}),
+      function: {module, function},
+      sort_keys: []
+    }
+  end
+
+  defp fill_source(value, op, mapping, _column, target) do
+    %{
+      enum_uses: SQL.enum_uses(value, op.entity, mapping, target),
+      sort_keys: SQL.sort_keys(value, op.entity, mapping),
+      sql: SQL.render(value, op.entity, mapping, target)
+    }
+  end
 
   # Every Schema.diff here passes renames: false. A migration says what it renames in its
   # model ops, and the rename chunks pair those from the mapping - pairing by definition could
@@ -499,13 +1033,18 @@ defmodule Hologram.Migration.Renderer do
   defp render_plain_chunk(chunk, model) do
     next_model = Model.fold(model, chunk, validate_filled_adds: false)
     next_mapping = Mapper.derive_from_model!(next_model)
+    pre_mapping = Mapper.derive_from_model!(model)
+    pre_term = Schema.from_mapping(pre_mapping)
+    cleared_term = without_recreated(pre_term, chunk, pre_mapping, next_mapping)
+    type_changes = type_changes(chunk, model)
 
     physical_ops =
-      model
-      |> term()
-      |> Schema.diff(Schema.from_mapping(next_mapping), renames: false)
-      |> attach_backfills(chunk)
+      pre_term
+      |> Schema.diff(cleared_term, renames: false)
+      |> Enum.concat(Schema.diff(cleared_term, Schema.from_mapping(next_mapping), renames: false))
+      |> attach_backfills(chunk, next_model, next_mapping)
       |> Enum.map(&put_declared_default(&1, next_mapping))
+      |> Enum.map(&mark_unfilled_add(&1, type_changes, next_mapping, next_model))
       |> prepend_grant_deletes(chunk)
 
     {physical_ops, next_model}
@@ -547,6 +1086,12 @@ defmodule Hologram.Migration.Renderer do
   defp retarget?(%{op: :change_relationship} = op), do: Keyword.has_key?(op.changes, :type)
 
   defp retarget?(_op), do: false
+
+  defp retargets?(chunk, model) do
+    chunk
+    |> type_changes(model)
+    |> Enum.any?()
+  end
 
   defp relationship_type(model, entity_type, name) do
     model.entities
@@ -683,6 +1228,23 @@ defmodule Hologram.Migration.Renderer do
     }
   end
 
+  # A sort key an earlier op of this file added is filled only after every op, so a fill ordering
+  # by it has it filled first. Named by the mapping of the fill's chunk, as the database stands
+  # there, since a later rename finds no column under the name the file ends with.
+  defp walk_op(%{op: :fill_column} = op, walked) do
+    fill_op = Map.drop(op, [:enum_uses, :mapping, :sort_keys])
+
+    case Enum.filter(op.sort_keys, &(&1 in walked.added)) do
+      [] ->
+        keep_op(fill_op, walked)
+
+      columns ->
+        companion_fill = %{op: :fill_companions, columns: columns, mapping: op.mapping}
+
+        keep_op(fill_op, keep_op(companion_fill, walked))
+    end
+  end
+
   defp walk_op(%{op: :rename_column} = op, walked) do
     pending =
       Enum.map(walked.pending, fn
@@ -745,4 +1307,190 @@ defmodule Hologram.Migration.Renderer do
     |> Mapper.derive_from_model!()
     |> Schema.from_mapping()
   end
+
+  # The model takes some ops' options unchecked, so they may be a map as well as a keyword list.
+  defp carries_backfill?(options) do
+    options
+    |> Map.new()
+    |> Map.has_key?(:backfill)
+  end
+
+  defp stored_kinds(%{op: :delete_attribute}), do: [:attribute, :search_key, :sort_key]
+
+  defp stored_kinds(%{op: :delete_relationship}), do: [:relationship]
+
+  # The diff keys on physical names, so a member deleted with another added under the same name
+  # reads as one column left alone, and with another type as one to convert. Starting the diff
+  # from a term without what the deleted member held makes it drop that and create the new one.
+  defp without_recreated(term, chunk, pre_mapping, next_mapping) do
+    # From every entity type: two can derive one join table name.
+    next_join_tables =
+      for {_entity_type, entry} <- next_mapping,
+          join_table <- entry.join_tables,
+          into: MapSet.new(),
+          do: join_table.name
+
+    chunk
+    |> Enum.filter(&(&1.op in [:delete_attribute, :delete_entity, :delete_relationship]))
+    |> Enum.reduce(term, fn op, acc ->
+      clear_member(acc, op, pre_mapping[op.entity], next_mapping[op.entity], next_join_tables)
+    end)
+  end
+
+  defp kept_join_tables(entry, next_join_tables) do
+    entry.join_tables
+    |> Enum.map(& &1.name)
+    |> Enum.filter(&MapSet.member?(next_join_tables, &1))
+  end
+
+  # A rename or a computed backfill can part a default from the op bringing its value into the
+  # type, which then doesn't hold it when the column fills.
+  defp validate_default_held!(op, value, mapping) do
+    if not default_held?(op, value, mapping) do
+      raise Hologram.CompileError,
+        message: Preflight.unheld_default_message(op.table, op.column, value, :add)
+    end
+  end
+
+  defp default_held?(op, value, mapping) do
+    {_entity_type, entry} =
+      Enum.find(mapping, fn {_entity_type, entry} -> entry.table == op.table end)
+
+    column = Enum.find(entry.columns, &(&1.name == op.column))
+
+    is_nil(column.enum_values) or value in column.enum_values
+  end
+
+  # The whole file passed its fold, but a cut makes the ops on each side of it apply on their own,
+  # so what the chunks leave has to stand: a delete and its cleanup, or a relationship and the
+  # entity type it targets, can't sit on opposite sides. Asked up front rather than around the
+  # rendering, whose other refusals aren't about the cut.
+  defp validate_cuts!(chunks, pre_model) do
+    if cut?(chunks) do
+      cuts = for {cut, _chunk} <- chunks, cut, do: cut
+
+      chunks
+      |> Enum.with_index()
+      |> Enum.reduce(pre_model, fn {{_cut, chunk}, index}, model ->
+        created_later = created_after(chunks, index)
+        next_model = fold_apart(model, chunk, cuts, created_later)
+
+        validate_targets_standing!(next_model, created_later, cuts)
+
+        next_model
+      end)
+    end
+  end
+
+  defp created_after(chunks, index) do
+    for {_cut, chunk} <- Enum.drop(chunks, index + 1),
+        %{op: :create_entity, entity: entity} <- chunk,
+        do: entity
+  end
+
+  defp cut?(chunks), do: Enum.any?(chunks, fn {cut, _chunk} -> cut end)
+
+  defp fold_apart(model, chunk, cuts, created_later) do
+    next_model = Model.fold(model, chunk, validate_filled_adds: false)
+
+    _mapping = Mapper.derive_from_model!(next_model)
+
+    next_model
+  rescue
+    error in Hologram.CompileError ->
+      validate_recreated_targets_free!(model, chunk, created_later)
+      raise_apart!(cuts, Exception.message(error))
+  end
+
+  defp validate_targets_standing!(model, created_later, cuts) do
+    missing =
+      for {entity_type, entry} <- model.entities,
+          {name, type, _opts} <- entry.relationships,
+          target <- [relationship_target(type)],
+          target in created_later,
+          not Map.has_key?(model.entities, target) do
+        "#{inspect(name)} on #{inspect(entity_type)} targets #{inspect(target)}, created below"
+      end
+
+    if missing != [] do
+      reason =
+        missing
+        |> Enum.sort()
+        |> Enum.join(", ")
+
+      raise_apart!(cuts, reason)
+    end
+  end
+
+  # A recreate is a cut of its own, so the delete before it applies while the type is gone, and a
+  # relationship still pointing at the type can't stand there wherever the ops around it move.
+  defp validate_recreated_targets_free!(model, chunk, created_later) do
+    recreated =
+      for %{op: :delete_entity, entity: entity} <- chunk, entity in created_later, do: entity
+
+    inbound = if recreated == [], do: [], else: recreated_inbound(model, chunk, recreated)
+
+    if inbound != [] do
+      message =
+        inbound
+        |> Enum.sort()
+        |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+        |> Enum.sort()
+        |> Enum.map_join("; ", &recreated_target_refusal/1)
+
+      raise Hologram.CompileError, message: message
+    end
+  end
+
+  # Folded op by op, leaving out the checks over the whole chunk, one of which refused it. An op
+  # refusing on its own is left to the refusal of the chunk.
+  defp recreated_inbound(model, chunk, recreated) do
+    folded = Enum.reduce(chunk, model, &Model.fold_op(&2, &1))
+
+    for {entity_type, entry} <- folded.entities,
+        {name, type, _opts} <- entry.relationships,
+        target <- [relationship_target(type)],
+        target in recreated,
+        not Map.has_key?(folded.entities, target) do
+      {target, "#{inspect(name)} on #{inspect(entity_type)}"}
+    end
+  rescue
+    Hologram.CompileError -> []
+  end
+
+  defp recreated_target_refusal({target, relationships}) do
+    {verb, noun, pronoun} =
+      if length(relationships) == 1,
+        do: {"targets", "relationship", "it"},
+        else: {"target", "relationships", "them"}
+
+    "#{inspect(target)} is deleted and created again in this file while " <>
+      "#{Enum.join(relationships, ", ")} still #{verb} it - the delete applies apart from the " <>
+      "create, so delete the #{noun} before deleting #{inspect(target)}, and add #{pronoun} " <>
+      "again after creating #{inspect(target)}"
+  end
+
+  defp relationship_target([target]), do: target
+
+  defp relationship_target(target), do: target
+
+  @spec raise_apart!(list(%{atom => any}), String.t()) :: no_return
+  defp raise_apart!(cuts, reason) do
+    raise Hologram.CompileError,
+      message:
+        "these ops apply apart from the ops around them: " <>
+          "#{Enum.map_join(cuts, ", ", &describe_op/1)} - the ops above each have to stand " <>
+          "without the ones below it, so move the op completing them above it. " <>
+          "Refused without it: #{reason}"
+  end
+
+  defp describe_op(%{name: name} = op) do
+    "#{op.op} #{inspect(name)} on #{inspect(op.entity)}#{op_line(op)}"
+  end
+
+  defp describe_op(%{entity: entity} = op), do: "#{op.op} #{inspect(entity)}#{op_line(op)}"
+
+  defp op_line(%{line: line}), do: " (line #{line})"
+
+  defp op_line(_op), do: ""
 end

@@ -207,6 +207,527 @@ defmodule Hologram.Migration.GeneratorTest do
     end
 
     @tag :database
+    test "writes a to-one replaced by an attribute taking its column" do
+      opts = opts!("takes_column")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Place
+
+           create_entity MyApp.Task do
+             add_relationship :place, MyApp.Place, optional: true
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Place => %{},
+          MyApp.Task => %{attributes: [{:place_id, :uuid, [optional: true]}]}
+        })
+
+      assert {:ok, path, 0} = generate(migrations, current, @timestamp, opts)
+
+      written = File.read!(path)
+
+      assert written =~ "add_attribute :place_id, :uuid"
+      assert written =~ "delete_relationship :place"
+    end
+
+    # A backfill applies apart from the ops around it, so the answer can't take the column while
+    # the to-one below it still holds it. Each case gives the lines freeing the column and the
+    # edits answering the draft.
+    fill = "resolve! :fill, attributes: [:place_id]"
+    delete = "delete_relationship :place"
+    to_many = "change_relationship :place, type: [MyApp.Place]"
+
+    for {label, current_extra, freeing_lines, edits} <- [
+          {"a deleted to-one, answered from a value", %{}, [delete],
+           [{fill, "add_attribute :place_id, :uuid, backfill: backup_id"}]},
+          {"a deleted to-one, answered from it renamed", %{}, [delete],
+           [
+             {"#{delete}\n    # RESOLVE",
+              "rename_relationship :place, :old_place\n    # RESOLVE"},
+             {fill,
+              "add_attribute :place_id, :uuid, backfill: old_place.id\n" <>
+                "    delete_relationship :old_place"}
+           ]},
+          {"a to-one turning to-many, answered from a value",
+           %{relationships: [{:place, [MyApp.Place], [optional: true]}]}, [to_many],
+           [{fill, "add_attribute :place_id, :uuid, backfill: backup_id"}]},
+          {"a to-one turning to-many, answered from it renamed",
+           %{relationships: [{:place, [MyApp.Place], [optional: true]}]}, [to_many],
+           [
+             {"#{to_many}\n    # RESOLVE",
+              "rename_relationship :place, :old_place\n    # RESOLVE"},
+             {fill,
+              "add_attribute :place_id, :uuid, backfill: old_place.id\n" <>
+                "    change_relationship :old_place, type: [MyApp.Place]\n" <>
+                "    rename_relationship :old_place, :place"}
+           ]},
+          {"a to-one an answer deletes, answered from a value",
+           %{relationships: [{:venue, MyApp.Place, [optional: true]}]}, [],
+           [
+             {"resolve! :relationships, deleted: [:place], added: [:venue]",
+              "delete_relationship :place\n" <>
+                "    add_relationship :venue, MyApp.Place, optional: true"},
+             {fill, "add_attribute :place_id, :uuid, backfill: backup_id"}
+           ]},
+          {"a to-one an answer deletes, answered from it renamed",
+           %{relationships: [{:venue, MyApp.Place, [optional: true]}]}, [],
+           [
+             {"resolve! :relationships, deleted: [:place], added: [:venue]",
+              "rename_relationship :place, :old_place\n" <>
+                "    add_relationship :venue, MyApp.Place, optional: true"},
+             {fill,
+              "add_attribute :place_id, :uuid, backfill: old_place.id\n" <>
+                "    delete_relationship :old_place"}
+           ]}
+        ] do
+      @tag :database
+      test "lets a fill take a column a to-one frees: #{label}" do
+        opts = opts!("takes_column_required")
+
+        migrations =
+          history([
+            {"20260813091521",
+             """
+             create_entity MyApp.Place
+
+             create_entity MyApp.Task do
+               add_relationship :place, MyApp.Place, optional: true
+               add_attribute :backup_id, :uuid, default: "00000000-0000-0000-0000-000000000001"
+             end
+             """}
+          ])
+
+        task =
+          Map.merge(
+            %{attributes: [], relationships: []},
+            unquote(Macro.escape(current_extra)),
+            fn _key, left, right -> left ++ right end
+          )
+
+        current =
+          model(%{
+            MyApp.Place => %{},
+            MyApp.Task => %{
+              task
+              | attributes:
+                  Enum.sort([
+                    {:backup_id, :uuid, [default: "00000000-0000-0000-0000-000000000001"]},
+                    {:place_id, :uuid, []} | task.attributes
+                  ])
+            }
+          })
+
+        assert {:ok, path, _question_count} = generate(migrations, current, @timestamp, opts)
+
+        draft = File.read!(path)
+
+        for line <- unquote(freeing_lines) do
+          assert draft =~ ~r/#{Regex.escape(line)}\n *# RESOLVE: :place_id is required/
+          assert draft =~ "#   #{line}\n"
+        end
+
+        answered =
+          Enum.reduce(unquote(edits), draft, fn {from, to}, text ->
+            assert [_before, _after] = String.split(text, from)
+            String.replace(text, from, to)
+          end)
+
+        File.write!(path, answered)
+        Code.compile_file(path)
+
+        [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+        history = Enum.concat(migrations, [migration])
+
+        assert generate(history, current, @timestamp, opts) == :nothing_to_do
+      end
+    end
+
+    # Only the final model is free of a required cycle, so the swap must not split the file into
+    # parts that each have to stand.
+    @tag :database
+    test "writes that replacement beside a required cycle moving to another side" do
+      opts = opts!("takes_column_cycle")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Alpha
+           create_entity MyApp.Beta
+           create_entity MyApp.Place
+
+           change_entity MyApp.Alpha do
+             add_relationship :b, MyApp.Beta, optional: true
+           end
+
+           change_entity MyApp.Beta do
+             add_relationship :a, MyApp.Alpha
+             add_relationship :place, MyApp.Place, optional: true
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Alpha => %{relationships: [{:b, MyApp.Beta, []}]},
+          MyApp.Beta => %{
+            attributes: [{:place_id, :uuid, [optional: true]}],
+            relationships: [{:a, MyApp.Alpha, [optional: true]}]
+          },
+          MyApp.Place => %{}
+        })
+
+      assert {:ok, path, 1} = generate(migrations, current, @timestamp, opts)
+
+      answered =
+        path
+        |> File.read!()
+        |> String.replace(
+          ~r/^( *)resolve! :fill, attributes: \[:b\]$/m,
+          "\\1change_relationship :b, optional: false"
+        )
+
+      refute answered =~ ~r/^ *resolve!/m
+
+      File.write!(path, answered)
+      Code.compile_file(path)
+
+      [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+      history = Enum.concat(migrations, [migration])
+
+      assert generate(history, current, @timestamp, opts) == :nothing_to_do
+    end
+
+    # A backfill applies apart from the ops around it, so the relaxation ending the cycle is
+    # written above the question.
+    @tag :database
+    test "writes a relaxation ending a required cycle above a fill a backfill answers" do
+      opts = opts!("backfilled_cycle")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Alpha
+           create_entity MyApp.Beta
+           create_entity MyApp.Place
+
+           change_entity MyApp.Alpha do
+             add_relationship :b, MyApp.Beta, optional: true
+           end
+
+           change_entity MyApp.Beta do
+             add_relationship :a, MyApp.Alpha
+             add_relationship :place, MyApp.Place, optional: true
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Alpha => %{relationships: [{:b, MyApp.Beta, []}]},
+          MyApp.Beta => %{
+            attributes: [{:place_id, :uuid, [optional: true]}],
+            relationships: [{:a, MyApp.Alpha, [optional: true]}]
+          },
+          MyApp.Place => %{}
+        })
+
+      assert {:ok, path, 1} = generate(migrations, current, @timestamp, opts)
+
+      answered =
+        path
+        |> File.read!()
+        |> String.replace(
+          ~r/^( *)resolve! :fill, attributes: \[:b\]$/m,
+          "\\1change_relationship :b, optional: false, backfill: ^\"01900000-0000-7000-8000-000000000000\""
+        )
+
+      refute answered =~ ~r/^ *resolve!/m
+
+      File.write!(path, answered)
+      Code.compile_file(path)
+
+      [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+      history = Enum.concat(migrations, [migration])
+
+      assert generate(history, current, @timestamp, opts) == :nothing_to_do
+    end
+
+    # The blocks asking for a fill are written by name, so a relaxation in a later one is written
+    # above all of them - with the other changes it makes to the member, too.
+    for {label, dir, changes, text} <- [
+          {"alone", "backfilled_cross_block_cycle", [optional: true], "optional: true"},
+          {"beside another change", "backfilled_cross_block_cycle_unique",
+           [optional: true, unique: true], "optional: true, unique: true"}
+        ] do
+      @tag :database
+      test "writes a relaxation #{label} ending a required cycle above another block's fill a backfill answers" do
+        opts = opts!(unquote(dir))
+
+        migrations =
+          history([
+            {"20260813091521",
+             """
+             create_entity MyApp.Alpha
+             create_entity MyApp.Beta
+             create_entity MyApp.Place
+
+             change_entity MyApp.Alpha do
+               add_relationship :b, MyApp.Beta, optional: true
+             end
+
+             change_entity MyApp.Beta do
+               add_relationship :a, MyApp.Alpha
+               add_relationship :place, MyApp.Place, optional: true
+             end
+             """}
+          ])
+
+        current =
+          model(%{
+            MyApp.Alpha => %{relationships: [{:b, MyApp.Beta, []}]},
+            MyApp.Beta => %{
+              relationships: [{:a, MyApp.Alpha, unquote(changes)}, {:place, MyApp.Place, []}]
+            },
+            MyApp.Place => %{}
+          })
+
+        assert {:ok, path, 2} = generate(migrations, current, @timestamp, opts)
+
+        assert File.read!(path) =~
+                 "change_entity MyApp.Beta do\n    change_relationship :a, #{unquote(text)}\n  end\n\n" <>
+                   "  change_entity MyApp.Alpha do"
+
+        answered =
+          path
+          |> File.read!()
+          |> String.replace(
+            ~r/^( *)resolve! :fill, attributes: \[:(b|place)\]$/m,
+            "\\1change_relationship :\\2, optional: false, backfill: ^\"01900000-0000-7000-8000-000000000000\""
+          )
+
+        refute answered =~ ~r/^ *resolve!/m
+
+        File.write!(path, answered)
+        Code.compile_file(path)
+
+        [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+        history = Enum.concat(migrations, [migration])
+
+        assert generate(history, current, @timestamp, opts) == :nothing_to_do
+      end
+    end
+
+    # A delete can't go above the fills, since the block's own backfill can read what it takes
+    # away, so the note says where to write it when another block's backfill needs it.
+    @tag :database
+    test "notes a delete ending a required cycle that another block's fill a backfill answers needs" do
+      opts = opts!("backfilled_cross_block_cycle_delete")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Alpha
+           create_entity MyApp.Beta
+           create_entity MyApp.Place
+
+           change_entity MyApp.Alpha do
+             add_relationship :b, MyApp.Beta, optional: true
+           end
+
+           change_entity MyApp.Beta do
+             add_relationship :a, MyApp.Alpha
+             add_relationship :place, MyApp.Place, optional: true
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Alpha => %{relationships: [{:b, MyApp.Beta, []}]},
+          MyApp.Beta => %{relationships: [{:place, MyApp.Place, []}]},
+          MyApp.Place => %{}
+        })
+
+      assert {:ok, path, 2} = generate(migrations, current, @timestamp, opts)
+
+      written = File.read!(path)
+
+      assert written =~
+               "    # If one of these ends a cycle of required to-ones that a line above closes, " <>
+                 "write it in a change_entity block of its own above that line, with the " <>
+                 "delete_unique lines naming it - unless this block's backfill reads what it " <>
+                 "takes away:\n" <>
+                 "    #   delete_relationship :a\n"
+
+      # Following the note: the delete moves to a block of its own above Alpha's.
+      answered =
+        written
+        |> String.replace(~r/^    delete_relationship :a\n/m, "")
+        |> String.replace(
+          "  change_entity MyApp.Alpha do",
+          "  change_entity MyApp.Beta do\n    delete_relationship :a\n  end\n\n  change_entity MyApp.Alpha do"
+        )
+        |> String.replace(
+          ~r/^( *)resolve! :fill, attributes: \[:(b|place)\]$/m,
+          "\\1change_relationship :\\2, optional: false, backfill: ^\"01900000-0000-7000-8000-000000000000\""
+        )
+
+      refute answered =~ ~r/^ *resolve!/m
+
+      File.write!(path, answered)
+      Code.compile_file(path)
+
+      [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+      history = Enum.concat(migrations, [migration])
+
+      assert generate(history, current, @timestamp, opts) == :nothing_to_do
+    end
+
+    # The blocks asking for a fill come after the others, so a retarget in another block can close
+    # a cycle a delete in the first of them ends.
+    @tag :database
+    test "notes a delete ending a required cycle that a retarget above closes" do
+      opts = opts!("retargeted_cycle_delete")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Alpha
+           create_entity MyApp.Gamma
+           create_entity MyApp.Other
+
+           change_entity MyApp.Alpha do
+             add_attribute :title, :string, optional: true
+             add_relationship :e, MyApp.Gamma
+           end
+
+           change_entity MyApp.Gamma do
+             add_relationship :g, MyApp.Other
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Alpha => %{attributes: [{:title, :string, []}]},
+          MyApp.Gamma => %{relationships: [{:g, MyApp.Alpha, []}]},
+          MyApp.Other => %{}
+        })
+
+      assert {:ok, path, 1} = generate(migrations, current, @timestamp, opts)
+
+      written = File.read!(path)
+
+      assert written =~
+               "change_entity MyApp.Gamma do\n    change_relationship :g, type: MyApp.Alpha\n  end"
+
+      assert written =~
+               "    # If one of these ends a cycle of required to-ones that a line above closes, " <>
+                 "write it in a change_entity block of its own above that line, with the " <>
+                 "delete_unique lines naming it - unless this block's backfill reads what it " <>
+                 "takes away:\n" <>
+                 "    #   delete_relationship :e\n"
+
+      # Following the note: the delete moves to a block of its own above Gamma's.
+      answered =
+        written
+        |> String.replace(~r/^    delete_relationship :e\n/m, "")
+        |> String.replace(
+          "  change_entity MyApp.Gamma do",
+          "  change_entity MyApp.Alpha do\n    delete_relationship :e\n  end\n\n  change_entity MyApp.Gamma do"
+        )
+        |> String.replace(
+          ~r/^( *)resolve! :fill, attributes: \[:title\]$/m,
+          "\\1change_attribute :title, optional: false, backfill: \"untitled\""
+        )
+
+      refute answered =~ ~r/^ *resolve!/m
+
+      File.write!(path, answered)
+      Code.compile_file(path)
+
+      [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+      history = Enum.concat(migrations, [migration])
+
+      assert generate(history, current, @timestamp, opts) == :nothing_to_do
+    end
+
+    # A block asking no fill comes before the fill blocks, so a retarget there can close a cycle
+    # that a relaxation from a fill block ends.
+    @tag :database
+    test "writes a relaxation ending a required cycle above a retarget closing it" do
+      opts = opts!("retargeted_cycle_relaxation")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Zeta
+           create_entity MyApp.Gamma
+           create_entity MyApp.Other
+
+           change_entity MyApp.Zeta do
+             add_attribute :title, :string, optional: true
+             add_relationship :e, MyApp.Gamma
+           end
+
+           change_entity MyApp.Gamma do
+             add_relationship :g, MyApp.Other
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Zeta => %{
+            attributes: [{:title, :string, []}],
+            relationships: [{:e, MyApp.Gamma, [optional: true]}]
+          },
+          MyApp.Gamma => %{relationships: [{:g, MyApp.Zeta, []}]},
+          MyApp.Other => %{}
+        })
+
+      assert {:ok, path, 1} = generate(migrations, current, @timestamp, opts)
+
+      written = File.read!(path)
+
+      assert written =~
+               "  change_entity MyApp.Zeta do\n" <>
+                 "    change_relationship :e, optional: true\n" <>
+                 "  end\n\n" <>
+                 "  change_entity MyApp.Gamma do\n" <>
+                 "    change_relationship :g, type: MyApp.Zeta\n" <>
+                 "  end\n"
+
+      answered =
+        String.replace(
+          written,
+          ~r/^( *)resolve! :fill, attributes: \[:title\]$/m,
+          "\\1change_attribute :title, optional: false, backfill: \"untitled\""
+        )
+
+      refute answered =~ ~r/^ *resolve!/m
+
+      File.write!(path, answered)
+      Code.compile_file(path)
+
+      [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+      history = Enum.concat(migrations, [migration])
+
+      assert generate(history, current, @timestamp, opts) == :nothing_to_do
+    end
+
+    @tag :database
     test "formats the file with the given formatter" do
       opts =
         "formatter"
@@ -581,7 +1102,29 @@ defmodule Hologram.Migration.GeneratorTest do
       assert rendered =~ "resolve! :user_entity, from: MyApp.User, to: nil"
     end
 
-    test "renders a fill question with the op spelled out three ways" do
+    test "renders a fill question for a to-one, which takes no default" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:owner],
+            members: [{:add_relationship, :owner, MyApp.User, []}],
+            withheld_ops: [],
+            freeing_ops: []
+          }
+        ]
+      }
+
+      rendered = render(plan, @module)
+
+      assert rendered =~ "#   add_relationship :owner, MyApp.User, backfill: <id or expression>"
+      assert rendered =~ "#   add_relationship :owner, MyApp.User, optional: true"
+      refute rendered =~ "default:"
+    end
+
+    test "renders a tightening question with its answers" do
       plan = %{
         ops: [],
         questions: [
@@ -589,8 +1132,9 @@ defmodule Hologram.Migration.GeneratorTest do
             kind: :fill,
             entity: MyApp.Task,
             attributes: [:title],
-            members: [{:title, :string, []}],
-            withheld_ops: []
+            members: [{:change_attribute, :title, [optional: false]}],
+            withheld_ops: [],
+            freeing_ops: []
           }
         ]
       }
@@ -599,10 +1143,459 @@ defmodule Hologram.Migration.GeneratorTest do
       change_entity MyApp.Task do
         # RESOLVE: :title is required, and MyApp.Task already holds rows - they need a value.
         # Write the op with one of these, then delete the resolve! line. API:
-        #   add_attribute :title, :string, backfill: <value>  - existing rows receive it, once
-        #   add_attribute :title, :string, default: <value>   - every row created without one, from now on
-        #   add_attribute :title, :string, optional: true     - existing rows stay empty
+        #   change_attribute :title, optional: false, backfill: <value or expression>  - the rows holding nil receive it, once, computed from each row when it names the row's fields
+        #   change_attribute :title, optional: false, backfill: fn field -> <query words> end  - the same, in one update
+        #   change_attribute :title, optional: false, backfill: fn field -> <Elixir> end  - the same, run row by row
+        #   change_attribute :title, optional: false  - every row already holds a value - the apply refuses otherwise
+        #   keep optional: true on :title in the entity type  - no op, the nils stay
         resolve! :fill, attributes: [:title]
+      end
+      """
+
+      assert render(plan, @module) == module_text(@module, expected)
+    end
+
+    test "writes the relaxations of the blocks asking for a fill in blocks above all of them" do
+      fill = fn entity, name ->
+        %{
+          kind: :fill,
+          entity: entity,
+          attributes: [name],
+          members: [{:change_attribute, name, [optional: false]}],
+          withheld_ops: [],
+          freeing_ops: []
+        }
+      end
+
+      plan = %{
+        ops: [
+          %{op: :add_attribute, entity: MyApp.Beta, name: :note, type: :string, opts: []},
+          %{op: :change_relationship, entity: MyApp.Beta, name: :a, changes: [optional: true]}
+        ],
+        questions: [fill.(MyApp.Alpha, :title), fill.(MyApp.Beta, :rank)]
+      }
+
+      [before_questions, alpha_question, beta_question] =
+        plan
+        |> render(@module)
+        |> String.split("# RESOLVE:")
+
+      assert before_questions =~
+               "change_entity MyApp.Beta do\n    change_relationship :a, optional: true\n  end\n\n" <>
+                 "  change_entity MyApp.Alpha do"
+
+      refute alpha_question =~ "change_relationship :a"
+      assert beta_question =~ "add_attribute :note, :string"
+      refute beta_question =~ "change_relationship :a"
+    end
+
+    test "writes the changes making a to-one optional above the blocks asking for a fill" do
+      fill = fn entity, name ->
+        %{
+          kind: :fill,
+          entity: entity,
+          attributes: [name],
+          members: [{:change_attribute, name, [optional: false]}],
+          withheld_ops: [],
+          freeing_ops: []
+        }
+      end
+
+      change = fn name, changes ->
+        %{op: :change_relationship, entity: MyApp.Beta, name: name, changes: changes}
+      end
+
+      plan = %{
+        ops: [
+          change.(:a, optional: true, unique: true),
+          change.(:c, optional: true, type: MyApp.Gamma),
+          change.(:g, type: MyApp.Gamma),
+          change.(:d, type: [MyApp.Alpha]),
+          change.(:e, unique: true),
+          %{op: :delete_relationship, entity: MyApp.Beta, name: :f}
+        ],
+        questions: [fill.(MyApp.Alpha, :title), fill.(MyApp.Beta, :rank)]
+      }
+
+      [before_questions, _alpha_question, beta_question] =
+        plan
+        |> render(@module)
+        |> String.split("# RESOLVE:")
+
+      assert before_questions =~
+               "change_entity MyApp.Beta do\n" <>
+                 "    change_relationship :a, optional: true, unique: true\n" <>
+                 "  end\n\n" <>
+                 "  change_entity MyApp.Alpha do"
+
+      # A retarget can add a required edge, and it, optional or not, a to-many and a delete change
+      # what Beta's own backfill can still read. The cycle note lists them too, as comments.
+      beta_lines = String.split(beta_question, "\n")
+
+      for line <- [
+            "change_relationship :c, optional: true, type: MyApp.Gamma",
+            "change_relationship :d, type: [MyApp.Alpha]",
+            "change_relationship :g, type: MyApp.Gamma",
+            "change_relationship :e, unique: true",
+            "delete_relationship :f"
+          ] do
+        assert ("    " <> line) in beta_lines
+      end
+    end
+
+    test "notes the lines that can end a required to-one in the fill questions below another block's fill" do
+      fill = fn entity, name ->
+        %{
+          kind: :fill,
+          entity: entity,
+          attributes: [name],
+          members: [{:change_attribute, name, [optional: false]}],
+          withheld_ops: [],
+          freeing_ops: []
+        }
+      end
+
+      plan = %{
+        ops: [
+          %{op: :delete_relationship, entity: MyApp.Alpha, name: :z},
+          %{op: :delete_relationship, entity: MyApp.Beta, name: :a},
+          %{
+            op: :change_relationship,
+            entity: MyApp.Beta,
+            name: :d,
+            changes: [type: [MyApp.Alpha]]
+          },
+          %{op: :change_relationship, entity: MyApp.Beta, name: :e, changes: [unique: true]},
+          %{op: :change_relationship, entity: MyApp.Beta, name: :g, changes: [type: MyApp.Gamma]},
+          %{op: :delete_attribute, entity: MyApp.Beta, name: :note}
+        ],
+        questions: [
+          fill.(MyApp.Alpha, :title),
+          fill.(MyApp.Beta, :rank),
+          %{
+            kind: :relationships,
+            entity: MyApp.Beta,
+            deleted: [:owner],
+            added: [:author],
+            hints: [],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      [_before_questions, alpha_question, _rename_question, beta_question] =
+        plan
+        |> render(@module)
+        |> String.split("# RESOLVE:")
+
+      refute alpha_question =~ "If one of these"
+
+      assert beta_question =~
+               "    # If one of these ends a cycle of required to-ones that a line above closes, " <>
+                 "write it in a change_entity block of its own above that line, with the " <>
+                 "delete_unique lines naming it - unless this block's backfill reads what it " <>
+                 "takes away:\n" <>
+                 "    #   delete_relationship :a\n" <>
+                 "    #   change_relationship :d, type: [MyApp.Alpha]\n" <>
+                 "    #   change_relationship :g, type: MyApp.Gamma\n" <>
+                 "    #   your answer to the relationships question\n" <>
+                 "    resolve! :fill, attributes: [:rank]\n"
+    end
+
+    # Gamma's block asks no fill, so it's written above Alpha's, the first block asking one.
+    for {label, gamma_ops, gamma_questions, noted?} <- [
+          {"a retarget", [%{op: :change_relationship, name: :g, changes: [type: MyApp.Alpha]}],
+           [], true},
+          {"a relationships question adding a required to-one", [],
+           [
+             %{
+               kind: :relationships,
+               deleted: [:old],
+               added: [:g],
+               hints: [],
+               withheld_ops: [
+                 %{op: :add_relationship, name: :g, type: MyApp.Alpha, opts: []},
+                 %{op: :delete_relationship, name: :old}
+               ]
+             }
+           ], true},
+          {"an optional retarget",
+           [%{op: :change_relationship, name: :g, changes: [optional: true, type: MyApp.Alpha]}],
+           [], false},
+          {"an optional to-one",
+           [%{op: :add_relationship, name: :g, type: MyApp.Alpha, opts: [optional: true]}], [],
+           false},
+          {"a to-many", [%{op: :add_relationship, name: :g, type: [MyApp.Alpha], opts: []}], [],
+           false},
+          {"a created entity type's required to-one",
+           [
+             %{op: :create_entity},
+             %{op: :add_relationship, name: :g, type: MyApp.Alpha, opts: []}
+           ], [], false}
+        ] do
+      test "#{if noted?, do: "notes", else: "doesn't note"} the lines that can end a required to-one in the first fill question below #{label}" do
+        in_gamma = fn item ->
+          item
+          |> Map.put(:entity, MyApp.Gamma)
+          |> Map.update(:withheld_ops, [], fn ops ->
+            Enum.map(ops, &Map.put(&1, :entity, MyApp.Gamma))
+          end)
+        end
+
+        plan = %{
+          ops: [
+            %{op: :delete_relationship, entity: MyApp.Alpha, name: :e}
+            | Enum.map(unquote(Macro.escape(gamma_ops)), in_gamma)
+          ],
+          questions: [
+            %{
+              kind: :fill,
+              entity: MyApp.Alpha,
+              attributes: [:title],
+              members: [{:change_attribute, :title, [optional: false]}],
+              withheld_ops: [],
+              freeing_ops: []
+            }
+            | Enum.map(unquote(Macro.escape(gamma_questions)), in_gamma)
+          ]
+        }
+
+        assert render(plan, @module) =~ "#   delete_relationship :e\n" == unquote(noted?)
+      end
+    end
+
+    # An answer can take away a member whose column a fill takes, so the fills come below it.
+    test "writes the fills last, with the ops freeing a column one takes above them" do
+      to_many = %{
+        op: :change_relationship,
+        entity: MyApp.Beta,
+        name: :place,
+        changes: [type: [MyApp.Alpha]]
+      }
+
+      fill = %{kind: :fill, withheld_ops: [], freeing_ops: []}
+
+      plan = %{
+        ops: [%{op: :delete_attribute, entity: MyApp.Beta, name: :note}, to_many],
+        questions: [
+          Map.merge(fill, %{
+            entity: MyApp.Alpha,
+            attributes: [:title],
+            members: [{:change_attribute, :title, [optional: false]}]
+          }),
+          Map.merge(fill, %{
+            entity: MyApp.Beta,
+            attributes: [:place_id],
+            members: [{:add_attribute, :place_id, :uuid, []}],
+            freeing_ops: [to_many]
+          }),
+          %{
+            kind: :relationships,
+            entity: MyApp.Beta,
+            deleted: [:foo],
+            added: [:bar],
+            hints: [],
+            withheld_ops: [%{op: :delete_unique, entity: MyApp.Beta, fields: [:foo, :place]}]
+          },
+          Map.merge(fill, %{
+            entity: MyApp.Beta,
+            attributes: [:rank],
+            members: [{:change_attribute, :rank, [optional: false]}],
+            freeing_ops: [to_many]
+          })
+        ]
+      }
+
+      [_alpha_block, beta_block] =
+        plan
+        |> render(@module)
+        |> String.split("change_entity MyApp.Beta do\n")
+
+      [_header, rename_question, place_question, rank_question] =
+        String.split(beta_block, "# RESOLVE:")
+
+      # The to-many change still takes :place from under the key the answer can respell.
+      assert rename_question =~ "the ops below take :place from it"
+
+      assert [_question, "\n    change_relationship :place, type: [MyApp.Alpha]\n    "] =
+               String.split(rename_question, ~r/resolve! :relationships, .*/)
+
+      notes =
+        "    # The lines above free a column a fill in this block takes. To fill from what one " <>
+          "of them takes away, rename that member there instead, fill from the new name, then " <>
+          "write the line below for the new name, renaming the member back after it if it " <>
+          "stays:\n" <>
+          "    #   change_relationship :place, type: [MyApp.Alpha]\n" <>
+          "    # The answers above come first, since one can free a column a fill takes - one " <>
+          "taking away what a backfill reads renames the member there and takes it away below, " <>
+          "or goes below the fills when it frees no column a fill takes.\n"
+
+      assert place_question =~ notes
+      assert rank_question =~ notes
+
+      # Above the fills it can still end a cycle a line in an earlier block closes.
+      assert place_question =~
+               ~r/ends a cycle of required to-ones.*\n    #   change_relationship :place, type: /
+
+      assert rank_question =~
+               "resolve! :fill, attributes: [:rank]\n    delete_attribute :note\n  end\nend"
+    end
+
+    # A roles answer frees no column.
+    for {label, other_questions} <- [
+          {"nothing else", []},
+          {"only roles",
+           [
+             %{
+               kind: :roles,
+               entity: MyApp.Task,
+               deleted: [MyApp.Roles.Legacy],
+               added: [MyApp.Roles.Maintainer],
+               hints: [],
+               withheld_ops: []
+             }
+           ]}
+        ] do
+      test "notes no answers above a fill whose block asks #{label} besides" do
+        fill = %{
+          kind: :fill,
+          entity: MyApp.Task,
+          attributes: [:rank],
+          members: [{:change_attribute, :rank, [optional: false]}],
+          withheld_ops: [],
+          freeing_ops: []
+        }
+
+        plan = %{ops: [], questions: [fill | unquote(Macro.escape(other_questions))]}
+
+        refute render(plan, @module) =~ "The answers above"
+      end
+    end
+
+    test "writes a tightening beside a type change as two ops when it backfills" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:rank],
+            members: [{:change_attribute, :rank, [optional: false, type: :string]}],
+            withheld_ops: [],
+            freeing_ops: []
+          }
+        ]
+      }
+
+      rendered = render(plan, @module)
+
+      assert rendered =~
+               "#   change_attribute :rank, type: :string  - first, as an op of its own"
+
+      assert rendered =~ "#   change_attribute :rank, optional: false, backfill: <value or"
+
+      assert rendered =~
+               "#   change_attribute :rank, optional: false, type: :string  - every row already"
+    end
+
+    test "keeps the other changes in the answer leaving the member optional" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:rank],
+            members: [{:change_attribute, :rank, [max: 10, optional: false]}],
+            withheld_ops: [],
+            freeing_ops: []
+          }
+        ]
+      }
+
+      assert render(plan, @module) =~
+               "#   change_attribute :rank, max: 10  - keep optional: true on :rank in the " <>
+                 "entity type, the nils stay"
+    end
+
+    test "writes a block creating an entity type above the others" do
+      plan = %{
+        ops: [
+          %{
+            op: :add_relationship,
+            entity: MyApp.Alpha,
+            name: :zed,
+            type: MyApp.Zed,
+            opts: [optional: true]
+          },
+          %{op: :create_entity, entity: MyApp.Zed}
+        ],
+        questions: []
+      }
+
+      rendered = render(plan, @module)
+
+      {create_at, _length} = :binary.match(rendered, "create_entity MyApp.Zed")
+      {change_at, _length} = :binary.match(rendered, "change_entity MyApp.Alpha")
+
+      assert create_at < change_at
+    end
+
+    test "renders a fill question with its answers" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:title],
+            members: [{:add_attribute, :title, :string, []}],
+            withheld_ops: [],
+            freeing_ops: []
+          }
+        ]
+      }
+
+      expected = """
+      change_entity MyApp.Task do
+        # RESOLVE: :title is required, and MyApp.Task already holds rows - they need a value.
+        # Write the op with one of these, then delete the resolve! line. API:
+        #   add_attribute :title, :string, backfill: <value or expression>  - existing rows receive it, once, computed from each row when it names the row's fields
+        #   add_attribute :title, :string, backfill: fn field -> <query words> end  - the same, in one update
+        #   add_attribute :title, :string, backfill: fn field -> <Elixir> end  - the same, run row by row
+        #   add_attribute :title, :string, default: <value>  - existing rows receive it, and so does every row created without one from now on
+        #   add_attribute :title, :string, optional: true  - existing rows stay empty
+        resolve! :fill, attributes: [:title]
+      end
+      """
+
+      assert render(plan, @module) == module_text(@module, expected)
+    end
+
+    test "leaves the default answer out of a fill question for a unique attribute" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:slug],
+            members: [{:add_attribute, :slug, :string, [unique: true]}],
+            withheld_ops: [],
+            freeing_ops: []
+          }
+        ]
+      }
+
+      expected = """
+      change_entity MyApp.Task do
+        # RESOLVE: :slug is required, and MyApp.Task already holds rows - they need a value.
+        # Write the op with one of these, then delete the resolve! line. API:
+        #   add_attribute :slug, :string, unique: true, backfill: <value or expression>  - existing rows receive it, once, computed from each row when it names the row's fields
+        #   add_attribute :slug, :string, unique: true, backfill: fn field -> <query words> end  - the same, in one update
+        #   add_attribute :slug, :string, unique: true, backfill: fn field -> <Elixir> end  - the same, run row by row
+        #   add_attribute :slug, :string, unique: true, optional: true  - existing rows stay empty
+        resolve! :fill, attributes: [:slug]
       end
       """
 
@@ -874,8 +1867,9 @@ defmodule Hologram.Migration.GeneratorTest do
             kind: :fill,
             entity: MyApp.Task,
             attributes: [:owner],
-            members: [{:owner, :string, []}],
-            withheld_ops: []
+            members: [{:add_attribute, :owner, :string, []}],
+            withheld_ops: [],
+            freeing_ops: []
           }
         ]
       }

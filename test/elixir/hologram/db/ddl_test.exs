@@ -351,6 +351,13 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "null_exists_statement/2" do
+    test "asks whether any row holds a NULL in the column" do
+      assert null_exists_statement("task", "subtitle") ==
+               ~s{SELECT EXISTS (SELECT 1 FROM "hologram_data"."task" WHERE "subtitle" IS NULL)}
+    end
+  end
+
   describe "rows_check_statement/1" do
     test "counts the rows of the table" do
       assert rows_check_statement("task") ==

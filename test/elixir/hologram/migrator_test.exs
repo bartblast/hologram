@@ -11,6 +11,7 @@ defmodule Hologram.MigratorTest do
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.DB.SortKey
   alias Hologram.Entity.Model
   alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
 
@@ -515,6 +516,93 @@ defmodule Hologram.MigratorTest do
       post_model = apply_pending([rename], model, @context)
 
       assert check_drift!(Mapper.derive_from_model!(post_model)) == :ok
+    end
+
+    test "changes an enum attribute to a string over existing rows" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :status,
+            type: :enum,
+            opts: [values: [:done, :todo], optional: true],
+            line: 4
+          }
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+
+      insert_task_rows([~s('todo')], "status")
+
+      change =
+        migration("20260813142237", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :status,
+            changes: [type: :string],
+            line: 3
+          }
+        ])
+
+      post_model = apply_pending([change], model, @context)
+
+      assert task_rows(~s("status", "status_$sort")) == [["todo", SortKey.compute("todo")]]
+      assert check_drift!(Mapper.derive_from_model!(post_model)) == :ok
+    end
+
+    # MyApp.Task.item_status and MyApp.TaskItem.status derive one enum type name.
+    for {label, order} <- [{"below", :converter_first}, {"above", :taker_first}] do
+      test "gives a converted enum's type name to a new attribute written #{label} it" do
+        create =
+          migration("20260813091522", [
+            %{op: :create_entity, entity: MyApp.Task, line: 3},
+            %{
+              op: :add_attribute,
+              entity: MyApp.Task,
+              name: :item_status,
+              type: :enum,
+              opts: [values: [:a, :b], optional: true],
+              line: 4
+            }
+          ])
+
+        model = apply_pending([create], Model.empty(), @context)
+
+        insert_task_rows([~s('a')], "item_status")
+
+        converter = %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :item_status,
+          changes: [type: :string],
+          line: 3
+        }
+
+        taker = [
+          %{op: :create_entity, entity: MyApp.TaskItem, line: 4},
+          %{
+            op: :add_attribute,
+            entity: MyApp.TaskItem,
+            name: :status,
+            type: :enum,
+            opts: [values: [:x, :y], optional: true],
+            line: 5
+          }
+        ]
+
+        ops =
+          if unquote(order) == :converter_first,
+            do: [converter | taker],
+            else: Enum.concat(taker, [converter])
+
+        post_model = apply_pending([migration("20260813142237", ops)], model, @context)
+
+        assert task_rows(~s("item_status")) == [["a"]]
+        assert check_drift!(Mapper.derive_from_model!(post_model)) == :ok
+      end
     end
 
     test "leaves the earlier files applied when a later one refuses" do

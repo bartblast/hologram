@@ -63,7 +63,8 @@ defmodule Hologram.Migration.Generator do
   formatted with the given function.
 
   Entity renames come first, so every later line names the entity as the current model
-  does - then the entity blocks in alphabetical order, then the flat ops. The default
+  does - then the blocks creating entity types, so a relationship never sits above the type it
+  targets, then the other entity blocks, each group in alphabetical order, then the flat ops. The default
   formatting writes the vocabulary parens-free, as a project importing Hologram's formatter
   config formats it; the generate task formats with the project's own config, so a fresh
   file is what the project's mix format would write.
@@ -162,28 +163,79 @@ defmodule Hologram.Migration.Generator do
       "#{inspect(question.to)}"
   end
 
+  defp backfill_lines(call, value, rows) do
+    [
+      "#{call}, backfill: #{value}  - #{rows} receive it, once, computed from each row when " <>
+        "it names the row's fields",
+      "#{call}, backfill: fn field -> <query words> end  - the same, in one update",
+      "#{call}, backfill: fn field -> <Elixir> end  - the same, run row by row"
+    ]
+  end
+
   defp block_op?(op) do
     Map.has_key?(op, :entity) and op.op not in @flat_entity_ops
   end
 
+  defp asks_fill?(questions), do: Enum.any?(questions, &(&1.kind == :fill))
+
+  defp created?(ops), do: Enum.any?(ops, &(&1.op == :create_entity))
+
   defp entity_of(op), do: Map.get(op, :entity)
+
+  defp freeing_ops(questions) do
+    for %{kind: :fill} = question <- questions, op <- question.freeing_ops, uniq: true, do: op
+  end
+
+  # A change making a to-one optional, whatever else it changes but its type. It only ever takes a
+  # required edge away, so it can't close a cycle wherever it goes. A retarget stays below, an
+  # optional one too: it can add an edge, and the block's own backfill can read through the old
+  # target - as it can read what the deletes and the changes to a to-many take away.
+  defp ends_required_edge?(%{op: :change_attribute, changes: [optional: true]}), do: true
+
+  defp ends_required_edge?(%{op: :change_relationship, changes: changes}) do
+    Keyword.get(changes, :optional) == true and not Keyword.has_key?(changes, :type)
+  end
+
+  defp ends_required_edge?(_op), do: false
 
   # Generated text is formatted text: a long payload wraps here rather than the first
   # time someone runs mix format, so a fresh file is never a pending diff.
   # Written out per attribute with its own name and type, so the answer is an edit of a
   # line rather than a recall of the option's spelling.
   defp fill_entries(members) do
-    Enum.flat_map(members, fn {name, type, opts} ->
-      declared_opts = render_opts(opts)
-      suffix = if declared_opts == "", do: "", else: ", " <> declared_opts
-      call = "add_attribute #{inspect(name)}, #{inspect(type)}#{suffix}"
+    Enum.flat_map(members, fn
+      {kind, name, changes} ->
+        tightening_lines(kind, name, changes)
 
-      [
-        "#{call}, backfill: <value>  - existing rows receive it, once",
-        "#{call}, default: <value>   - every row created without one, from now on",
-        "#{call}, optional: true     - existing rows stay empty"
-      ]
+      {kind, name, type, opts} ->
+        declared_opts = render_opts(opts)
+        suffix = if declared_opts == "", do: "", else: ", " <> declared_opts
+
+        fill_lines(kind, "#{kind} #{inspect(name)}, #{inspect(type)}#{suffix}", opts)
     end)
+  end
+
+  # A to-one takes no default, since a default id would point every new row at one target.
+  defp fill_lines(:add_relationship, call, _opts) do
+    call
+    |> backfill_lines("<id or expression>", "existing rows")
+    |> Enum.concat(["#{call}, optional: true  - existing rows stay empty"])
+  end
+
+  # Nor does a unique attribute, since a default is one value for every row that omits it.
+  defp fill_lines(_kind, call, opts) do
+    default_lines =
+      if opts[:unique] == true,
+        do: [],
+        else: [
+          "#{call}, default: <value>  - existing rows receive it, and so does every row " <>
+            "created without one from now on"
+        ]
+
+    call
+    |> backfill_lines("<value or expression>", "existing rows")
+    |> Enum.concat(default_lines)
+    |> Enum.concat(["#{call}, optional: true  - existing rows stay empty"])
   end
 
   defp format(text) do
@@ -231,7 +283,12 @@ defmodule Hologram.Migration.Generator do
 
   # Sections in canonical order: the questions demanding attention first, then the
   # renames (the ordering rule - every later line names the current model's spelling),
-  # then the entity blocks, then the flat ops that take no scope.
+  # then the entity blocks, then the flat ops that take no scope. A backfill answering a fill
+  # applies apart from the ops around it, so the ops above it have to stand without the ones
+  # below: the blocks asking for a fill come after the others, and the changes that can end a
+  # cycle of required to-ones go to blocks of their own above all of them, since another block's
+  # fill can need one. The lines that can end one but have to stay, and the rename answers, get
+  # a note in the fill questions of the blocks below another block's fill.
   defp group_sections(plan) do
     {entity_ops, flat_ops} = Enum.split_with(plan.ops, &block_op?/1)
     {renames, other_flat_ops} = Enum.split_with(flat_ops, &(&1.op == :rename_entity))
@@ -240,26 +297,107 @@ defmodule Hologram.Migration.Generator do
     ops_by_entity = Enum.group_by(entity_ops, &entity_of/1)
     questions_by_entity = Enum.group_by(block_questions, &entity_of/1)
 
-    blocks =
+    {fill_blocks, other_blocks} =
       ops_by_entity
       |> Map.keys()
       |> Enum.concat(Map.keys(questions_by_entity))
       |> Enum.uniq()
-      |> Enum.sort_by(&inspect/1)
+      |> Enum.sort_by(&{not created?(Map.get(ops_by_entity, &1, [])), inspect(&1)})
       |> Enum.map(fn entity_type ->
         {:block, entity_type, Map.get(ops_by_entity, entity_type, []),
          Map.get(questions_by_entity, entity_type, [])}
       end)
+      |> Enum.split_with(fn {:block, _entity_type, _ops, questions} -> asks_fill?(questions) end)
 
+    # A created entity type's own to-ones can't close a cycle: the edge into it would have to be a
+    # retarget, or another created type's, which the current model would hold too.
+    edge_added_above? =
+      Enum.any?(other_blocks, fn {:block, _entity_type, ops, questions} ->
+        not created?(ops) and
+          Enum.any?(ops ++ Enum.flat_map(questions, & &1.withheld_ops), &may_add_required_edge?/1)
+      end)
+
+    {edge_blocks, answered_blocks} =
+      fill_blocks
+      |> Enum.with_index()
+      |> Enum.map(fn {{:block, entity_type, ops, questions}, index} ->
+        {edge_changes, later_ops} = Enum.split_with(ops, &ends_required_edge?/1)
+        answered_block = {:block, entity_type, later_ops, questions}
+
+        # Each block above a fill block's own can close a cycle: an earlier fill block with its
+        # backfill, another one with a required to-one it adds.
+        noted_block =
+          if index > 0 or edge_added_above?,
+            do: note_cycle_lines(answered_block),
+            else: answered_block
+
+        {{:block, entity_type, edge_changes, []}, noted_block}
+      end)
+      |> Enum.unzip()
+
+    # The relaxations go above the other blocks too, where a retarget can close a cycle one ends.
+    # They change members of types that exist, so they need nothing those blocks write.
     Enum.map(flat_questions, &{:question, &1}) ++
       Enum.map(renames, &{:flat, &1}) ++
-      blocks ++ Enum.map(other_flat_ops, &{:flat, &1})
+      Enum.reject(edge_blocks, &match?({:block, _entity_type, [], _questions}, &1)) ++
+      other_blocks ++ answered_blocks ++ Enum.map(other_flat_ops, &{:flat, &1})
   end
+
+  # The block's lines that can still end a required to-one, written in the fill question as a note
+  # to move one above the line closing a cycle with it.
+  defp note_cycle_lines({:block, entity_type, ops, questions}) do
+    cycle_lines =
+      ops
+      |> Enum.filter(&may_end_required_edge?/1)
+      |> Enum.map(&render_op/1)
+
+    rename_lines =
+      if Enum.any?(questions, &(&1.kind == :relationships)),
+        do: ["your answer to the relationships question"],
+        else: []
+
+    questions =
+      Enum.map(questions, fn
+        %{kind: :fill} = question -> Map.put(question, :cycle_lines, cycle_lines ++ rename_lines)
+        question -> question
+      end)
+
+    {:block, entity_type, ops, questions}
+  end
+
+  defp may_end_required_edge?(%{op: :delete_relationship}), do: true
+
+  defp may_end_required_edge?(%{op: :change_relationship, changes: changes}),
+    do: Keyword.has_key?(changes, :type)
+
+  defp may_end_required_edge?(_op), do: false
+
+  defp may_add_required_edge?(%{op: :add_relationship, type: type, opts: opts}),
+    do: not is_list(type) and Keyword.get(opts, :optional) != true
+
+  # A tightening of a to-one always asks a fill, so outside the fill blocks only a retarget adds one.
+  defp may_add_required_edge?(%{op: :change_relationship, changes: changes}) do
+    type = Keyword.get(changes, :type)
+
+    type != nil and not is_list(type) and Keyword.get(changes, :optional) != true
+  end
+
+  defp may_add_required_edge?(_op), do: false
 
   defp indent(text) do
     text
     |> String.split("\n")
     |> Enum.map_join("\n", &"#{@indent}#{&1}")
+  end
+
+  # What's left of the change once the member stays optional, which still has to be written.
+  defp keep_optional_line(_kind, name, []) do
+    "keep optional: true on #{inspect(name)} in the entity type  - no op, the nils stay"
+  end
+
+  defp keep_optional_line(kind, name, other_changes) do
+    "#{render_call(Atom.to_string(kind), [name], other_changes)}  - keep optional: true on " <>
+      "#{inspect(name)} in the entity type, the nils stay"
   end
 
   # A key naming a member the question asks about is withheld with it, and the two answers
@@ -544,7 +682,14 @@ defmodule Hologram.Migration.Generator do
       |> fill_entries()
       |> Enum.map(&"  #{&1}")
 
-    render_comment_block(fact_lines ++ api_lines, question)
+    render_comment_block(
+      fact_lines ++
+        api_lines ++
+        freeing_note(question) ++
+        answers_note(question) ++
+        cycle_note(question),
+      question
+    )
   end
 
   defp render_question(%{kind: :user_entity} = question, _ops) do
@@ -582,6 +727,38 @@ defmodule Hologram.Migration.Generator do
     )
   end
 
+  defp cycle_note(%{cycle_lines: [_line | _lines] = lines}) do
+    [
+      "If one of these ends a cycle of required to-ones that a line above closes, write it " <>
+        "in a change_entity block of its own above that line, with the delete_unique lines " <>
+        "naming it - unless this block's backfill reads what it takes away:"
+      | Enum.map(lines, &"  #{&1}")
+    ]
+  end
+
+  defp cycle_note(_question), do: []
+
+  defp freeing_note(%{freeing_ops: []}), do: []
+
+  defp freeing_note(%{freeing_ops: ops}) do
+    [
+      "The lines above free a column a fill in this block takes. To fill from what one of " <>
+        "them takes away, rename that member there instead, fill from the new name, then " <>
+        "write the line below for the new name, renaming the member back after it if it stays:"
+      | Enum.map(ops, &"  #{render_op(&1)}")
+    ]
+  end
+
+  defp answers_note(%{answers_above: true}) do
+    [
+      "The answers above come first, since one can free a column a fill takes - one taking " <>
+        "away what a backfill reads renames the member there and takes it away below, or goes " <>
+        "below the fills when it frees no column a fill takes."
+    ]
+  end
+
+  defp answers_note(_question), do: []
+
   defp render_comment_block(lines, question) do
     lines
     |> Enum.map(&"# #{&1}")
@@ -615,16 +792,34 @@ defmodule Hologram.Migration.Generator do
   # creation itself is the header, never a member line. Questions come first inside the
   # block, so what needs a human is what a reader meets - after the keys that leave, though:
   # an answer is written where its question sits, and one that brings a member under a name
-  # a leaving key still holds would be refused with the key's delete two lines below it.
+  # a leaving key still holds would be refused with the key's delete two lines below it. A
+  # backfill applies apart from the ops below it, so the fills come last among the questions,
+  # below the answers that can take away a member whose column one takes, with the ops freeing
+  # such a column right above them.
   defp render_section({:block, entity_type, ops, questions}) do
     {creations, member_ops} = Enum.split_with(ops, &(&1.op == :create_entity))
-    {key_deletes, later_ops} = Enum.split_with(member_ops, &(&1.op == :delete_unique))
+    {key_deletes, other_ops} = Enum.split_with(member_ops, &(&1.op == :delete_unique))
+    freed = freeing_ops(questions)
+    {freeing_ops, later_ops} = Enum.split_with(other_ops, &(&1 in freed))
+    {fills, other_questions} = Enum.split_with(questions, &(&1.kind == :fill))
+    answers_above? = Enum.any?(other_questions, &(&1.kind in [:attributes, :relationships]))
     verb = if creations == [], do: "change_entity", else: "create_entity"
 
-    key_delete_lines = Enum.map(key_deletes, &"#{@indent}#{render_op(&1)}")
-    question_lines = Enum.map(questions, &indent(render_question(&1, later_ops)))
-    op_lines = Enum.map(later_ops, &"#{@indent}#{render_op(&1)}")
-    body = Enum.join(key_delete_lines ++ question_lines ++ op_lines, "\n")
+    body =
+      [
+        Enum.map(key_deletes, &"#{@indent}#{render_op(&1)}"),
+        Enum.map(other_questions, &indent(render_question(&1, freeing_ops ++ later_ops))),
+        Enum.map(freeing_ops, &"#{@indent}#{render_op(&1)}"),
+        Enum.map(fills, fn fill ->
+          fill
+          |> Map.put(:answers_above, answers_above?)
+          |> render_question(later_ops)
+          |> indent()
+        end),
+        Enum.map(later_ops, &"#{@indent}#{render_op(&1)}")
+      ]
+      |> Enum.concat()
+      |> Enum.join("\n")
 
     "#{verb} #{inspect(entity_type)} do\n#{body}\nend"
   end
@@ -687,6 +882,32 @@ defmodule Hologram.Migration.Generator do
     do: is_list(Keyword.get(changes, :type))
 
   defp takes_key_field?(_op), do: false
+
+  # A backfill can't sit beside a type change, since it would hold values of the new type while
+  # the column has the old one, so that answer is two ops.
+  defp tightening_lines(kind, name, changes) do
+    value =
+      if kind == :change_relationship, do: "<id or expression>", else: "<value or expression>"
+
+    plain = render_call(Atom.to_string(kind), [name], changes)
+
+    {type_lines, tightening} =
+      if Keyword.has_key?(changes, :type) do
+        first = render_call(Atom.to_string(kind), [name], Keyword.delete(changes, :optional))
+
+        {["#{first}  - first, as an op of its own, when a backfill follows"],
+         render_call(Atom.to_string(kind), [name], optional: false)}
+      else
+        {[], plain}
+      end
+
+    type_lines ++
+      backfill_lines(tightening, value, "the rows holding nil") ++
+      [
+        "#{plain}  - every row already holds a value - the apply refuses otherwise",
+        keep_optional_line(kind, name, Keyword.delete(changes, :optional))
+      ]
+  end
 
   defp verify_finalized(:nothing_to_do, migrations, current_model) do
     ShadowVerifier.verify!(migrations, current_model)

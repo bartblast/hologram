@@ -1338,6 +1338,20 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "system_attributes/0" do
+    test "returns the attributes every entity type has" do
+      assert system_attributes() == [
+               {:created_at, :datetime, []},
+               {:id, :uuid, []},
+               {:server_created_at, :datetime, []},
+               {:server_created_seq, :integer, []},
+               {:server_updated_at, :datetime, []},
+               {:server_updated_seq, :integer, []},
+               {:updated_at, :datetime, []}
+             ]
+    end
+  end
+
   describe "t/0" do
     test "types a declared enum attribute as its declared values" do
       assert struct_field_types(Module4) == %{

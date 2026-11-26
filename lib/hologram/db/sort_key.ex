@@ -134,7 +134,8 @@ defmodule Hologram.DB.SortKey do
   # regenerated. The rules aren't the only input: downcasing and NFD read the
   # runtime's Unicode tables, so an Elixir or OTP upgrade that moves to a newer
   # Unicode version can change the key of a value holding a codepoint it newly
-  # cases or decomposes, with no version bump here.
+  # cases or decomposes, with no version bump here. A migration's most_common breaks a tie by the
+  # stored key in SQL and by a fresh key in Elixir, so stale keys can make the two pick differently.
   @spec version() :: pos_integer
   def version, do: 1
 

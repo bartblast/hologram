@@ -289,8 +289,8 @@ defmodule Hologram.Entity.Model do
 
   The given ops are also checked as one migration file: a relationship left pointing at a
   deleted entity type, a designation change that leaves the role grants behind, and a
-  required attribute added without a value for its rows to an entity type the ops did not
-  create before it. `validate_filled_adds: false` skips that last check, for a caller
+  required attribute or to-one relationship added without a value for its rows to an entity
+  type the ops did not create before it. `validate_filled_adds: false` skips that last check, for a caller
   folding a file piece by piece after folding it whole - a piece cannot tell an entity type
   an earlier piece created from one that predates the file. The other two hold for each
   piece on its own: a piece is applied on its own, and one that deletes a target or moves
@@ -311,6 +311,14 @@ defmodule Hologram.Entity.Model do
 
     folded
   end
+
+  @doc """
+  Returns the given model with the given op applied, leaving out the checks `fold/3` makes over a
+  whole list of ops, which a single op of a valid file can fail on its own: a delete and the
+  cleanup it needs are two ops.
+  """
+  @spec fold_op(%{atom => any}, %{atom => any}) :: %{atom => any}
+  def fold_op(model, op), do: apply_op(op, model)
 
   defp apply_op(%{op: :add_attribute} = op, model) do
     validate_added_enum_values!(op)
@@ -1109,11 +1117,11 @@ defmodule Hologram.Entity.Model do
   # The rename-vs-replace footgun guard: writing a new value list is never a legal
   # move - the only exception is a type change TO :enum, which must bring the initial
   # values.
-  # A required attribute added to a table that already stands meets the rows that predate
-  # it, and leaves them without a value - which the apply refuses once it counts them. The
-  # value is the author's to supply: the model cannot carry it, and the database this file
-  # will meet is not the one it was generated against, so an empty table today proves
-  # nothing about the one that runs it next.
+  # A required attribute or to-one relationship added to a table that already stands meets the
+  # rows that predate it, and leaves them without a value - which the apply refuses once it
+  # counts them. The value is the author's to supply: the model cannot carry it, and the
+  # database this file will meet is not the one it was generated against, so an empty table
+  # today proves nothing about the one that runs it next.
   #
   # Entities the same ops created before the add are exempt - their table is born here,
   # holding nothing. Before the add, by its position: an entity type the ops create and then
@@ -1127,10 +1135,11 @@ defmodule Hologram.Entity.Model do
   defp validate_filled_adds!(ops) do
     {unfilled, _created_types} =
       Enum.reduce(ops, {[], MapSet.new()}, fn
-        %{op: :add_attribute} = op, {unfilled, created_types} ->
+        %{op: kind} = op, {unfilled, created_types}
+        when kind in [:add_attribute, :add_relationship] ->
           if MapSet.member?(created_types, op.entity) or filled?(op),
             do: {unfilled, created_types},
-            else: {["#{inspect(op.name)} on #{inspect(op.entity)}" | unfilled], created_types}
+            else: {[op | unfilled], created_types}
 
         %{op: :create_entity, entity: entity_type}, {unfilled, created_types} ->
           {unfilled, MapSet.put(created_types, entity_type)}
@@ -1145,19 +1154,43 @@ defmodule Hologram.Entity.Model do
           acc
       end)
 
-    if unfilled != [] do
+    {relationships, attributes} = Enum.split_with(unfilled, &(&1.op == :add_relationship))
+
+    if attributes != [] do
       raise Hologram.CompileError,
         message:
           "required attributes added without a value for existing rows - " <>
-            "#{Enum.join(Enum.sort(unfilled), ", ")} - declare backfill: <value> for a " <>
+            "#{unfilled_names(attributes)} - declare backfill: <value> for a " <>
             "one-time value, default: <value> to give every row one, or optional: true " <>
             "to leave them empty"
     end
+
+    if relationships != [] do
+      raise Hologram.CompileError,
+        message:
+          "required to-one relationships added without a value for existing rows - " <>
+            "#{unfilled_names(relationships)} - declare backfill: <id> for a one-time value, " <>
+            "or optional: true to leave them empty"
+    end
+  end
+
+  # A to-many stores no column on the row, so existing rows simply hold none.
+  defp filled?(%{op: :add_relationship, type: type}) when is_list(type), do: true
+
+  defp filled?(%{op: :add_relationship} = op) do
+    op.opts[:optional] == true or not is_nil(op.opts[:backfill])
   end
 
   defp filled?(op) do
     op.opts[:optional] == true or not is_nil(op.opts[:default]) or
       not is_nil(op.opts[:backfill])
+  end
+
+  defp unfilled_names(ops) do
+    ops
+    |> Enum.map(&"#{inspect(&1.name)} on #{inspect(&1.entity)}")
+    |> Enum.sort()
+    |> Enum.join(", ")
   end
 
   defp rename_created(created_types, op) do

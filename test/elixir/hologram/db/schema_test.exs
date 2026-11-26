@@ -686,12 +686,12 @@ defmodule Hologram.DB.SchemaTest do
                :drop_index,
                :drop_column,
                :drop_table,
-               :drop_enum_type,
                :create_enum_type,
                :add_enum_value,
                :create_table,
                :add_column,
                :alter_column,
+               :drop_enum_type,
                :rename_constraint,
                :add_foreign_key,
                :create_index
@@ -964,6 +964,61 @@ defmodule Hologram.DB.SchemaTest do
       %{tables: %{"task" => table}, enum_types: %{enum_type => values}}
     end
 
+    test "replaces a type whose column converts while another column takes its name" do
+      actual = %{
+        tables: %{
+          "task" => %{
+            @task_table
+            | columns:
+                Map.put(@task_table.columns, "item_status", %{
+                  type: "task_item_status_$enum",
+                  collation: nil,
+                  null: false
+                })
+          }
+        },
+        enum_types: %{"task_item_status_$enum" => ["a", "b"]}
+      }
+
+      target = %{
+        tables: %{
+          "task" => %{
+            @task_table
+            | columns:
+                Map.put(@task_table.columns, "item_status", %{
+                  type: "text",
+                  collation: "C",
+                  null: false
+                })
+          },
+          "task_item" => %{
+            @task_table
+            | columns:
+                Map.put(@task_table.columns, "status", %{
+                  type: "task_item_status_$enum",
+                  collation: nil,
+                  null: false
+                })
+          }
+        },
+        enum_types: %{"task_item_status_$enum" => ["x", "y"]}
+      }
+
+      op_kinds =
+        actual
+        |> diff(target, renames: false)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:alter_column, :drop_enum_type, :create_enum_type, :create_table]
+    end
+
+    test "keeps a type changing values while its column stays on it" do
+      actual = status_term("task_status_$enum", ["todo"])
+      target = status_term("task_status_$enum", ["todo", "done"])
+
+      assert [%{op: :add_enum_value, value: "done"}] = diff(actual, target, renames: false)
+    end
+
     test "emits a lone rename_enum_type for a type renamed under the column using it" do
       actual = status_term("task_old_$enum", ["todo", "done"])
       target = status_term("task_status_$enum", ["todo", "done"])
@@ -1084,7 +1139,7 @@ defmodule Hologram.DB.SchemaTest do
         |> diff(target, renames: false)
         |> Enum.map(& &1.op)
 
-      assert op_kinds == [:drop_enum_type, :create_enum_type, :alter_column]
+      assert op_kinds == [:create_enum_type, :alter_column, :drop_enum_type]
     end
 
     test "emits a lone rename_index for an index whose name changed and definition didn't" do

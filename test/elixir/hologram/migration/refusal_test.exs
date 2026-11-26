@@ -18,17 +18,20 @@ defmodule Hologram.Migration.RefusalTest do
   #   * tightening a column while a row holds NULL - covered in full by the atomicity
   #     suite, whose "applies none of a file's ops when pre-flight refuses one of them" test
   #     uses that refusal as its lever and asserts the same three things.
-  #   * a required attribute ADDED without a value for the existing rows - refused EARLIER
-  #     than the database, by `Model.fold/2` itself: `validate_filled_adds!/1` rejects an
-  #     add_attribute that is required and carries neither backfill: nor default:, exempting
-  #     only entities the same file created before it. Its message ("declare backfill: for
-  #     a one-time value...") is the one a dev actually sees - covered by the model suite. A
-  #     migration reaches the database-level check only around that validation: an
-  #     optional add the same chunk tightens, whose default arrives after a rename - tested
-  #     below - or a required relationship, which declares no default at all. Schema
-  #     reconciliation folds a model from MODULES rather than ops, so a required attribute
-  #     declared on a populated dev database reaches it there too, where the reconciler
-  #     suite covers it.
+  #   * a required attribute or to-one relationship ADDED without a value for the existing
+  #     rows - refused EARLIER than the database, by `Model.fold/2` itself:
+  #     `validate_filled_adds!/1` rejects an add that is required and carries neither
+  #     backfill: nor, for an attribute, default:, exempting only entities the same file
+  #     created before it. Its messages, which ask for backfill: or optional: true, are the
+  #     ones a dev actually sees - covered by the model suite, and below for a relationship
+  #     the same file renames, where only the compile error is asserted, since nothing
+  #     reaches the database. A migration reaches the database-level check only around that
+  #     validation: an optional add the same chunk tightens - an attribute whose default
+  #     arrives after a rename, or a unique attribute or to-one, which declares none - tested
+  #     below. An add whose computed backfill leaves rows nil is refused after its fill
+  #     instead, which the backfill suite covers. Schema reconciliation folds a model from
+  #     MODULES rather than ops, so a required attribute or to-one declared on a populated
+  #     dev database reaches it there too, where the reconciler suite covers it.
   #   * a foreign key over orphaned rows - void by construction, since a relationship
   #     column is born together with its foreign key and no op adopts an existing column.
   #
@@ -56,6 +59,57 @@ defmodule Hologram.Migration.RefusalTest do
     {:ok, %{rows: rows}} = Connection.query(statement)
 
     Enum.map(rows, fn [version] -> version end)
+  end
+
+  # A file adding an optional enum, and one making it required with a default that the same file
+  # adds to the enum only below a rename, so the value isn't there yet when the column fills.
+  defp grade_files(first_model) do
+    add_grade =
+      migration("20260813091523", [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          type: :enum,
+          opts: [optional: true, values: [:a]],
+          line: 3
+        }
+      ])
+
+    tighten =
+      migration("20260813091524", [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          changes: [optional: false, default: :fresh],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :cost, line: 4},
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :grade,
+          value: :fresh,
+          opts: [],
+          line: 5
+        }
+      ])
+
+    {add_grade, Model.fold(first_model, add_grade.ops), tighten}
+  end
+
+  # Separate from task_rows/0 because only the tests that add grade have the column.
+  defp grade_rows do
+    statement = """
+    SELECT "title", "amount", "status"::text, "grade"::text
+    FROM "hologram_data"."my_app_task"
+    ORDER BY "title"
+    """
+
+    {:ok, %{rows: rows}} = Connection.query(statement)
+
+    rows
   end
 
   defp insert_task(title, amount, status) do
@@ -247,9 +301,102 @@ defmodule Hologram.Migration.RefusalTest do
       expected_msg =
         ~s(cannot add required column "code" to table "my_app_task" - ) <>
           "2 existing rows would have no value - " <>
-          "declare default: <value>, make the attribute optional: true, or clear the rows"
+          "add backfill: <value or expression> to the op making it required, " <>
+          "declare default: <value>, keep the attribute optional: true, or clear the rows"
 
       assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    # A to-one made required in its first chunk the same way, which declares no default, so it
+    # isn't offered one.
+    test "refuses a required to-one added optional and made required in its chunk", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      refused =
+        migration("20260813142237", [
+          %{op: :create_entity, entity: MyApp.User, line: 3},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :author,
+            type: MyApp.User,
+            opts: [optional: true],
+            line: 5
+          },
+          %{
+            op: :change_relationship,
+            entity: MyApp.Task,
+            name: :author,
+            changes: [optional: false],
+            line: 7
+          }
+        ])
+
+      expected_msg =
+        ~s(cannot add required column "author_id" to table "my_app_task" - ) <>
+          "2 existing rows would have no value - " <>
+          "add backfill: <id or expression> to the op making it required, " <>
+          "keep the relationship optional: true, or clear the rows"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    test "refuses a default its enum doesn't hold yet when a NULL needs it", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      {add_grade, grade_model, tighten} = grade_files(first_model)
+
+      route(scratch, fn ->
+        assert run([create, add_grade], grade_model, @context) == :ok
+
+        rows_before = grade_rows()
+        schema_before = Introspection.schema()
+        full_model = Model.fold(grade_model, tighten.ops)
+
+        expected_msg =
+          ~s(the default "fresh" of column "grade" on table "my_app_task" is an enum value ) <>
+            "its type doesn't hold yet when the column fills - move the change filling the " <>
+            "column to the next migration file, under the names things have there"
+
+        assert_error RuntimeError, expected_msg, fn ->
+          run([create, add_grade, tighten], full_model, @context)
+        end
+
+        assert applied_versions_list() == ["20260813091522", "20260813091523"]
+        assert Introspection.schema() == schema_before
+        assert grade_rows() == rows_before
+      end)
+    end
+
+    test "applies a default its enum doesn't hold yet when no NULL needs it", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      {add_grade, grade_model, tighten} = grade_files(first_model)
+
+      route(scratch, fn ->
+        assert run([create, add_grade], grade_model, @context) == :ok
+
+        {:ok, _result} =
+          Connection.query(~s|UPDATE "hologram_data"."my_app_task" SET "grade" = 'a'|)
+
+        full_model = Model.fold(grade_model, tighten.ops)
+
+        assert run([create, add_grade, tighten], full_model, @context) == :ok
+
+        {:ok, %{rows: rows}} =
+          Connection.query(
+            ~s|SELECT "title", "grade"::text FROM "hologram_data"."my_app_task" ORDER BY "title"|
+          )
+
+        assert rows == [["one", "a"], ["two", "a"]]
+        assert Introspection.schema().tables["my_app_task"].columns["grade"].null == false
+      end)
     end
 
     # The column turns required in its own chunk, where it declares no default - the one
@@ -282,18 +429,84 @@ defmodule Hologram.Migration.RefusalTest do
 
       expected_msg =
         ~s(cannot make column "amount" on table "my_app_task" required - ) <>
-          "found 1 row with NULL - " <>
+          "found 1 row with NULL - add backfill: <value or expression> to the op, " <>
           "declare default: <value>, keep the attribute optional: true, or fix the data"
 
       assert_refused(scratch, create, first_model, refused, expected_msg)
     end
 
-    # A relationship declares no default, so the rows refusal is all that stands between the
-    # add and a NOT NULL column over rows without a value - checked where the add sits, under
-    # the name the rename takes away afterwards, and not satisfied by the attribute that takes
-    # the name over and declares a default of its own.
-    test "refuses a required relationship added to a populated table before the same file renames it",
+    # A unique attribute can't declare a default either, so it isn't offered one.
+    test "refuses a required unique attribute added optional and made required in its chunk", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      refused =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :serial,
+            type: :integer,
+            opts: [optional: true, unique: true],
+            line: 3
+          },
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :serial,
+            changes: [optional: false],
+            line: 4
+          }
+        ])
+
+      expected_msg =
+        ~s(cannot add required column "serial" to table "my_app_task" - ) <>
+          "2 existing rows would have no value - " <>
+          "add backfill: <value or expression> to the op making it required, " <>
+          "keep the attribute optional: true, or clear the rows"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    # The op making the add required also gives it its type, and a backfill can't sit beside a
+    # type change.
+    test "refuses a required attribute added optional and given its type by the op making it required",
          %{create: create, first_model: first_model, scratch: scratch} do
+      refused =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :code,
+            type: :string,
+            opts: [optional: true],
+            line: 3
+          },
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :code,
+            changes: [type: :integer, optional: false],
+            line: 4
+          }
+        ])
+
+      expected_msg =
+        ~s(cannot add required column "code" to table "my_app_task" - ) <>
+          "2 existing rows would have no value - " <>
+          "change the type in an op of its own, then add backfill: <value or expression> to " <>
+          "the op making it required, declare default: <value>, " <>
+          "keep the attribute optional: true, or clear the rows"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    # A relationship declares no default, so it needs a backfill or optional: true - asked of the
+    # add where it sits, under the name the rename takes away afterwards, and not satisfied by
+    # the attribute that takes the name over and declares a default of its own.
+    test "refuses a required relationship added before the same file renames it",
+         %{first_model: first_model, scratch: scratch} do
       refused =
         migration("20260813142237", [
           %{op: :create_entity, entity: MyApp.User, line: 3},
@@ -317,11 +530,15 @@ defmodule Hologram.Migration.RefusalTest do
         ])
 
       expected_msg =
-        ~s(cannot add required column "author_id" to table "my_app_task" - ) <>
-          "2 existing rows would have no value - " <>
-          "declare default: <value>, make the attribute optional: true, or clear the rows"
+        "required to-one relationships added without a value for existing rows - " <>
+          ":author on MyApp.Task - declare backfill: <id> for a one-time value, or " <>
+          "optional: true to leave them empty"
 
-      assert_refused(scratch, create, first_model, refused, expected_msg)
+      route(scratch, fn ->
+        assert_error Hologram.CompileError, expected_msg, fn ->
+          Model.fold(first_model, refused.ops)
+        end
+      end)
     end
 
     # The third row repeats the first one's amount and status under a title of its own, so
@@ -435,7 +652,7 @@ defmodule Hologram.Migration.RefusalTest do
       expected_msg =
         ~s(cannot make column "amount" on table "my_app_task" required - ) <>
           ~s{filling its NULLs with the default would make 1 key repeat over ("amount", "status") - } <>
-          "fix the data, keep the attribute optional: true, or drop the unique declaration"
+          "fix the data, keep the attribute optional: true, or drop the unique declaration before making it required"
 
       route(scratch, fn ->
         insert_task("three", nil, "done")
