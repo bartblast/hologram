@@ -8,6 +8,7 @@ defmodule Hologram.DB.ResetTest do
   alias Hologram.DB.Mapper
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Test.DatabaseBootstrap
+  alias Hologram.Test.TLSProxy
 
   @claim %{
     otp_app: "hologram",
@@ -746,6 +747,26 @@ defmodule Hologram.DB.ResetTest do
       assert other_table_rows(scratch_opts) == [[1]]
     end
 
+    test "connects through TLS when the options set ssl", %{
+      database_opts: database_opts,
+      scratch_opts: scratch_opts
+    } do
+      disconnect(scratch_opts)
+
+      proxy = start_supervised!(TLSProxy)
+
+      tls_opts =
+        database_opts
+        |> Keyword.put(:port, TLSProxy.port(proxy))
+        |> Keyword.put(:ssl, mode: :require)
+
+      assert reset!(tls_opts, :hologram, :dev) == :empty
+
+      # One connection to the maintenance database, one to the cleared one.
+      assert TLSProxy.tls_sessions(proxy) == 2
+      assert TLSProxy.plain_sessions(proxy) == 0
+    end
+
     test "drops Hologram schemas that have no marker table", %{
       database_opts: database_opts,
       scratch: scratch,
@@ -1116,6 +1137,7 @@ defmodule Hologram.DB.ResetTest do
         host: "localhost",
         password: "postgres",
         port: 1,
+        ssl: false,
         user: "postgres"
       ]
 

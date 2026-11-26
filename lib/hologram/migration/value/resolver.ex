@@ -43,7 +43,7 @@ defmodule Hologram.Migration.Value.Resolver do
           | {:at, {:split, resolved, {:value, String.t(), :string}}, {:value, integer, :integer}}
           | {:coalesce, list(resolved)}
           | {:count, resolved_set}
-          | {:most_common, resolved_set, atom, type, list(atom) | nil}
+          | {:most_common, resolved_set, atom, type, list(atom) | :characters | nil}
 
   # The dates and datetimes a column holds. The floor is PostgreSQL's, 4714 BC in its calendar.
   # The driver wraps a date past the top to another one with no error, and the codec can't encode
@@ -382,6 +382,12 @@ defmodule Hologram.Migration.Value.Resolver do
   end
 
   defp ranks({:enum, _owner, _name, values}), do: values
+
+  # An id, a uuid or a reference orders by its characters, the way its column orders, rather than
+  # as text, which folds the letter case an id reads apart.
+  defp ranks({:reference, _target}), do: :characters
+
+  defp ranks(type) when type in [:id, :uuid], do: :characters
 
   defp ranks(_type), do: nil
 

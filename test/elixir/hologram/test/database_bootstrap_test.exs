@@ -7,10 +7,13 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
   import Hologram.Test.DatabaseBootstrap
 
   alias Hologram.DB.Config
+  alias Hologram.DB.Listener
   alias Hologram.DB.Mapper
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Entity.Model
   alias Hologram.Test.DatabaseBootstrap
+  alias Hologram.Test.DatabaseBootstrap.Connection
+  alias Hologram.Test.TLSProxy
 
   @claim %{
     otp_app: "hologram",
@@ -79,6 +82,19 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
       {:error, :closed} ->
         :ok
     end
+  end
+
+  # Opens a connection to the maintenance database through the given proxy, checking its
+  # certificate under the given mode against the CA in the given file.
+  defp connect_through(proxy, mode, ca_cert_path) do
+    [
+      database: "postgres",
+      port: TLSProxy.port(proxy),
+      ssl: [ca_cert_path: ca_cert_path, mode: mode]
+    ]
+    |> Config.resolve!(:test)
+    |> Config.postgrex_opts()
+    |> Connection.start()
   end
 
   defp create_database(scratch, database) do
@@ -521,6 +537,133 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
           "is recognized by the running ExUnit server, so call run!/1 after ExUnit.start()."
 
       assert_error RuntimeError, expected_msg, fn -> run!() end
+    end
+  end
+
+  describe "TLS" do
+    test "run!/1 reaches the server through TLS when the config sets ssl, checking its certificate",
+         %{scratch_opts: scratch_opts} do
+      proxy = start_supervised!(TLSProxy)
+      ssl = [ca_cert_path: TLSProxy.ca_cert_path(proxy), mode: :verify_full]
+
+      Application.put_env(:hologram, :database,
+        database: scratch_opts[:database],
+        port: TLSProxy.port(proxy),
+        ssl: ssl
+      )
+
+      run_and_drop!(scratch_opts)
+
+      # One connection to the maintenance database, one held to the run's database.
+      assert TLSProxy.tls_sessions(proxy) == 2
+      assert TLSProxy.plain_sessions(proxy) == 0
+
+      assert Application.get_env(:hologram, :database)[:ssl] == ssl
+    end
+
+    test "run!/1 presents the client certificate the config sets", %{scratch_opts: scratch_opts} do
+      proxy = start_supervised!({TLSProxy, client_cert: true})
+
+      ssl =
+        [ca_cert_path: TLSProxy.ca_cert_path(proxy), mode: :verify_full] ++
+          TLSProxy.client_cert_paths(proxy)
+
+      Application.put_env(:hologram, :database,
+        database: scratch_opts[:database],
+        port: TLSProxy.port(proxy),
+        ssl: ssl
+      )
+
+      run_and_drop!(scratch_opts)
+
+      assert TLSProxy.client_cert_sessions(proxy) == 2
+    end
+
+    test "a held connection reaches the server through TLS when the config sets ssl", %{
+      scratch_opts: scratch_opts
+    } do
+      proxy = start_supervised!(TLSProxy)
+
+      Application.put_env(:hologram, :database,
+        database: scratch_opts[:database],
+        ssl: [ca_cert_path: TLSProxy.ca_cert_path(proxy), mode: :verify_full]
+      )
+
+      start_supervised!(
+        Supervisor.child_spec(
+          {Listener, port: TLSProxy.port(proxy), sync_connect: true},
+          restart: :temporary
+        )
+      )
+
+      assert TLSProxy.tls_sessions(proxy) == 1
+      assert TLSProxy.plain_sessions(proxy) == 0
+    end
+
+    test "run!/1 under mode :verify_ca accepts a certificate for another host", %{
+      scratch_opts: scratch_opts
+    } do
+      proxy = start_supervised!({TLSProxy, cert: :other_host})
+
+      Application.put_env(:hologram, :database,
+        database: scratch_opts[:database],
+        port: TLSProxy.port(proxy),
+        ssl: [ca_cert_path: TLSProxy.ca_cert_path(proxy), mode: :verify_ca]
+      )
+
+      run_and_drop!(scratch_opts)
+
+      assert TLSProxy.tls_sessions(proxy) == 2
+    end
+
+    test "run!/1 under mode :verify_ca accepts a certificate with no subjectAltName", %{
+      scratch_opts: scratch_opts
+    } do
+      proxy = start_supervised!({TLSProxy, cert: :common_name_only})
+
+      Application.put_env(:hologram, :database,
+        database: scratch_opts[:database],
+        port: TLSProxy.port(proxy),
+        ssl: [ca_cert_path: TLSProxy.ca_cert_path(proxy), mode: :verify_ca]
+      )
+
+      run_and_drop!(scratch_opts)
+
+      assert TLSProxy.tls_sessions(proxy) == 2
+    end
+
+    test "mode :verify_ca refuses a certificate its CA didn't sign" do
+      proxy = start_supervised!(TLSProxy)
+      other_proxy = start_supervised!(TLSProxy, id: :other_proxy)
+
+      capture_log(fn ->
+        assert {:error, %DBConnection.ConnectionError{message: message}} =
+                 connect_through(proxy, :verify_ca, TLSProxy.ca_cert_path(other_proxy))
+
+        assert message =~ "Unknown CA"
+      end)
+    end
+
+    test "mode :verify_full refuses a certificate for another host" do
+      proxy = start_supervised!({TLSProxy, cert: :other_host})
+
+      capture_log(fn ->
+        assert {:error, %DBConnection.ConnectionError{message: message}} =
+                 connect_through(proxy, :verify_full, TLSProxy.ca_cert_path(proxy))
+
+        assert message =~ "hostname_check_failed"
+      end)
+    end
+
+    test "mode :verify_full refuses a certificate with no subjectAltName for another host" do
+      proxy = start_supervised!({TLSProxy, cert: :common_name_only})
+
+      capture_log(fn ->
+        assert {:error, %DBConnection.ConnectionError{message: message}} =
+                 connect_through(proxy, :verify_full, TLSProxy.ca_cert_path(proxy))
+
+        assert message =~ "hostname_check_failed"
+      end)
     end
   end
 

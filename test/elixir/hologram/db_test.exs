@@ -37,6 +37,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Entity.Module54
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.TCPProxy
+  alias Hologram.Test.TLSProxy
   alias Hologram.WriteError
 
   @stale_model_msg "the code changed since the last compile that validated the data model - fix the compile error, if there is one, and save again"
@@ -279,6 +280,28 @@ defmodule Hologram.DBTest do
       assert opts[:after_connect] == {Hologram.DB, :apply_session_settings, []}
     end
 
+    test "opens the pool connections with the configured ssl" do
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Hologram.DB.Protocol, opts}]}}]}} = init([])
+
+      assert Keyword.fetch(opts, :ssl) == {:ok, false}
+    end
+
+    test "opens the pool connections with the ssl the config sets" do
+      database_config = Application.get_env(:hologram, :database, [])
+
+      Application.put_env(
+        :hologram,
+        :database,
+        Keyword.put(database_config, :ssl, mode: :require)
+      )
+
+      on_exit(fn -> Application.put_env(:hologram, :database, database_config) end)
+
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Hologram.DB.Protocol, opts}]}}]}} = init([])
+
+      assert opts[:ssl] == [verify: :verify_none]
+    end
+
     test "leaves the given after_connect in place" do
       after_connect = {IO, :inspect, []}
 
@@ -504,6 +527,83 @@ defmodule Hologram.DBTest do
         pool = start_unreachable_pool()
 
         assert_raise Postgrex.Error, ~r/hologram_no_such_database/, fn ->
+          Connection.with_connection(pool, fn ->
+            await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+          end)
+        end
+
+        stop_unreachable_pool()
+      end)
+    end
+
+    # A refused handshake is refused the same way on every try.
+    test "raises when the server's certificate is signed by a CA it wasn't given" do
+      proxy = start_supervised!(Supervisor.child_spec(TLSProxy, id: :proxy))
+      other_proxy = start_supervised!(Supervisor.child_spec(TLSProxy, id: :other_proxy))
+
+      connection_opts =
+        Config.connection_opts(
+          port: TLSProxy.port(proxy),
+          ssl: [cacertfile: TLSProxy.ca_cert_path(other_proxy), verify: :verify_peer]
+        )
+
+      capture_log(fn ->
+        pool = start_unreachable_pool()
+
+        assert_raise DBConnection.ConnectionError, ~r/^ssl connect: .*:unknown_ca/s, fn ->
+          Connection.with_connection(pool, fn ->
+            await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+          end)
+        end
+
+        stop_unreachable_pool()
+      end)
+    end
+
+    # Under TLS 1.3 the server refuses the client's certificate only after the connect returned.
+    test "raises when the server refuses the client's certificate" do
+      proxy = start_supervised!(Supervisor.child_spec({TLSProxy, client_cert: true}, id: :proxy))
+      other_proxy = start_supervised!(Supervisor.child_spec(TLSProxy, id: :other_proxy))
+      client_cert_paths = TLSProxy.client_cert_paths(other_proxy)
+
+      connection_opts =
+        Config.connection_opts(
+          port: TLSProxy.port(proxy),
+          ssl: [
+            cacertfile: TLSProxy.ca_cert_path(proxy),
+            certfile: client_cert_paths[:cert_path],
+            keyfile: client_cert_paths[:key_path],
+            verify: :verify_peer
+          ]
+        )
+
+      capture_log(fn ->
+        pool = start_unreachable_pool()
+
+        assert_raise DBConnection.ConnectionError, ~r/^ssl recv .*:unknown_ca/s, fn ->
+          Connection.with_connection(pool, fn ->
+            await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+          end)
+        end
+
+        stop_unreachable_pool()
+      end)
+    end
+
+    test "raises when the TLS options are refused" do
+      proxy = start_supervised!(TLSProxy)
+      cacertfile = Path.join(System.tmp_dir!(), "hologram_no_such_ca.pem")
+
+      connection_opts =
+        Config.connection_opts(
+          port: TLSProxy.port(proxy),
+          ssl: [cacertfile: cacertfile, verify: :verify_peer]
+        )
+
+      capture_log(fn ->
+        pool = start_unreachable_pool()
+
+        assert_raise DBConnection.ConnectionError, ~r/^ssl connect: .*:options/s, fn ->
           Connection.with_connection(pool, fn ->
             await_database(connection_opts: connection_opts, retry_interval_ms: 10)
           end)

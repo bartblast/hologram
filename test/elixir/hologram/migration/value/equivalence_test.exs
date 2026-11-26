@@ -214,9 +214,7 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
 
   defp decode(value, type), do: Codec.decode(value, type)
 
-  defp insert(table, fields) do
-    id = Entity.generate_id()
-
+  defp insert(table, fields, id \\ Entity.generate_id()) do
     names = [
       "id",
       "created_at",
@@ -774,6 +772,31 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
           most_common(:guide_id),
           %{kind: :relationship, line: 9, name: :value, type: MyApp.User}
         )
+      end)
+    end
+
+    test "most_common of references breaks a tie by the id's characters", %{scratch: scratch} do
+      route(scratch, fn ->
+        prepare()
+
+        # Ignoring case, as text orders, the lowercase d comes first; by its characters, the way
+        # the id column orders, the uppercase X does.
+        lowercase_user = insert("my_app_user", %{"name" => "a"}, "0354NCV0ddAUXPO63b3CsD")
+        uppercase_user = insert("my_app_user", %{"name" => "b"}, "0354NCV0XRqiltKuUt0vh8")
+
+        trip =
+          insert_trip_with_tags([
+            %{"guide_id" => stored(lowercase_user)},
+            %{"guide_id" => stored(uppercase_user)}
+          ])
+
+        common =
+          assert_same(
+            most_common(:guide_id),
+            %{kind: :relationship, line: 9, name: :value, type: MyApp.User}
+          )
+
+        assert common[trip] == uppercase_user
       end)
     end
   end
