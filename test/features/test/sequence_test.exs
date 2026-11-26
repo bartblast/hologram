@@ -27,7 +27,7 @@ defmodule HologramFeatureTests.SequenceTest do
     create_notice("first")
 
     session
-    |> visit(SequencePage)
+    |> visit(SequencePage, carried: :notices)
     |> await_local_fill()
     |> await_local_read("Show view", "view", "first | first | first | first | first")
 
@@ -66,7 +66,7 @@ defmodule HologramFeatureTests.SequenceTest do
     create_notice("first")
 
     session
-    |> visit(SequencePage)
+    |> visit(SequencePage, carried: :notices)
     |> await_local_fill()
     |> await_local_read("Show view", "view", "first | first | first | first | first")
     |> click(button("Mark read"))
@@ -106,13 +106,60 @@ defmodule HologramFeatureTests.SequenceTest do
     )
   end
 
-  # The reload brings back the newer notice's number as waiting, from the store and from the page's
-  # render alike, so the lists leave it out until the held save commits.
+  # The reload's render hides the newer notice's number, as it isn't final, and the page carries it
+  # as waiting. The page brought the row, so the browser takes no stored number into it, and the
+  # lists leave the newer notice out until the held save commits.
   feature "holds a number back across a reload", %{session: session} do
+    assert_number_held_across_reload(session, :notices)
+  end
+
+  # The page carries no notices, so the reload brings back the newer notice's number as waiting from
+  # the store alone.
+  feature "holds a stored number back across a reload", %{session: session} do
+    assert_number_held_across_reload(session, :none)
+  end
+
+  # The first notice comes over the stream once the browser's point is past its numbers, so its
+  # stored record holds them in its row, and the second moves the stored place past it, so the
+  # reload's catch-up doesn't send it again. A node that just restarted publishes a limit below
+  # every number, so the reload's render hides the first notice's numbers, and the page carries
+  # them as waiting. The reload brings back the stored point, which is past them, so the browser
+  # files them right away.
+  feature "keeps a row's updated number across a reload rendered by a node that is behind",
+          %{session: session} do
+    session
+    |> visit(SequencePage, carried: :notices)
+    |> await_local_fill()
+
+    first = create_notice("first")
+
+    session
+    |> await_local_read("Show updated", "updated", "first")
+    |> await_stored_final(first)
+
+    second = create_notice("second")
+
+    stored =
+      session
+      |> await_local_read("Show updated", "updated", "first, second")
+      |> await_stored_final(second)
+
+    assert is_integer(stored_updated_seq(stored, first))
+    assert stored_waiting_numbers(stored, first) == nil
+
+    put_published_limit_behind()
+
+    stored
+    |> reload()
+    |> await_page_mount(SequencePage)
+    |> await_local_read("Show updated", "updated", "first, second")
+  end
+
+  defp assert_number_held_across_reload(session, carried) do
     create_notice("first")
 
     session
-    |> visit(SequencePage)
+    |> visit(SequencePage, carried: carried)
     |> await_local_fill()
 
     held = hold_save("held")
@@ -142,42 +189,6 @@ defmodule HologramFeatureTests.SequenceTest do
       "first, held, after | after, held, first | after | first, held, after | " <>
         "after, first, held"
     )
-  end
-
-  # The first notice comes over the stream once the browser's point is past its numbers, so its
-  # stored record holds them in its row, and the second moves the stored place past it, so the
-  # reload's catch-up doesn't send it again. A node that just restarted publishes a limit below
-  # every number, so the reload's render hides the first notice's numbers, and the page carries
-  # them as waiting. The reload brings back the stored point, which is past them, so the browser
-  # files them right away.
-  feature "keeps a row's updated number across a reload rendered by a node that is behind",
-          %{session: session} do
-    session
-    |> visit(SequencePage)
-    |> await_local_fill()
-
-    first = create_notice("first")
-
-    session
-    |> await_local_read("Show updated", "updated", "first")
-    |> await_stored_final(first)
-
-    second = create_notice("second")
-
-    stored =
-      session
-      |> await_local_read("Show updated", "updated", "first, second")
-      |> await_stored_final(second)
-
-    assert is_integer(stored_updated_seq(stored, first))
-    assert stored_waiting_numbers(stored, first) == nil
-
-    put_published_limit_behind()
-
-    stored
-    |> reload()
-    |> await_page_mount(SequencePage)
-    |> await_local_read("Show updated", "updated", "first, second")
   end
 
   defp create_notice(title) do
@@ -303,7 +314,7 @@ defmodule HologramFeatureTests.SequenceTest do
         reading.onsuccess = () => {
           db.close();
           const record = reading.result;
-          resolve(#{expression} ?? null);
+          resolve((#{expression}) ?? null);
         };
       };
     }));

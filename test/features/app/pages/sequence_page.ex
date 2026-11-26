@@ -4,13 +4,18 @@ defmodule HologramFeatureTests.SequencePage do
 
   alias HologramFeatureTests.Entities.Notice
 
-  route "/sequence"
+  route "/sequence/:carried"
+
+  # :notices to carry the notices on the page, :none to carry none.
+  param :carried, :atom
 
   layout HologramFeatureTests.Components.DefaultLayout
 
   # Read through a derived field, so the page carries the notices as its render read them, numbers
-  # and all. The reads in init carry none.
-  derived :notices, [Notice], &notices_query/0
+  # and all. The reads in init carry none, so with :none the browser has only its store to go by.
+  derived :notices, [Notice], fn carried ->
+    if carried == :notices, do: notices_query(), else: []
+  end
 
   state :marker, :integer
   state :updated, :string
@@ -101,8 +106,8 @@ defmodule HologramFeatureTests.SequencePage do
       titles(by_title)
   end
 
-  # The notices that hold an updated number, by it. A notice never updated, or whose number isn't
-  # final or the browser lost, reads nil there, which the filter leaves out.
+  # The notices that hold an updated number, by it. A notice whose number isn't final or the browser
+  # lost reads nil there, which the filter leaves out.
   defp updated do
     Notice
     |> filter(server_updated_seq != nil)
