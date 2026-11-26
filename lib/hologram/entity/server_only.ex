@@ -32,7 +32,7 @@ defmodule Hologram.Entity.ServerOnly do
         <p>Token hidden</p>
       {/if}
 
-  Matching on the struct works too, in browser code:
+  Matching on the struct works too, in a `case` or a function head in browser code:
 
       alias Hologram.Entity.ServerOnly
 
@@ -40,12 +40,6 @@ defmodule Hologram.Entity.ServerOnly do
         %ServerOnly{} -> :hidden
         token -> token
       end
-
-  Or in a template:
-
-      {%if match?(%ServerOnly{}, @user.api_token)}
-        <p>Token hidden</p>
-      {/if}
   """
 
   # Sibling of NotIncluded. The internal __meta__ map names the attribute, as %{field: name}, so

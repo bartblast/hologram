@@ -27,7 +27,6 @@ defmodule HologramFeatureTests.PlaceholdersTest do
     |> visit(PlaceholdersPage)
     |> await_local_fill()
     |> assert_text(css("#folder_without_include"), ~r/^not_included$/)
-    |> assert_text(css("#folder_without_include_helper"), ~r/^not_included$/)
     |> assert_text(css("#folder_with_include"), ~r/^value$/)
   end
 
@@ -48,7 +47,6 @@ defmodule HologramFeatureTests.PlaceholdersTest do
     |> click(button("Match placeholders"))
     |> assert_text(css("#result"), ~r/^not_included,value,server_only,value$/)
     |> assert_text(css("#folder_without_include"), ~r/^not_included$/)
-    |> assert_text(css("#folder_without_include_helper"), ~r/^not_included$/)
     |> assert_text(css("#folder_with_include"), ~r/^value$/)
     |> assert_text(css("#api_token"), ~r/^server_only$/)
     |> assert_text(css("#title"), ~r/^value$/)

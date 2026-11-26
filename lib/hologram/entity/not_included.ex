@@ -23,7 +23,7 @@ defmodule Hologram.Entity.NotIncluded do
         <p>Project not loaded</p>
       {/if}
 
-  Matching on the struct works too, in server or browser code:
+  Matching on the struct works too, in a `case` or a function head, in server or browser code:
 
       alias Hologram.Entity.NotIncluded
 
@@ -32,12 +32,6 @@ defmodule Hologram.Entity.NotIncluded do
         nil -> :no_project
         project -> project.name
       end
-
-  Or in a template:
-
-      {%if match?(%NotIncluded{}, @todo.project)}
-        <p>Project not loaded</p>
-      {/if}
   """
 
   # The default value of an entity struct's relationship embed and to-many fields, and of its
