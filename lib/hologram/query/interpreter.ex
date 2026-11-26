@@ -568,11 +568,16 @@ defmodule Hologram.Query.Interpreter do
     end
   end
 
+  # Kept in the metadata the way the database executor keeps it, so both return the same struct.
   defp masked(row, limit) do
     Enum.reduce([:server_created_seq, :server_updated_seq], row, fn field, acc ->
       case acc do
-        %{^field => seq} when is_integer(seq) and seq > limit -> %{acc | field => nil}
-        _final -> acc
+        %{^field => seq} when is_integer(seq) and seq > limit ->
+          waiting = Map.put(acc.__meta__.waiting, field, seq)
+          %{acc | field => nil, __meta__: %{acc.__meta__ | waiting: waiting}}
+
+        _final ->
+          acc
       end
     end)
   end
