@@ -2083,81 +2083,30 @@ describe("LocalDatabase", () => {
       assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
     });
 
-    // The page's render hid the numbers, since its pin didn't reach them.
-    it("files a stored created number a held row holds none for once the restored point reaches it", () => {
+    // A row the page brought holds its own version's numbers, and a stored number can be another
+    // version's.
+    it("takes no number a held row holds none for from the stored row", () => {
       LocalDatabase.putRow(TASK, row("t1", null, null));
 
       LocalDatabase.restore(
         [{facts: {}, id: "t1", row: row("t1", 5, 8), type: TASK}],
-        10,
-      );
-
-      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 5);
-      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
-    });
-
-    // A stored updated number can be an older version's than the page brought.
-    it("takes no stored updated number a held row holds none for", () => {
-      LocalDatabase.putRow(TASK, row("t1", 5, null));
-
-      LocalDatabase.restore(
-        [{facts: {}, id: "t1", row: row("t1", 5, 8), type: TASK}],
-        10,
-      );
-
-      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
-      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
-    });
-
-    it("holds a stored created number a held row holds none for back above the restored point", () => {
-      LocalDatabase.putRow(TASK, row("t1", null, null));
-
-      LocalDatabase.restore(
-        [{facts: {}, id: "t1", row: row("t1", 15, 18), type: TASK}],
         10,
       );
 
       assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_created_seq);
-
-      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
-        numbers: {server_created_seq: 15},
-        own: false,
-      });
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
     });
 
-    it("takes no stored created number a held row's shown one is as new as", () => {
-      LocalDatabase.raiseFinal(3);
-      LocalDatabase.putRow(
-        TASK,
-        LocalDatabase.carryNumbers(TASK, row("t1", 5, null)),
-      );
-
-      LocalDatabase.restore(
-        [{facts: {}, id: "t1", row: row("t1", 5, null), type: TASK}],
-        4,
-      );
-
-      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
-        numbers: {},
-        own: false,
-        shown: {server_created_seq: 5},
-      });
-    });
-
-    // The page showed a newer version's number, so the stored one is an older version's.
-    it("takes no stored waiting number a held row's shown one is newer than", () => {
-      LocalDatabase.raiseFinal(3);
-      LocalDatabase.putRow(
-        TASK,
-        LocalDatabase.carryNumbers(TASK, row("t1", 2, 20)),
-      );
+    it("takes no stored waiting number newer than a held row's", () => {
+      LocalDatabase.putRow(TASK, row("t1", 5, 8));
 
       LocalDatabase.restore(
         [
           {
             facts: {},
             id: "t1",
-            row: row("t1", 2, null),
+            row: row("t1", 5, 8),
             type: TASK,
             waiting: {numbers: {server_updated_seq: 15}, own: false},
           },
@@ -2167,31 +2116,73 @@ describe("LocalDatabase", () => {
 
       LocalDatabase.raiseFinal(15);
 
-      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
-
-      LocalDatabase.raiseFinal(20);
-
-      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 20);
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 8);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
     });
 
-    it("keeps a newer waiting created number over a stored one a held row holds none for", () => {
-      LocalDatabase.raiseFinal(3);
-      LocalDatabase.putRow(TASK, row("t1", null, null));
-      LocalDatabase.holdNumbers(TASK, {id: "t1", server_created_seq: 15});
-
-      LocalDatabase.restore(
-        [{facts: {}, id: "t1", row: row("t1", 5, null), type: TASK}],
-        4,
+    it("takes no stored waiting number older than the one a held row waits for", () => {
+      LocalDatabase.putRow(
+        TASK,
+        LocalDatabase.carryNumbers(TASK, {
+          ...row("t1", 5, null),
+          $waiting: {server_updated_seq: 20},
+        }),
       );
 
+      LocalDatabase.restore(
+        [
+          {
+            facts: {},
+            id: "t1",
+            row: row("t1", 5, 8),
+            type: TASK,
+            waiting: {numbers: {server_updated_seq: 14}, own: false},
+          },
+        ],
+        10,
+      );
+
+      LocalDatabase.raiseFinal(14);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+
       assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
-        numbers: {server_created_seq: 15},
+        numbers: {server_updated_seq: 20},
         own: false,
       });
     });
 
-    it("holds a stored number newer than a carried row's back, own flag and all", () => {
-      LocalDatabase.putRow(TASK, row("t1", null, null));
+    it("takes no stored shown number into a held row", () => {
+      LocalDatabase.putRow(TASK, row("t1", 5, null));
+
+      LocalDatabase.restore(
+        [
+          {
+            facts: {},
+            id: "t1",
+            row: row("t1", 5, 8),
+            type: TASK,
+            waiting: {
+              numbers: {},
+              own: false,
+              shown: {server_updated_seq: 15},
+            },
+          },
+        ],
+        10,
+      );
+
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("takes the stored own flag into a held row whose hidden created number waits", () => {
+      LocalDatabase.putRow(
+        TASK,
+        LocalDatabase.carryNumbers(TASK, {
+          ...row("t1", null, null),
+          $waiting: {server_created_seq: 12, server_updated_seq: 12},
+        }),
+      );
 
       LocalDatabase.restore(
         [
@@ -2215,8 +2206,8 @@ describe("LocalDatabase", () => {
       });
     });
 
-    it("takes no stored number a carried row holds a newer one for", () => {
-      LocalDatabase.putRow(TASK, row("t1", 12, 20));
+    it("drops the stored own flag of a held row whose created number waits for nothing", () => {
+      LocalDatabase.putRow(TASK, row("t1", null, null));
 
       LocalDatabase.restore(
         [
@@ -2226,7 +2217,7 @@ describe("LocalDatabase", () => {
             row: row("t1", null, null),
             type: TASK,
             waiting: {
-              numbers: {server_created_seq: 12, server_updated_seq: 14},
+              numbers: {server_created_seq: 12, server_updated_seq: 12},
               own: true,
             },
           },
@@ -2235,7 +2226,6 @@ describe("LocalDatabase", () => {
       );
 
       assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
-      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 20);
     });
 
     it("takes up a stored row with the numbers the store says it waits for", () => {

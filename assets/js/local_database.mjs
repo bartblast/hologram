@@ -888,10 +888,12 @@ export default class LocalDatabase {
   // was away, so nothing would resend it.
   //
   // The final point comes in with the records, since it was written down with them, and so do the
-  // numbers they wait for. A row the page brought takes a stored number only when it is newer than
-  // the one the row holds, which a number the page's render could not call final yet is, and a
-  // created number the stored copy of the row holds where the page's holds none (see
-  // #takeStoredCreated).
+  // numbers they wait for. A row the page brought takes no stored number, waiting, shown or in the
+  // stored row: its numbers go with its values, which are the page's, and the page carried every
+  // number of that version it knew, including the ones its render hid (see carryNumbers). A stored
+  // number can be another version's, which filed under the page's would pass comparisons the
+  // page's own number fails. Only the stored own flag comes across, which lasts only while a
+  // created number the page hid waits above the restored point (see #settleEntry).
   // A stored row can hold a number the stored point doesn't reach, which goes back beside it (see
   // #holdStoredAbove).
   static restore(records, finalSeq = null) {
@@ -910,15 +912,11 @@ export default class LocalDatabase {
 
       if (stored) {
         LocalDatabase.putRow(type, row);
+        LocalDatabase.#takeWaiting(type, id, record.waiting);
+        LocalDatabase.#holdStoredAbove(type, id);
       } else {
         LocalDatabase.unmarkCarried(type, id);
-        LocalDatabase.#takeStoredCreated(type, id, row);
-      }
-
-      LocalDatabase.#takeWaiting(type, id, record.waiting);
-
-      if (stored) {
-        LocalDatabase.#holdStoredAbove(type, id);
+        LocalDatabase.#takeOwn(type, id, record.waiting);
       }
 
       for (const [relationship, targetIds] of Object.entries(facts)) {
@@ -938,8 +936,9 @@ export default class LocalDatabase {
   // its rows (see Tabs.#takeStore), after `takeStoredFinal`. The numbers this tab's page showed
   // stay, since they are final on the server whatever the store holds: a list keeps ordering the
   // row by them. They are the ones held beside the row now, and the given ones, which
-  // `shownNumbers` took before the row was dropped. A number the store's point doesn't reach goes
-  // back beside the row, as `restore` does with it.
+  // `shownNumbers` took before the row was dropped. The numbers the page's render hid go with the
+  // page's row, since they are its version's, and the store's row brings its own. A number the
+  // store's point doesn't reach goes back beside the row, as `restore` does with it.
   static putStored(type, row, waiting, shown = {}) {
     const kept = Object.entries(
       Object.assign({}, LocalDatabase.#waiting[type]?.[row.id]?.shown),
@@ -1409,43 +1408,10 @@ export default class LocalDatabase {
     }
   }
 
-  // Takes the created number a stored row holds where the page's copy of it holds none, as a number
-  // it waits for. The page's render can hide a number its pin didn't reach - on a node behind this
-  // one, or one that just restarted - and the change that gave it can lie at or below the place
-  // this page resumes from, so nothing sends it again.
-  //
-  // Only the created number, because it never changes for a row: a stored updated number can be an
-  // older version's, which filed under the page's version would pass comparisons that version's own
-  // number fails, and a timestamp can't tell two writes in the same millisecond apart. A number the
-  // page showed beside the row is the page's, so a stored one no newer than it adds nothing.
-  static #takeStoredCreated(type, id, stored) {
-    const field = "server_created_seq";
-    const number = stored[field] ?? null;
-
-    if (
-      number === null ||
-      (LocalDatabase.baseRow(type, id)[field] ?? null) !== null
-    ) {
-      return;
-    }
-
-    const shown = LocalDatabase.#waiting[type]?.[id]?.shown?.[field];
-
-    if (shown !== undefined && BigInt(shown) >= BigInt(number)) {
-      return;
-    }
-
-    const entry = LocalDatabase.#waitingEntry(type, id);
-    const waiting = entry.numbers[field];
-
-    if (waiting === undefined || BigInt(waiting) < BigInt(number)) {
-      entry.numbers[field] = number;
-    }
-  }
-
-  // Takes the stored numbers a held row waits for, each only when the row holds an older one for
-  // the field, or none, and no page showed one for it at least as new: that one is the version the
-  // row holds, and an older version's number filed under it would pass comparisons its own fails.
+  // Takes the stored numbers a row the store filled waits for, each only when the row holds an
+  // older one for the field, or none, and no page showed one for it at least as new: that one is
+  // the version the row holds, and an older version's number filed under it would pass comparisons
+  // its own fails.
   static #takeWaiting(type, id, stored) {
     if (stored === undefined || stored === null) {
       return;
@@ -1482,6 +1448,18 @@ export default class LocalDatabase {
 
     entry.own ||= stored.own === true;
 
+    LocalDatabase.#settleEntry(type, id);
+  }
+
+  // Takes the stored own flag into a row the page brought: the row is this client's own while the
+  // created number the page hid waits, and the page can't say whose batch created it. With no
+  // created number waiting the flag is dropped again (see #settleEntry).
+  static #takeOwn(type, id, stored) {
+    if (stored?.own !== true) {
+      return;
+    }
+
+    LocalDatabase.#waitingEntry(type, id).own = true;
     LocalDatabase.#settleEntry(type, id);
   }
 
