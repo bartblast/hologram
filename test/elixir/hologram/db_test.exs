@@ -199,6 +199,28 @@ defmodule Hologram.DBTest do
       assert opts[:after_connect] == {Hologram.DB, :apply_session_settings, []}
     end
 
+    test "opens the pool connections with the configured ssl" do
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Hologram.DB.Protocol, opts}]}}]}} = init([])
+
+      assert Keyword.fetch(opts, :ssl) == {:ok, false}
+    end
+
+    test "opens the pool connections with the ssl the config sets" do
+      database_config = Application.get_env(:hologram, :database, [])
+
+      Application.put_env(
+        :hologram,
+        :database,
+        Keyword.put(database_config, :ssl, mode: :require)
+      )
+
+      on_exit(fn -> Application.put_env(:hologram, :database, database_config) end)
+
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Hologram.DB.Protocol, opts}]}}]}} = init([])
+
+      assert opts[:ssl] == [verify: :verify_none]
+    end
+
     test "leaves the given after_connect in place" do
       after_connect = {IO, :inspect, []}
 

@@ -945,21 +945,17 @@ defmodule Hologram.DB do
       |> Application.get_env(:database, [])
       |> Config.resolve!(Hologram.env())
 
-    # The driver boundary - resolved config uses the component-named keys, Postgrex expects
-    # its own option names. Given opts win, so that tests can inject overrides (e.g. an
+    # The driver boundary - Config.postgrex_opts/1 turns the resolved config into Postgrex's
+    # options, ssl included. Given opts win, so that tests can inject overrides (e.g. an
     # ownership pool).
     postgrex_opts =
       Keyword.merge(
-        [
-          after_connect: {__MODULE__, :apply_session_settings, []},
-          database: resolved_opts[:database],
-          hostname: resolved_opts[:host],
-          name: @pool_name,
-          password: resolved_opts[:password],
-          pool_size: resolved_opts[:pool_size],
-          port: resolved_opts[:port],
-          username: resolved_opts[:user]
-        ],
+        Config.postgrex_opts(resolved_opts) ++
+          [
+            after_connect: {__MODULE__, :apply_session_settings, []},
+            name: @pool_name,
+            pool_size: resolved_opts[:pool_size]
+          ],
         opts
       )
 

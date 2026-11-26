@@ -5,6 +5,7 @@ defmodule Hologram.DB.Reset do
   # that runs Mix, so the steps can be tested on scratch databases. The task resolves the
   # connection options, guards the env, and rebuilds and seeds afterwards.
 
+  alias Hologram.DB.Config
   alias Hologram.DB.Mapper
   alias Hologram.Migration.ShadowVerifier
   alias Hologram.Test.DatabaseBootstrap
@@ -563,13 +564,10 @@ defmodule Hologram.DB.Reset do
   defp sessions(count), do: "#{count} other sessions are"
 
   defp with_connection(database_opts, database, fun) do
-    connection_opts = [
-      database: database,
-      hostname: database_opts[:host],
-      password: database_opts[:password],
-      port: database_opts[:port],
-      username: database_opts[:user]
-    ]
+    connection_opts =
+      database_opts
+      |> Config.postgrex_opts()
+      |> Keyword.put(:database, database)
 
     case Connection.start(connection_opts) do
       {:ok, pid} ->

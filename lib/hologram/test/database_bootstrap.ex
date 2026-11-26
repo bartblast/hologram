@@ -111,7 +111,8 @@ defmodule Hologram.Test.DatabaseBootstrap do
     end
 
     # The resolved discrete keys, without :url - a configured url would win over the run's
-    # database name.
+    # database name. :ssl among them, normalized, so every connection opened afterwards
+    # reaches the server the way the bootstrap's did.
     Application.put_env(
       :hologram,
       :database,
@@ -168,15 +169,9 @@ defmodule Hologram.Test.DatabaseBootstrap do
   # maintenance one sits idle while they connect. The pings themselves stay, since they keep the
   # session from idling out on a server that sets idle_session_timeout.
   defp connection_opts(database_opts, database) do
-    [
-      database: database,
-      handshake_timeout: :infinity,
-      hostname: database_opts[:host],
-      password: database_opts[:password],
-      ping_timeout: :infinity,
-      port: database_opts[:port],
-      username: database_opts[:user]
-    ]
+    database_opts
+    |> Config.postgrex_opts()
+    |> Keyword.merge(database: database, handshake_timeout: :infinity, ping_timeout: :infinity)
   end
 
   # IF EXISTS: another run's sweep, or a test dropping its own databases, may have got there
@@ -261,6 +256,8 @@ defmodule Hologram.Test.DatabaseBootstrap do
           Linux (systemd): sudo systemctl start postgresql
           Docker: docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres
       * the credentials are refused - check the user and password
+      * TLS failed - with ssl set, the server may not offer TLS, or may present a \
+    certificate the configured CA or host name doesn't match
       * the "postgres" maintenance database is missing - this bootstrap connects to it \
     to create the test databases
 
