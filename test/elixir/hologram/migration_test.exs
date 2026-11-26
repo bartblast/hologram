@@ -383,6 +383,9 @@ defmodule Hologram.MigrationTest do
             {"fn title -> inspect([bind_quoted: [x: @o], do: x] |> quote()) <> title end",
              ~s("1")},
             {"fn title -> coalesce(title, ^inspect(quote(do: unquote(@o)))) end", ~s("1")},
+            # A bare atom in the option list sets its option to true, and the first one counts.
+            {"fn title -> coalesce(title, ^inspect(quote([:unquote, unquote: false], " <>
+               "do: unquote(@o)))) end", ~s("1")},
             # A quote's separate options are code even in a quote of a quote.
             {"fn title -> coalesce(title, ^inspect(quote(do: quote(unquote(@o), do: 1)))) end",
              ~s("1")},

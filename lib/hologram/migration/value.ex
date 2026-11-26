@@ -1082,7 +1082,8 @@ defmodule Hologram.Migration.Value do
   # or :unknown when only the compiler can read them, like an attribute. With separate options,
   # Elixir ignores any beside the do. In a list it takes the first unquote once the list expands
   # and ignores what isn't a pair, so an item that may expand to one, like an attribute, may set
-  # unquote or bind_quoted unless an unquote written as a pair comes before it.
+  # unquote or bind_quoted unless an unquote written as a pair comes before it. A bare :unquote
+  # sets it to true, while a bare :bind_quoted binds nothing.
   defp quote_unquotes(args) do
     written =
       case args do
@@ -1100,11 +1101,17 @@ defmodule Hologram.Migration.Value do
 
     default = if rest == [], do: not Keyword.has_key?(settings, :bind_quoted), else: :unknown
 
-    case Keyword.get(settings, :unquote, default) do
-      setting when is_boolean(setting) -> setting
+    case Enum.find_value(written_out, {:ok, default}, &unquote_setting/1) do
+      {:ok, setting} when is_boolean(setting) -> setting
       _compiler_read -> :unknown
     end
   end
+
+  defp unquote_setting(:unquote), do: {:ok, true}
+
+  defp unquote_setting({:unquote, setting}), do: {:ok, setting}
+
+  defp unquote_setting(_item), do: nil
 
   defp read_query(_body, :elixir, _scope), do: :none
 
