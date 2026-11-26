@@ -22,7 +22,7 @@ defmodule Hologram.Realtime.SSETest do
   use_module_stub :asset_path_registry
   use_module_stub :chunk_registry
 
-  @server_only_token ~s'["atoken",{"t":"m","d":[["aattribute","atoken"],["a__struct__","aElixir.Hologram.Entity.ServerOnly"]]}]'
+  @server_only_token ~s'["atoken",{"t":"m","d":[["a__struct__","aElixir.Hologram.Entity.ServerOnly"],["a__meta__",{"t":"m","d":[["afield","atoken"]]}]]}]'
 
   setup :set_mox_global
 
