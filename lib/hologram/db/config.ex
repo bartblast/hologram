@@ -215,9 +215,9 @@ defmodule Hologram.DB.Config do
   Any other value, entry or entry value raises ArgumentError naming it.
 
   The :url follows PostgreSQL's connection URI format: its user, password and database are
-  percent-decoded, so a password with `@` or `:` is written as `%40` or `%3A`, and its query takes libpq's TLS
-  parameters, each replacing only its own :ssl entry, the way the url's host and port replace
-  their keys:
+  percent-decoded, so a password with `@` or `:` is written as `%40` or `%3A`, and its query
+  takes libpq's TLS parameters, each replacing only its own :ssl entry, the way the url's host
+  and port replace their keys:
 
     * `sslmode` - `disable` turns ssl off whatever the key says, `require`, `verify-ca` and
       `verify-full` set the mode. `allow` and `prefer` raise, Postgrex can't fall back between
@@ -230,10 +230,11 @@ defmodule Hologram.DB.Config do
 
   The resulting list is checked like the key: :cert_path and :key_path need each other, and
   :ca_cert_path (`sslrootcert` too, unlike in libpq, where it implies `verify-ca`) needs
-  `:verify_ca` or `:verify_full`. A `sslrootcert`, `sslcert` or `sslkey` while ssl ends up off
-  raises, since it would be ignored. Any other parameter raises ArgumentError naming it, `ssl`
-  and `pool_size` included, and so does a repeated one or a malformed percent-encoding. No
-  message holds the url, which carries the password.
+  `:verify_ca` or `:verify_full`. A checking mode without :ca_cert_path raises when the system's
+  CAs fail to load. A `sslrootcert`, `sslcert` or `sslkey` while ssl ends up off raises, since it
+  would be ignored. Any other parameter raises ArgumentError naming it, `ssl` and `pool_size`
+  included, and so does a repeated one or a malformed percent-encoding. No message holds the
+  url, which carries the password.
 
   Returns a keyword list sorted by key with the :database, :host, :password, :pool_size,
   :port, :ssl and :user options, :ssl holding false or the list sorted by entry, with its
@@ -419,13 +420,18 @@ defmodule Hologram.DB.Config do
         validate_client_cert!(merged, url_ssl)
         validate_ca_cert_mode!(merged, url_ssl)
 
-        merged
-        |> Enum.flat_map(fn
-          # sslrootcert=system: the system's CAs, which a checking mode trusts without a CA file.
-          {:ca_cert_path, :system} -> []
-          entry -> [entry]
-        end)
-        |> Enum.sort()
+        resolved =
+          merged
+          |> Enum.flat_map(fn
+            # sslrootcert=system: the system's CAs, which a checking mode trusts without a CA file.
+            {:ca_cert_path, :system} -> []
+            entry -> [entry]
+          end)
+          |> Enum.sort()
+
+        validate_system_cacerts!(resolved)
+
+        resolved
     end
   end
 
@@ -451,6 +457,17 @@ defmodule Hologram.DB.Config do
     :error, {:failed_load_cacerts, reason} ->
       raise ArgumentError,
             "ssl in config :hologram, :database checks the server's certificate against the system's CAs, which failed to load (#{inspect(reason)}) - set ssl entry :ca_cert_path to the CA to trust"
+  end
+
+  # Loaded here rather than first in postgrex_opts/1, so that a system without CAs is a config
+  # error - the boot, mix holo.db.reset and the test bootstrap all resolve the config before they
+  # connect. public_key caches them for the whole VM, so postgrex_opts/1 gets them again cheaply.
+  defp validate_system_cacerts!(ssl) do
+    if Keyword.fetch!(ssl, :mode) != :require and not Keyword.has_key?(ssl, :ca_cert_path) do
+      system_cacerts!()
+    end
+
+    :ok
   end
 
   defp validate_ca_cert_mode!(ssl, url_ssl) do

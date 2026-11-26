@@ -733,8 +733,9 @@ defmodule Hologram.DB do
   that are wrong look the same through. So a failed try opens one connection of its own to learn
   which: a server that refuses or cannot be reached - a host name that does not resolve included -
   or one still starting up or shutting down, is waited for. Any other error - a wrong password, a
-  database that does not exist, a connection limit, a TLS handshake refused over a certificate or
-  over the TLS options - raises, failing the boot as it did before the wait. A TLS handshake that
+  database that does not exist, a connection limit, a TLS handshake refused over a certificate -
+  the client's included - or over the TLS options - raises, failing the boot as it did before the
+  wait. A TLS handshake that
   times out or is closed is waited for. In dev, a database that does not exist raises naming
   mix holo.db.reset, which creates it. An error the query itself answers with raises the same way,
   unless it is one of those.
@@ -1087,10 +1088,12 @@ defmodule Hologram.DB do
   # A TLS handshake the server or the client refused - an alert, like a certificate no CA given
   # trusts or a host name it doesn't cover - or TLS options the client refused, like a CA file
   # that doesn't exist. Either fails the same way on every try. A handshake that timed out or was
-  # closed is a server that is away. Postgrex gives the reason only inside the message, as
-  # "ssl connect: <formatted reason> - <inspected reason>", so the match is on that.
+  # closed is a server that is away. Under TLS 1.3 the connect returns before the server checks
+  # the client's certificate, so the server's refusal of it comes as an alert on the first read,
+  # as "ssl recv (idle): ...", not on the connect. Postgrex gives the reason only inside the
+  # message, as "ssl <action>: <formatted reason> - <inspected reason>", so the match is on that.
   defp tls_misconfiguration?(message) do
-    String.starts_with?(message, "ssl connect: ") and
+    String.starts_with?(message, "ssl ") and
       String.contains?(message, [" - {:tls_alert, ", " - {:options, "])
   end
 

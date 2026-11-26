@@ -480,6 +480,36 @@ defmodule Hologram.DBTest do
       end)
     end
 
+    # Under TLS 1.3 the server refuses the client's certificate only after the connect returned.
+    test "raises when the server refuses the client's certificate" do
+      proxy = start_supervised!(Supervisor.child_spec({TLSProxy, client_cert: true}, id: :proxy))
+      other_proxy = start_supervised!(Supervisor.child_spec(TLSProxy, id: :other_proxy))
+      client_cert_paths = TLSProxy.client_cert_paths(other_proxy)
+
+      connection_opts =
+        Config.connection_opts(
+          port: TLSProxy.port(proxy),
+          ssl: [
+            cacertfile: TLSProxy.ca_cert_path(proxy),
+            certfile: client_cert_paths[:cert_path],
+            keyfile: client_cert_paths[:key_path],
+            verify: :verify_peer
+          ]
+        )
+
+      capture_log(fn ->
+        pool = start_unreachable_pool()
+
+        assert_raise DBConnection.ConnectionError, ~r/^ssl recv .*:unknown_ca/s, fn ->
+          Connection.with_connection(pool, fn ->
+            await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+          end)
+        end
+
+        stop_unreachable_pool()
+      end)
+    end
+
     test "raises when the TLS options are refused" do
       proxy = start_supervised!(TLSProxy)
       cacertfile = Path.join(System.tmp_dir!(), "hologram_no_such_ca.pem")

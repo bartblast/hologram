@@ -735,6 +735,44 @@ defmodule Hologram.DB.ConfigTest do
       end
     end
 
+    # In a VM of its own, since the ssl application caches the system's CAs for the whole VM, so
+    # failing their load here would fail it for the tests running alongside.
+    test "raises when a checking mode has no CA and the system's CAs fail to load" do
+      {:ok, peer, _node} =
+        :peer.start_link(%{
+          args: Enum.flat_map(:code.get_path(), &[~c"-pa", &1]),
+          connection: :standard_io
+        })
+
+      missing_path = Path.join(System.tmp_dir!(), "hologram_no_such_cacerts.pem")
+
+      :ok = :peer.call(peer, :application, :load, [:public_key])
+      :ok = :peer.call(peer, :application, :set_env, [:public_key, :cacerts_path, missing_path])
+
+      # Every identity key given under :prod, which has no defaults, since the dev defaults
+      # read the otp_app from Mix, which the peer doesn't run.
+      resolve_ssl = fn ssl ->
+        config = [database: "my_db", host: "db.example.com", password: "p", ssl: ssl, user: "u"]
+        :peer.call(peer, Hologram.DB.Config, :resolve!, [config, :prod])[:ssl]
+      end
+
+      expected_msg =
+        "ssl in config :hologram, :database checks the server's certificate against the system's CAs, which failed to load (:enoent) - set ssl entry :ca_cert_path to the CA to trust"
+
+      assert_error ArgumentError, expected_msg, fn -> resolve_ssl.(true) end
+      assert_error ArgumentError, expected_msg, fn -> resolve_ssl.(mode: :verify_ca) end
+
+      assert resolve_ssl.(ca_cert_path: "/certs/ca.pem") == [
+               ca_cert_path: "/certs/ca.pem",
+               mode: :verify_full
+             ]
+
+      assert resolve_ssl.(mode: :require) == [mode: :require]
+      assert resolve_ssl.(false) == false
+
+      :peer.stop(peer)
+    end
+
     test "raises when identity keys are missing and the environment has no defaults" do
       expected_msg =
         "missing database configuration for :prod - set config :hologram, :database with discrete keys or url:, missing: database, password, user"
