@@ -735,10 +735,9 @@ defmodule Hologram.DB do
   or one still starting up or shutting down, is waited for. Any other error - a wrong password, a
   database that does not exist, a connection limit, a TLS handshake refused over a certificate -
   the client's included - or over the TLS options - raises, failing the boot as it did before the
-  wait. A TLS handshake that
-  times out or is closed is waited for. In dev, a database that does not exist raises naming
-  mix holo.db.reset, which creates it. An error the query itself answers with raises the same way,
-  unless it is one of those.
+  wait. A TLS handshake that times out or is closed is waited for. In dev, a database that does not
+  exist raises naming mix holo.db.reset, which creates it. An error the query itself answers with
+  raises the same way, unless it is one of those.
 
   It runs inside the start of the database's supervisor, so a restart of that supervisor while the
   database is away - rare, since the pool waits rather than failing - holds the unit above it, and
