@@ -7,6 +7,7 @@ defmodule Hologram.Migration.Value.Check do
 
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator
+  alias Hologram.Migration.Renderer
   alias Hologram.Migration.Value
   alias Hologram.Migration.Value.Resolver
 
@@ -27,9 +28,11 @@ defmodule Hologram.Migration.Value.Check do
   required, with no type change. A to-many takes none, and a backfill is never nil. A computed one
   resolves against the model right before its op. A constant one must suit the member's type and
   its declared rules as they stand after the op, and fit the byte bound of any unique index over
-  the member standing while it fills - one the table had before the file - and, unless a later op
-  changes the member's type, converting the value, of any the file leaves, which it builds after
-  it commits.
+  the member standing while it fills - one the table had before the file - and, unless the file
+  later casts the member to another type, converting the value, of any the file leaves, which it
+  builds after it commits. The renderer renders a file's ops in chunks, each from the model at its
+  start to the one at its end, so type changes within a chunk that end on the type it started
+  with cast nothing.
 
   An op stating an attribute's type or default must also leave it a default that suits the type,
   since a later fill would otherwise crash encoding it.
@@ -40,7 +43,7 @@ defmodule Hologram.Migration.Value.Check do
   def validate_ops!(ops, pre_model) do
     final_model = Enum.reduce(ops, pre_model, &Model.fold_op(&2, &1))
 
-    walk(ops, pre_model, file_keys(pre_model), final_model)
+    walk(ops, chunk_ends(ops), pre_model, file_keys(pre_model), final_model)
   end
 
   @doc """
@@ -79,13 +82,14 @@ defmodule Hologram.Migration.Value.Check do
   Returns the given ops, one file's, with each computed fill of an attribute carrying :max_bytes,
   the most its value may hold so that the unique indexes over the attribute can carry it, or nil
   with none: the ones standing while it fills, which the table had before the file, and the ones
-  the file leaves, unless a later op changes the attribute's type, converting the value.
+  the file leaves, unless the file later casts the attribute to another type, converting the
+  value, as validate_ops!/2 has it.
   """
   @spec put_byte_bounds(list(%{atom => any}), %{atom => any}) :: list(%{atom => any})
   def put_byte_bounds(ops, pre_model) do
     final_model = Enum.reduce(ops, pre_model, &Model.fold_op(&2, &1))
 
-    bound_ops(ops, pre_model, file_keys(pre_model), final_model)
+    bound_ops(ops, chunk_ends(ops), pre_model, file_keys(pre_model), final_model)
   end
 
   @doc """
@@ -156,14 +160,14 @@ defmodule Hologram.Migration.Value.Check do
     end
   end
 
-  defp bound_ops([], _model, _keys, _final_model), do: []
+  defp bound_ops([], [], _model, _keys, _final_model), do: []
 
-  defp bound_ops([op | later_ops], model, keys, final_model) do
-    bounds = op_bounds(op, later_ops, model, keys, final_model)
+  defp bound_ops([op | later_ops], [_ends? | later_ends], model, keys, final_model) do
+    bounds = op_bounds(op, {later_ops, later_ends}, model, keys, final_model)
 
     [
       put_byte_bound(op, bounds)
-      | bound_ops(later_ops, bounds.next_model, bounds.keys, final_model)
+      | bound_ops(later_ops, later_ends, bounds.next_model, bounds.keys, final_model)
     ]
   end
 
@@ -181,6 +185,42 @@ defmodule Hologram.Migration.Value.Check do
   end
 
   defp byte_refusal(_value, _op, _bounds), do: nil
+
+  # Whether the file casts the member the given op fills to another type after the op. A chunk
+  # renders its ops together, from the model at its start to the one at its end, so the member's
+  # type counts only where a chunk ends: type changes within one that end on the type it started
+  # with cast nothing.
+  defp cast_later?(op, later_ops, later_ends, model) do
+    member = {op.entity, op.name}
+
+    cast_within?(member, attribute_type(member, model), Enum.zip(later_ops, later_ends), model)
+  end
+
+  defp cast_within?(_member, _type, [], _model), do: false
+
+  defp cast_within?(member, type, [{later_op, ends?} | rest], model) do
+    next_model = Model.fold_op(model, later_op)
+
+    case follow_member(later_op, member) do
+      {:halt, nil} ->
+        false
+
+      {:cont, next_member} ->
+        (ends? and attribute_type(next_member, next_model) != type) or
+          cast_within?(next_member, type, rest, next_model)
+    end
+  end
+
+  # Whether each of the given ops, one file's, ends a chunk the renderer renders together.
+  defp chunk_ends(ops) do
+    ops
+    |> Renderer.chunks()
+    |> Enum.flat_map(fn {_cut, chunk_ops} ->
+      chunk_ops
+      |> Enum.map(fn _op -> false end)
+      |> List.replace_at(-1, true)
+    end)
+  end
 
   # A declaration may bound a date or time in another calendar, so a bound needs only a calendar
   # the comparison can run on: a real one, with the day starting when ISO's does for a date or
@@ -380,15 +420,21 @@ defmodule Hologram.Migration.Value.Check do
   end
 
   # The indexes standing while the fill runs bound what it writes. The ones the file builds after
-  # it commits hold the member as the file leaves it, so they bound the fill only while no later
-  # op changes the member's type, converting what the fill wrote.
+  # it commits hold the member as the file leaves it, so they bound the fill only while the file
+  # never casts the member to another type, converting what the fill wrote.
   defp max_bytes(op, bounds) do
-    %{final_model: final_model, keys: keys, later_ops: later_ops, next_model: next_model} = bounds
+    %{
+      final_model: final_model,
+      keys: keys,
+      later_ends: later_ends,
+      later_ops: later_ops,
+      next_model: next_model
+    } = bounds
 
     at_op = byte_bound(op.name, standing_entry(next_model.entities[op.entity], op.entity, keys))
 
     at_end =
-      if retyped_later?(op, later_ops, next_model) do
+      if cast_later?(op, later_ops, later_ends, next_model) do
         nil
       else
         op.entity
@@ -402,10 +448,11 @@ defmodule Hologram.Migration.Value.Check do
     end
   end
 
-  defp op_bounds(op, later_ops, model, keys, final_model) do
+  defp op_bounds(op, {later_ops, later_ends}, model, keys, final_model) do
     %{
       final_model: final_model,
       keys: follow_keys(keys, op),
+      later_ends: later_ends,
       later_ops: later_ops,
       next_model: Model.fold_op(model, op)
     }
@@ -456,27 +503,6 @@ defmodule Hologram.Migration.Value.Check do
       "fills an attribute declaring #{key}: #{printed(rule_value)}, which a " <>
         "#{inspect(type)} attribute can't take"
     )
-  end
-
-  defp retyped_later?(op, later_ops, model) do
-    member = {op.entity, op.name}
-
-    retyped_later?(member, attribute_type(member, model), later_ops, model)
-  end
-
-  defp retyped_later?(_member, _type, [], _model), do: false
-
-  defp retyped_later?(member, type, [later_op | rest], model) do
-    next_model = Model.fold_op(model, later_op)
-
-    case follow_member(later_op, member) do
-      {:halt, nil} ->
-        false
-
-      {:cont, next_member} ->
-        attribute_type(next_member, next_model) != type or
-          retyped_later?(next_member, type, rest, next_model)
-    end
   end
 
   # A rule the declaration would refuse for this type. An op's options aren't checked as a
@@ -786,14 +812,14 @@ defmodule Hologram.Migration.Value.Check do
     end
   end
 
-  defp walk([], _model, _keys, _final_model), do: :ok
+  defp walk([], [], _model, _keys, _final_model), do: :ok
 
-  defp walk([op | later_ops], model, keys, final_model) do
-    bounds = op_bounds(op, later_ops, model, keys, final_model)
+  defp walk([op | later_ops], [_ends? | later_ends], model, keys, final_model) do
+    bounds = op_bounds(op, {later_ops, later_ends}, model, keys, final_model)
 
     validate!(op, model, bounds.next_model, bounds)
 
-    walk(later_ops, bounds.next_model, bounds.keys, final_model)
+    walk(later_ops, later_ends, bounds.next_model, bounds.keys, final_model)
   end
 
   defp widen(value, :float), do: Value.normalize_constant(value, :float)

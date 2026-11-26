@@ -25,6 +25,17 @@ defmodule Hologram.Migration.Renderer do
     :rename_role
   ]
 
+  # Each chunk with the op that cut it from the one before, nil when only the kind of op changed.
+  # Public for Check, which bounds a fill by the casts these chunks render.
+  @doc false
+  @spec chunks(list(%{atom => any})) :: list({%{atom => any} | nil, list(%{atom => any})})
+  def chunks(logical_ops) do
+    logical_ops
+    |> Enum.reduce([], &place_op/2)
+    |> Enum.reverse()
+    |> Enum.map(fn {cut, reversed_ops} -> {cut, Enum.reverse(reversed_ops)} end)
+  end
+
   @doc """
   Returns the physical ops applying the given logical ops to a database holding the
   given model, plus the model they leave behind.
@@ -99,14 +110,6 @@ defmodule Hologram.Migration.Renderer do
       end
 
     Enum.map(physical_ops, &put_backfill(&1, backfills))
-  end
-
-  # Each chunk with the op that cut it from the one before, nil when only the kind of op changed.
-  defp chunks(logical_ops) do
-    logical_ops
-    |> Enum.reduce([], &place_op/2)
-    |> Enum.reverse()
-    |> Enum.map(fn {cut, reversed_ops} -> {cut, Enum.reverse(reversed_ops)} end)
   end
 
   # Clears what the given columns hold from the term a diff starts at: their foreign keys, the

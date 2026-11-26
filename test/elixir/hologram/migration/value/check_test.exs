@@ -703,6 +703,18 @@ defmodule Hologram.Migration.Value.CheckTest do
       assert validate_ops!(ops, @model) == :ok
     end
 
+    test "refuses a constant over an index after type changes that a chunk renders as no cast" do
+      ops = [
+        add_attribute(:string, optional: true, backfill: String.duplicate("0", 2693)),
+        change(:change_attribute, :value, type: :integer),
+        change(:change_attribute, :value, type: :string, unique: true)
+      ]
+
+      error = assert_raise Hologram.CompileError, fn -> validate_ops!(ops, @model) end
+
+      assert error.message =~ "must hold at most 2692 bytes"
+    end
+
     test "keeps the bound of a unique index the fill writes into when a later op retypes it" do
       model =
         put_in(@model.entities[MyApp.Task].attributes, [
@@ -950,14 +962,25 @@ defmodule Hologram.Migration.Value.CheckTest do
       assert [_add, _delete, %{max_bytes: nil}] = put_byte_bounds(ops, @model)
     end
 
-    test "doesn't bound a computed fill by an index over what a later op converts it to" do
+    test "bounds a computed fill by an index over type changes that a chunk renders as no cast" do
       ops = [
         add_attribute(:string, optional: true, backfill: %Value{term: {:name, [:code]}}),
         change(:change_attribute, :value, type: :integer),
         change(:change_attribute, :value, type: :string, unique: true)
       ]
 
-      assert [%{max_bytes: nil}, _cast, _cast_back] = put_byte_bounds(ops, @model)
+      assert [%{max_bytes: 2692}, _cast, _cast_back] = put_byte_bounds(ops, @model)
+    end
+
+    test "doesn't bound a computed fill by an index over what a later chunk casts it to" do
+      ops = [
+        add_attribute(:string, optional: true, backfill: %Value{term: {:name, [:code]}}),
+        change(:change_attribute, :value, type: :integer),
+        %{op: :rename_attribute, entity: MyApp.Task, from: :value, to: :canonical, line: 9},
+        change(:change_attribute, :canonical, type: :string, unique: true)
+      ]
+
+      assert [%{max_bytes: nil}, _cast, _rename, _cast_back] = put_byte_bounds(ops, @model)
     end
 
     test "bounds a computed fill by a unique attribute standing before the file that it turns off and on" do
