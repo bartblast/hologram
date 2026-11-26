@@ -12,6 +12,10 @@ defmodule Hologram.Entity.Metadata do
   # A write authored elsewhere carries its writer's stamp too, which the executor stores as the
   # revision of every column the write sets, in place of one from this node's clock - the writer's
   # next write says it was based on that exact value, so nothing may re-author it on the way in.
+  #
+  # A struct a read filled under a final-sequence limit also holds, by field name, each sequence
+  # number the read hid because it was above the limit - the field itself reads nil - so a page
+  # that carries the row can tell the browser its version's numbers (see Hologram.Sync.WireData).
 
   alias Hologram.Entity
 

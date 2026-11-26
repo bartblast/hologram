@@ -35,8 +35,8 @@ export default class Deltas {
   // `insertOnly` is how rows a page carried are applied, which changes three things and nothing
   // else: a row already held is left alone, one that is filed is remembered as unconfirmed until
   // the stream delivers it, and its numbers past the final point are kept beside the row as shown
-  // rather than in it (see LocalDatabase.carryNumbers), held row or not. The numbers its render hid
-  // wait beside a row not held yet, as a stream row's above the point do.
+  // rather than in it (see LocalDatabase.carryNumbers). The numbers its render hid are held back
+  // like a stream row's. A row held already takes none of them.
   //
   // Left alone because what a page carries can be OLDER than what the client holds - a page
   // rendered at one moment lands after the stream delivered a later change to the same row - and
@@ -298,15 +298,11 @@ export default class Deltas {
     Deltas.#observeRevisions(row);
 
     if (opts.insertOnly) {
-      // A number the page showed is kept even for a row held already, since a list orders the row
-      // by it until the stream's own is final. One it hid is kept only for a row not held yet.
-      const carried = LocalDatabase.carryNumbers(type, row);
-
       if (LocalDatabase.baseRow(type, row.id) !== null) {
         return null;
       }
 
-      Deltas.#fileRow(type, carried);
+      Deltas.#fileRow(type, LocalDatabase.carryNumbers(type, row));
       LocalDatabase.markCarried(type, row.id);
 
       return row.id;

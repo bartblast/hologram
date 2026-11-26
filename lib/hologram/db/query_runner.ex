@@ -29,7 +29,8 @@ defmodule Hologram.DB.QueryRunner do
 
   `server_created_seq` and `server_updated_seq` read nil where they are above the limit (see
   `Hologram.Sync.FinalSeq.current/0`), in what the query returns and in what it filters, orders and
-  computes by. `raw: true` reads them as stored, as sync does.
+  computes by. Each number a returned struct's field hides that way is kept by field name in its
+  `__meta__.waiting`. `raw: true` reads them as stored, as sync does.
 
   Raises Hologram.MisuseError when the term holds a placeholder (see
   `Hologram.Query.Stage.assert_no_placeholders!/1`).
