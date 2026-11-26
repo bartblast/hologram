@@ -10,8 +10,8 @@ describe("DropHash", () => {
   describe("hash()", () => {
     it("hashes a salt and an id the way the server does", () => {
       assert.equal(
-        DropHash.hash("salt", "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"),
-        "112df949ed165eb9",
+        DropHash.hash("salt", "02y1zRviSAYGVwSyzxs4q7"),
+        "cb73f507346fd15a",
       );
     });
 
@@ -31,7 +31,7 @@ describe("DropHash", () => {
     });
 
     it("hashes the same id differently under another salt", () => {
-      const id = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f";
+      const id = "02y1zRviSAYGVwSyzxs4q7";
 
       assert.notEqual(DropHash.hash("salt", id), DropHash.hash("other", id));
     });

@@ -547,8 +547,8 @@ defmodule Hologram.Job.RunnerTest do
     end
 
     test "names a job's run lock the same way every time" do
-      assert lock_name(Module1, "01a1f90b-3867-7fb8-b6ec-32bdc35da5d7") ==
-               "Hologram.Test.Fixtures.Job.Module1:01a1f90b-3867-7fb8-b6ec-32bdc35da5d7"
+      assert lock_name(Module1, "0350sGF52T0oVNH9XZLF5z") ==
+               "Hologram.Test.Fixtures.Job.Module1:0350sGF52T0oVNH9XZLF5z"
     end
   end
 

@@ -95,7 +95,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
       Connection.query(
         ~s|UPDATE "hologram_data"."#{Mapper.table_name(__MODULE__)}" | <>
           ~s|SET "server_created_at" = "server_created_at" + interval '1 second' WHERE "id" = $1|,
-        [Codec.encode(job.id, :uuid)]
+        [Codec.encode(job.id, :id)]
       )
 
     {:error, :too_late}

@@ -274,7 +274,7 @@ defmodule HologramFeatureTests.MutationsTest do
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id])
 
     Enum.map(rows, fn [actor_id, result, envelope] ->
-      %{actor_id: Codec.decode(actor_id, :uuid), envelope: envelope, result: result}
+      %{actor_id: Codec.decode(actor_id, :id), envelope: envelope, result: result}
     end)
   end
 

@@ -68,8 +68,8 @@ defmodule Hologram.DB.WriterRaceTest do
           PERFORM nextval('pg_temp.make_row_appear_fired');
 
           INSERT INTO #{target_table}
-          SELECT (jsonb_populate_record(t, jsonb_build_object('id', '#{id}'))).*
-          FROM #{target_table} t WHERE "id" = '#{template.id}'
+          SELECT (jsonb_populate_record(t, jsonb_build_object('id', '#{Entity.id_to_uuid(id)}'))).*
+          FROM #{target_table} t WHERE "id" = '#{Entity.id_to_uuid(template.id)}'
           ON CONFLICT DO NOTHING;
 
           RETURN NEW;

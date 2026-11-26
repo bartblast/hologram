@@ -14,6 +14,7 @@ defmodule Hologram.Sync.LiveTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Oplog
+  alias Hologram.Entity
   alias Hologram.Policy.Edges
   alias Hologram.Sync.Frame
   alias Hologram.Sync.PackedIds
@@ -89,7 +90,7 @@ defmodule Hologram.Sync.LiveTest do
 
     params = [
       Codec.encode_enum_value(row.__struct__),
-      Codec.encode(row.id, :uuid),
+      Codec.encode(row.id, :id),
       Integer.to_string(tx),
       %{"replica_id" => replica_id, "seq" => seq}
     ]
@@ -207,7 +208,7 @@ defmodule Hologram.Sync.LiveTest do
 
     test "moves a row created or deleted", context do
       created = create!(PolicyModule17)
-      deleted_id = Ecto.UUID.generate()
+      deleted_id = Entity.generate_id()
 
       effects = [
         effect(:put_entity, PolicyModule17, created.id, %{"name" => nil, "public" => false}),
@@ -271,7 +272,7 @@ defmodule Hologram.Sync.LiveTest do
 
     test "checks a deleted row, which nobody may read any more", context do
       project = create!(PolicyModule17, public: true)
-      deleted_id = Ecto.UUID.generate()
+      deleted_id = Entity.generate_id()
 
       effects = [
         effect(:del_entity, PolicyModule17, deleted_id, %{"name" => nil, "public" => true}),
@@ -382,7 +383,7 @@ defmodule Hologram.Sync.LiveTest do
     end
 
     test "passes over an effect of an entity type this node doesn't know", context do
-      effects = [effect(:patch_entity, "MyApp.Unknown", Ecto.UUID.generate(), %{"a" => 1})]
+      effects = [effect(:patch_entity, "MyApp.Unknown", Entity.generate_id(), %{"a" => 1})]
 
       parts = parts(effects, context.sessions, context.edges, @synced, @place)
       part = Map.fetch!(parts, nil)
@@ -394,7 +395,7 @@ defmodule Hologram.Sync.LiveTest do
     test "passes over a pair of a to-many this build doesn't declare", context do
       project = create!(PolicyModule17, public: true)
 
-      data = %{"relationship" => "watchers", "target_id" => Ecto.UUID.generate()}
+      data = %{"relationship" => "watchers", "target_id" => Entity.generate_id()}
       effects = [effect(:add_relationship, PolicyModule17, project.id, data)]
 
       parts = parts(effects, context.sessions, context.edges, @synced, @place)
@@ -500,7 +501,7 @@ defmodule Hologram.Sync.LiveTest do
 
       effects = [
         effect(:patch_entity, PolicyModule17, project.id, %{"name" => "a"}, mutation_ref: ref),
-        effect(:del_entity, PolicyModule17, Ecto.UUID.generate(), %{}, mutation_ref: ref),
+        effect(:del_entity, PolicyModule17, Entity.generate_id(), %{}, mutation_ref: ref),
         effect(:put_entity, PolicyModule19, label.id, %{"name" => nil}, mutation_ref: ref)
       ]
 
@@ -578,15 +579,21 @@ defmodule Hologram.Sync.LiveTest do
       board = create!(ReadersModule15)
       create!(ReadersModule16, author_id: context.alice, board_id: board.id)
 
-      shouted = String.upcase(context.alice)
+      other_spelling = Entity.id_to_uuid(context.alice)
       effects = [effect(:patch_entity, ReadersModule15, board.id, %{"name" => "renamed"})]
 
       parts =
-        parts(effects, [{self(), shouted}, {self(), 42}], Edges.derive(synced), synced, @place)
+        parts(
+          effects,
+          [{self(), other_spelling}, {self(), 42}],
+          Edges.derive(synced),
+          synced,
+          @place
+        )
 
       anonymous = worked_out_verdicts(nil, board)
 
-      assert parts[shouted].verdicts[ReadersModule15][board.id] == anonymous
+      assert parts[other_spelling].verdicts[ReadersModule15][board.id] == anonymous
       assert parts[42].verdicts[ReadersModule15][board.id] == anonymous
       refute worked_out_verdicts(context.bob, board) == anonymous
     end
@@ -655,7 +662,7 @@ defmodule Hologram.Sync.LiveTest do
         "user_id" => context.alice
       }
 
-      effects = [effect(:put_entity, RoleGrant, Ecto.UUID.generate(), data)]
+      effects = [effect(:put_entity, RoleGrant, Entity.generate_id(), data)]
 
       parts = parts(effects, context.sessions, edges, @synced, @place)
 
@@ -687,7 +694,7 @@ defmodule Hologram.Sync.LiveTest do
     end
 
     test "passes over an effect whose type names a module that is no entity", context do
-      effects = [effect(:patch_entity, String, Ecto.UUID.generate(), %{"a" => 1})]
+      effects = [effect(:patch_entity, String, Entity.generate_id(), %{"a" => 1})]
 
       parts = parts(effects, context.sessions, context.edges, @synced, @place)
       part = Map.fetch!(parts, nil)
@@ -734,7 +741,7 @@ defmodule Hologram.Sync.LiveTest do
       ref = %{"replica_id" => "replica_a", "seq" => 4}
 
       effects = [
-        effect(:patch_entity, "MyApp.Unknown", Ecto.UUID.generate(), %{}, mutation_ref: ref)
+        effect(:patch_entity, "MyApp.Unknown", Entity.generate_id(), %{}, mutation_ref: ref)
       ]
 
       parts = parts(effects, context.sessions, context.edges, @synced, @place)
@@ -747,7 +754,7 @@ defmodule Hologram.Sync.LiveTest do
     # several statements, so 5,203 take two.
     test "asks about many rows of one type in several statements, as if in one", context do
       projects = for _index <- 1..3, do: create!(PolicyModule17, public: true)
-      missing_ids = for _index <- 1..5_200, do: Ecto.UUID.generate()
+      missing_ids = for _index <- 1..5_200, do: Entity.generate_id()
 
       effects =
         projects

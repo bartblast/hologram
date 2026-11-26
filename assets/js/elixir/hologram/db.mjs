@@ -16,6 +16,7 @@ import QueryCheck from "../../query_check.mjs";
 import QueryKernel from "../../query_kernel.mjs";
 import StringOrder from "../../string_order.mjs";
 import Type from "../../type.mjs";
+import Utils from "../../utils.mjs";
 
 // The data verbs, hand-written for the client the way the query stages are.
 //
@@ -43,9 +44,6 @@ class Rollback {
 let openTransactions = 0;
 
 const ROLE_GRANT = "Hologram.Auth.RoleGrant";
-
-const ID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // A module reaches a verb as an alias, not as a struct - so its name is read off the alias rather
 // than through Model.structTypeName, which answers for a boxed struct.
@@ -106,7 +104,8 @@ function basedOn(held, changes) {
 }
 
 // The edges an update records, each its own entry, in one order however the stages were called -
-// two clients making the same two edges send the same two writes.
+// two clients making the same two edges send the same two writes. The order is by code point,
+// since a locale's order folds the letter case two ids differ in.
 function edgeEntries(entity, entityType, relationshipOps) {
   return Object.values(relationshipOps.data)
     .map(([key, op]) => {
@@ -121,7 +120,8 @@ function edgeEntries(entity, entityType, relationshipOps) {
       };
     })
     .sort((left, right) =>
-      `${left.relationship} ${left.target_id}`.localeCompare(
+      StringOrder.compare(
+        `${left.relationship} ${left.target_id}`,
         `${right.relationship} ${right.target_id}`,
       ),
     );
@@ -685,9 +685,9 @@ function storedEntity(entity, entityType, stamp) {
 }
 
 function validateId(id) {
-  if (!Type.isBinary(id) || !ID_PATTERN.test(Bitstring.toText(id))) {
+  if (!Type.isBinary(id) || !Utils.isEntityId(Bitstring.toText(id))) {
     Interpreter.raiseMisuseError(
-      `invalid id ${printedKey(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
+      `invalid id ${printedKey(id)} - entity ids are strings of 22 base62 characters`,
     );
   }
 }

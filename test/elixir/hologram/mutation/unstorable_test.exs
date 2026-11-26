@@ -56,7 +56,7 @@ defmodule Hologram.Mutation.UnstorableTest do
       Connection.query("""
       CREATE FUNCTION public.point_grant_key() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
-        NEW.#{column} := '#{user_id}'::uuid;
+        NEW.#{column} := '#{Entity.id_to_uuid(user_id)}'::uuid;
 
         RETURN NEW;
       END

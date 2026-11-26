@@ -13,8 +13,8 @@ defmodule Hologram.DB.OplogTest do
   alias Hologram.Test.Fixtures.Entity.Module3
 
   @replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
-  @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
-  @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+  @entity_id "02y1zRviSAYGVwSyzxs4q7"
+  @target_id "02y1zRviSAYGVwSyzxs4q8"
 
   defp next_seq do
     {:ok, %Postgrex.Result{rows: [[seq]]}} =
@@ -71,9 +71,9 @@ defmodule Hologram.DB.OplogTest do
                         old
                       ] ->
       %{
-        actor_id: Codec.decode(actor_id, :uuid),
+        actor_id: Codec.decode(actor_id, :id),
         data: data,
-        entity_id: Codec.decode(entity_id, :uuid),
+        entity_id: Codec.decode(entity_id, :id),
         model_hash: model_hash,
         mutation_ref: mutation_ref,
         old: old,
@@ -110,7 +110,7 @@ defmodule Hologram.DB.OplogTest do
     params = [
       op,
       type_label,
-      Codec.encode(entity_id, :uuid),
+      Codec.encode(entity_id, :id),
       data,
       tx,
       revisions,
@@ -859,7 +859,7 @@ defmodule Hologram.DB.OplogTest do
       RETURNING "seq"
       """
 
-      params = [Codec.encode(@entity_id, :uuid), 200]
+      params = [Codec.encode(@entity_id, :id), 200]
 
       {:ok, %Postgrex.Result{rows: [[seq]]}} = Connection.query(statement, params)
 
@@ -980,7 +980,7 @@ defmodule Hologram.DB.OplogTest do
     end
 
     test "records the acting user" do
-      user_id = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
+      user_id = "02y1zRviSAYGVwSyzxs4q9"
 
       Context.with_actor(user_id, fn ->
         effect = %{

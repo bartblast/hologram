@@ -591,7 +591,7 @@ defmodule Hologram.Policy.EdgesTest do
       defmodule VerdictMixedProject do
         use Hologram.Entity
 
-        attribute :owner_id, :uuid, optional: true
+        attribute :owner_id, :id, optional: true
         attribute :reviewed, :boolean, server_only: true
         attribute :title, :string
 

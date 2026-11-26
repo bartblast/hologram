@@ -776,7 +776,7 @@ defmodule Hologram.DBTest do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
       assert_error MisuseError, expected_msg, fn ->
-        delete(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        delete(RoleGrant, "02wSyz8E9khZO82QLJOgGt")
       end
     end
   end
@@ -1069,13 +1069,14 @@ defmodule Hologram.DBTest do
       end
     end
 
-    test "reads an entity id as the string the entity carries" do
+    test "reads an entity id in the 36-character form" do
       {:ok, entity} = create(Module1.new())
 
       statement =
         ~s|SELECT "id" FROM "hologram_data"."test_fixtures_entity_module1" WHERE "id" = $1|
 
-      assert sql(statement, [entity.id]) == {:ok, %{columns: ["id"], rows: [[entity.id]]}}
+      assert sql(statement, [entity.id]) ==
+               {:ok, %{columns: ["id"], rows: [[Hologram.Entity.id_to_uuid(entity.id)]]}}
     end
 
     test "refuses a delete" do
@@ -1329,7 +1330,7 @@ defmodule Hologram.DBTest do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
       assert_error MisuseError, expected_msg, fn ->
-        update(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f", role: :owner)
+        update(RoleGrant, "02wSyz8E9khZO82QLJOgGt", role: :owner)
       end
     end
 

@@ -585,11 +585,11 @@ defmodule Hologram.Sync.CarryTest do
     test "spells a reference as its id" do
       query =
         Module28
-        |> Stage.filter(channel_id: "0190e4c1-0000-7000-8000-000000000001")
+        |> Stage.filter(channel_id: "02xCwuPMdKjmyGDidbWxLF")
         |> Stage.count()
 
       assert spell(query) ==
-               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[["channel_id","==","0190e4c1-0000-7000-8000-000000000001"]],"include":{},"skip":null,"sort":[],"take":null}|
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[["channel_id","==","02xCwuPMdKjmyGDidbWxLF"]],"include":{},"skip":null,"sort":[],"take":null}|
     end
 
     # The clauses are sorted by their spelling rather than kept in the normalizer's order, which the

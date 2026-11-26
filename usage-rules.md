@@ -91,7 +91,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Every page must specify a layout: `layout MyApp.MainLayout` or `layout MyApp.MainLayout, prop: value`.
 - Pages are always stateful and always initialized server-side with `init/3` (params, component, server).
 - `init/3` receives URL params, not props. Use `param :name, :type` to declare typed route parameters.
-- Supported param types: `:atom`, `:float`, `:integer`, `:string`.
+- Supported param types: `:atom`, `:float`, `:id`, `:integer`, `:string`. `:id` takes only an entity ID, 22 letters and digits.
 - `param` takes no options yet - passing one is a compile error.
 - A page's params are its props, so an action reads a URL param with `component.props.name`, the same way a component reads a prop.
 - Declare page state with `state :name, :type`, the same way as in a component. A state key can't share a param's name.

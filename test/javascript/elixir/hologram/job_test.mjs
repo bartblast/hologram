@@ -51,11 +51,11 @@ describe("Elixir_Hologram_Job", () => {
       model: {
         [NOTIFY]: {
           attributes: {
-            actor_id: "uuid",
+            actor_id: "id",
             attempt: "integer",
             created_at: "datetime",
             error: "string",
-            id: "uuid",
+            id: "id",
             reason: "string",
             run_as_server: "boolean",
             scheduled_at: "datetime",
@@ -97,7 +97,7 @@ describe("Elixir_Hologram_Job", () => {
           serverOnly: ["error"],
         },
         [TASK]: {
-          attributes: {done: "boolean", id: "uuid", title: "string"},
+          attributes: {done: "boolean", id: "id", title: "string"},
           constraints: {},
           defaults: {},
           enumValues: {},
@@ -159,7 +159,7 @@ describe("Elixir_Hologram_Job", () => {
         .data[1];
 
       assert.deepStrictEqual(field(job, "reason"), Type.bitstring("x"));
-      assert.match(Bitstring.toText(field(job, "id")), /^[0-9a-f-]{36}$/);
+      assert.match(Bitstring.toText(field(job, "id")), /^[0-9A-Za-z]{22}$/);
     });
 
     // The arity-one form is the arity-two one with no values, which is all it claims - this job

@@ -7,9 +7,9 @@ defmodule Hologram.Sync.HeldTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
 
-  @id_1 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e01"
-  @id_2 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e02"
-  @id_3 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e03"
+  @id_1 "02y1zRviSAYGVwSyzxs4pt"
+  @id_2 "02y1zRviSAYGVwSyzxs4pu"
+  @id_3 "02y1zRviSAYGVwSyzxs4pv"
 
   describe "add/3" do
     test "holds the given ids of the given type" do

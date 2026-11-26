@@ -2179,7 +2179,7 @@ describe("Durability", () => {
     beforeEach(() => {
       globalThis.Hologram.sync.model = {
         [COUNTED]: {
-          attributes: {id: "uuid", n: "integer"},
+          attributes: {id: "id", n: "integer"},
           relationships: {},
           serverOnly: [],
         },

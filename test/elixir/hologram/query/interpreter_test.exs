@@ -135,13 +135,13 @@ defmodule Hologram.Query.InterpreterTest do
         )
 
       Enum.reduce(result.rows, joined, fn [source_id, target_id], pairs ->
-        key = {entity_type, join_table.relationship, Codec.decode(source_id, :uuid)}
+        key = {entity_type, join_table.relationship, Codec.decode(source_id, :id)}
 
         Map.update(
           pairs,
           key,
-          [Codec.decode(target_id, :uuid)],
-          &[Codec.decode(target_id, :uuid) | &1]
+          [Codec.decode(target_id, :id)],
+          &[Codec.decode(target_id, :id) | &1]
         )
       end)
     end)

@@ -36,6 +36,7 @@ defmodule Hologram.Query.Stage do
     date: "an ISO Date from -4713-11-24 to 5874897-12-31",
     datetime: "a DateTime from -4713-11-24T00:00:00Z to 9999-12-31T23:59:59.999999Z",
     float: "a float, or an integer that fits in 64 bits",
+    id: ~s(an entity id, 22 base62 characters like "02wLIRxqmq3AUo6vl2OW37"),
     integer: "an integer that fits in 64 bits",
     string: "a UTF-8 string with no NUL byte",
     time: "an ISO Time",
@@ -775,7 +776,7 @@ defmodule Hologram.Query.Stage do
   defp attribute_type(entity_type, name) do
     case attribute_definition(entity_type, name) do
       {_name, type, _opts} -> type
-      nil -> :uuid
+      nil -> :id
     end
   end
 
@@ -2020,10 +2021,10 @@ defmodule Hologram.Query.Stage do
   defp validate_actor_attribute!(name, entity_type) do
     type = attribute_type(entity_type, name)
 
-    if type != :uuid do
+    if type != :id do
       raise MisuseError,
         message:
-          "user_id() requires a uuid attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
+          "user_id() requires an id attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
     end
   end
 
@@ -2259,7 +2260,7 @@ defmodule Hologram.Query.Stage do
         {type, opts} =
           case definition do
             {_name, type, opts} -> {type, opts}
-            nil -> {:uuid, []}
+            nil -> {:id, []}
           end
 
         if not value_fits?(value, type, opts) do
@@ -2416,7 +2417,7 @@ defmodule Hologram.Query.Stage do
     if type not in @orderable_types do
       raise MisuseError,
         message:
-          "operator #{inspect(operator)} requires an orderable attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}, and boolean and uuid attributes have no order to compare by"
+          "operator #{inspect(operator)} requires an orderable attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}, and boolean, id and uuid attributes have no order to compare by"
     end
   end
 

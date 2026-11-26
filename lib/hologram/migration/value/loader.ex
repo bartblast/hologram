@@ -29,10 +29,6 @@ defmodule Hologram.Migration.Value.Loader do
         }) ::
           list(Evaluator.row())
   def load(reads, entity_type, ids, mapping) do
-    # The rows come back keyed by the dashed spelling, which a compact id has to take to find its
-    # row.
-    ids = Enum.map(ids, &Codec.decode(Codec.encode(&1, :uuid), :uuid))
-
     # One snapshot where the caller isn't in a transaction already, since a load is several
     # statements that have to agree.
     {:ok, rows} =
@@ -87,7 +83,7 @@ defmodule Hologram.Migration.Value.Loader do
 
     pairs =
       Enum.map(edges, fn [source_id, target_id] ->
-        {Codec.decode(source_id, :uuid), Codec.decode(target_id, :uuid)}
+        {Codec.decode(source_id, :id), Codec.decode(target_id, :id)}
       end)
 
     target_ids =
@@ -131,7 +127,7 @@ defmodule Hologram.Migration.Value.Loader do
 
   defp decode(value, type), do: Codec.decode(value, type)
 
-  defp encode_ids(ids), do: Enum.map(ids, &Codec.encode(&1, :uuid))
+  defp encode_ids(ids), do: Enum.map(ids, &Codec.encode(&1, :id))
 
   defp entry_for!(mapping, table) do
     {_entity_type, entry} = Enum.find(mapping, fn {_type, entry} -> entry.table == table end)

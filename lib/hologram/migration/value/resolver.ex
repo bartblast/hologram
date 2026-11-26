@@ -17,6 +17,7 @@ defmodule Hologram.Migration.Value.Resolver do
           | :date
           | :datetime
           | :float
+          | :id
           | :integer
           | :string
           | :time
@@ -95,7 +96,7 @@ defmodule Hologram.Migration.Value.Resolver do
   @spec codec_type(type) :: atom
   def codec_type({:enum, _owner, _name, _values}), do: :enum
 
-  def codec_type({:reference, _target}), do: :uuid
+  def codec_type({:reference, _target}), do: :id
 
   def codec_type(type), do: type
 
@@ -278,7 +279,9 @@ defmodule Hologram.Migration.Value.Resolver do
   end
 
   defp fit_value!(value, {:reference, _target} = type, context) do
-    fit_uuid!(value, type, context)
+    if Validator.attribute_value_valid?(value, :id),
+      do: value,
+      else: refuse_value!(value, type, context)
   end
 
   defp fit_value!(value, :uuid, context), do: fit_uuid!(value, :uuid, context)
@@ -325,7 +328,7 @@ defmodule Hologram.Migration.Value.Resolver do
     end
   end
 
-  # What a name of the given owner reads. A reference reads as a uuid where a uuid goes, and an id
+  # What a name of the given owner reads. A reference reads as an id where an id goes, and an id
   # as a reference where a reference to its own type goes.
   defp name_type!(owner, [name], expected, context) do
     entry = entry!(owner, context)
@@ -335,13 +338,13 @@ defmodule Hologram.Migration.Value.Resolver do
         attribute_type(member, owner)
 
       name == :id ->
-        if expected == {:reference, owner}, do: expected, else: :uuid
+        if expected == {:reference, owner}, do: expected, else: :id
 
       system_type = system_type(name) ->
         system_type
 
       reference = reference_target(entry, name) ->
-        if expected == :uuid, do: :uuid, else: {:reference, reference}
+        if expected == :id, do: :id, else: {:reference, reference}
 
       relationship = relationship(entry, name) ->
         refuse_relationship_value!(relationship, owner, context)

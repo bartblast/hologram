@@ -142,6 +142,42 @@ defmodule Hologram.PageTest do
       end
     end
 
+    test "valid id value" do
+      assert cast_params(%{e: "0BNUMeXxvhUdvhqDGcyqTA"}, Module6) == %{
+               e: "0BNUMeXxvhUdvhqDGcyqTA"
+             }
+    end
+
+    test "36-character UUID value for an id param" do
+      expected_msg =
+        ~s/can't cast param "e" with value "0189c5e2-1b3a-7c4d-8e5f-6a7b8c9d0e1f" to id / <>
+          ~s/in page "Hologram.Test.Fixtures.Page.Module6"/
+
+      assert_raise Hologram.ParamError, expected_msg, fn ->
+        cast_params(%{e: "0189c5e2-1b3a-7c4d-8e5f-6a7b8c9d0e1f"}, Module6)
+      end
+    end
+
+    test "wrong-length string value for an id param" do
+      expected_msg =
+        ~s/can't cast param "e" with value "0BNUMeXxvhUdvhqDGcyqT" to id / <>
+          ~s/in page "Hologram.Test.Fixtures.Page.Module6"/
+
+      assert_raise Hologram.ParamError, expected_msg, fn ->
+        cast_params(%{e: "0BNUMeXxvhUdvhqDGcyqT"}, Module6)
+      end
+    end
+
+    test "value of invalid type for an id param" do
+      expected_msg =
+        ~s/can't cast param "e" with value 123 to id / <>
+          ~s/in page "Hologram.Test.Fixtures.Page.Module6", because it's of invalid type/
+
+      assert_raise Hologram.ParamError, expected_msg, fn ->
+        cast_params(%{e: 123}, Module6)
+      end
+    end
+
     test "multiple params" do
       assert cast_params(%{"a" => :test, c: "123"}, Module6) == %{a: :test, c: 123}
     end

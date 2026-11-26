@@ -17,6 +17,7 @@ defmodule Hologram.Migration.Value.SQL do
     date: "date",
     datetime: "timestamptz",
     float: "float8",
+    id: "uuid",
     integer: "int8",
     string: "text",
     time: "time",

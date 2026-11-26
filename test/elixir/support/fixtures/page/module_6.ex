@@ -5,8 +5,9 @@ defmodule Hologram.Test.Fixtures.Page.Module6 do
   param :b, :float
   param :c, :integer
   param :d, :string
+  param :e, :id
 
-  route "/hologram-test-fixtures-page-module6/:a/:b/:c/:d"
+  route "/hologram-test-fixtures-page-module6/:a/:b/:c/:d/:e"
 
   layout Hologram.Test.Fixtures.LayoutFixture
 

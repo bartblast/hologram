@@ -21,7 +21,7 @@ describe("Deltas", () => {
     globalThis.Hologram.sync = {
       model: {
         [PROJECT]: {
-          attributes: {id: "uuid", name: "string"},
+          attributes: {id: "id", name: "string"},
           relationships: {
             owner: {toMany: false, type: "MyApp.User"},
             tasks: {toMany: true, type: TASK},
@@ -31,7 +31,7 @@ describe("Deltas", () => {
         [TASK]: {
           attributes: {
             done: "boolean",
-            id: "uuid",
+            id: "id",
             note: "string",
             position: "integer",
             title: "string",

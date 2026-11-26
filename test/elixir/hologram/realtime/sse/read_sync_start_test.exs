@@ -13,7 +13,7 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
   alias Hologram.Sync.Cursor
   alias Hologram.Test.Fixtures.Entity.Module2
 
-  @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
+  @entity_id "02y1zRviSAYGVwSyzxs4q7"
   @policy_hash "0123456789abcdef0123456789abcdef"
   @synced_types [Module2]
 
@@ -46,7 +46,7 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     RETURNING "seq", "tx", "inserted_at"
     """
 
-    params = [Codec.encode(@entity_id, :uuid), Model.hash()]
+    params = [Codec.encode(@entity_id, :id), Model.hash()]
 
     {:ok, %Postgrex.Result{rows: [[seq, tx, inserted_at]]}} = Connection.query(statement, params)
 

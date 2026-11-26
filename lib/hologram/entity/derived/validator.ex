@@ -234,7 +234,7 @@ defmodule Hologram.Entity.Derived.Validator do
 
     case List.keyfind(declarations, last_name, 0) do
       {_name, type, opts} -> {type, opts}
-      nil -> {:uuid, []}
+      nil -> {:id, []}
     end
   end
 
@@ -486,6 +486,8 @@ defmodule Hologram.Entity.Derived.Validator do
   defp value_of_type?(value, {:enum, opts}), do: is_atom(value) and value in opts[:values]
 
   defp value_of_type?(value, {:float, _opts}), do: is_number(value)
+
+  defp value_of_type?(value, {:id, _opts}), do: EntityValidator.attribute_value_valid?(value, :id)
 
   defp value_of_type?(value, {:integer, _opts}), do: is_integer(value)
 

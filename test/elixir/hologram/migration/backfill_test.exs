@@ -17,6 +17,7 @@ defmodule Hologram.Migration.BackfillTest do
 
   import Hologram.Migrator
 
+  alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.SortKey
   alias Hologram.Entity.Model
@@ -1494,7 +1495,7 @@ defmodule Hologram.Migration.BackfillTest do
   end
 
   describe "run/3, a backfill on a to-one relationship" do
-    @missing_id "018f0000-0000-7000-8000-00000000dead"
+    @missing_id "02wLIRxqmq3AUo6vl2OksX"
 
     setup do
       attribute = fn entity, name, line ->
@@ -1572,21 +1573,21 @@ defmodule Hologram.Migration.BackfillTest do
             ~s|"server_created_at", "server_created_seq", | <>
             ~s|"server_updated_at", "server_updated_seq", "updated_at", "$revisions") | <>
             ~s|VALUES (gen_random_uuid(), now(), now(), 0, now(), 0, now(), '{}') | <>
-            ~s|RETURNING "id"::text|
+            ~s|RETURNING "id"|
         )
 
-      id
+      Codec.decode(id, :id)
     end
 
-    defp uuid(text), do: Ecto.UUID.dump!(text)
+    defp stored(id), do: Codec.encode(id, :id)
 
     defp ids_by_code(table, column) do
       {:ok, %{rows: rows}} =
-        Connection.query(
-          ~s|SELECT "#{column}"::text FROM "hologram_data"."#{table}" ORDER BY "code"|
-        )
+        Connection.query(~s|SELECT "#{column}" FROM "hologram_data"."#{table}" ORDER BY "code"|)
 
-      List.flatten(rows)
+      rows
+      |> List.flatten()
+      |> Enum.map(&(&1 && Codec.decode(&1, :id)))
     end
 
     defp owner_column_required? do
@@ -1621,7 +1622,7 @@ defmodule Hologram.Migration.BackfillTest do
         admin = user_id()
         creator = user_id()
 
-        insert_row("my_app_task", code: "a", creator_id: uuid(creator))
+        insert_row("my_app_task", code: "a", creator_id: stored(creator))
         insert_row("my_app_task", code: "b")
 
         term = {:coalesce, [{:name, [:creator_id]}, {:value, admin}]}
@@ -1641,7 +1642,7 @@ defmodule Hologram.Migration.BackfillTest do
         assert run([create], first_model, @context) == :ok
 
         creator = user_id()
-        task_id = insert_row("my_app_task", code: "a", creator_id: uuid(creator))
+        task_id = insert_row("my_app_task", code: "a", creator_id: stored(creator))
         insert_row("my_app_stop", code: "s", task_id: task_id)
 
         op = add_to_one(MyApp.Stop, %Value{term: {:name, [:task, :creator_id]}})
@@ -1664,7 +1665,7 @@ defmodule Hologram.Migration.BackfillTest do
         task_id = insert_row("my_app_task", code: "a")
 
         for owner <- [rare, common, common] do
-          tag_id = insert_row("my_app_tag", owner_id: uuid(owner))
+          tag_id = insert_row("my_app_tag", owner_id: stored(owner))
 
           {:ok, _result} =
             Connection.query(
@@ -1734,8 +1735,8 @@ defmodule Hologram.Migration.BackfillTest do
           assert run([create, unique], unique_model, @context) == :ok
 
           creator = user_id()
-          insert_row("my_app_task", code: "a", creator_id: uuid(creator))
-          insert_row("my_app_task", code: "b", creator_id: uuid(creator))
+          insert_row("my_app_task", code: "a", creator_id: stored(creator))
+          insert_row("my_app_task", code: "b", creator_id: stored(creator))
 
           backfill = if unquote(backfill) == :id, do: creator, else: unquote(backfill)
           file = migration("20260813142237", [tighten_reviewer(backfill)])
@@ -1785,8 +1786,8 @@ defmodule Hologram.Migration.BackfillTest do
     end
 
     for {label, backfill} <- [
-          {"constant", "018f0000-0000-7000-8000-00000000dead"},
-          {"computed", quote(do: %Value{term: {:value, "018f0000-0000-7000-8000-00000000dead"}})}
+          {"constant", "02wLIRxqmq3AUo6vl2OksX"},
+          {"computed", quote(do: %Value{term: {:value, "02wLIRxqmq3AUo6vl2OksX"}})}
         ] do
       test "refuses a #{label} id no row holds on an add, schema unchanged", %{
         create: create,
@@ -1844,7 +1845,7 @@ defmodule Hologram.Migration.BackfillTest do
         admin = user_id()
         kept = user_id()
 
-        insert_row("my_app_task", code: "a", reviewer_id: uuid(kept))
+        insert_row("my_app_task", code: "a", reviewer_id: stored(kept))
         insert_row("my_app_task", code: "b")
 
         assert apply_file([tighten_reviewer(admin)], create, first_model) == :ok
@@ -1864,8 +1865,13 @@ defmodule Hologram.Migration.BackfillTest do
         creator = user_id()
         kept = user_id()
 
-        insert_row("my_app_task", code: "a", creator_id: uuid(creator), reviewer_id: uuid(kept))
-        insert_row("my_app_task", code: "b", creator_id: uuid(creator))
+        insert_row("my_app_task",
+          code: "a",
+          creator_id: stored(creator),
+          reviewer_id: stored(kept)
+        )
+
+        insert_row("my_app_task", code: "b", creator_id: stored(creator))
 
         op = tighten_reviewer(%Value{term: {:name, [:creator_id]}})
 
@@ -2298,9 +2304,11 @@ defmodule Hologram.Migration.BackfillTest do
             [last_id]
           )
 
-        assert_error RuntimeError, ~r/raised on row #{last_id}: .*bad code/s, fn ->
-          apply_file([tighten_title(value)], create, first_model)
-        end
+        assert_error RuntimeError,
+                     ~r/raised on row #{Hologram.Entity.uuid_to_id(last_id)}: .*bad code/s,
+                     fn ->
+                       apply_file([tighten_title(value)], create, first_model)
+                     end
 
         {:ok, %{rows: [[filled]]}} =
           Connection.query(
@@ -2351,7 +2359,7 @@ defmodule Hologram.Migration.BackfillTest do
         context,
         rows,
         [add_filled(:copy, :string, value, optional: true)],
-        ~r/column "copy" on table "my_app_task" \(line 3\) raised on row [0-9a-f-]{36}: .*FunctionClauseError/s
+        ~r/column "copy" on table "my_app_task" \(line 3\) raised on row [0-9A-Za-z]{22}: .*FunctionClauseError/s
       )
     end
 
@@ -2384,7 +2392,7 @@ defmodule Hologram.Migration.BackfillTest do
         context,
         rows,
         [add_filled(:copy, :string, value, optional: true)],
-        ~r/raised on row [0-9a-f-]{36}: \*\* \(throw\) %\{.*year: 3/s
+        ~r/raised on row [0-9A-Za-z]{22}: \*\* \(throw\) %\{.*year: 3/s
       )
     end
 
@@ -2396,7 +2404,7 @@ defmodule Hologram.Migration.BackfillTest do
         context,
         rows,
         [add_filled(:copy, :string, value, optional: true)],
-        ~r/returned 3 for row [0-9a-f-]{36}, which isn't a value of type :string/
+        ~r/returned 3 for row [0-9A-Za-z]{22}, which isn't a value of type :string/
       )
     end
 
@@ -2428,7 +2436,7 @@ defmodule Hologram.Migration.BackfillTest do
         context,
         rows,
         [add_filled(:due, :datetime, value, optional: true)],
-        ~r/returned %\{.*\} for row [0-9a-f-]{36}, which isn't a value of type :datetime/s
+        ~r/returned %\{.*\} for row [0-9A-Za-z]{22}, which isn't a value of type :datetime/s
       )
     end
 
@@ -2492,7 +2500,7 @@ defmodule Hologram.Migration.BackfillTest do
         context,
         rows,
         [op],
-        ~r/repeats the key "SAME" of a unique index, on rows including [0-9a-f-]{36}/
+        ~r/repeats the key "SAME" of a unique index, on rows including [0-9A-Za-z]{22}/
       )
     end
 
@@ -2516,7 +2524,7 @@ defmodule Hologram.Migration.BackfillTest do
         context,
         rows,
         [op],
-        ~r/repeats the key "x\\ny" of a unique index, on rows including [0-9a-f-]{36}/
+        ~r/repeats the key "x\\ny" of a unique index, on rows including [0-9A-Za-z]{22}/
       )
     end
 
@@ -2584,7 +2592,7 @@ defmodule Hologram.Migration.BackfillTest do
         insert_row("my_app_task", code: "a2", rank: 7)
 
         assert_error RuntimeError,
-                     ~r/in the page of rows from [0-9a-f-]{36} to [0-9a-f-]{36}/,
+                     ~r/in the page of rows from [0-9A-Za-z]{22} to [0-9A-Za-z]{22}/,
                      fn ->
                        run(
                          [create, keyed, tighten],
@@ -2611,7 +2619,7 @@ defmodule Hologram.Migration.BackfillTest do
         insert_row("my_app_task", code: "a", creator_id: Ecto.UUID.dump!(creator))
       end
 
-      value = elixir_fn("fn creator_id -> String.upcase(creator_id) end")
+      value = elixir_fn("fn creator_id -> String.trim(creator_id) end")
 
       op = %{
         op: :add_relationship,
@@ -2633,8 +2641,8 @@ defmodule Hologram.Migration.BackfillTest do
     end
 
     test "refuses an id no row holds, naming the row", context do
-      missing = "018f0000-0000-7000-8000-00000000dead"
-      value = elixir_fn(~s|fn code -> code <> "018f0000-0000-7000-8000-00000000dead" end|)
+      missing = "02wLIRxqmq3AUo6vl2OksX"
+      value = elixir_fn(~s|fn code -> code <> "02wLIRxqmq3AUo6vl2OksX" end|)
       rows = fn -> insert_row("my_app_task", code: "") end
 
       op = %{
@@ -2650,7 +2658,7 @@ defmodule Hologram.Migration.BackfillTest do
         context,
         rows,
         [op],
-        ~r/writes #{missing} on row [0-9a-f-]{36}, which no MyApp.User holds/
+        ~r/writes #{missing} on row [0-9A-Za-z]{22}, which no MyApp.User holds/
       )
     end
 

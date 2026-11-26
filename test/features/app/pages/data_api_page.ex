@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.DataApiPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
+  alias Hologram.Entity
   alias Hologram.WriteError
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Product
@@ -231,8 +232,8 @@ defmodule HologramFeatureTests.DataApiPage do
   end
 
   # Each row's id is compared with the id of the entity created for it, so the answer can only be
-  # true when the uuid column came back as the entity's id string. The excluded row is left out by
-  # an id string bound to a uuid placeholder.
+  # true when the uuid column came back as the UUID spelling of the entity's id. The excluded row is
+  # left out by an entity id bound to a uuid placeholder.
   def command(:read_rows_with_sql, _params, server) do
     ids =
       Map.new(["sql_apple", "sql_banana", "sql_excluded"], fn name ->
@@ -251,7 +252,10 @@ defmodule HologramFeatureTests.DataApiPage do
 
     %{rows: rows} = DB.sql!(statement, [ids["sql_excluded"]])
 
-    result = Enum.map_join(rows, ",", fn [id, name] -> "#{name}:#{id == ids[name]}" end)
+    result =
+      Enum.map_join(rows, ",", fn [id, name] ->
+        "#{name}:#{Entity.uuid_to_id(id) == ids[name]}"
+      end)
 
     put_action(server, :show_result, result: "sql_rows_#{result}")
   end

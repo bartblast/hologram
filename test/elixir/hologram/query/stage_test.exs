@@ -27,6 +27,7 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
+  alias Hologram.Test.Fixtures.Entity.Module58
 
   defp assert_actor_refused(predicates) do
     expected_msg =
@@ -479,21 +480,21 @@ defmodule Hologram.Query.StageTest do
     end
 
     test "accepts system attribute names" do
-      query = filter(Module2, id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+      query = filter(Module2, id: "02wSyz8E9khZO82QLJOgGt")
 
-      assert query.filter == [{:id, :==, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"}]
+      assert query.filter == [{:id, :==, "02wSyz8E9khZO82QLJOgGt"}]
     end
 
     test "accepts to-one reference field names" do
-      query = filter(Module3, c_id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+      query = filter(Module3, c_id: "02wSyz8E9khZO82QLJOgGt")
 
-      assert query.filter == [{:c_id, :==, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"}]
+      assert query.filter == [{:c_id, :==, "02wSyz8E9khZO82QLJOgGt"}]
     end
 
     test "accepts a membership list on a to-one reference field" do
-      query = filter(Module3, b_id: [nil, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"])
+      query = filter(Module3, b_id: [nil, "02wSyz8E9khZO82QLJOgGt"])
 
-      assert query.filter == [{:b_id, :in, [nil, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"]}]
+      assert query.filter == [{:b_id, :in, [nil, "02wSyz8E9khZO82QLJOgGt"]}]
     end
 
     test "accepts a placeholder sentinel on a to-one reference field" do
@@ -902,7 +903,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on a path and an attribute of different types" do
       expected_msg =
-        "operator :== compares attribute :c_id with attribute b.c in Hologram.Test.Fixtures.Entity.Module3, which have different types (:uuid and :string) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
+        "operator :== compares attribute :c_id with attribute b.c in Hologram.Test.Fixtures.Entity.Module3, which have different types (:id and :string) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
 
       assert_error MisuseError, expected_msg, fn ->
         filter(Module3, c_id: {:attribute, [:b, :c]})
@@ -1013,7 +1014,7 @@ defmodule Hologram.Query.StageTest do
         ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered - filter its reference via :c_id"
 
       assert_error MisuseError, expected_msg, fn ->
-        filter(Module3, c: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        filter(Module3, c: "02wSyz8E9khZO82QLJOgGt")
       end
     end
 
@@ -1022,7 +1023,7 @@ defmodule Hologram.Query.StageTest do
         ":messages is a relationship in Hologram.Test.Fixtures.Entity.Module26 - only attributes can be filtered"
 
       assert_error MisuseError, expected_msg, fn ->
-        filter(Module26, messages: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        filter(Module26, messages: "02wSyz8E9khZO82QLJOgGt")
       end
     end
 
@@ -1031,16 +1032,16 @@ defmodule Hologram.Query.StageTest do
         ":a is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered"
 
       assert_error MisuseError, expected_msg, fn ->
-        filter(Module3, a: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        filter(Module3, a: "02wSyz8E9khZO82QLJOgGt")
       end
     end
 
     test "raises on an ordering comparison on a to-one reference field" do
       expected_msg =
-        "operator :>= requires an orderable attribute - attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 has type :uuid, and boolean and uuid attributes have no order to compare by"
+        "operator :>= requires an orderable attribute - attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 has type :id, and boolean, id and uuid attributes have no order to compare by"
 
       assert_error MisuseError, expected_msg, fn ->
-        filter(Module3, c_id: {:>=, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"})
+        filter(Module3, c_id: {:>=, "02wSyz8E9khZO82QLJOgGt"})
       end
     end
 
@@ -1213,7 +1214,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on an ordering comparison between reference fields" do
       expected_msg =
-        "operator :< requires an orderable attribute - attribute :a_id in Hologram.Test.Fixtures.Entity.Module5 has type :uuid, and boolean and uuid attributes have no order to compare by"
+        "operator :< requires an orderable attribute - attribute :a_id in Hologram.Test.Fixtures.Entity.Module5 has type :id, and boolean, id and uuid attributes have no order to compare by"
 
       assert_error MisuseError, expected_msg, fn ->
         filter(Module5, a_id: {:<, {:attribute, :b_id}})
@@ -1222,7 +1223,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on an ordering comparison on a path to a boolean attribute" do
       expected_msg =
-        "operator :> requires an orderable attribute - attribute b.a in Hologram.Test.Fixtures.Entity.Module3 has type :boolean, and boolean and uuid attributes have no order to compare by"
+        "operator :> requires an orderable attribute - attribute b.a in Hologram.Test.Fixtures.Entity.Module3 has type :boolean, and boolean, id and uuid attributes have no order to compare by"
 
       assert_error MisuseError, expected_msg, fn ->
         filter(Module3, [{[:b, :a], {:>, true}}])
@@ -1231,10 +1232,10 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on an ordering comparison on the id attribute" do
       expected_msg =
-        "operator :< requires an orderable attribute - attribute :id in Hologram.Test.Fixtures.Entity.Module2 has type :uuid, and boolean and uuid attributes have no order to compare by"
+        "operator :< requires an orderable attribute - attribute :id in Hologram.Test.Fixtures.Entity.Module2 has type :id, and boolean, id and uuid attributes have no order to compare by"
 
       assert_error MisuseError, expected_msg, fn ->
-        filter(Module2, id: {:<, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"})
+        filter(Module2, id: {:<, "02wSyz8E9khZO82QLJOgGt"})
       end
     end
 
@@ -2157,37 +2158,59 @@ defmodule Hologram.Query.StageTest do
       )
     end
 
-    test "refuses a value that isn't a uuid for a reference field" do
+    test "refuses a value that isn't an id for a reference field" do
       assert_value_refused(
         Module3,
         [c_id: 5],
-        ~s(5 is not a value of attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :uuid, which takes a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
+        ~s(5 is not a value of attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :id, which takes an entity id, 22 base62 characters like "02wLIRxqmq3AUo6vl2OW37")
+      )
+    end
+
+    test "refuses a value that isn't an id for an :id attribute" do
+      assert_value_refused(
+        Module58,
+        [a: "018f0000-0000-7000-8000-000000000001"],
+        ~s("018f0000-0000-7000-8000-000000000001" is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module58 - the attribute has type :id, which takes an entity id, 22 base62 characters like "02wLIRxqmq3AUo6vl2OW37")
+      )
+    end
+
+    test "refuses the 36-character form of an entity id" do
+      assert_value_refused(
+        Module3,
+        [id: "018f0000-0000-7000-8000-000000000001"],
+        ~s("018f0000-0000-7000-8000-000000000001" is not a value of attribute :id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :id, which takes an entity id, 22 base62 characters like "02wLIRxqmq3AUo6vl2OW37")
+      )
+    end
+
+    test "refuses an id followed by a newline" do
+      assert_value_refused(
+        Module3,
+        [id: "02wLIRxqmq3AUo6vl2OW37\n"],
+        ~s("02wLIRxqmq3AUo6vl2OW37\\n" is not a value of attribute :id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :id, which takes an entity id, 22 base62 characters like "02wLIRxqmq3AUo6vl2OW37")
+      )
+    end
+
+    test "refuses an id past the largest 128-bit number" do
+      assert_value_refused(
+        Module3,
+        [id: "7n42DGM5Tflk9n8mt7Fhc8"],
+        ~s("7n42DGM5Tflk9n8mt7Fhc8" is not a value of attribute :id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :id, which takes an entity id, 22 base62 characters like "02wLIRxqmq3AUo6vl2OW37")
       )
     end
 
     test "refuses an uppercase uuid" do
       assert_value_refused(
-        Module3,
-        [id: "018F0000-0000-7000-8000-000000000001"],
-        ~s("018F0000-0000-7000-8000-000000000001" is not a value of attribute :id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :uuid, which takes a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
+        Module58,
+        [b: "018F0000-0000-7000-8000-000000000001"],
+        ~s("018F0000-0000-7000-8000-000000000001" is not a value of attribute :b in Hologram.Test.Fixtures.Entity.Module58 - the attribute has type :uuid, which takes a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
       )
     end
 
-    test "refuses a uuid followed by a newline" do
-      assert_value_refused(
-        Module3,
-        [id: "018f0000-0000-7000-8000-000000000001\n"],
-        ~s("018f0000-0000-7000-8000-000000000001\\n" is not a value of attribute :id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :uuid, which takes a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
-      )
-    end
-
-    # The database reads this spelling, but the browser compares ids as strings, so it would match
-    # on the server only.
     test "refuses a uuid without hyphens" do
       assert_value_refused(
-        Module3,
-        [id: "018f0000000070008000000000000001"],
-        ~s("018f0000000070008000000000000001" is not a value of attribute :id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :uuid, which takes a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
+        Module58,
+        [b: "018f0000000070008000000000000001"],
+        ~s("018f0000000070008000000000000001" is not a value of attribute :b in Hologram.Test.Fixtures.Entity.Module58 - the attribute has type :uuid, which takes a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
       )
     end
 
@@ -3728,11 +3751,11 @@ defmodule Hologram.Query.StageTest do
     test "is idempotent" do
       normalized =
         Module3
-        |> filter(id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        |> filter(id: "02wSyz8E9khZO82QLJOgGt")
         |> filter(
           or: [
-            [c_id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e1f"],
-            [b_id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e2f"]
+            [c_id: "02wSyz8E9khZO82QLJOgH9"],
+            [b_id: "02wSyz8E9khZO82QLJOgHP"]
           ]
         )
         |> include(:a)
@@ -3841,9 +3864,7 @@ defmodule Hologram.Query.StageTest do
       query =
         Module26
         |> filter(
-          any:
-            {[:messages],
-             [any: {[:labels], [name: "b", id: "018f0000-0000-7000-8000-000000000001"]}]}
+          any: {[:messages], [any: {[:labels], [name: "b", id: "02wLIRxqmq3AUo6vl2OW37"]}]}
         )
         |> normalize()
 
@@ -3851,9 +3872,7 @@ defmodule Hologram.Query.StageTest do
                {:any,
                 {[:messages],
                  [
-                   {:any,
-                    {[:labels],
-                     [{:id, :==, "018f0000-0000-7000-8000-000000000001"}, {:name, :==, "b"}]}}
+                   {:any, {[:labels], [{:id, :==, "02wLIRxqmq3AUo6vl2OW37"}, {:name, :==, "b"}]}}
                  ]}}
              ]
 
@@ -4239,7 +4258,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on the actor compared with an attribute that isn't a uuid" do
       expected_msg =
-        "user_id() requires a uuid attribute - attribute b.c in Hologram.Test.Fixtures.Entity.Module3 has type :string"
+        "user_id() requires an id attribute - attribute b.c in Hologram.Test.Fixtures.Entity.Module3 has type :string"
 
       assert_error MisuseError, expected_msg, fn ->
         predicate_triples!(Module3, [{[:b, :c], {:actor}}])

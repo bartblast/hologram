@@ -371,6 +371,18 @@ defmodule Hologram.Migration.DiffTest do
              }
     end
 
+    test "emits change_attribute when an attribute changes from :uuid to :id" do
+      replayed = model(%{MyApp.Task => %{attributes: [{:ref, :uuid, []}]}})
+      current = model(%{MyApp.Task => %{attributes: [{:ref, :id, []}]}})
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{op: :change_attribute, entity: MyApp.Task, name: :ref, changes: [type: :id]}
+               ],
+               questions: []
+             }
+    end
+
     test "includes the initial values when an attribute becomes an enum" do
       replayed = model(%{MyApp.Task => %{attributes: [{:status, :string, []}]}})
 

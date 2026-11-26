@@ -8,6 +8,7 @@ defmodule Hologram.Migration.Value.RowFill do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Migration.Value
   alias Hologram.Migration.Value.Check
@@ -42,7 +43,8 @@ defmodule Hologram.Migration.Value.RowFill do
   """
   @spec missing_target(String.t() | nil, list({String.t(), any, any}), module) :: String.t()
   def missing_target(detail, filled, target) do
-    {_columns, key} = key_parts(detail)
+    {_columns, stored_key} = key_parts(detail)
+    key = id_key(stored_key)
 
     where =
       case {key_rows(filled, key), filled} do
@@ -92,7 +94,9 @@ defmodule Hologram.Migration.Value.RowFill do
     end
   end
 
-  defp fill_row([id | row_values], op) do
+  defp fill_row([stored_id | row_values], op) do
+    id = Codec.decode(stored_id, :id)
+
     args =
       op.arg_columns
       |> Enum.zip(row_values)
@@ -129,6 +133,11 @@ defmodule Hologram.Migration.Value.RowFill do
     end
   end
 
+  # PostgreSQL names a reference's key in the stored spelling, a uuid, which a fn's ids don't take.
+  defp id_key(key) do
+    if Validator.attribute_value_valid?(key, :uuid), do: Entity.uuid_to_id(key), else: key
+  end
+
   # The rows holding the key when its text is the value's, which a key over several columns or a
   # value the database spells its own way isn't.
   defp key_rows(_filled, nil), do: []
@@ -147,7 +156,8 @@ defmodule Hologram.Migration.Value.RowFill do
 
   defp quoted(name), do: Mapper.quote_identifier(name)
 
-  # The id comes back under another name so that ORDER BY reads the uuid column, as in FillCheck.
+  # The id comes back under another name so that ORDER BY reads the uuid column, as in FillCheck,
+  # and as its stored bytes, which the next page's cursor binds as they are.
   # sobelow_skip ["SQL.Query"]
   defp read_statement(op) do
     column = Mapper.quote_identifier(op.column)
@@ -157,8 +167,8 @@ defmodule Hologram.Migration.Value.RowFill do
 
     only_nulls = if op.nulls_only, do: ~s| AND "$r".#{column} IS NULL|, else: ""
 
-    ~s|SELECT "$r"."id"::text AS "$after_id", #{selected} FROM #{table(op)} AS "$r" | <>
-      ~s|WHERE ($1::text IS NULL OR "$r"."id" > $1::text::uuid)#{only_nulls} | <>
+    ~s|SELECT "$r"."id" AS "$after_id", #{selected} FROM #{table(op)} AS "$r" | <>
+      ~s|WHERE ($1::uuid IS NULL OR "$r"."id" > $1::uuid)#{only_nulls} | <>
       ~s|ORDER BY "$r"."id" LIMIT $2 FOR UPDATE|
   end
 
@@ -222,14 +232,16 @@ defmodule Hologram.Migration.Value.RowFill do
 
   defp write_page(op, write, filled) do
     ids = Enum.map(filled, &elem(&1, 0))
+    stored_ids = Enum.map(ids, &Codec.encode(&1, :id))
     values = Enum.map(filled, &elem(&1, 2))
 
-    case Connection.query(write, [ids, values]) do
+    case Connection.query(write, [stored_ids, values]) do
       {:ok, _result} ->
         if op.nulls_only, do: FillCheck.keep_filled_ids!(ids)
 
       {:error, %{postgres: %{code: :unique_violation} = error}} ->
-        {columns, key} = key_parts(error[:detail])
+        {columns, stored_key} = key_parts(error[:detail])
+        key = if op.fill_target, do: id_key(stored_key), else: stored_key
         rows = if columns == op.column, do: key_rows(filled, key), else: []
 
         refuse!(
@@ -259,7 +271,7 @@ defmodule Hologram.Migration.Value.RowFill do
   # sobelow_skip ["SQL.Query"]
   defp write_statement(op, array_type, value) do
     ~s|UPDATE #{table(op)} AS "$t" SET #{quoted(op.column)} = #{value} | <>
-      ~s|FROM unnest($1::text[], $2::#{array_type}[]) AS "$v"(id, value) | <>
-      ~s|WHERE "$t"."id" = "$v".id::uuid|
+      ~s|FROM unnest($1::uuid[], $2::#{array_type}[]) AS "$v"(id, value) | <>
+      ~s|WHERE "$t"."id" = "$v".id|
   end
 end
