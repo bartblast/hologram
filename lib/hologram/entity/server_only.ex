@@ -7,11 +7,12 @@ defmodule Hologram.Entity.ServerOnly do
   `%ServerOnly{}` in whatever is bound for the browser:
 
     * the `{Hologram, :user}` context user
-    * the rows of a derived field read in a template
+    * the rows of any derived field resolved during the server render, whether a template reads
+      them or not
     * anything Hologram serializes for the browser
 
   Server code reading through `DB` gets the real value, and so does an entity put in state in
-  `init/3` during the server render.
+  `init/3` or passed down in props during the server render.
 
   Browser code can't write a server-only attribute. Set it in a command or a job.
 
@@ -25,6 +26,8 @@ defmodule Hologram.Entity.ServerOnly do
   ## Examples
 
   In browser code:
+
+      alias Hologram.Entity.ServerOnly
 
       case user.api_token do
         %ServerOnly{} -> :hidden

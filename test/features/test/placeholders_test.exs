@@ -38,11 +38,17 @@ defmodule HologramFeatureTests.PlaceholdersTest do
     |> assert_text(css("#title"), ~r/^value$/)
   end
 
-  feature "an action in the browser tells a placeholder from a value", %{session: session} do
+  feature "an action and a template in the browser tell a placeholder from a value", %{
+    session: session
+  } do
     session
     |> visit(PlaceholdersPage)
     |> await_local_fill()
     |> click(button("Match placeholders"))
     |> assert_text(css("#result"), ~r/^not_included,value,server_only,value$/)
+    |> assert_text(css("#folder_without_include"), ~r/^not_included$/)
+    |> assert_text(css("#folder_with_include"), ~r/^value$/)
+    |> assert_text(css("#api_token"), ~r/^server_only$/)
+    |> assert_text(css("#title"), ~r/^value$/)
   end
 end

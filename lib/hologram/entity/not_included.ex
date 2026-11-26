@@ -1,11 +1,15 @@
 defmodule Hologram.Entity.NotIncluded do
   @moduledoc """
-  The value of an entity field that the query which read the entity didn't include.
+  The value of an entity field that wasn't loaded, such as one the query which read the entity
+  didn't include.
 
   A relationship (to-one, to-many or inverse) or a derived field holds `%NotIncluded{}` until a
   query includes it, on the server and in the browser alike. Once included, a to-one relationship
   holds `nil` or the related entity, a to-many relationship holds a list of entities, and a
   derived field holds its value. Add the field to the query's `include` to read it.
+
+  An entity no query read holds it too, like one built with `new/1` or one a create returns. To
+  read such a field, read the entity through a query that includes it.
 
   Tell a placeholder from a value by matching on the struct alone. The struct's `__meta__` key
   is internal and may change, so don't read it or match on it.
@@ -13,6 +17,8 @@ defmodule Hologram.Entity.NotIncluded do
   ## Examples
 
   In server or browser code:
+
+      alias Hologram.Entity.NotIncluded
 
       case todo.project do
         %NotIncluded{} -> :not_loaded
