@@ -504,7 +504,7 @@ defmodule Hologram.Entity do
   Returns `true` when the given entity field value is the `Hologram.Entity.ServerOnly`
   placeholder, and `false` for anything else.
   Returns `true` in the browser and in any template, since Hologram removes server-only values
-  from everything it sends to the browser. Returns `false` on an entity your server code reads
+  from the entities it sends to the browser. Returns `false` on an entity your server code reads
   through `DB`, which holds the real value.
   Works on the server and in the browser, and is imported into pages and components.
   """
