@@ -55,6 +55,7 @@ defmodule Hologram.Entity.Validator do
     datetime: 8,
     enum: 8,
     float: 8,
+    id: 16,
     integer: 8,
     reference: 16,
     time: 8,
@@ -93,11 +94,15 @@ defmodule Hologram.Entity.Validator do
     :datetime,
     :enum,
     :float,
+    :id,
     :integer,
     :string,
     :time,
     :uuid
   ]
+
+  # 2^128 - 1 in base62, the largest id.
+  @max_id "7n42DGM5Tflk9n8mt7Fhc7"
 
   @valid_relationship_opts [:inverse, :optional, :sort, :unique]
 
@@ -202,6 +207,16 @@ defmodule Hologram.Entity.Validator do
   end
 
   def attribute_value_valid?(_value, :time, _opts), do: false
+
+  # An id is the 128-bit number written in 22 base62 digits, 0-9, A-Z and a-z in ASCII order, zero
+  # padded - so ids compare as strings the way their numbers do. The largest 22-digit text that
+  # fits in 128 bits is 2^128 - 1, and at a fixed width the string comparison is the range check.
+  # The pattern ends in \z, not $, which also matches before a final newline.
+  def attribute_value_valid?(value, :id, _opts) when is_binary(value) do
+    String.match?(value, ~r/\A[0-9A-Za-z]{22}\z/) and value <= @max_id
+  end
+
+  def attribute_value_valid?(_value, :id, _opts), do: false
 
   # Only the canonical lowercase 8-4-4-4-12 form is valid - the framework
   # generates and stores ids in that spelling, and the client tier compares ids

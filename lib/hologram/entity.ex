@@ -13,7 +13,18 @@ defmodule Hologram.Entity do
   alias Hologram.Policy.Expression, as: PolicyExpression
   alias Hologram.Reflection
 
-  @attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid]
+  @attribute_types [
+    :boolean,
+    :date,
+    :datetime,
+    :enum,
+    :float,
+    :id,
+    :integer,
+    :string,
+    :time,
+    :uuid
+  ]
 
   @system_attributes [
     {:created_at, :datetime, []},
@@ -1035,8 +1046,8 @@ defmodule Hologram.Entity do
     type_union(union_types)
   end
 
-  # The Elixir types an attribute's field holds, from the type its declaration names. A uuid is a
-  # string here - the canonical id format is a declaration check, not something a type can state.
+  # The Elixir types an attribute's field holds, from the type its declaration names. An id or a uuid
+  # is a string here - the canonical format is a declaration check, not something a type can state.
   # An enum answers with its values rather than with a union of them, so that the field's own
   # union stays flat: a nested one is equivalent but renders as ":x | :y | nil" wrapped in
   # parentheses, and this type is what ExDoc shows on every entity's page.
@@ -1045,6 +1056,7 @@ defmodule Hologram.Entity do
   defp attribute_type_asts(:datetime, _opts), do: [remote_type_ast(DateTime)]
   defp attribute_type_asts(:enum, opts), do: Keyword.fetch!(opts, :values)
   defp attribute_type_asts(:float, _opts), do: [quote(do: float())]
+  defp attribute_type_asts(:id, _opts), do: [remote_type_ast(Entity, :id)]
   defp attribute_type_asts(:integer, _opts), do: [quote(do: integer())]
   defp attribute_type_asts(:string, _opts), do: [remote_type_ast(String)]
   defp attribute_type_asts(:time, _opts), do: [remote_type_ast(Time)]

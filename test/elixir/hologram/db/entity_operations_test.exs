@@ -30,6 +30,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Entity.Module53
   alias Hologram.Test.Fixtures.Entity.Module54
+  alias Hologram.Test.Fixtures.Entity.Module58
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
@@ -333,6 +334,11 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       refute Map.has_key?(data, "server_created_seq")
       refute Map.has_key?(data, "server_updated_seq")
+    end
+
+    test "refuses an :id attribute value that is not an id" do
+      assert create(Module58.new(a: "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f")) ==
+               {:error, %{a: [type: :id]}}
     end
 
     test "inserts a full row and stamps every timestamp with the same value" do
@@ -1565,6 +1571,26 @@ defmodule Hologram.DB.EntityOperationsTest do
       {:ok, created_entity} = create(entity)
 
       assert unnumbered(get(Module4, created_entity.id)) == created_entity
+    end
+
+    test "returns :id attribute values as they were written" do
+      entity =
+        Module58.new(a: "02y1zRviSAYGVwSyzxs4q7", b: "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f")
+
+      {:ok, created_entity} = create(entity)
+
+      assert unnumbered(get(Module58, created_entity.id)) == created_entity
+      assert created_entity.a == "02y1zRviSAYGVwSyzxs4q7"
+    end
+
+    test "stores an :id attribute value as the uuid of the same number" do
+      {:ok, created_entity} = create(Module58.new(a: "02y1zRviSAYGVwSyzxs4q7"))
+
+      statement =
+        ~s|SELECT "a"::text FROM "hologram_data"."test_fixtures_entity_module58" WHERE "id" = $1|
+
+      assert {:ok, %Postgrex.Result{rows: [["0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"]]}} =
+               Connection.query(statement, [Codec.encode(created_entity.id, :uuid)])
     end
 
     test "returns to-one relationship references as target ids" do

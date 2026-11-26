@@ -43,6 +43,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module40
   alias Hologram.Test.Fixtures.Entity.Module41
   alias Hologram.Test.Fixtures.Entity.Module42
+  alias Hologram.Test.Fixtures.Entity.Module58
   alias Hologram.Test.Fixtures.Entity.Module8
   alias Hologram.Test.Fixtures.Entity.Module9
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -72,7 +73,8 @@ defmodule Hologram.DB.QueryRunnerTest do
                        Module39,
                        Module40,
                        Module41,
-                       Module42
+                       Module42,
+                       Module58
                      ],
                      []
                    )
@@ -1286,6 +1288,21 @@ defmodule Hologram.DB.QueryRunnerTest do
       query = filter(Module39, member.display_name == "ann (general)")
 
       assert derived_query_results(query, :score) == [1]
+    end
+
+    test "reads and filters on a derived :id value" do
+      put_derived_definitions([Module58])
+
+      for id <- ["02y1zRviSAYGVwSyzxs4q7", "0000000000000000000001"] do
+        {:ok, _entity} = create(Module58.new(a: id))
+      end
+
+      query =
+        Module58
+        |> filter(a_copy == "02y1zRviSAYGVwSyzxs4q7")
+        |> include(a_copy)
+
+      assert derived_query_results(query, :a_copy) == ["02y1zRviSAYGVwSyzxs4q7"]
     end
 
     test "compares a derived enum by its declared order" do

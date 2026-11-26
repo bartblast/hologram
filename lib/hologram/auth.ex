@@ -29,12 +29,6 @@ defmodule Hologram.Auth do
   # assets/js/elixir/hologram/auth.mjs) - a hand-ported pair, pinned on both tiers.
   @operation_shape_message "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
-  # In ASCII order, so that owner texts of the same width sort the way their ids do.
-  @base62_digits "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-  # The digits any 128-bit id fits in.
-  @base62_id_width 22
-
   # Marks a struct as a row of the database as a change would leave it. Kept on the struct rather
   # than in its metadata, whose fields travel to the browser with every entity: a marked row lives
   # only for the length of a rule's evaluation.
@@ -569,8 +563,12 @@ defmodule Hologram.Auth do
         "s" <> user_id
 
       entity_id ->
-        <<number::128>> = Codec.encode(entity_id, :uuid)
-        "u" <> base62(number, @base62_id_width, [])
+        id =
+          entity_id
+          |> Codec.encode(:uuid)
+          |> Codec.decode(:id)
+
+        "u" <> id
     end
   end
 
@@ -702,13 +700,6 @@ defmodule Hologram.Auth do
     end
 
     :ok
-  end
-
-  defp base62(_number, 0, digits), do: List.to_string(digits)
-
-  defp base62(number, width, digits) do
-    digit = :binary.at(@base62_digits, rem(number, 62))
-    base62(div(number, 62), width - 1, [digit | digits])
   end
 
   # The per-role question both gates ask, with the answer held until the transaction ends: the

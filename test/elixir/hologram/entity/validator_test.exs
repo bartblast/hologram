@@ -228,6 +228,26 @@ defmodule Hologram.Entity.ValidatorTest do
              )
     end
 
+    test "validates :id values" do
+      assert attribute_value_valid?("02y1zRviSAYGVwSyzxs4q7", :id)
+      assert attribute_value_valid?("0000000000000000000000", :id)
+      assert attribute_value_valid?("7n42DGM5Tflk9n8mt7Fhc7", :id)
+      refute attribute_value_valid?("02y1zRviSAYGVwSyzxs4q", :id)
+      refute attribute_value_valid?("02y1zRviSAYGVwSyzxs4q70", :id)
+      refute attribute_value_valid?("02y1zRviSAYGVwSyzxs4q-", :id)
+      refute attribute_value_valid?("0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f", :id)
+      refute attribute_value_valid?(5, :id)
+    end
+
+    test "refuses an :id value past 2^128 - 1" do
+      refute attribute_value_valid?("7n42DGM5Tflk9n8mt7Fhc8", :id)
+      refute attribute_value_valid?("zzzzzzzzzzzzzzzzzzzzzz", :id)
+    end
+
+    test "refuses an :id value followed by a newline" do
+      refute attribute_value_valid?("02y1zRviSAYGVwSyzxs4q7\n", :id)
+    end
+
     test "validates :uuid values" do
       assert attribute_value_valid?("018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f", :uuid)
       refute attribute_value_valid?("018f4571a1b27c3d8e4f5a6b7c8d9e0f", :uuid)
@@ -1231,7 +1251,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown attribute type" do
       expected_msg =
-        "invalid type :text for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid"
+        "invalid type :text for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :id, :integer, :string, :time, :uuid"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture1 do
@@ -1244,7 +1264,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects module used as attribute type" do
       expected_msg =
-        "invalid type DateTime for attribute :happened_at in Hologram.Entity.ValidatorTest.InlineEntityFixture2 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid"
+        "invalid type DateTime for attribute :happened_at in Hologram.Entity.ValidatorTest.InlineEntityFixture2 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :id, :integer, :string, :time, :uuid"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture2 do
@@ -2418,7 +2438,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a list of several entity type modules" do
       expected_msg =
-        "invalid type [Hologram.Test.Fixtures.Entity.Module1, Hologram.Test.Fixtures.Entity.Module2] for derived field :rows in Hologram.Entity.ValidatorTest.InlineEntityFixture160 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
+        "invalid type [Hologram.Test.Fixtures.Entity.Module1, Hologram.Test.Fixtures.Entity.Module2] for derived field :rows in Hologram.Entity.ValidatorTest.InlineEntityFixture160 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :id, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture160 do
@@ -2431,7 +2451,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects an unknown type" do
       expected_msg =
-        "invalid type :text for derived field :title in Hologram.Entity.ValidatorTest.InlineEntityFixture147 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
+        "invalid type :text for derived field :title in Hologram.Entity.ValidatorTest.InlineEntityFixture147 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :id, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture147 do
@@ -2444,7 +2464,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a list of something other than an entity type module" do
       expected_msg =
-        "invalid type [:integer] for derived field :counts in Hologram.Entity.ValidatorTest.InlineEntityFixture148 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
+        "invalid type [:integer] for derived field :counts in Hologram.Entity.ValidatorTest.InlineEntityFixture148 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :id, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture148 do

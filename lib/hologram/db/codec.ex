@@ -1,9 +1,15 @@
 defmodule Hologram.DB.Codec do
   @moduledoc false
 
+  # In ASCII order, so that ids of the same width sort the way their numbers do.
+  @base62_digits "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+  # The base62 digits any 128-bit number fits in. An id is always written with all of them.
+  @id_width 22
+
   @doc """
   Translates a value received from the Postgres driver into the Elixir term held by entity structs, per attribute type.
-  nil stays nil, :enum text becomes an existing atom, :uuid 16-byte binaries become canonical lowercase uuid strings - values of the other admitted types pass through unchanged.
+  nil stays nil, :enum text becomes an existing atom, :id 16-byte binaries become their 22-character base62 form, :uuid 16-byte binaries become canonical lowercase uuid strings - values of the other admitted types pass through unchanged.
   An :enum label beginning with an uppercase letter names a module, and decodes to the module itself - modules are stored without their "Elixir." prefix.
   A :map value is a jsonb column's contents as the driver hands them back, keyed by strings - what those keys name is the caller's to know.
   The inverse of encode/2 - the round-trip is the per-type contract.
@@ -22,6 +28,8 @@ defmodule Hologram.DB.Codec do
   def decode(value, :enum), do: decode_enum_label(value)
 
   def decode(value, :float), do: value
+
+  def decode(<<number::128>>, :id), do: base62(number, @id_width, [])
 
   def decode(value, :integer), do: value
 
@@ -64,9 +72,9 @@ defmodule Hologram.DB.Codec do
   @doc """
   Translates a value from its JSON form into the Elixir term held by entity structs, per attribute type - the inverse of encode_json/2, and the way a value written elsewhere is read back.
   Returns {:ok, value}, or :error for a value that is not the given type's JSON form.
-  nil reads back as nil for every type, an ISO 8601 string becomes a :date (of any year a date column holds, as encode_json/2 spells one), a :datetime or a :time, an :enum label becomes the atom or module it names - booleans, maps, numbers and strings are read as they are spelled, and a :uuid stays the string it is, its form being the model's to judge.
+  nil reads back as nil for every type, an ISO 8601 string becomes a :date (of any year a date column holds, as encode_json/2 spells one), a :datetime or a :time, an :enum label becomes the atom or module it names - booleans, maps, numbers and strings are read as they are spelled, and an :id or a :uuid stays the string it is, its form being the model's to judge.
   A whole number reads back as a :float value, because a JSON writer spells 1.0 as 1 and the two are one number to it.
-  Which type a JSON value carries is not recoverable from the value itself, since a :date, an :enum and a :uuid all arrive as strings - reading one back means knowing the attribute it belongs to, whose type the model states.
+  Which type a JSON value carries is not recoverable from the value itself, since a :date, an :enum, an :id and a :uuid all arrive as strings - reading one back means knowing the attribute it belongs to, whose type the model states.
   """
   @spec decode_json(any, atom) :: {:ok, any} | :error
   def decode_json(value, type)
@@ -108,6 +116,8 @@ defmodule Hologram.DB.Codec do
     # is what it is - the alternative is the exception escaping a caller that handles only :error.
     ArithmeticError -> :error
   end
+
+  def decode_json(value, :id) when is_binary(value), do: {:ok, value}
 
   def decode_json(value, :integer) when is_integer(value), do: {:ok, value}
 
@@ -156,7 +166,7 @@ defmodule Hologram.DB.Codec do
 
   @doc """
   Translates an Elixir term held by entity structs into the value the Postgres driver exchanges, per attribute type.
-  nil stays nil, :datetime values are normalized to their UTC representation, :time values to microsecond precision, :enum atoms become strings, :uuid strings become 16-byte binaries - values of the other admitted types pass through unchanged.
+  nil stays nil, :datetime values are normalized to their UTC representation, :time values to microsecond precision, :enum atoms become strings, :id and :uuid strings become 16-byte binaries - values of the other admitted types pass through unchanged.
   An :enum value that is a module is stored under its name without the "Elixir." prefix, which is the spelling the model declares it with.
   A :map value is handed to the driver as it is spelled, and the jsonb column it is bound to holds it.
   The inverse of decode/2 - the round-trip is the per-type contract.
@@ -183,6 +193,15 @@ defmodule Hologram.DB.Codec do
 
   def encode(value, :float), do: value
 
+  def encode(value, :id) do
+    number =
+      for <<char <- value>>, reduce: 0 do
+        acc -> acc * 62 + base62_digit_value(char)
+      end
+
+    <<number::128>>
+  end
+
   def encode(value, :integer), do: value
 
   def encode(value, :map), do: value
@@ -206,9 +225,9 @@ defmodule Hologram.DB.Codec do
 
   @doc """
   Translates an Elixir term held by entity structs into its JSON form, per attribute type.
-  nil stays nil, :date and :datetime values become ISO 8601 strings, a :time value becomes one at full microsecond precision whatever it was written at, :enum atoms become their labels - booleans, maps, numbers, strings and uuids pass through as they are spelled.
+  nil stays nil, :date and :datetime values become ISO 8601 strings, a :time value becomes one at full microsecond precision whatever it was written at, :enum atoms become their labels - booleans, maps, numbers, strings, ids and uuids pass through as they are spelled.
   This is how a value is stored in a jsonb column, where being queryable and legible is the point - it is not how a value is sent to a client, which the client-bound term encoder does.
-  Which type a JSON value carries is not recoverable from the value itself, since a :date, an :enum and a :uuid all arrive as strings - reading one back means knowing the attribute it belongs to, whose type the model states.
+  Which type a JSON value carries is not recoverable from the value itself, since a :date, an :enum, an :id and a :uuid all arrive as strings - reading one back means knowing the attribute it belongs to, whose type the model states.
   """
   @spec encode_json(any, atom) :: boolean | map | number | String.t() | nil
   def encode_json(value, type)
@@ -228,6 +247,8 @@ defmodule Hologram.DB.Codec do
   def encode_json(value, :enum), do: encode_enum_value(value)
 
   def encode_json(value, :float), do: value
+
+  def encode_json(value, :id), do: value
 
   def encode_json(value, :integer), do: value
 
@@ -308,4 +329,15 @@ defmodule Hologram.DB.Codec do
       _no_date -> :error
     end
   end
+
+  defp base62(_number, 0, digits), do: List.to_string(digits)
+
+  defp base62(number, width, digits) do
+    digit = :binary.at(@base62_digits, rem(number, 62))
+    base62(div(number, 62), width - 1, [digit | digits])
+  end
+
+  defp base62_digit_value(char) when char in ?0..?9, do: char - ?0
+  defp base62_digit_value(char) when char in ?A..?Z, do: char - ?A + 10
+  defp base62_digit_value(char) when char in ?a..?z, do: char - ?a + 36
 end

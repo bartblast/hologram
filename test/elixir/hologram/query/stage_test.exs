@@ -27,6 +27,7 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
+  alias Hologram.Test.Fixtures.Entity.Module58
 
   defp assert_actor_refused(predicates) do
     expected_msg =
@@ -2162,6 +2163,14 @@ defmodule Hologram.Query.StageTest do
         Module3,
         [c_id: 5],
         ~s(5 is not a value of attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :uuid, which takes a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
+      )
+    end
+
+    test "refuses a value that isn't an id for an :id attribute" do
+      assert_value_refused(
+        Module58,
+        [a: "018f0000-0000-7000-8000-000000000001"],
+        ~s("018f0000-0000-7000-8000-000000000001" is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module58 - the attribute has type :id, which takes an entity id, 22 base62 characters like "02wLIRxqmq3AUo6vl2OW37")
       )
     end
 

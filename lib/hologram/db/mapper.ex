@@ -860,6 +860,8 @@ defmodule Hologram.DB.Mapper do
 
   defp sql_type(:float, _segments, _name), do: "float8"
 
+  defp sql_type(:id, _segments, _name), do: "uuid"
+
   defp sql_type(:integer, _segments, _name), do: "int8"
 
   defp sql_type(:string, _segments, _name), do: "text"

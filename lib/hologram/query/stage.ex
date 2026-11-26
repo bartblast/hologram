@@ -36,6 +36,7 @@ defmodule Hologram.Query.Stage do
     date: "an ISO Date from -4713-11-24 to 5874897-12-31",
     datetime: "a DateTime from -4713-11-24T00:00:00Z to 9999-12-31T23:59:59.999999Z",
     float: "a float, or an integer that fits in 64 bits",
+    id: ~s(an entity id, 22 base62 characters like "02wLIRxqmq3AUo6vl2OW37"),
     integer: "an integer that fits in 64 bits",
     string: "a UTF-8 string with no NUL byte",
     time: "an ISO Time",

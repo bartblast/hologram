@@ -668,6 +668,8 @@ defmodule Hologram.Mutation.Envelope do
 
   defp type_word(:enum), do: "enum value"
 
+  defp type_word(:id), do: "entity id"
+
   defp type_word(:uuid), do: "entity id"
 
   defp type_word(type), do: Atom.to_string(type)
