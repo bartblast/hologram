@@ -474,8 +474,8 @@ defmodule Hologram.Entity do
   Returns `false` when the given entity field value is the `Hologram.Entity.NotIncluded`
   placeholder, and `true` for anything else, `nil` and lists included.
   A relationship or a derived field holds the placeholder when the query that read the entity
-  didn't include it. Works on the server and in the browser, and is imported into pages and
-  components.
+  didn't include it, and in an entity no query read, like one built with `new/1` or one a create
+  returns. Works on the server and in the browser, and is imported into pages and components.
   """
   @spec included?(any) :: boolean
   def included?(%NotIncluded{}), do: false
@@ -503,8 +503,12 @@ defmodule Hologram.Entity do
   @doc """
   Returns `true` when the given entity field value is the `Hologram.Entity.ServerOnly`
   placeholder, and `false` for anything else.
-  A server-only attribute holds the placeholder wherever its real value isn't available, like in
-  the browser. Works on the server and in the browser, and is imported into pages and components.
+  In the browser, a server-only attribute always holds the placeholder. On the server, it holds
+  the placeholder in whatever is bound for the browser: the `{Hologram, :user}` context user, the
+  rows of any derived field resolved during the server render, and anything Hologram serializes
+  for the browser. An entity server code reads through `DB` holds the real value, also when it's
+  put in state in `init/3` or passed down in props, so this returns `false` there.
+  Works on the server and in the browser, and is imported into pages and components.
   """
   @spec server_only?(any) :: boolean
   def server_only?(%ServerOnly{}), do: true

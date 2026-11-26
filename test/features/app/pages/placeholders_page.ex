@@ -10,8 +10,8 @@ defmodule HologramFeatureTests.PlaceholdersPage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   # The same documents read twice, once without the folder and once with it, so each field holds
-  # a placeholder in one read and a value in the other. The folder without include is checked by
-  # matching on the struct, the other fields through the included?/1 and server_only?/1 helpers.
+  # a placeholder in one read and a value in the other. The folder without include is checked
+  # both by matching on the struct and through included?/1, the other fields through the helpers.
   derived :documents, [Document], fn -> sort(Document, title) end
 
   derived :documents_with_folder, [Document], fn ->
@@ -33,6 +33,9 @@ defmodule HologramFeatureTests.PlaceholdersPage do
     </p>
     <p>
       Folder without include: <strong id="folder_without_include"><code>{%for document <- @documents}{%if match?(%NotIncluded{}, document.folder)}not_included{%else}value{/if}{/for}</code></strong>
+    </p>
+    <p>
+      Folder without include, through the helper: <strong id="folder_without_include_helper"><code>{%for document <- @documents}{%if included?(document.folder)}value{%else}not_included{/if}{/for}</code></strong>
     </p>
     <p>
       Folder with include: <strong id="folder_with_include"><code>{%for document <- @documents_with_folder}{%if included?(document.folder)}value{%else}not_included{/if}{/for}</code></strong>
