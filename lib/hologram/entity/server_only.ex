@@ -11,8 +11,7 @@ defmodule Hologram.Entity.ServerOnly do
       them or not
     * anything Hologram serializes for the browser
 
-  Server code reading through `DB` gets the real value, and so does an entity put in state in
-  `init/3` or passed down in props during the server render.
+  Server code reading through `DB` gets the real value.
 
   Browser code can't write a server-only attribute. Set it in a command or a job.
 

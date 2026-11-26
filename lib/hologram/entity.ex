@@ -506,8 +506,8 @@ defmodule Hologram.Entity do
   In the browser, a server-only attribute always holds the placeholder. On the server, it holds
   the placeholder in whatever is bound for the browser: the `{Hologram, :user}` context user, the
   rows of any derived field resolved during the server render, and anything Hologram serializes
-  for the browser. An entity server code reads through `DB` holds the real value, also when it's
-  put in state in `init/3` or passed down in props, so this returns `false` there.
+  for the browser. An entity server code reads through `DB` holds the real value, so this returns
+  `false` there.
   Works on the server and in the browser, and is imported into pages and components.
   """
   @spec server_only?(any) :: boolean
