@@ -214,16 +214,36 @@ defmodule Hologram.DB.Config do
 
   Any other value, entry or entry value raises ArgumentError naming it.
 
+  The :url follows PostgreSQL's connection URI format, and its query takes libpq's TLS
+  parameters, each replacing only its own :ssl entry, the way the url's host and port replace
+  their keys:
+
+    * `sslmode` - `disable` turns ssl off whatever the key says, `require`, `verify-ca` and
+      `verify-full` set the mode. `allow` and `prefer` raise, Postgrex can't fall back between
+      an encrypted and a plain connection
+    * `sslrootcert` - sets :ca_cert_path, or with `system` trusts the system's CAs, which as
+      in libpq needs `verify-full`
+    * `sslcert` and `sslkey` - set :cert_path and :key_path
+    * `channel_binding` - `disable` and `prefer` have no effect, `require` raises, Postgrex
+      never binds the channel
+
+  The resulting list is checked like the key: :cert_path and :key_path need each other, and
+  :ca_cert_path (`sslrootcert` too, unlike in libpq, where it implies `verify-ca`) needs
+  `:verify_ca` or `:verify_full`. A `sslrootcert`, `sslcert` or `sslkey` while ssl ends up off
+  raises, since it would be ignored. Any other parameter raises ArgumentError naming it, `ssl`
+  and `pool_size` included, and so does a repeated one or a malformed percent-encoding. No
+  message holds the url, which carries the password.
+
   Returns a keyword list sorted by key with the :database, :host, :password, :pool_size,
   :port, :ssl and :user options, :ssl holding false or the list sorted by entry, with its
   mode.
   """
   @spec resolve!(keyword, atom) :: keyword
   def resolve!(config, env) do
-    url_components =
+    {url_components, url_ssl} =
       config
       |> Keyword.get(:url)
-      |> url_components()
+      |> url_components!()
 
     resolved =
       env
@@ -233,7 +253,7 @@ defmodule Hologram.DB.Config do
       |> Keyword.put_new(:pool_size, @default_pool_size)
       |> Keyword.put_new(:port, @default_port)
       |> Keyword.put_new(:ssl, false)
-      |> Keyword.update!(:ssl, &normalize_ssl!/1)
+      |> Keyword.update!(:ssl, &resolve_ssl!(&1, url_ssl))
 
     validate_required!(resolved, env)
 
@@ -301,6 +321,30 @@ defmodule Hologram.DB.Config do
 
   defp defaults(_env), do: []
 
+  defp merge_url_ssl!(ssl, []), do: ssl
+
+  defp merge_url_ssl!(ssl, url_ssl) do
+    case {ssl, Keyword.fetch(url_ssl, :mode)} do
+      {_ssl, {:ok, :disable}} ->
+        validate_no_ignored_url_ssl_params!(url_ssl, "sslmode=disable turns ssl off")
+        false
+
+      {false, :error} ->
+        validate_no_ignored_url_ssl_params!(
+          url_ssl,
+          "ssl is off - set sslmode in the url, or ssl: in config :hologram, :database"
+        )
+
+        false
+
+      {false, {:ok, _mode}} ->
+        url_ssl
+
+      {ssl, _mode} ->
+        Keyword.merge(ssl, url_ssl)
+    end
+  end
+
   defp normalize_ssl!(false), do: false
 
   defp normalize_ssl!(true), do: [mode: :verify_full]
@@ -312,12 +356,8 @@ defmodule Hologram.DB.Config do
 
     Enum.each(ssl, &validate_ssl_entry!/1)
     validate_no_repeated_ssl_entries!(ssl)
-    validate_client_cert!(ssl)
-    validate_ca_cert_mode!(ssl)
 
-    ssl
-    |> Keyword.put_new(:mode, :verify_full)
-    |> Enum.sort()
+    Keyword.put_new(ssl, :mode, :verify_full)
   end
 
   defp normalize_ssl!(ssl), do: raise_invalid_ssl!(ssl)
@@ -362,6 +402,48 @@ defmodule Hologram.DB.Config do
           "invalid ssl in config :hologram, :database - expected false, true or a keyword list, got: #{inspect(ssl)}"
   end
 
+  # The key's ssl with the url's TLS parameters over it, each replacing only its own entry - see
+  # resolve!/2.
+  defp resolve_ssl!(ssl, url_ssl) do
+    merged =
+      ssl
+      |> normalize_ssl!()
+      |> merge_url_ssl!(url_ssl)
+
+    case merged do
+      false ->
+        false
+
+      merged ->
+        validate_client_cert!(merged, url_ssl)
+        validate_ca_cert_mode!(merged, url_ssl)
+
+        merged
+        |> Enum.flat_map(fn
+          # sslrootcert=system: the system's CAs, which a checking mode trusts without a CA file.
+          {:ca_cert_path, :system} -> []
+          entry -> [entry]
+        end)
+        |> Enum.sort()
+    end
+  end
+
+  defp ssl_counterpart(entry, url_ssl, given_entry) do
+    if Keyword.has_key?(url_ssl, given_entry) do
+      url_ssl_param(entry)
+    else
+      inspect(entry)
+    end
+  end
+
+  defp ssl_source(entry, url_ssl) do
+    if Keyword.has_key?(url_ssl, entry) do
+      "url parameter #{url_ssl_param(entry)}"
+    else
+      "ssl entry #{inspect(entry)}"
+    end
+  end
+
   defp system_cacerts! do
     :public_key.cacerts_get()
   catch
@@ -370,26 +452,66 @@ defmodule Hologram.DB.Config do
             "ssl in config :hologram, :database checks the server's certificate against the system's CAs, which failed to load (#{inspect(reason)}) - set ssl entry :ca_cert_path to the CA to trust"
   end
 
-  defp validate_ca_cert_mode!(ssl) do
-    if Keyword.has_key?(ssl, :ca_cert_path) and Keyword.get(ssl, :mode) == :require do
-      raise ArgumentError,
-            "ssl entry :ca_cert_path in config :hologram, :database needs mode :verify_ca or :verify_full - mode :require doesn't check the server's certificate"
-    end
+  defp validate_ca_cert_mode!(ssl, url_ssl) do
+    mode = Keyword.fetch!(ssl, :mode)
+    url_mode? = Keyword.has_key?(url_ssl, :mode)
 
-    :ok
+    mode_source =
+      if url_mode?, do: "sslmode=#{url_sslmode(mode)}", else: "mode #{inspect(mode)}"
+
+    case Keyword.fetch(ssl, :ca_cert_path) do
+      # As in libpq: the system's CAs vouch for whatever host they issued a certificate to, so
+      # trusting them takes the host name check.
+      {:ok, :system} when mode != :verify_full ->
+        needed_mode = if url_mode?, do: "sslmode=verify-full", else: "mode :verify_full"
+
+        unchecked =
+          if mode == :require, do: "the server's certificate", else: "the server's host name"
+
+        raise ArgumentError,
+              "url parameter sslrootcert=system in config :hologram, :database needs #{needed_mode} - #{mode_source} doesn't check #{unchecked}"
+
+      {:ok, _path} when mode == :require ->
+        ca_source =
+          if Keyword.has_key?(url_ssl, :ca_cert_path),
+            do: "url parameter sslrootcert",
+            else: "ssl entry :ca_cert_path"
+
+        needed_modes =
+          if url_mode?,
+            do: "sslmode=verify-ca or sslmode=verify-full",
+            else: "mode :verify_ca or :verify_full"
+
+        raise ArgumentError,
+              "#{ca_source} in config :hologram, :database needs #{needed_modes} - #{mode_source} doesn't check the server's certificate"
+
+      _no_conflict ->
+        :ok
+    end
   end
 
-  defp validate_client_cert!(ssl) do
+  defp validate_client_cert!(ssl, url_ssl) do
     case {Keyword.has_key?(ssl, :cert_path), Keyword.has_key?(ssl, :key_path)} do
       {true, false} ->
         raise ArgumentError,
-              "ssl entry :cert_path in config :hologram, :database needs :key_path, the key of the client certificate"
+              "#{ssl_source(:cert_path, url_ssl)} in config :hologram, :database needs #{ssl_counterpart(:key_path, url_ssl, :cert_path)}, the key of the client certificate"
 
       {false, true} ->
         raise ArgumentError,
-              "ssl entry :key_path in config :hologram, :database needs :cert_path, the client certificate of the key"
+              "#{ssl_source(:key_path, url_ssl)} in config :hologram, :database needs #{ssl_counterpart(:cert_path, url_ssl, :key_path)}, the client certificate of the key"
 
       _both_or_neither ->
+        :ok
+    end
+  end
+
+  defp validate_no_ignored_url_ssl_params!(url_ssl, reason) do
+    case Enum.find(url_ssl, fn {entry, _value} -> entry in @ssl_path_entries end) do
+      {entry, _path} ->
+        raise ArgumentError,
+              "url parameter #{url_ssl_param(entry)} in config :hologram, :database would be ignored - #{reason}"
+
+      nil ->
         :ok
     end
   end
@@ -432,9 +554,9 @@ defmodule Hologram.DB.Config do
           "unknown ssl entry #{inspect(entry)} in config :hologram, :database - supported: :ca_cert_path, :cert_path, :key_path, :mode"
   end
 
-  defp url_components(nil), do: []
+  defp url_components!(nil), do: {[], []}
 
-  defp url_components(url) do
+  defp url_components!(url) do
     uri = URI.parse(url)
 
     {user, password} =
@@ -453,8 +575,121 @@ defmodule Hologram.DB.Config do
       user: user
     ]
 
-    Enum.reject(components, fn {_key, value} -> value in [nil, ""] end)
+    {Enum.reject(components, fn {_key, value} -> value in [nil, ""] end), url_ssl!(uri.query)}
   end
+
+  # The url's query, read the way libpq reads a connection URI's. The messages name the parameter
+  # and never hold the url, which carries the password.
+  defp url_ssl!(nil), do: []
+
+  defp url_ssl!(query) do
+    # URI.query_decoder/2 keeps a malformed escape as it is and decodes %00 to a zero byte, both of
+    # which libpq refuses.
+    for pair <- String.split(query, "&"), pair =~ ~r/%(?![0-9A-Fa-f]{2})|%00/ do
+      [name | _value] = String.split(pair, "=", parts: 2)
+
+      raise ArgumentError,
+            "invalid url parameter #{inspect(name)} in config :hologram, :database - malformed percent-encoding"
+    end
+
+    params =
+      query
+      |> URI.query_decoder(:rfc3986)
+      |> Enum.to_list()
+
+    url_ssl = Enum.flat_map(params, &url_ssl_entry!/1)
+
+    repeated =
+      params
+      |> Enum.frequencies_by(fn {name, _value} -> name end)
+      |> Enum.find(fn {_name, count} -> count > 1 end)
+
+    case repeated do
+      {name, _count} ->
+        raise ArgumentError,
+              "url parameter #{name} in config :hologram, :database is given more than once"
+
+      nil ->
+        url_ssl
+    end
+  end
+
+  defp url_ssl_entry!({"sslmode", "disable"}), do: [mode: :disable]
+
+  defp url_ssl_entry!({"sslmode", "require"}), do: [mode: :require]
+
+  defp url_ssl_entry!({"sslmode", "verify-ca"}), do: [mode: :verify_ca]
+
+  defp url_ssl_entry!({"sslmode", "verify-full"}), do: [mode: :verify_full]
+
+  defp url_ssl_entry!({"sslmode", mode}) when mode in ["allow", "prefer"] do
+    raise ArgumentError,
+          "url parameter sslmode=#{mode} in config :hologram, :database isn't supported - Postgrex can't fall back between an encrypted and a plain connection, use sslmode=require or sslmode=disable"
+  end
+
+  defp url_ssl_entry!({"sslmode", mode}) do
+    raise ArgumentError,
+          "invalid url parameter sslmode in config :hologram, :database - expected disable, require, verify-ca or verify-full, got: #{inspect(mode)}"
+  end
+
+  # Postgrex never binds the channel, which both values allow.
+  defp url_ssl_entry!({"channel_binding", value}) when value in ["disable", "prefer"], do: []
+
+  defp url_ssl_entry!({"channel_binding", "require"}) do
+    raise ArgumentError,
+          "url parameter channel_binding=require in config :hologram, :database isn't supported - Postgrex can't bind the channel, remove the parameter"
+  end
+
+  defp url_ssl_entry!({"channel_binding", value}) do
+    raise ArgumentError,
+          "invalid url parameter channel_binding in config :hologram, :database - expected disable or prefer, got: #{inspect(value)}"
+  end
+
+  defp url_ssl_entry!({"sslrootcert", "system"}), do: [ca_cert_path: :system]
+
+  defp url_ssl_entry!({name, path}) when name in ["sslcert", "sslkey", "sslrootcert"] do
+    if path == "" do
+      raise ArgumentError,
+            "invalid url parameter #{name} in config :hologram, :database - expected a file path, got an empty value"
+    end
+
+    [{url_ssl_entry(name), path}]
+  end
+
+  defp url_ssl_entry!({"ssl", _value}) do
+    raise ArgumentError,
+          "url parameter ssl in config :hologram, :database isn't supported - use sslmode=verify-full, or ssl: in config :hologram, :database"
+  end
+
+  defp url_ssl_entry!({"pool_size", _value}) do
+    raise ArgumentError,
+          "url parameter pool_size in config :hologram, :database isn't supported - set pool_size: next to url: in config :hologram, :database"
+  end
+
+  defp url_ssl_entry!({name, _value}) do
+    raise ArgumentError,
+          "unknown url parameter #{inspect(name)} in config :hologram, :database - supported: channel_binding, sslcert, sslkey, sslmode, sslrootcert"
+  end
+
+  defp url_ssl_entry("sslcert"), do: :cert_path
+
+  defp url_ssl_entry("sslkey"), do: :key_path
+
+  defp url_ssl_entry("sslrootcert"), do: :ca_cert_path
+
+  defp url_ssl_param(:ca_cert_path), do: "sslrootcert"
+
+  defp url_ssl_param(:cert_path), do: "sslcert"
+
+  defp url_ssl_param(:key_path), do: "sslkey"
+
+  defp url_ssl_param(:mode), do: "sslmode"
+
+  defp url_sslmode(:require), do: "require"
+
+  defp url_sslmode(:verify_ca), do: "verify-ca"
+
+  defp url_sslmode(:verify_full), do: "verify-full"
 
   defp validate_required!(resolved, env) do
     missing = Enum.reject(@required_keys, &Keyword.has_key?(resolved, &1))

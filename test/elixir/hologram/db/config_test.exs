@@ -3,6 +3,8 @@ defmodule Hologram.DB.ConfigTest do
 
   import Hologram.DB.Config
 
+  @url "postgres://alice:secret@db.example.com/my_db"
+
   describe "connection_opts/1" do
     test "returns the configured database as Postgrex options" do
       opts = connection_opts()
@@ -359,6 +361,265 @@ defmodule Hologram.DB.ConfigTest do
       assert resolve!(config, :dev)[:ssl] == [mode: :require]
     end
 
+    test "reads the url's sslmode" do
+      for {sslmode, mode} <- [
+            {"require", :require},
+            {"verify-ca", :verify_ca},
+            {"verify-full", :verify_full}
+          ] do
+        assert resolve_url!("sslmode=#{sslmode}")[:ssl] == [mode: mode]
+      end
+    end
+
+    test "turns ssl off on the url's sslmode=disable" do
+      assert resolve_url!("sslmode=disable")[:ssl] == false
+    end
+
+    test "reads the url's certificate parameters" do
+      query =
+        "sslmode=verify-ca&sslrootcert=/certs/ca.pem&sslcert=/certs/client.pem&sslkey=/certs/client.key"
+
+      assert resolve_url!(query)[:ssl] == [
+               ca_cert_path: "/certs/ca.pem",
+               cert_path: "/certs/client.pem",
+               key_path: "/certs/client.key",
+               mode: :verify_ca
+             ]
+    end
+
+    test "percent-decodes the url's parameters" do
+      assert resolve_url!("sslmode=verify-full&sslrootcert=/my%20certs/ca+1.pem")[:ssl] == [
+               ca_cert_path: "/my certs/ca+1.pem",
+               mode: :verify_full
+             ]
+    end
+
+    test "trusts the system's CAs on the url's sslrootcert=system" do
+      assert resolve_url!("sslmode=verify-full&sslrootcert=system")[:ssl] == [mode: :verify_full]
+    end
+
+    test "accepts the url's channel_binding values Postgrex meets without binding" do
+      for value <- ["disable", "prefer"] do
+        assert resolve_url!("sslmode=require&channel_binding=#{value}")[:ssl] == [mode: :require]
+      end
+    end
+
+    test "leaves ssl as it is for a url query without TLS parameters" do
+      assert resolve_url!("", ssl: [mode: :require])[:ssl] == [mode: :require]
+      assert resolve_url!("channel_binding=prefer")[:ssl] == false
+    end
+
+    test "has the url's sslmode replace only the key's mode" do
+      ssl = [ca_cert_path: "/certs/ca.pem", mode: :verify_full]
+
+      assert resolve_url!("sslmode=verify-ca", ssl: ssl)[:ssl] == [
+               ca_cert_path: "/certs/ca.pem",
+               mode: :verify_ca
+             ]
+    end
+
+    test "has the url's sslrootcert replace only the key's ca_cert_path" do
+      ssl = [ca_cert_path: "/certs/ca.pem", mode: :verify_ca]
+
+      assert resolve_url!("sslrootcert=/certs/other.pem", ssl: ssl)[:ssl] == [
+               ca_cert_path: "/certs/other.pem",
+               mode: :verify_ca
+             ]
+    end
+
+    test "has the url's sslrootcert=system replace the key's ca_cert_path" do
+      ssl = [ca_cert_path: "/certs/ca.pem", mode: :verify_full]
+
+      assert resolve_url!("sslrootcert=system", ssl: ssl)[:ssl] == [mode: :verify_full]
+    end
+
+    test "completes the key's client certificate with the url's sslkey" do
+      ssl = [cert_path: "/certs/client.pem"]
+
+      assert resolve_url!("sslkey=/certs/client.key", ssl: ssl)[:ssl] == [
+               cert_path: "/certs/client.pem",
+               key_path: "/certs/client.key",
+               mode: :verify_full
+             ]
+    end
+
+    test "turns ssl on from the url's sslmode when the key has it off" do
+      assert resolve_url!("sslmode=require", ssl: false)[:ssl] == [mode: :require]
+    end
+
+    test "turns ssl off on the url's sslmode=disable whatever the key says" do
+      ssl = [ca_cert_path: "/certs/ca.pem", mode: :verify_full]
+
+      assert resolve_url!("sslmode=disable", ssl: ssl)[:ssl] == false
+    end
+
+    test "resolves its own resolved options with a url's TLS parameters again the same" do
+      config = [
+        ssl: [ca_cert_path: "/certs/ca.pem"],
+        url: "#{@url}?sslmode=verify-full&sslrootcert=system"
+      ]
+
+      resolved = resolve!(config, :dev)
+
+      assert resolve!(Keyword.put(resolved, :url, config[:url]), :dev) == resolved
+    end
+
+    # The url carries the password, so each message below, matched in full, leaves it out.
+
+    test "raises on the url's sslmode allow or prefer" do
+      for mode <- ["allow", "prefer"] do
+        assert_url_error(
+          "sslmode=#{mode}",
+          "url parameter sslmode=#{mode} in config :hologram, :database isn't supported - Postgrex can't fall back between an encrypted and a plain connection, use sslmode=require or sslmode=disable"
+        )
+      end
+    end
+
+    test "raises on an unknown sslmode in the url" do
+      assert_url_error(
+        "sslmode=verify_full",
+        ~s'invalid url parameter sslmode in config :hologram, :database - expected disable, require, verify-ca or verify-full, got: "verify_full"'
+      )
+    end
+
+    test "raises on the url's channel_binding=require" do
+      assert_url_error(
+        "sslmode=require&channel_binding=require",
+        "url parameter channel_binding=require in config :hologram, :database isn't supported - Postgrex can't bind the channel, remove the parameter"
+      )
+    end
+
+    test "raises on an unknown channel_binding in the url" do
+      assert_url_error(
+        "channel_binding=on",
+        ~s'invalid url parameter channel_binding in config :hologram, :database - expected disable or prefer, got: "on"'
+      )
+    end
+
+    test "raises on an empty certificate parameter in the url" do
+      for param <- ["sslrootcert", "sslcert", "sslkey"] do
+        assert_url_error(
+          "sslmode=verify-full&#{param}=",
+          "invalid url parameter #{param} in config :hologram, :database - expected a file path, got an empty value"
+        )
+      end
+    end
+
+    test "raises on the url's ssl parameter" do
+      assert_url_error(
+        "ssl=true",
+        "url parameter ssl in config :hologram, :database isn't supported - use sslmode=verify-full, or ssl: in config :hologram, :database"
+      )
+    end
+
+    test "raises on the url's pool_size parameter" do
+      assert_url_error(
+        "pool_size=5",
+        "url parameter pool_size in config :hologram, :database isn't supported - set pool_size: next to url: in config :hologram, :database"
+      )
+    end
+
+    test "raises on an unknown url parameter without its value" do
+      assert_url_error(
+        "sslmode=require&sslpassword=secret",
+        ~s'unknown url parameter "sslpassword" in config :hologram, :database - supported: channel_binding, sslcert, sslkey, sslmode, sslrootcert'
+      )
+    end
+
+    test "raises on a repeated url parameter" do
+      assert_url_error(
+        "sslmode=require&sslmode=verify-full",
+        "url parameter sslmode in config :hologram, :database is given more than once"
+      )
+    end
+
+    test "raises on a certificate parameter in the url while ssl is off" do
+      for param <- ["sslrootcert", "sslcert", "sslkey"] do
+        assert_url_error(
+          "#{param}=/certs/file.pem",
+          "url parameter #{param} in config :hologram, :database would be ignored - ssl is off - set sslmode in the url, or ssl: in config :hologram, :database"
+        )
+      end
+    end
+
+    test "raises on a certificate parameter in the url under sslmode=disable" do
+      assert_url_error(
+        "sslmode=disable&sslrootcert=/certs/ca.pem",
+        [ssl: [mode: :verify_full]],
+        "url parameter sslrootcert in config :hologram, :database would be ignored - sslmode=disable turns ssl off"
+      )
+    end
+
+    test "raises on the url's sslrootcert under the url's sslmode=require" do
+      assert_url_error(
+        "sslmode=require&sslrootcert=/certs/ca.pem",
+        "url parameter sslrootcert in config :hologram, :database needs sslmode=verify-ca or sslmode=verify-full - sslmode=require doesn't check the server's certificate"
+      )
+    end
+
+    test "raises on the url's sslrootcert under the key's mode :require" do
+      assert_url_error(
+        "sslrootcert=/certs/ca.pem",
+        [ssl: [mode: :require]],
+        "url parameter sslrootcert in config :hologram, :database needs mode :verify_ca or :verify_full - mode :require doesn't check the server's certificate"
+      )
+    end
+
+    test "raises on the key's ca_cert_path under the url's sslmode=require" do
+      assert_url_error(
+        "sslmode=require",
+        [ssl: [ca_cert_path: "/certs/ca.pem"]],
+        "ssl entry :ca_cert_path in config :hologram, :database needs sslmode=verify-ca or sslmode=verify-full - sslmode=require doesn't check the server's certificate"
+      )
+    end
+
+    test "raises on the url's sslrootcert=system under a mode other than verify_full" do
+      assert_url_error(
+        "sslmode=verify-ca&sslrootcert=system",
+        "url parameter sslrootcert=system in config :hologram, :database needs sslmode=verify-full - sslmode=verify-ca doesn't check the server's host name"
+      )
+
+      assert_url_error(
+        "sslrootcert=system",
+        [ssl: [mode: :verify_ca]],
+        "url parameter sslrootcert=system in config :hologram, :database needs mode :verify_full - mode :verify_ca doesn't check the server's host name"
+      )
+
+      assert_url_error(
+        "sslrootcert=system",
+        [ssl: [mode: :require]],
+        "url parameter sslrootcert=system in config :hologram, :database needs mode :verify_full - mode :require doesn't check the server's certificate"
+      )
+    end
+
+    test "raises on a malformed percent-encoding in the url's query" do
+      assert_url_error(
+        "sslmode=verify-ca&sslrootcert=/certs/ca%zz.pem",
+        ~s'invalid url parameter "sslrootcert" in config :hologram, :database - malformed percent-encoding'
+      )
+    end
+
+    test "raises on an encoded zero byte in the url's query" do
+      assert_url_error(
+        "sslmode=verify-ca&sslrootcert=/certs/ca%00.pem",
+        ~s'invalid url parameter "sslrootcert" in config :hologram, :database - malformed percent-encoding'
+      )
+    end
+
+    test "raises on the url's sslcert without a key" do
+      assert_url_error(
+        "sslmode=require&sslcert=/certs/client.pem",
+        "url parameter sslcert in config :hologram, :database needs sslkey, the key of the client certificate"
+      )
+    end
+
+    test "raises on the url's sslkey without a certificate" do
+      assert_url_error(
+        "sslmode=require&sslkey=/certs/client.key",
+        "url parameter sslkey in config :hologram, :database needs sslcert, the client certificate of the key"
+      )
+    end
+
     test "raises on an ssl value other than a boolean or a keyword list" do
       for value <- [:verify_full, nil, ["mode"]] do
         expected_msg =
@@ -441,5 +702,13 @@ defmodule Hologram.DB.ConfigTest do
         resolve!([host: "db.example.com"], :prod)
       end
     end
+  end
+
+  defp assert_url_error(query, config \\ [], expected_msg) do
+    assert_error ArgumentError, expected_msg, fn -> resolve_url!(query, config) end
+  end
+
+  defp resolve_url!(query, config \\ []) do
+    resolve!(Keyword.put(config, :url, "#{@url}?#{query}"), :dev)
   end
 end
