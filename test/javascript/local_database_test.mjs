@@ -2485,6 +2485,115 @@ describe("LocalDatabase", () => {
       assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 15);
       assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
     });
+
+    // The numbers a page's render hid because they weren't final under its limit, which its row
+    // carries beside its data.
+    describe("a page row's hidden numbers", () => {
+      const hidden = (id, waiting) =>
+        Object.assign(row(id, null, null), {$waiting: waiting});
+
+      const carry = (item) =>
+        Deltas.apply({put_entity: {[TASK]: [item]}}, {insertOnly: true});
+
+      // A reload's page is applied before the store is restored, so no point is held yet, and the
+      // stored place can be past the hidden numbers, so catch-up never sends the row again.
+      it("files them once a reload restores a point that reaches them", () => {
+        carry(hidden("t1", {server_created_seq: 5, server_updated_seq: 8}));
+
+        LocalDatabase.restore(
+          [{facts: {}, id: "t1", row: row("t1", 5, 8), type: TASK}],
+          10,
+        );
+
+        const held = LocalDatabase.baseRow(TASK, "t1");
+
+        assert.equal(held.server_created_seq, 5);
+        assert.equal(held.server_updated_seq, 8);
+        assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+      });
+
+      it("files one the point reaches straight into the row", () => {
+        LocalDatabase.raiseFinal(10);
+
+        carry(hidden("t1", {server_updated_seq: 8}));
+
+        assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 8);
+        assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+      });
+
+      it("holds one above the point back until the point reaches it", () => {
+        LocalDatabase.raiseFinal(10);
+
+        carry(hidden("t1", {server_updated_seq: 12}));
+
+        assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+
+        assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+          numbers: {server_updated_seq: 12},
+          own: false,
+        });
+
+        LocalDatabase.raiseFinal(12);
+
+        assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 12);
+        assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+      });
+
+      it("keeps a newer number already waiting for the field", () => {
+        LocalDatabase.raiseFinal(10);
+
+        LocalDatabase.holdNumbers(TASK, row("t1", 5, 15));
+
+        LocalDatabase.carryNumbers(
+          TASK,
+          hidden("t1", {server_updated_seq: 12}),
+        );
+
+        assert.equal(
+          LocalDatabase.waitingNumbers(TASK, "t1").numbers.server_updated_seq,
+          15,
+        );
+      });
+
+      it("holds back a number past 2^53 the wire spells as text", () => {
+        LocalDatabase.raiseFinal(10);
+
+        carry(hidden("t1", {server_updated_seq: "9007199254740993"}));
+
+        assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+          numbers: {server_updated_seq: "9007199254740993"},
+          own: false,
+        });
+
+        LocalDatabase.raiseFinal("9007199254740993");
+
+        assert.strictEqual(
+          LocalDatabase.baseRow(TASK, "t1").server_updated_seq,
+          9007199254740993n,
+        );
+      });
+
+      it("leaves them off the row it files", () => {
+        LocalDatabase.raiseFinal(10);
+
+        carry(hidden("t1", {server_updated_seq: 8}));
+
+        assert.notProperty(LocalDatabase.baseRow(TASK, "t1"), "$waiting");
+      });
+
+      // The held row's values aren't the page's version, so the page's numbers aren't its own.
+      it("ignores them for a row held already", () => {
+        LocalDatabase.raiseFinal(10);
+
+        hold(row("t1", 5, null));
+
+        carry(hidden("t1", {server_updated_seq: 8}));
+        carry(hidden("t1", {server_updated_seq: 12}));
+
+        assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_updated_seq);
+        assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+      });
+    });
   });
 
   describe("orderingKey()", () => {

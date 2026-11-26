@@ -35,6 +35,10 @@ const SAVED_COUNT_KEYS_LENGTH_LIMIT = 256_000;
 // Hologram.Sync.Frame.put_entity/3).
 const OWN = "$own";
 
+// What a page's row spells the numbers its render hid with, beside its data, because they weren't
+// final under the render's limit (see LocalDatabase.carryNumbers).
+const WAITING = "$waiting";
+
 // The numbers that place a row in the server's order, which a row holds only once they are final.
 const SEQUENCE_FIELDS = ["server_created_seq", "server_updated_seq"];
 
@@ -158,9 +162,10 @@ export default class LocalDatabase {
   static #typeFinalSeqs = {};
 
   // type -> id -> {numbers: {field: number}, shown?: {field: number}, own: boolean} - each number
-  // a row came with above the final point, held back from the row until the point reaches it. The
-  // row holds the number it had before, final, or null when it had none, so a number a reader
-  // finds is always final and no reader has to ask. Shown is the numbers a page carried above the
+  // a row came with above the final point, or a page's render hid from a row it carried (see
+  // carryNumbers), held back from the row until the point reaches it. The row holds the number it
+  // had before, final, or null when it had none, so a number a reader finds is always final and no
+  // reader has to ask. Shown is the numbers a page carried above the
   // point: final on the server, so a list orders the row by them (see orderingKey). Own is whether
   // the row's own batch created it, kept while its created number waits: until then it is this
   // client's own unnumbered row.
@@ -392,10 +397,18 @@ export default class LocalDatabase {
   // holdNumbers). The render showed only numbers final on the server, so each is kept beside the
   // row as shown, and a list orders the row by it while the field reads as not final here (see
   // orderingKey). A number at or below the point is the stream's to bring for a row held already.
+  //
+  // The numbers the render hid, because they weren't final under its limit, come beside the row's
+  // data as `$waiting`, which doesn't reach the row. For a row not held yet each is its version's
+  // own number, held back like a stream row's: filed when the point here reaches it - the render's
+  // node was behind this one - and otherwise waiting beside the row until it does, so a reload whose
+  // stored place is past the number still gets it. A held row's values aren't the page's version,
+  // so the page's hidden numbers say nothing about it, and the stream brings its own.
   static carryNumbers(type, row) {
     const filed = Object.assign({}, row);
 
     delete filed[OWN];
+    delete filed[WAITING];
 
     const held = LocalDatabase.baseRow(type, row.id);
 
@@ -410,6 +423,10 @@ export default class LocalDatabase {
       filed[field] = held?.[field] ?? null;
 
       LocalDatabase.#show(type, row.id, field, row[field]);
+    }
+
+    if (held === null) {
+      LocalDatabase.#holdHidden(type, row.id, row[WAITING] ?? {}, filed);
     }
 
     LocalDatabase.#settleEntry(type, row.id);
@@ -462,6 +479,7 @@ export default class LocalDatabase {
     const filed = Object.assign({}, item);
 
     delete filed[OWN];
+    delete filed[WAITING];
 
     const held = LocalDatabase.baseRow(type, item.id);
     const entry = LocalDatabase.#waitingEntry(type, item.id);
@@ -1312,6 +1330,31 @@ export default class LocalDatabase {
     }
 
     LocalDatabase.putRow(type, row);
+  }
+
+  // Files each number a page's render hid into the given copy of a row not held yet when the point
+  // reaches it, and holds the rest back beside the row, keeping the newer of two waiting for a
+  // field. Kept as the wire spelled them, as holdNumbers keeps a stream row's.
+  static #holdHidden(type, id, hidden, filed) {
+    for (const field of SEQUENCE_FIELDS) {
+      const number = hidden[field] ?? null;
+
+      if (number === null) {
+        continue;
+      }
+
+      if (LocalDatabase.#isFinal(type, number)) {
+        filed[field] = number;
+        continue;
+      }
+
+      const entry = LocalDatabase.#waitingEntry(type, id);
+      const waiting = entry.numbers[field];
+
+      if (waiting === undefined || BigInt(waiting) < BigInt(number)) {
+        entry.numbers[field] = number;
+      }
+    }
   }
 
   // A waiting number as the wire spelled it, which is a string past 2^53.
