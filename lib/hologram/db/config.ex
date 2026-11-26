@@ -216,7 +216,8 @@ defmodule Hologram.DB.Config do
   Any other value, entry or entry value raises ArgumentError naming it.
 
   The :url follows PostgreSQL's connection URI format: its user, password and database are
-  percent-decoded, so a password with `@` or `:` is written as `%40` or `%3A`, and its query
+  percent-decoded, so characters with a meaning in a url, like `@`, `:`, `/`, `?`, `#` or `%`,
+  are written percent-encoded there - a password `p@ss/word` as `p%40ss%2Fword` - and its query
   takes libpq's TLS parameters, each replacing only its own :ssl entry, the way the url's host
   and port replace their keys:
 
