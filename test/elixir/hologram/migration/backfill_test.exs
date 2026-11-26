@@ -32,12 +32,13 @@ defmodule Hologram.Migration.BackfillTest do
 
   # A string attribute arriving on a populated table: its sort and search key companions
   # are computed from the value the backfill gives the existing rows. Past 64 bytes, so the
-  # search key is a value rather than NULL.
-  @note String.duplicate("Zed ", 20)
+  # search key is a value rather than NULL, and holding a letter that folds to two, so a key
+  # computed from the raw value fails.
+  @note String.duplicate("Straße ", 12)
 
   # The values of the paged fills, as SQL over n: each folds to a key unlike itself, and the last
   # is past the key cap, so it takes a search key too.
-  @paged_value ~s|CASE WHEN n = 1005 THEN repeat('Zed ', 20) ELSE 'Straße ' \|\| n END|
+  @paged_value ~s|CASE WHEN n = 1005 THEN repeat('Straße ', 12) ELSE 'Straße ' \|\| n END|
 
   @add_note %{
     op: :add_attribute,
