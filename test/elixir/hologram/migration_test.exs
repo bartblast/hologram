@@ -737,7 +737,13 @@ defmodule Hologram.MigrationTest do
          "g/1"},
         {"default: g(1)",
          "defguardp g(x) when x == 1\nModule.delete_definition(__MODULE__, {:g, 1})\n" <>
-           "defmacrop g(_x), do: quote(do: @o)", "g/1"}
+           "defmacrop g(_x), do: quote(do: @o)", "g/1"},
+        # A head's defaults go only to the clause right after it.
+        {"default: g(1)",
+         "defguardp g(x, y \\\\ 1)\ndefguardp g(x, y) when x == y\n" <>
+           "Module.delete_definition(__MODULE__, {:g, 2})\n" <>
+           "Module.delete_definition(__MODULE__, {:g, 1})\n" <>
+           "defmacrop g(_x), do: quote(do: @o)\ndefguardp g(x, y) when x == y", "g/1"}
       ]
 
       for kind <- ["defmacro", "defmacrop"],
@@ -811,18 +817,24 @@ defmodule Hologram.MigrationTest do
     end
 
     test "accepts a guard of the migration called with its defaults in an op" do
-      module =
-        compile_migration("20260813091522", """
-        defguardp long(text, limit \\\\ 3) when byte_size(text) > limit
+      # The defaults can be declared in a head of their own.
+      for guard <- [
+            "defguardp long(text, limit \\\\ 3) when byte_size(text) > limit",
+            "defguardp long(text, limit \\\\ 3)\ndefguardp long(text, limit) when byte_size(text) > limit"
+          ] do
+        module =
+          compile_migration("20260813091522", """
+          #{guard}
 
-        change_entity MyApp.Task do
-          add_attribute :first, :string, default: if(long("Paris"), do: "y", else: "n")
-          add_attribute :second, :string, default: if(long("Paris", 9), do: "y", else: "n")
-        end
-        """)
+          change_entity MyApp.Task do
+            add_attribute :first, :string, default: if(long("Paris"), do: "y", else: "n")
+            add_attribute :second, :string, default: if(long("Paris", 9), do: "y", else: "n")
+          end
+          """)
 
-      assert [%{opts: [default: "y"]}, %{opts: [default: "n"]}] =
-               module.__hologram_migration__().ops
+        assert [%{opts: [default: "y"]}, %{opts: [default: "n"]}] =
+                 module.__hologram_migration__().ops
+      end
     end
 
     test "keeps a field access a quote holds as data in an op" do

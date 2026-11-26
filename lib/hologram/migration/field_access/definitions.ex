@@ -9,6 +9,8 @@ defmodule Hologram.Migration.FieldAccess.Definitions do
 
   @guards_attribute :__hologram_migration_guards__
 
+  @guard_heads_attribute :__hologram_migration_guard_heads__
+
   # credo:disable-for-next-line Credo.Check.Readability.Specs
   defmacro def(call), do: FieldAccess.define(:def, __CALLER__, call)
 
@@ -79,11 +81,13 @@ defmodule Hologram.Migration.FieldAccess.Definitions do
   end
 
   @doc """
-  Registers the attribute the given module records the guards it defines in.
+  Registers the attributes the given module records the guards it defines in, and the defaults
+  their heads declare.
   """
   @spec register_guards(module) :: :ok
   def register_guards(module) do
     Module.register_attribute(module, @guards_attribute, accumulate: true)
+    Module.register_attribute(module, @guard_heads_attribute, accumulate: true)
   end
 
   @doc """
@@ -104,19 +108,56 @@ defmodule Hologram.Migration.FieldAccess.Definitions do
   # in a branch that doesn't run, or one a macro has since replaced, can't vouch for another macro
   # of its name. A guard made overridable counts as replaced, and one whose name is unquoted isn't
   # recorded: both are refused like any other macro. The arities its defaults give are recorded
-  # together, as a shorter one calls the full one, so replacing any of them refuses them all.
-  defp define_guard(kind, guard, env) do
-    records =
-      for call <- guard_calls(guard) do
-        quote do
-          {unquote(call), Module.get_definition(__MODULE__, unquote(call))}
-        end
-      end
+  # together, as a shorter one calls the full one, so replacing any of them refuses them all. A
+  # head declaring the defaults apart defines the shorter ones, which the clause after it records:
+  # the head is recorded with the definition it leaves, so a clause after another one, or after
+  # the definition was deleted, takes none of them.
+  defp define_guard(kind, {name, _meta, args} = head, env)
+       when is_atom(name) and name != :when and is_list(args) do
+    call = {name, length(args)}
 
     quote do
-      unquote(FieldAccess.define(kind, env, guard))
-      Module.put_attribute(__MODULE__, unquote(@guards_attribute), unquote(records))
+      unquote(FieldAccess.define(kind, env, head))
+
+      Module.put_attribute(
+        __MODULE__,
+        unquote(@guard_heads_attribute),
+        {unquote(call), Module.get_definition(__MODULE__, unquote(call)),
+         unquote(default_calls(name, args))}
+      )
     end
+  end
+
+  defp define_guard(kind, guard, env) do
+    case guard_calls(guard) do
+      [] ->
+        FieldAccess.define(kind, env, guard)
+
+      [call | _default_calls] = calls ->
+        quote do
+          head_calls = unquote(__MODULE__).__head_defaults__(__MODULE__, unquote(call))
+
+          unquote(FieldAccess.define(kind, env, guard))
+
+          Module.put_attribute(
+            __MODULE__,
+            unquote(@guards_attribute),
+            for record_call <- unquote(calls) ++ head_calls do
+              {record_call, Module.get_definition(__MODULE__, record_call)}
+            end
+          )
+        end
+    end
+  end
+
+  @doc false
+  @spec __head_defaults__(module, {atom, non_neg_integer}) :: list({atom, non_neg_integer})
+  def __head_defaults__(module, call) do
+    definition = Module.get_definition(module, call)
+
+    for {^call, ^definition, calls} <- Module.get_attribute(module, @guard_heads_attribute, []),
+        default_call <- calls,
+        do: default_call
   end
 
   defp kept?(module, {call, definition}) do
@@ -126,9 +167,7 @@ defmodule Hologram.Migration.FieldAccess.Definitions do
 
   defp guard_calls({:when, _meta, [{name, _call_meta, args}, _body]})
        when is_atom(name) and is_list(args) do
-    defaults = Enum.count(args, &match?({:\\, _default_meta, [_arg, _default]}, &1))
-
-    for arity <- (length(args) - defaults)..length(args)//1, do: {name, arity}
+    [{name, length(args)} | default_calls(name, args)]
   end
 
   defp guard_calls({:when, _meta, [{name, _call_meta, context}, _body]})
@@ -136,4 +175,11 @@ defmodule Hologram.Migration.FieldAccess.Definitions do
        do: [{name, 0}]
 
   defp guard_calls(_guard), do: []
+
+  # The shorter arities the given args' defaults give.
+  defp default_calls(name, args) do
+    defaults = Enum.count(args, &match?({:\\, _default_meta, [_arg, _default]}, &1))
+
+    for arity <- (length(args) - defaults)..(length(args) - 1)//1, do: {name, arity}
+  end
 end
