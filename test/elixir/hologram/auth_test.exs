@@ -37,6 +37,8 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module23, as: PolicyCard
   alias Hologram.Test.Fixtures.Policy.Module24, as: PolicyShelf
   alias Hologram.Test.Fixtures.Policy.Module25, as: PolicyProfile
+  alias Hologram.Test.Fixtures.Policy.Module33, as: PolicyVault
+  alias Hologram.Test.Fixtures.Policy.Module34, as: PolicyVaultKey
   alias Hologram.Test.Fixtures.Policy.Module36
   alias Hologram.Test.Fixtures.Policy.Module37
   alias Hologram.Test.Fixtures.Policy.Module38
@@ -51,6 +53,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module59, as: ChangedTask
   alias Hologram.Test.Fixtures.Policy.Module8
   alias Hologram.Test.Fixtures.Policy.Module9, as: SelfParent
+  alias Hologram.Test.Fixtures.Policy.Readers.Module18, as: ReadersModule18
   alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
   alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
   alias Hologram.Test.Fixtures.Policy.Readers.Module25, as: ReadersModule25
@@ -1136,6 +1139,48 @@ defmodule Hologram.AuthTest do
       assert_error MisuseError, expected_msg, fn ->
         can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:grant_role, :editr}, %Module1{public: true})
       end
+    end
+  end
+
+  # A template, a derived field and the props it passes hold a row with its server-only attributes
+  # replaced by the placeholder, which a rule reading them is answered past.
+  describe "can?/3 on a row holding server-only placeholders" do
+    test "judges a stored row by its stored server-only values" do
+      steward_id = Entity.generate_id()
+
+      reviewed = create_stripped(ReadersModule18, reviewed: true)
+      stewarded = create_stripped(ReadersModule18, steward_id: steward_id)
+
+      assert can?(nil, :read, reviewed)
+      refute can?(nil, :read, stewarded)
+      assert can?(steward_id, :read, stewarded)
+    end
+
+    test "judges a field the caller changed as given" do
+      vault = create_stripped(PolicyVault, code: "kestrel")
+
+      [name: "kestrel", vault_id: vault.id]
+      |> PolicyVaultKey.new()
+      |> DB.create!()
+
+      refute can?(nil, :read, vault)
+      assert can?(nil, :read, %{vault | public: true})
+    end
+
+    test "keeps the placeholders on a row with no stored copy" do
+      row =
+        [reviewed: true]
+        |> ReadersModule18.new()
+        |> Entity.strip_server_only()
+
+      refute can?(nil, :read, row)
+    end
+
+    defp create_stripped(entity_type, values) do
+      values
+      |> entity_type.new()
+      |> DB.create!()
+      |> Entity.strip_server_only()
     end
   end
 
