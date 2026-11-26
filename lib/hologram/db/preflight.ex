@@ -727,15 +727,16 @@ defmodule Hologram.DB.Preflight do
   defp pluralize_values(_values), do: "values"
 
   defp repeat_ways_out(:default) do
-    "fix the data, keep the attribute optional: true, or drop the unique declaration"
+    "fix the data, keep the attribute optional: true, or drop the unique declaration before " <>
+      "making it required"
   end
 
   # A member staying optional takes the whole tightening out of the op, backfill included, as the
   # NULL refusal of a backfill says.
   defp repeat_ways_out({:backfill, member}) do
-    "fix the data or the backfill, drop the unique declaration, or keep optional: true on the " <>
-      "#{member} in the entity type and remove optional: false and backfill: from the op, or the " <>
-      "whole op when it changes nothing else"
+    "fix the data or the backfill, drop the unique declaration before the op, or keep " <>
+      "optional: true on the #{member} in the entity type and remove optional: false and " <>
+      "backfill: from the op, or the whole op when it changes nothing else"
   end
 
   defp standing_unique_indexes(table, column, skipped_names \\ MapSet.new()) do

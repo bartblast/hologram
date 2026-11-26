@@ -1289,10 +1289,10 @@ defmodule Hologram.Migration.BackfillTest do
           assert_error RuntimeError,
                        ~s(cannot make column "slug" on table "my_app_task" required - filling ) <>
                          ~s{its NULLs with the backfill would make 1 key repeat over ("slug") - } <>
-                         "fix the data or the backfill, drop the unique declaration, or keep " <>
-                         "optional: true on the attribute in the entity type and remove " <>
-                         "optional: false and backfill: from the op, or the whole op when it " <>
-                         "changes nothing else",
+                         "fix the data or the backfill, drop the unique declaration before the " <>
+                         "op, or keep optional: true on the attribute in the entity type and " <>
+                         "remove optional: false and backfill: from the op, or the whole op when " <>
+                         "it changes nothing else",
                        fn ->
                          apply_file([tighten(:slug, unquote(backfill))], create, first_model)
                        end
@@ -1743,9 +1743,9 @@ defmodule Hologram.Migration.BackfillTest do
                        ~s(cannot make column "reviewer_id" on table "my_app_task" required - ) <>
                          "filling its NULLs with the backfill would make 1 key repeat over " <>
                          ~s{("reviewer_id") - fix the data or the backfill, drop the unique } <>
-                         "declaration, or keep optional: true on the relationship in the entity " <>
-                         "type and remove optional: false and backfill: from the op, or the whole " <>
-                         "op when it changes nothing else",
+                         "declaration before the op, or keep optional: true on the relationship " <>
+                         "in the entity type and remove optional: false and backfill: from the " <>
+                         "op, or the whole op when it changes nothing else",
                        fn ->
                          run([create, unique, file], Model.fold(unique_model, file.ops), @context)
                        end

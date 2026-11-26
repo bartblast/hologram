@@ -327,7 +327,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   defp filled_duplicate_key_msg do
     ~s(cannot make column "b" on table "test_fixtures_entity_module2" required - ) <>
       ~s{filling its NULLs with the default would make 1 key repeat over ("b", "c") - } <>
-      "fix the data, keep the attribute optional: true, or drop the unique declaration"
+      "fix the data, keep the attribute optional: true, or drop the unique declaration before " <>
+      "making it required"
   end
 
   # Module2's mapping with two optional string columns "y" and "z", and a key over them.
