@@ -491,7 +491,7 @@ defmodule Hologram.Mutation do
     references =
       entity_type.__relationships__()
       |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
-      |> Map.new(fn {name, _type, _opts} -> {String.to_existing_atom("#{name}_id"), :uuid} end)
+      |> Map.new(fn {name, _type, _opts} -> {String.to_existing_atom("#{name}_id"), :id} end)
 
     Map.merge(attributes, references)
   end

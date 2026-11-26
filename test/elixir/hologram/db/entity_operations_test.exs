@@ -59,8 +59,8 @@ defmodule Hologram.DB.EntityOperationsTest do
     count_sql =
       ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module3_a_$join" WHERE "source_id" = $1 AND "target_id" = $2|
 
-    encoded_source_id = Codec.encode(source_entity.id, :uuid)
-    encoded_target_id = Codec.encode(target_entity.id, :uuid)
+    encoded_source_id = Codec.encode(source_entity.id, :id)
+    encoded_target_id = Codec.encode(target_entity.id, :id)
 
     {:ok, %Postgrex.Result{rows: [[count]]}} =
       Connection.query(count_sql, [encoded_source_id, encoded_target_id])
@@ -101,7 +101,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     Enum.map(rows, fn [op, type, entity_id, data, revisions, old] ->
       %{
         data: data,
-        entity_id: Codec.decode(entity_id, :uuid),
+        entity_id: Codec.decode(entity_id, :id),
         old: old,
         op: op,
         revisions: revisions,
@@ -138,7 +138,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     statement =
       ~s|SELECT "op", "seq" FROM "hologram_system"."oplog" WHERE "entity_id" = $1 ORDER BY "seq"|
 
-    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [Codec.encode(id, :uuid)])
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [Codec.encode(id, :id)])
 
     Enum.map(rows, fn [op, seq] -> {op, seq} end)
   end
@@ -330,7 +330,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       statement = ~s|SELECT "data" FROM "hologram_system"."oplog" WHERE "entity_id" = $1|
 
       {:ok, %Postgrex.Result{rows: [[data]]}} =
-        Connection.query(statement, [Codec.encode(created_entity.id, :uuid)])
+        Connection.query(statement, [Codec.encode(created_entity.id, :id)])
 
       refute Map.has_key?(data, "server_created_seq")
       refute Map.has_key?(data, "server_updated_seq")
@@ -354,7 +354,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       select_sql =
         ~s|SELECT "a", "b", "c" FROM "hologram_data"."test_fixtures_entity_module2" WHERE "id" = $1|
 
-      encoded_id = Codec.encode(created_entity.id, :uuid)
+      encoded_id = Codec.encode(created_entity.id, :id)
 
       assert {:ok, %Postgrex.Result{rows: [[true, nil, "some text"]]}} =
                Connection.query(select_sql, [encoded_id])
@@ -370,7 +370,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       select_sql =
         ~s|SELECT "a", "b", "c", "d" FROM "hologram_data"."test_fixtures_entity_module4" WHERE "id" = $1|
 
-      encoded_id = Codec.encode(created_entity.id, :uuid)
+      encoded_id = Codec.encode(created_entity.id, :id)
 
       assert {:ok, %Postgrex.Result{rows: [[~D[2026-07-19], ^written_at, "x", 1.5]]}} =
                Connection.query(select_sql, [encoded_id])
@@ -386,8 +386,8 @@ defmodule Hologram.DB.EntityOperationsTest do
       select_sql =
         ~s|SELECT "b_id", "c_id" FROM "hologram_data"."test_fixtures_entity_module3" WHERE "id" = $1|
 
-      encoded_id = Codec.encode(created_entity.id, :uuid)
-      encoded_target_id = Codec.encode(target_entity.id, :uuid)
+      encoded_id = Codec.encode(created_entity.id, :id)
+      encoded_target_id = Codec.encode(target_entity.id, :id)
 
       assert {:ok, %Postgrex.Result{rows: [[nil, ^encoded_target_id]]}} =
                Connection.query(select_sql, [encoded_id])
@@ -687,7 +687,7 @@ defmodule Hologram.DB.EntityOperationsTest do
           s2: incompressible_string(max_bytes.s2),
           s3: incompressible_string(max_bytes.s3),
           s4: incompressible_string(max_bytes.s4),
-          u: Entity.generate_id()
+          u: Entity.id_to_uuid(Entity.generate_id())
         )
 
       two_padded_strings =
@@ -712,7 +712,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     test "returns reference violations" do
       assert create(Module3.new()) == {:error, %{c_id: [:required]}}
 
-      assert create(Module3.new(c_id: "garbage")) == {:error, %{c_id: [type: :uuid]}}
+      assert create(Module3.new(c_id: "garbage")) == {:error, %{c_id: [type: :id]}}
     end
 
     # A well-formed id naming no row is a valid value, so it passes the declarations and the
@@ -757,7 +757,7 @@ defmodule Hologram.DB.EntityOperationsTest do
     # the violation it earned - and the reference beside it is still asked about.
     test "skips a reference carrying its own violation" do
       assert create(Module3.new(b_id: Entity.generate_id(), c_id: "garbage")) ==
-               {:error, %{b_id: [:not_found], c_id: [type: :uuid]}}
+               {:error, %{b_id: [:not_found], c_id: [type: :id]}}
     end
 
     test "reports a value violation and a taken unique value together" do
@@ -1023,7 +1023,7 @@ defmodule Hologram.DB.EntityOperationsTest do
         ~s|SELECT "role" FROM "hologram_data"."hologram_role_grant" | <>
           ~s|WHERE "user_id" = $1 AND "entity_id" = $2 ORDER BY "role"|
 
-      params = [Codec.encode(user_id, :uuid), Codec.encode(entity_id, :uuid)]
+      params = [Codec.encode(user_id, :id), Codec.encode(entity_id, :id)]
       {:ok, %{rows: rows}} = Connection.query(select_sql, params)
 
       Enum.map(rows, fn [role] -> role end)
@@ -1061,8 +1061,8 @@ defmodule Hologram.DB.EntityOperationsTest do
         ~s|SELECT "role", "id" FROM "hologram_data"."hologram_role_grant" | <>
           ~s|WHERE "user_id" = $1 ORDER BY "role"|
 
-      {:ok, %{rows: rows}} = Connection.query(select_sql, [Codec.encode(user.id, :uuid)])
-      granted = Enum.map(rows, fn [role, id] -> {role, Codec.decode(id, :uuid)} end)
+      {:ok, %{rows: rows}} = Connection.query(select_sql, [Codec.encode(user.id, :id)])
+      granted = Enum.map(rows, fn [role, id] -> {role, Codec.decode(id, :id)} end)
 
       entity_type = PolicyModule1
 
@@ -1080,7 +1080,7 @@ defmodule Hologram.DB.EntityOperationsTest do
         ~s|SELECT count(*) FROM "hologram_data"."hologram_role_grant" WHERE "entity_id" = $1|
 
       {:ok, %{rows: [[count]]}} =
-        Connection.query(select_sql, [Codec.encode(resource.id, :uuid)])
+        Connection.query(select_sql, [Codec.encode(resource.id, :id)])
 
       assert count == 0
     end
@@ -1110,7 +1110,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       select_sql =
         ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_policy_module1" WHERE "id" = $1|
 
-      {:ok, %{rows: [[count]]}} = Connection.query(select_sql, [Codec.encode(entity.id, :uuid)])
+      {:ok, %{rows: [[count]]}} = Connection.query(select_sql, [Codec.encode(entity.id, :id)])
 
       assert count == 0
     end
@@ -1121,7 +1121,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       count_sql =
         ~s|SELECT count(*) FROM "hologram_data"."hologram_role_grant" WHERE "user_id" = $1|
 
-      {:ok, %{rows: [[count]]}} = Connection.query(count_sql, [Codec.encode(user_id, :uuid)])
+      {:ok, %{rows: [[count]]}} = Connection.query(count_sql, [Codec.encode(user_id, :id)])
 
       count
     end
@@ -1154,9 +1154,9 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert count_role_grants(user.id) == 1
 
       select_sql = ~s|SELECT "id" FROM "hologram_data"."hologram_role_grant" WHERE "user_id" = $1|
-      {:ok, %{rows: [[id]]}} = Connection.query(select_sql, [Codec.encode(user.id, :uuid)])
+      {:ok, %{rows: [[id]]}} = Connection.query(select_sql, [Codec.encode(user.id, :id)])
 
-      assert Codec.decode(id, :uuid) == first_grant.id
+      assert Codec.decode(id, :id) == first_grant.id
     end
 
     test "records the insert as an effect" do
@@ -1590,7 +1590,7 @@ defmodule Hologram.DB.EntityOperationsTest do
         ~s|SELECT "a"::text FROM "hologram_data"."test_fixtures_entity_module58" WHERE "id" = $1|
 
       assert {:ok, %Postgrex.Result{rows: [["0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"]]}} =
-               Connection.query(statement, [Codec.encode(created_entity.id, :uuid)])
+               Connection.query(statement, [Codec.encode(created_entity.id, :id)])
     end
 
     test "returns to-one relationship references as target ids" do
@@ -1779,7 +1779,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
     test "refuses an id that isn't a canonical UUID" do
       expected_msg =
-        ~s(invalid id "constructor" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings)
+        ~s(invalid id "constructor" - entity ids are strings of 22 base62 characters)
 
       assert_error MisuseError, expected_msg, fn ->
         update(Module2, "constructor", c: "after")
@@ -1788,7 +1788,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
     test "prints a map id with its keys sorted" do
       expected_msg =
-        "invalid id %{alpha: 2, zeta: 1} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+        "invalid id %{alpha: 2, zeta: 1} - entity ids are strings of 22 base62 characters"
 
       assert_error MisuseError, expected_msg, fn ->
         update(Module2, %{zeta: 1, alpha: 2}, c: "after")
@@ -1797,7 +1797,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
     test "refuses a nil id" do
       expected_msg =
-        "invalid id nil - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+        "invalid id nil - entity ids are strings of 22 base62 characters"
 
       assert_error MisuseError, expected_msg, fn -> update(Module2, nil, c: "after") end
     end
@@ -2628,7 +2628,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert update(Module3, created_entity.id, %{c_id: nil}) == {:error, %{c_id: [:required]}}
 
       assert update(Module3, created_entity.id, %{c_id: "garbage"}) ==
-               {:error, %{c_id: [type: :uuid]}}
+               {:error, %{c_id: [type: :id]}}
     end
 
     test "returns a missing reference target from the write itself" do

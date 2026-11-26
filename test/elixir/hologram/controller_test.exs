@@ -601,7 +601,7 @@ defmodule Hologram.ControllerTest do
         identity_tag: "my_identity_tag",
         instance_id: "my_instance_id",
         mount_data: %{
-          actor_user_id: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+          actor_user_id: "02x9QDX4pOzriCIlt0xKjn",
           component_registry: %{"page" => %{module: Module1, struct: %Component{}}},
           page_module: Module1,
           page_params: %{key: "value"},
@@ -678,7 +678,7 @@ defmodule Hologram.ControllerTest do
       assert decoded["assetManifest"]["hologram/runtime.js"] ==
                "/hologram/runtime-1234567890abcdef.js"
 
-      assert decoded["actorEntityId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
+      assert decoded["actorEntityId"] == "02x9QDX4pOzriCIlt0xKjn"
 
       assert decoded["actorUserId"] == "u02x9QDX4pOzriCIlt0xKjn"
 
@@ -701,7 +701,7 @@ defmodule Hologram.ControllerTest do
       fields = %{
         chunk_digests: ["AAAAAAAA", "BBBBBBBB"],
         mount_data: %{
-          actor_user_id: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+          actor_user_id: "02x9QDX4pOzriCIlt0xKjn",
           component_registry: %{"page" => %{module: Module1, struct: %Component{}}},
           page_module: Module1,
           page_params: %{},
@@ -763,7 +763,7 @@ defmodule Hologram.ControllerTest do
         |> Jason.encode!()
         |> Jason.decode!()
 
-      assert decoded["actorEntityId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
+      assert decoded["actorEntityId"] == "02x9QDX4pOzriCIlt0xKjn"
 
       assert decoded["actorUserId"] == "u02x9QDX4pOzriCIlt0xKjn"
 
@@ -1169,7 +1169,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "runs middleware as the session user" do
-      session = Map.put(@session, :hologram_user_id, "019ff5c2-0000-7000-8000-000000000001")
+      session = Map.put(@session, :hologram_user_id, "0345qHnCxCNtMoI98fgkFd")
 
       parsed_json =
         %{
@@ -1192,7 +1192,7 @@ defmodule Hologram.ControllerTest do
       assert response["action"] ==
                serialized_term(%Component.Action{
                  name: :my_action,
-                 params: %{actor: "019ff5c2-0000-7000-8000-000000000001"},
+                 params: %{actor: "0345qHnCxCNtMoI98fgkFd"},
                  target: "my_target_1"
                })
     end
@@ -3649,7 +3649,7 @@ defmodule Hologram.ControllerTest do
         :get
         |> Plug.Test.conn("/")
         |> Plug.Test.init_test_session(%{
-          hologram_user_id: "019ff5c2-0000-7000-8000-000000000002"
+          hologram_user_id: "0345qHnCxCNtMoI98fgkFe"
         })
         |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module51, %{}, [],
@@ -3659,7 +3659,7 @@ defmodule Hologram.ControllerTest do
           replica_id: @replica_id
         )
 
-      assert String.contains?(conn.resp_body, "actor=019ff5c2-0000-7000-8000-000000000002")
+      assert String.contains?(conn.resp_body, "actor=0345qHnCxCNtMoI98fgkFe")
     end
 
     test "asks the connection to replace its bindings with the page's accumulated subscriptions" do
@@ -4191,7 +4191,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "names a user entity's id as the actor's entity id" do
-      user_id = UUID.uuid4()
+      user_id = Hologram.Entity.generate_id()
 
       conn =
         post_handshake("test-instance-id", %{

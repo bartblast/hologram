@@ -14,11 +14,11 @@ defmodule Hologram.Mutation.WriteTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
-  @actor_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13"
-  @granter_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
-  @id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
-  @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
-  @user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12"
+  @actor_id "02y1zRviSAYGVwSyzxs4qB"
+  @granter_id "02y1zRviSAYGVwSyzxs4q9"
+  @id "02y1zRviSAYGVwSyzxs4q7"
+  @target_id "02y1zRviSAYGVwSyzxs4q8"
+  @user_id "02y1zRviSAYGVwSyzxs4qA"
 
   defp grant_write do
     %Write{

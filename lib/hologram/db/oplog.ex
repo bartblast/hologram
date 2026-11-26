@@ -102,7 +102,7 @@ defmodule Hologram.DB.Oplog do
 
   def append(effects) do
     model_hash = Model.hash()
-    actor_id = Codec.encode(Context.actor_entity_id(), :uuid)
+    actor_id = Codec.encode(Context.actor_entity_id(), :id)
     mutation_ref = Ref.get()
 
     effects
@@ -579,7 +579,7 @@ defmodule Hologram.DB.Oplog do
     case Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end) do
       # A name matching no attribute definition is a to-one reference field, and every reference
       # column carries the entity id type.
-      nil -> :uuid
+      nil -> :id
       {_name, type, _opts} -> type
     end
   end
@@ -603,7 +603,7 @@ defmodule Hologram.DB.Oplog do
 
   # Every old reference is an entity id, or nil for a reference that was unset.
   defp old(%{old: old}) when is_map(old) do
-    Map.new(old, fn {name, value} -> {name, Codec.encode_json(value, :uuid)} end)
+    Map.new(old, fn {name, value} -> {name, Codec.encode_json(value, :id)} end)
   end
 
   defp old(_effect), do: nil
@@ -633,9 +633,9 @@ defmodule Hologram.DB.Oplog do
          inserted_at
        ]) do
     %{
-      actor_id: Codec.decode(actor_id, :uuid),
+      actor_id: Codec.decode(actor_id, :id),
       data: data,
-      entity_id: Codec.decode(entity_id, :uuid),
+      entity_id: Codec.decode(entity_id, :id),
       inserted_at: inserted_at,
       model_hash: model_hash,
       mutation_ref: mutation_ref,
@@ -692,7 +692,7 @@ defmodule Hologram.DB.Oplog do
       Map.get(effect, :seq),
       Atom.to_string(op),
       Codec.encode_enum_value(entity_type),
-      Codec.encode(entity_id, :uuid),
+      Codec.encode(entity_id, :id),
       data(effect),
       model_hash,
       actor_id,

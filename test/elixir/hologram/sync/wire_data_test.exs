@@ -18,8 +18,8 @@ defmodule Hologram.Sync.WireDataTest do
   alias Hologram.Test.Fixtures.Entity.Module4
 
   @created_at ~U[2026-08-16 15:18:13.022508Z]
-  @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
-  @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+  @entity_id "02y1zRviSAYGVwSyzxs4q7"
+  @target_id "02y1zRviSAYGVwSyzxs4q8"
   @updated_at ~U[2026-08-16 16:20:00.000000Z]
 
   defp module_2(overrides \\ %{}) do

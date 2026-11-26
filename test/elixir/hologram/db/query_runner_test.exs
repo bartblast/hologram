@@ -12,6 +12,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
+  alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
   alias Hologram.MisuseError
   alias Hologram.Policy
@@ -167,13 +168,13 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       values =
         Enum.map(compiled.params, fn
-          :actor -> Codec.encode(actor_user_id, :uuid)
+          :actor -> Codec.encode(actor_user_id, :id)
           {:value, value} -> value
         end)
 
       {:ok, %{rows: rows}} = Connection.query(compiled.sql, values)
 
-      Enum.map(rows, fn [id | _rest] -> Codec.decode(id, :uuid) end)
+      Enum.map(rows, fn [id | _rest] -> Codec.decode(id, :id) end)
     end
 
     defp create_policy_child(parent, public) do
@@ -318,8 +319,7 @@ defmodule Hologram.DB.QueryRunnerTest do
         |> DB.create!()
 
       for session_user_id <- [
-            String.replace(user.id, "-", ""),
-            String.upcase(user.id),
+            Entity.id_to_uuid(user.id),
             user.id <> "\n",
             "abc",
             7,
@@ -671,7 +671,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       {:ok, _result} =
         Connection.query(
           ~s(UPDATE "hologram_data".#{Mapper.quote_identifier(Mapper.table_name(Module2))} SET "created_at" = $1 WHERE "id" = $2),
-          [stamp, Codec.encode(target.id, :uuid)]
+          [stamp, Codec.encode(target.id, :id)]
         )
 
       embedding_term =

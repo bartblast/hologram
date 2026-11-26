@@ -234,7 +234,7 @@ defmodule Hologram.Entity.Derived.Validator do
 
     case List.keyfind(declarations, last_name, 0) do
       {_name, type, opts} -> {type, opts}
-      nil -> {:uuid, []}
+      nil -> {:id, []}
     end
   end
 

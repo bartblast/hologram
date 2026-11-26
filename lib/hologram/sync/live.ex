@@ -327,7 +327,7 @@ defmodule Hologram.Sync.Live do
         Enum.flat_map(relationships, fn {source, _name, target} -> [source, target] end)
       )
       |> Map.new(fn {entity_type, ids} ->
-        {entity_type, Enum.map(ids, &Codec.encode(&1, :uuid))}
+        {entity_type, Enum.map(ids, &Codec.encode(&1, :id))}
       end)
 
     for {source_type, name, target_type} <- relationships,
@@ -386,8 +386,8 @@ defmodule Hologram.Sync.Live do
   # every id the log decodes has before it can be compared with one.
   defp canonical_id(id) do
     id
-    |> Codec.encode(:uuid)
-    |> Codec.decode(:uuid)
+    |> Codec.encode(:id)
+    |> Codec.decode(:id)
   end
 
   defp merge_rows(rows, more_rows) do

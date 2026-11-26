@@ -344,8 +344,8 @@ defmodule Hologram.DB do
   raw. A by-id read carries no claim, so a trusted one is
   `type |> filter(id: ^id) |> one() |> trust() |> DB.read()`.
 
-  Raises Hologram.MisuseError when the id is not a canonical entity id (a lowercase
-  8-4-4-4-12 UUID string), or when the first argument is not an entity type module.
+  Raises Hologram.MisuseError when the id is not an entity id (a string of 22 base62
+  characters), or when the first argument is not an entity type module.
   """
   @spec read(module, Entity.id()) :: Entity.t() | nil
   def read(entity_type, id) do

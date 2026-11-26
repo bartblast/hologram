@@ -231,10 +231,10 @@ defmodule Hologram.AuthContentionTest do
     """
 
     {:ok, %Postgrex.Result{rows: rows}} =
-      route(scratch, fn -> Connection.query(statement, [Codec.encode(resource.id, :uuid)]) end)
+      route(scratch, fn -> Connection.query(statement, [Codec.encode(resource.id, :id)]) end)
 
     rows
-    |> Enum.map(fn [user_id] -> Codec.decode(user_id, :uuid) end)
+    |> Enum.map(fn [user_id] -> Codec.decode(user_id, :id) end)
     |> Enum.sort()
   end
 

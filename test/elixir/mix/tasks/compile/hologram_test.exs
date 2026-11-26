@@ -166,7 +166,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     def __system_attributes__ do
       [
         {:created_at, :datetime, []},
-        {:id, :uuid, []},
+        {:id, :id, []},
         {:server_created_at, :datetime, []},
         {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},
@@ -239,7 +239,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     def __system_attributes__ do
       [
         {:created_at, :datetime, []},
-        {:id, :uuid, []},
+        {:id, :id, []},
         {:server_created_at, :datetime, []},
         {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},
@@ -310,7 +310,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     def __system_attributes__ do
       [
         {:created_at, :datetime, []},
-        {:id, :uuid, []},
+        {:id, :id, []},
         {:server_created_at, :datetime, []},
         {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},

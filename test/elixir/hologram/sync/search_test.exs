@@ -27,7 +27,7 @@ defmodule Hologram.Sync.SearchTest do
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
-  @unknown_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
+  @unknown_id "02y1zRviSAYGVwSyzxs4q7"
 
   # Module12's read rule reads parent.parent.public: the reference it is followed through on its
   # Module5, and the attribute on the Module1 there.

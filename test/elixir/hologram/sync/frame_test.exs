@@ -307,7 +307,7 @@ defmodule Hologram.Sync.FrameTest do
   # The same vectors test/javascript/drop_hash_test.mjs checks the browser's hash against.
   describe "drop_hash/2" do
     test "hashes a salt and an id the way the browser does" do
-      assert drop_hash("salt", "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f") == "112df949ed165eb9"
+      assert drop_hash("salt", "02y1zRviSAYGVwSyzxs4q7") == "cb73f507346fd15a"
     end
 
     test "hashes nothing at all as SHA-256 does" do
@@ -402,7 +402,7 @@ defmodule Hologram.Sync.FrameTest do
         deltas: %{put_entity: %{"Hologram.Test.Fixtures.Entity.Module2" => [WireData.row(row)]}},
         final_seq: nil,
         model_hash: Model.hash(),
-        protocol_version: 1
+        protocol_version: 2
       }
 
       encoded = Jason.encode!(payload)
@@ -569,7 +569,7 @@ defmodule Hologram.Sync.FrameTest do
 
   describe "encode_reload_envelope/2" do
     test "wraps the notice in a sync_reload SSE event envelope" do
-      payload = %{protocol_version: 1, reason: :model_hash}
+      payload = %{protocol_version: 2, reason: :model_hash}
       encoded = Jason.encode!(payload)
 
       assert encode_reload_envelope(42, :model_hash) ==
@@ -587,7 +587,7 @@ defmodule Hologram.Sync.FrameTest do
 
   describe "encode_resync_envelope/2" do
     test "wraps the discard marker in a sync_resync SSE event envelope" do
-      payload = %{protocol_version: 1, reason: :retention}
+      payload = %{protocol_version: 2, reason: :retention}
       encoded = Jason.encode!(payload)
 
       assert encode_resync_envelope(42, :retention) ==
@@ -607,7 +607,7 @@ defmodule Hologram.Sync.FrameTest do
 
       assert Jason.decode!(data) == %{
                "identity_tag" => "1.tag",
-               "protocol_version" => 1,
+               "protocol_version" => 2,
                "reason" => "identity"
              }
     end
@@ -621,7 +621,7 @@ defmodule Hologram.Sync.FrameTest do
 
   describe "encode_identity_envelope/4" do
     test "wraps who the session is now in a sync_identity SSE event envelope" do
-      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+      user_id = "3rrX7lDxWDEFgiyP0LHGP9"
 
       assert "event: sync_identity\nid: 42\ndata: " <> data =
                encode_identity_envelope(42, user_id, "1.tag", nil)
@@ -630,7 +630,7 @@ defmodule Hologram.Sync.FrameTest do
                "actor_entity_id" => user_id,
                "actor_user_id" => Auth.owner_key(user_id),
                "identity_tag" => "1.tag",
-               "protocol_version" => 1
+               "protocol_version" => 2
              }
     end
 
@@ -652,7 +652,7 @@ defmodule Hologram.Sync.FrameTest do
 
     # The tab holds the new user's row before its stream fills it, as a page's first render does.
     test "carries the user's row the way a page carries it" do
-      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+      user_id = "3rrX7lDxWDEFgiyP0LHGP9"
       user_rows = %{put_entity: %{"MyApp.User" => [%{id: user_id, email: "a@example.com"}]}}
 
       "event: sync_identity\nid: 42\ndata: " <> data =
@@ -685,7 +685,7 @@ defmodule Hologram.Sync.FrameTest do
 
       assert Jason.decode!(data) == %{
                "policy_hash" => "0123456789abcdef",
-               "protocol_version" => 1,
+               "protocol_version" => 2,
                "rules" => %{"derived" => %{}, "inverses" => %{}, "policies" => %{}}
              }
     end
@@ -698,7 +698,7 @@ defmodule Hologram.Sync.FrameTest do
         cursor: nil,
         final_seq: nil,
         model_hash: Model.hash(),
-        protocol_version: 1,
+        protocol_version: 2,
         scope: :types,
         types: ["Hologram.Test.Fixtures.Entity.Module2"]
       }
@@ -715,7 +715,7 @@ defmodule Hologram.Sync.FrameTest do
         cursor: nil,
         final_seq: nil,
         model_hash: Model.hash(),
-        protocol_version: 1,
+        protocol_version: 2,
         scope: :types,
         types: ["Hologram.Test.Fixtures.Entity.Module2", "Hologram.Test.Fixtures.Entity.Module3"]
       }
@@ -732,7 +732,7 @@ defmodule Hologram.Sync.FrameTest do
         cursor: nil,
         final_seq: nil,
         model_hash: Model.hash(),
-        protocol_version: 1,
+        protocol_version: 2,
         scope: :types,
         types: ["Hologram.Test.Fixtures.Entity.Module2"]
       }
@@ -748,7 +748,7 @@ defmodule Hologram.Sync.FrameTest do
         cursor: nil,
         final_seq: nil,
         model_hash: Model.hash(),
-        protocol_version: 1,
+        protocol_version: 2,
         scope: :all
       }
 
@@ -781,7 +781,7 @@ defmodule Hologram.Sync.FrameTest do
         cursor: "Nzc4LjA",
         final_seq: nil,
         model_hash: Model.hash(),
-        protocol_version: 1,
+        protocol_version: 2,
         scope: :all
       }
 
@@ -794,7 +794,7 @@ defmodule Hologram.Sync.FrameTest do
 
   describe "protocol_version/0" do
     test "returns the version this build speaks" do
-      assert protocol_version() == 1
+      assert protocol_version() == 2
     end
   end
 

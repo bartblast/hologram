@@ -59,7 +59,7 @@ defmodule Hologram.DB.WriterTest do
       Connection.query(
         ~s|UPDATE "hologram_data"."#{table}" SET "updated_at" = "updated_at" - interval '1 hour' | <>
           ~s|WHERE "id" = $1|,
-        [Codec.encode(id, :uuid)]
+        [Codec.encode(id, :id)]
       )
 
     EntityOperations.get(entity_type, id)
@@ -72,8 +72,8 @@ defmodule Hologram.DB.WriterTest do
 
     {:ok, %Postgrex.Result{rows: [[count]]}} =
       Connection.query(count_sql, [
-        Codec.encode(source_entity.id, :uuid),
-        Codec.encode(target_entity.id, :uuid)
+        Codec.encode(source_entity.id, :id),
+        Codec.encode(target_entity.id, :id)
       ])
 
     count
@@ -97,8 +97,8 @@ defmodule Hologram.DB.WriterTest do
 
     {:ok, %{rows: rows}} =
       Connection.query(select_sql, [
-        Codec.encode(user_id, :uuid),
-        Codec.encode(entity_id, :uuid)
+        Codec.encode(user_id, :id),
+        Codec.encode(entity_id, :id)
       ])
 
     Enum.map(rows, fn [role] -> role end)
@@ -108,7 +108,7 @@ defmodule Hologram.DB.WriterTest do
     statement = ~s|SELECT "actor_id" FROM "hologram_system"."oplog" WHERE "entity_id" = $1|
 
     {:ok, %Postgrex.Result{rows: rows}} =
-      Connection.query(statement, [Codec.encode(entity_id, :uuid)])
+      Connection.query(statement, [Codec.encode(entity_id, :id)])
 
     Enum.map(rows, fn [actor_id] -> actor_id end)
   end
@@ -412,7 +412,7 @@ defmodule Hologram.DB.WriterTest do
       {:ok, %Postgrex.Result{rows: [[count]]}} =
         Connection.query(
           ~s|SELECT count(*) FROM "hologram_data"."hologram_role_grant" WHERE "entity_id" = $1|,
-          [Codec.encode(entity.id, :uuid)]
+          [Codec.encode(entity.id, :id)]
         )
 
       assert count == 0

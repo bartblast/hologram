@@ -21,7 +21,7 @@ defmodule Hologram.Query.Ordering do
   ranks, a map from each declared value to its index. Given no ranks, an enum value compares as any
   other atom.
   """
-  @spec compare(any, any, %{atom => non_neg_integer} | nil) :: :eq | :gt | :lt
+  @spec compare(any, any, %{atom => non_neg_integer} | :characters | nil) :: :eq | :gt | :lt
   def compare(left, right, ranks \\ nil)
 
   # Strings order by the key derived from them and then by themselves, which is the pair of
@@ -35,6 +35,11 @@ defmodule Hologram.Query.Ordering do
   end
 
   def compare(left, right, nil), do: compare_values(left, right)
+
+  # An id or a uuid orders by its characters, as its column orders by the number they write: a
+  # fixed-width spelling whose characters run in ASCII order, where a string's sort key would fold
+  # the letter case an id reads apart.
+  def compare(left, right, :characters), do: compare_values(left, right)
 
   # An enum value orders by its position in the declared list, which is the order the database
   # holds the type in - so what compares is the pair of positions rather than the labels. A value
@@ -69,7 +74,8 @@ defmodule Hologram.Query.Ordering do
   Returns the given rows of the given entity type ordered by the given sort keys, `{name,
   direction}` pairs, each row's keys read once with the given function of a row and a name. Values
   compare as `compare/3` compares them - an enum key, a derived one included, by its position among
-  the type's declared values - and a missing value goes last ascending and first descending. Rows
+  the type's declared values, and an id, a reference or a uuid by its characters - and a missing
+  value goes last ascending and first descending. Rows
   tying on every key keep no particular order, so a total order needs a unique key among them, as
   a normalized query's sort has its id.
   """
@@ -77,7 +83,11 @@ defmodule Hologram.Query.Ordering do
           list(struct)
   def sort(rows, keys, entity_type, read) do
     names = Enum.map(keys, fn {name, _direction} -> name end)
-    ranks = enum_ranks(entity_type, names)
+
+    ranks =
+      entity_type
+      |> enum_ranks(names)
+      |> Map.merge(character_orders(entity_type, names))
 
     rows
     |> Enum.map(fn row -> {row, Enum.map(names, &read.(row, &1))} end)
@@ -101,6 +111,23 @@ defmodule Hologram.Query.Ordering do
   end
 
   def widened(value, _type), do: value
+
+  # The names among the given ones that order by their characters - the id, a reference field and
+  # an id or uuid attribute or derived field. A reference field has no definition of its own.
+  defp character_orders(entity_type, names) do
+    definitions =
+      entity_type.__attributes__() ++
+        entity_type.__system_attributes__() ++ entity_type.__derived__()
+
+    names
+    |> Enum.filter(fn name ->
+      case List.keyfind(definitions, name, 0) do
+        {_name, type, _opts} -> type in [:id, :uuid]
+        nil -> true
+      end
+    end)
+    |> Map.new(&{&1, :characters})
+  end
 
   # Missing values are placed the way the database places them - last when ascending, first when
   # descending - so a page reading its own rows shows them where the server put them.

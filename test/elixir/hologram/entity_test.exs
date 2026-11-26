@@ -410,7 +410,7 @@ defmodule Hologram.EntityTest do
     test "returns system attribute definitions sorted by name on every entity type" do
       expected = [
         {:created_at, :datetime, []},
-        {:id, :uuid, []},
+        {:id, :id, []},
         {:server_created_at, :datetime, []},
         {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},
@@ -667,8 +667,12 @@ defmodule Hologram.EntityTest do
   # Each test in this describe block has a related JavaScript test in test/javascript/utils_test.mjs (describe "uuidv7()")
   # Always update both together.
   describe "generate_id/0" do
-    test "returns a version 7 UUID string" do
-      assert generate_id() =~
+    test "returns 22 base62 characters holding the bits of a version 7 UUID" do
+      id = generate_id()
+
+      assert id =~ ~r/^[0-9A-Za-z]{22}$/
+
+      assert id_to_uuid(id) =~
                ~r/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
     end
 
@@ -683,12 +687,24 @@ defmodule Hologram.EntityTest do
 
       embedded_unix_ms =
         id
+        |> id_to_uuid()
         |> String.replace("-", "")
         |> String.slice(0, 12)
         |> String.to_integer(16)
 
       assert embedded_unix_ms >= unix_ms_before
       assert embedded_unix_ms <= unix_ms_after
+    end
+
+    test "returns ids that sort as strings in the order they were made, across milliseconds" do
+      ids =
+        Enum.map(1..3, fn _index ->
+          id = generate_id()
+          Process.sleep(2)
+          id
+        end)
+
+      assert Enum.sort(ids) == ids
     end
   end
 
@@ -703,7 +719,7 @@ defmodule Hologram.EntityTest do
     end
 
     test "is undone by uuid_to_id/1" do
-      id = uuid_to_id(generate_id())
+      id = generate_id()
 
       assert uuid_to_id(id_to_uuid(id)) == id
     end
@@ -889,8 +905,7 @@ defmodule Hologram.EntityTest do
 
       assert is_struct(entity, Module2)
 
-      assert entity.id =~
-               ~r/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      assert entity.id =~ ~r/^[0-9A-Za-z]{22}$/
 
       assert entity.a == false
       assert entity.c == "text_4"
@@ -906,8 +921,7 @@ defmodule Hologram.EntityTest do
 
       assert is_struct(entity, Module1)
 
-      assert entity.id =~
-               ~r/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      assert entity.id =~ ~r/^[0-9A-Za-z]{22}$/
     end
 
     test "builds a job through its own type" do
@@ -962,8 +976,7 @@ defmodule Hologram.EntityTest do
 
       assert is_struct(entity, Module1)
 
-      assert entity.id =~
-               ~r/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      assert entity.id =~ ~r/^[0-9A-Za-z]{22}$/
 
       assert entity.created_at == nil
       assert entity.updated_at == nil
@@ -1047,7 +1060,7 @@ defmodule Hologram.EntityTest do
         ":actor_id of Hologram.Test.Fixtures.Job.Module1 is set by the framework - a job is enqueued as queued, and the worker records the rest"
 
       assert_error MisuseError, expected_msg, fn ->
-        new(JobModule1, %{actor_id: "018f4c11-1111-7111-8111-111111111111"})
+        new(JobModule1, %{actor_id: "02wTiQpCtbKJxz7pUTfNFB"})
       end
     end
 
@@ -1556,7 +1569,7 @@ defmodule Hologram.EntityTest do
     end
 
     test "is undone by id_to_uuid/1" do
-      uuid = generate_id()
+      uuid = id_to_uuid(generate_id())
 
       assert id_to_uuid(uuid_to_id(uuid)) == uuid
     end

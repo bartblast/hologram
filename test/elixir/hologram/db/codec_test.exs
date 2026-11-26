@@ -315,7 +315,7 @@ defmodule Hologram.DB.CodecTest do
     end
 
     test "round trips the bytes of a UUIDv7" do
-      binary = encode(Hologram.Entity.generate_id(), :uuid)
+      binary = encode(Hologram.Entity.generate_id(), :id)
 
       assert encode(decode(binary, :id), :id) == binary
     end

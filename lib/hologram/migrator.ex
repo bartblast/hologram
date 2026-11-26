@@ -15,6 +15,7 @@ defmodule Hologram.Migrator do
   alias Hologram.DB.Schema
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SortKey
+  alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Migration.Loader
   alias Hologram.Migration.Renderer
@@ -1344,11 +1345,20 @@ defmodule Hologram.Migrator do
 
     {:ok, %{rows: rows}} = Connection.query(statement, [op.value, after_id, op.page_size])
 
+    # The page holds the ids as text, in the uuid spelling, and the derivation takes and gives
+    # entity ids - so they are compared as entity ids, and the new ones written back as text.
     moved =
       for [id, user_id, entity_type, entity_id, role] <- rows,
-          derived = RoleGrant.derive_id_from_labels(user_id, entity_type, entity_id, role),
-          derived != id,
-          do: {id, derived}
+          derived =
+            user_id
+            |> Entity.uuid_to_id()
+            |> RoleGrant.derive_id_from_labels(
+              entity_type,
+              entity_id && Entity.uuid_to_id(entity_id),
+              role
+            ),
+          derived != Entity.uuid_to_id(id),
+          do: {id, Entity.id_to_uuid(derived)}
 
     if moved != [] do
       {old_ids, new_ids} = Enum.unzip(moved)

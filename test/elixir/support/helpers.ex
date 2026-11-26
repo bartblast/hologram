@@ -241,8 +241,8 @@ defmodule Hologram.Test.Helpers do
         ~s|VALUES ($1, $2, $3::"hologram_data"."hologram_role_grant_role_$enum", $4, $4, 0, $4, 0, $4, '{}')|
 
     params = [
-      Codec.encode(Entity.generate_id(), :uuid),
-      Codec.encode(user_id, :uuid),
+      Codec.encode(Entity.generate_id(), :id),
+      Codec.encode(user_id, :id),
       Codec.encode(role, :enum),
       DateTime.utc_now()
     ]
@@ -503,7 +503,7 @@ defmodule Hologram.Test.Helpers do
     {:ok, _result} =
       Connection.query(statement, [
         Codec.encode(scheduled_at, :datetime),
-        Codec.encode(id, :uuid)
+        Codec.encode(id, :id)
       ])
 
     :ok
@@ -525,7 +525,7 @@ defmodule Hologram.Test.Helpers do
     {:ok, _result} =
       Connection.query(statement, [
         Codec.encode(created_at, :datetime),
-        Codec.encode(id, :uuid)
+        Codec.encode(id, :id)
       ])
 
     :ok
@@ -544,7 +544,7 @@ defmodule Hologram.Test.Helpers do
       ~s|UPDATE "hologram_data"."#{Mapper.table_name(entity_type)}" | <>
         ~s|SET "$revisions" = $1 WHERE "id" = $2|
 
-    {:ok, _result} = Connection.query(statement, [revisions, Codec.encode(id, :uuid)])
+    {:ok, _result} = Connection.query(statement, [revisions, Codec.encode(id, :id)])
 
     :ok
   end

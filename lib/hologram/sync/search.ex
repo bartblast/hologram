@@ -90,8 +90,8 @@ defmodule Hologram.Sync.Search do
   # every id the log decodes has before it can be listed as one.
   defp canonical_id(id) do
     id
-    |> Codec.encode(:uuid)
-    |> Codec.decode(:uuid)
+    |> Codec.encode(:id)
+    |> Codec.decode(:id)
   end
 
   # An entry is what one effect asks of the search along one edge: a walk to run (ids at the end of
@@ -319,12 +319,12 @@ defmodule Hologram.Sync.Search do
       encoded_ids =
         entity_ids
         |> Enum.uniq()
-        |> Enum.map(&Codec.encode(&1, :uuid))
+        |> Enum.map(&Codec.encode(&1, :id))
 
       {:ok, %Postgrex.Result{rows: found}} =
         Connection.query(statement, [type_label, encoded_ids])
 
-      reached = MapSet.new(found, fn [id] -> Codec.decode(id, :uuid) end)
+      reached = MapSet.new(found, fn [id] -> Codec.decode(id, :id) end)
 
       Map.update(rows, entity_type, reached, &MapSet.union(&1, reached))
     end)
@@ -385,11 +385,11 @@ defmodule Hologram.Sync.Search do
   end
 
   defp select_ids(statement, ids) do
-    params = [Enum.map(ids, &Codec.encode(&1, :uuid))]
+    params = [Enum.map(ids, &Codec.encode(&1, :id))]
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, params)
 
-    for [id] <- rows, id != nil, into: MapSet.new(), do: Codec.decode(id, :uuid)
+    for [id] <- rows, id != nil, into: MapSet.new(), do: Codec.decode(id, :id)
   end
 
   # One step back along a chain: from the rows a link leads to, to the rows it is followed from.

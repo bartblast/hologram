@@ -235,8 +235,8 @@ defmodule Hologram.DB.SQLQueryTest do
     end
 
     test "matches the same row with a uuid param in either spelling" do
-      id = Entity.generate_id()
-      short_id = Entity.uuid_to_id(id)
+      short_id = Entity.generate_id()
+      id = Entity.id_to_uuid(short_id)
       bytes = Codec.encode(id, :uuid)
 
       {:ok, _result} = Connection.query(@insert_given_id_sql, [bytes])
@@ -652,7 +652,7 @@ defmodule Hologram.DB.SQLQueryTest do
     end
 
     test "refuses an insert with Hologram's message" do
-      id = Codec.encode(Entity.generate_id(), :uuid)
+      id = Codec.encode(Entity.generate_id(), :id)
 
       assert run(@insert_given_id_sql, [id], []) ==
                {:error,

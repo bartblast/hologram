@@ -29,7 +29,7 @@ defmodule Hologram.Entity do
 
   @system_attributes [
     {:created_at, :datetime, []},
-    {:id, :uuid, []},
+    {:id, :id, []},
     {:server_created_at, :datetime, []},
     {:server_created_seq, :integer, []},
     {:server_updated_at, :datetime, []},
@@ -40,7 +40,7 @@ defmodule Hologram.Entity do
   @sequence_attributes [:server_created_seq, :server_updated_seq]
 
   @typedoc """
-  An entity id - the canonical lowercase 8-4-4-4-12 spelling generate_id/0 mints.
+  An entity id - the 128-bit number written in 22 base62 characters (0-9, A-Z, a-z), the spelling generate_id/0 mints.
   """
   @type id :: String.t()
 
@@ -466,7 +466,8 @@ defmodule Hologram.Entity do
   end
 
   @doc """
-  Generates a new entity id - a UUIDv7 string built from the number of milliseconds since the Unix epoch (1970-01-01 UTC, 48 bits) followed by random bits (74 bits).
+  Generates a new entity id - the bits of a UUIDv7, the number of milliseconds since the Unix epoch (1970-01-01 UTC, 48 bits) followed by random bits (74 bits), written in 22 base62 characters.
+  Ids of different milliseconds sort as strings in the order they were made.
   Entity ids come only from this function, on the server and on the client alike.
   """
   @spec generate_id() :: id
@@ -474,12 +475,7 @@ defmodule Hologram.Entity do
     unix_ms = System.system_time(:millisecond)
     <<rand_a::12, rand_b::62, _discarded::6>> = :crypto.strong_rand_bytes(10)
 
-    uuid = <<unix_ms::48, 7::4, rand_a::12, 2::2, rand_b::62>>
-
-    <<part_1::binary-size(8), part_2::binary-size(4), part_3::binary-size(4),
-      part_4::binary-size(4), part_5::binary-size(12)>> = Base.encode16(uuid, case: :lower)
-
-    "#{part_1}-#{part_2}-#{part_3}-#{part_4}-#{part_5}"
+    Codec.decode(<<unix_ms::48, 7::4, rand_a::12, 2::2, rand_b::62>>, :id)
   end
 
   @doc """
@@ -1094,7 +1090,7 @@ defmodule Hologram.Entity do
   defp attribute_type_asts(:integer, _opts), do: [quote(do: integer())]
   defp attribute_type_asts(:string, _opts), do: [remote_type_ast(String)]
   defp attribute_type_asts(:time, _opts), do: [remote_type_ast(Time)]
-  defp attribute_type_asts(:uuid, _opts), do: [remote_type_ast(Entity, :id)]
+  defp attribute_type_asts(:uuid, _opts), do: [remote_type_ast(String)]
 
   # An entity type with no derived field defines no definition function, which nothing asks of it.
   defp definition_function_clauses([]), do: []

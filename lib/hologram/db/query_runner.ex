@@ -129,10 +129,10 @@ defmodule Hologram.DB.QueryRunner do
     values =
       Enum.map(compiled.params, fn
         :ids ->
-          Enum.map(ids, &Codec.encode(&1, :uuid))
+          Enum.map(ids, &Codec.encode(&1, :id))
 
         :users ->
-          Enum.map(signed_in_user_ids, &Codec.encode(&1, :uuid))
+          Enum.map(signed_in_user_ids, &Codec.encode(&1, :id))
 
         {:value, encoded_value} ->
           encoded_value
@@ -249,6 +249,14 @@ defmodule Hologram.DB.QueryRunner do
   # column holds.
   defp decode_embedded_value(value, :float) when is_integer(value), do: value * 1.0
 
+  # jsonb spells a uuid column in the 8-4-4-4-12 form, where the column path reads an id's 22
+  # base62 characters - read back as the column holds it. A :uuid stays as jsonb spells it.
+  defp decode_embedded_value(value, :id) do
+    value
+    |> Codec.encode(:uuid)
+    |> Codec.decode(:id)
+  end
+
   # Same story as :datetime one type over - JSON drops a fraction's trailing zeros, so a time
   # arriving this way is spelled shorter than the same time read from its own column, which is
   # always six digits. Promoted here so that one time of day is one struct however it was read.
@@ -351,7 +359,7 @@ defmodule Hologram.DB.QueryRunner do
   defp readers(true, _anonymous, _reader_ids), do: :all
 
   defp readers(false, anonymous, reader_ids) do
-    readers = MapSet.new(reader_ids, &Codec.decode(&1, :uuid))
+    readers = MapSet.new(reader_ids, &Codec.decode(&1, :id))
 
     if anonymous, do: MapSet.put(readers, nil), else: readers
   end
@@ -380,7 +388,7 @@ defmodule Hologram.DB.QueryRunner do
 
   # The actor slot never appears in an anonymous statement - actor-referencing rules are
   # elided at composition, so there is no nil to bind.
-  defp resolve_param(:actor, actor_user_id, _limit), do: Codec.encode(actor_user_id, :uuid)
+  defp resolve_param(:actor, actor_user_id, _limit), do: Codec.encode(actor_user_id, :id)
 
   defp resolve_param(:final_seq, _actor_user_id, limit), do: limit
 
@@ -435,7 +443,7 @@ defmodule Hologram.DB.QueryRunner do
         Enum.reduce(user_ids, acc, fn user_id, user_acc ->
           Map.update(
             user_acc,
-            Codec.decode(user_id, :uuid),
+            Codec.decode(user_id, :id),
             %{key => true},
             &Map.put(&1, key, true)
           )

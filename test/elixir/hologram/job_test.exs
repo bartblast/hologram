@@ -18,7 +18,7 @@ defmodule Hologram.JobTest do
 
     test "declares the attributes the framework owns" do
       assert Module1.__attributes__() == [
-               {:actor_id, :uuid, [optional: true]},
+               {:actor_id, :id, [optional: true]},
                {:attempt, :integer, [default: 0]},
                {:error, :string, [optional: true, server_only: true]},
                {:run_as_server, :boolean, [default: false]},

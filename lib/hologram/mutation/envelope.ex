@@ -291,15 +291,16 @@ defmodule Hologram.Mutation.Envelope do
     with :ok <- no_data(entry), do: {:ok, %{}}
   end
 
+  # The derivation reads the number an id spells, so an id that is not one derives nothing - and
+  # no id could have been derived from it either.
   defp derived_id(%Write{data: data} = write) do
     user_id = Map.get(data, :user_id)
     entity_type = Map.get(data, :entity_type)
     entity_id = Map.get(data, :entity_id)
     role = Map.get(data, :role)
 
-    derived = RoleGrant.derive_id(user_id, entity_type, entity_id, role)
-
-    if write.id == derived do
+    if Enum.all?([user_id, entity_id], &(&1 == nil or Validator.attribute_value_valid?(&1, :id))) and
+         write.id == RoleGrant.derive_id(user_id, entity_type, entity_id, role) do
       :ok
     else
       {:error, "a role grant's id is derived from the grant it names"}
@@ -366,8 +367,8 @@ defmodule Hologram.Mutation.Envelope do
     value = Map.get(entry, "id")
 
     cond do
-      Validator.attribute_value_valid?(value, :uuid) -> {:ok, value}
-      is_binary(value) -> {:refused, %{id: [{:type, :uuid}]}}
+      Validator.attribute_value_valid?(value, :id) -> {:ok, value}
+      is_binary(value) -> {:refused, %{id: [{:type, :id}]}}
       true -> {:error, "id must be an entity id"}
     end
   end
@@ -636,7 +637,7 @@ defmodule Hologram.Mutation.Envelope do
       |> Map.new(fn {name, _type, _opts} ->
         field = "#{name}_id"
 
-        {field, {String.to_existing_atom(field), :uuid}}
+        {field, {String.to_existing_atom(field), :id}}
       end)
 
     Map.merge(attributes, references)
@@ -660,8 +661,8 @@ defmodule Hologram.Mutation.Envelope do
     value = Map.get(entry, "target_id")
 
     cond do
-      Validator.attribute_value_valid?(value, :uuid) -> {:ok, value}
-      is_binary(value) -> {:refused, %{relationship => [{:type, :uuid}]}}
+      Validator.attribute_value_valid?(value, :id) -> {:ok, value}
+      is_binary(value) -> {:refused, %{relationship => [{:type, :id}]}}
       true -> {:error, "target_id must be an entity id"}
     end
   end
@@ -670,7 +671,7 @@ defmodule Hologram.Mutation.Envelope do
 
   defp type_word(:id), do: "entity id"
 
-  defp type_word(:uuid), do: "entity id"
+  defp type_word(:uuid), do: "UUID"
 
   defp type_word(type), do: Atom.to_string(type)
 

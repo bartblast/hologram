@@ -19,7 +19,7 @@ defmodule Hologram.Sync.Frame do
   alias Hologram.Sync.PackedIds
   alias Hologram.Sync.WireData
 
-  @protocol_version 1
+  @protocol_version 2
 
   @doc """
   Turns what a session worked out for one client into the deltas a frame carries.
@@ -70,8 +70,8 @@ defmodule Hologram.Sync.Frame do
 
   It has to keep the id from being read back, which holds for an id with random bits in it - not
   for one worked out from what it names, like a grant's, which is never dropped by hash, only kept
-  by it (see `keep_hashed/3`). An id `Hologram.Entity.generate_id/0` makes is a UUIDv7: a creation
-  time to the millisecond and 74 random bits. Finding ids that hash to a given one means trying the random
+  by it (see `keep_hashed/3`). An id `Hologram.Entity.generate_id/0` makes holds the bits of a UUIDv7: a
+  creation time to the millisecond and 74 random bits. Finding ids that hash to a given one means trying the random
   bits one guess at a time - there is no shortcut back through SHA-256 - and even a search that
   could finish would leave a thousand ids per hash for every millisecond the row may have been
   created in, 74 bits against 64, with nothing to tell the dropped one apart. Telling one apart

@@ -82,7 +82,7 @@ defmodule Hologram.ControllerCommandActorTest do
       ~s|SELECT "role" FROM "hologram_data"."hologram_role_grant" | <>
         ~s|WHERE "user_id" = $1 ORDER BY "role"|
 
-    {:ok, %{rows: rows}} = Connection.query(select_sql, [Codec.encode(user_id, :uuid)])
+    {:ok, %{rows: rows}} = Connection.query(select_sql, [Codec.encode(user_id, :id)])
 
     Enum.map(rows, fn [role] -> role end)
   end

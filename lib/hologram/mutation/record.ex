@@ -37,7 +37,7 @@ defmodule Hologram.Mutation.Record do
     VALUES ($1, $2, $3, $4)
     """
 
-    params = [replica_id, seq, Codec.encode(actor_id, :uuid), model_hash]
+    params = [replica_id, seq, Codec.encode(actor_id, :id), model_hash]
 
     case Connection.query(statement, params) do
       {:ok, _result} ->
@@ -93,7 +93,7 @@ defmodule Hologram.Mutation.Record do
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id, seq])
 
     case rows do
-      [[actor_id, result]] -> %{actor_id: Codec.decode(actor_id, :uuid), result: result}
+      [[actor_id, result]] -> %{actor_id: Codec.decode(actor_id, :id), result: result}
       [] -> nil
     end
   end
@@ -137,7 +137,7 @@ defmodule Hologram.Mutation.Record do
     params = [
       replica_id,
       seq,
-      Codec.encode(actor_id, :uuid),
+      Codec.encode(actor_id, :id),
       model_hash,
       without_nul(envelope),
       answer

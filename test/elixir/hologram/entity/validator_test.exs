@@ -661,17 +661,17 @@ defmodule Hologram.Entity.ValidatorTest do
     end
 
     test "validates reference fields" do
-      target_id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+      target_id = "02wSyz8E9khZO82QLJOgGt"
 
       assert validate(Module3, %{c_id: target_id}) == :ok
       assert validate(Module3, %{b_id: nil, c_id: target_id}) == :ok
       assert validate(Module3, %{}) == {:error, [{:c_id, :required}]}
       assert validate(Module3, %{c_id: nil}) == {:error, [{:c_id, :required}]}
-      assert validate(Module3, %{c_id: "garbage"}) == {:error, [{:c_id, {:type, :uuid}}]}
+      assert validate(Module3, %{c_id: "garbage"}) == {:error, [{:c_id, {:type, :id}}]}
     end
 
     test "reports to-many relationship names as unknown" do
-      target_id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+      target_id = "02wSyz8E9khZO82QLJOgGt"
 
       assert validate(Module3, %{a: [target_id], c_id: target_id}) ==
                {:error, [{:a, :unknown}]}
@@ -2199,12 +2199,12 @@ defmodule Hologram.Entity.ValidatorTest do
     end
 
     test "validates reference field pairs" do
-      target_id = "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+      target_id = "02wSyz8E9khZO82QLJOgGt"
 
       assert validate_changes(Module3, %{c_id: target_id}) == :ok
       assert validate_changes(Module3, %{b_id: nil}) == :ok
       assert validate_changes(Module3, %{c_id: nil}) == {:error, [{:c_id, :required}]}
-      assert validate_changes(Module3, %{c_id: "garbage"}) == {:error, [{:c_id, {:type, :uuid}}]}
+      assert validate_changes(Module3, %{c_id: "garbage"}) == {:error, [{:c_id, {:type, :id}}]}
     end
 
     test "reports unknown names" do

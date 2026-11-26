@@ -6263,7 +6263,7 @@ defmodule Hologram.Compiler do
 
     case declaration do
       {_name, type, _opts} when is_atom(type) -> type
-      _other -> :uuid
+      _other -> :id
     end
   end
 

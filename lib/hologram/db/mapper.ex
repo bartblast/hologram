@@ -409,7 +409,7 @@ defmodule Hologram.DB.Mapper do
 
         %{
           name: column_name,
-          type: :uuid,
+          type: :id,
           sql_type: "uuid",
           collation: nil,
           enum_values: nil,
@@ -635,7 +635,7 @@ defmodule Hologram.DB.Mapper do
   defp id_column do
     %{
       name: "id",
-      type: :uuid,
+      type: :id,
       sql_type: "uuid",
       collation: nil,
       enum_values: nil,
@@ -757,7 +757,7 @@ defmodule Hologram.DB.Mapper do
 
     %{
       attributes: [
-        {:entity_id, :uuid, [optional: true]},
+        {:entity_id, :id, [optional: true]},
         {:entity_type, :enum, [optional: true, values: entity_type_values]},
         {:role, :enum, [values: role_values]}
       ],
