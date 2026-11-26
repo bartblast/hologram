@@ -495,6 +495,18 @@ defmodule Hologram.Entity do
   end
 
   @doc """
+  Returns `false` when the given entity field value is the `Hologram.Entity.NotIncluded`
+  placeholder, and `true` for anything else, `nil` and lists included.
+  A relationship or a derived field holds the placeholder when the query that read the entity
+  didn't include it, and in an entity no query read, like one built with `new/1` or one a create
+  returns. Works on the server and in the browser, and is imported into pages and components.
+  """
+  @spec included?(any) :: boolean
+  def included?(%NotIncluded{}), do: false
+
+  def included?(_value), do: true
+
+  @doc """
   Builds a new entity struct of the given entity type from the given values (a map or a keyword list).
   The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
   To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
@@ -511,6 +523,19 @@ defmodule Hologram.Entity do
 
     struct!(entity_type, fields)
   end
+
+  @doc """
+  Returns `true` when the given entity field value is the `Hologram.Entity.ServerOnly`
+  placeholder, and `false` for anything else.
+  Returns `true` in the browser and in any template, since Hologram removes server-only values
+  from the entities it sends to the browser. Returns `false` on an entity your server code reads
+  through `DB`, which holds the real value.
+  Works on the server and in the browser, and is imported into pages and components.
+  """
+  @spec server_only?(any) :: boolean
+  def server_only?(%ServerOnly{}), do: true
+
+  def server_only?(_value), do: false
 
   @doc """
   Returns the entity id spelling of the given UUID - the same 128-bit number in 22 base62
@@ -735,7 +760,8 @@ defmodule Hologram.Entity do
   # One row read twice - at the root and as another row's embed, or by two queries of one render -
   # arrives as two copies whose includes differ. The kept copy keeps its values and takes every
   # relationship it did not include from the other one, so whichever copy is met first, the row
-  # carries what either included.
+  # carries what either included. Two statements can read different versions of the row, so the
+  # kept copy keeps its own metadata too - the revisions and the hidden numbers of its own values.
   @doc false
   @spec merge_copies(struct, struct) :: struct
   def merge_copies(%entity_type{} = kept, copy) do
@@ -937,7 +963,7 @@ defmodule Hologram.Entity do
     attribute_names = server_only_attribute_names(entity.__struct__)
 
     Enum.reduce(attribute_names, entity, fn name, stripped ->
-      %{stripped | name => %ServerOnly{attribute: name}}
+      %{stripped | name => %ServerOnly{__meta__: %{field: name}}}
     end)
   end
 
@@ -985,6 +1011,13 @@ defmodule Hologram.Entity do
 
   def strip_server_only_deep(term), do: term
 
+  @doc """
+  Returns the attributes every entity type has beside the ones it declares, in the shape
+  `__attributes__/0` returns.
+  """
+  @spec system_attributes() :: list({atom, atom, keyword})
+  def system_attributes, do: @system_attributes
+
   # Everything the entity DECLARES, sorted by name. The framework's own __meta__ field is added
   # by the caller rather than here, so that its struct is expanded in the entity's module.
   # An attribute field holds what its declaration declares as the default, so a bare struct
@@ -1007,25 +1040,25 @@ defmodule Hologram.Entity do
       |> Module.get_attribute(:__relationships__)
       |> Enum.flat_map(fn
         {name, [_target], _opts} ->
-          [{name, %NotIncluded{relationship: name}}]
+          [{name, %NotIncluded{__meta__: %{field: name}}}]
 
         {name, _target, _opts} ->
           # Compile-time atom creation - the reference field atoms are being defined here.
           # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-          [{:"#{name}_id", nil}, {name, %NotIncluded{relationship: name}}]
+          [{:"#{name}_id", nil}, {name, %NotIncluded{__meta__: %{field: name}}}]
       end)
 
     # An inverse stores no reference, so it holds the one field its rows are embedded in.
     inverse_fields =
       module
       |> Module.get_attribute(:__inverse_relationships__)
-      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{relationship: name}} end)
+      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{__meta__: %{field: name}}} end)
 
     # A derived field holds nothing until a query includes it.
     derived_fields =
       module
       |> Module.get_attribute(:__derived__)
-      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{relationship: name}} end)
+      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{__meta__: %{field: name}}} end)
 
     Enum.sort(
       system_attribute_fields ++

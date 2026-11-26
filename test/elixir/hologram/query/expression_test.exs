@@ -137,6 +137,12 @@ defmodule Hologram.Query.ExpressionTest do
   end
 
   describe "condition/2" do
+    test "names a backfill word on the left side of a comparison" do
+      assert_error Hologram.CompileError,
+                   ~s[lib/my_app/queries.ex:12: the left side of a comparison names an attribute of the entity or a path to one, got: coalesce(a, b) - if you meant the query word coalesce, it works only in a migration's backfill: for now],
+                   fn -> lower_condition(~s[coalesce(a, b) == "x"]) end
+    end
+
     test "lowers a comparison" do
       assert lower_condition("priority < 3") == [priority: {:<, 3}]
     end
@@ -458,6 +464,15 @@ defmodule Hologram.Query.ExpressionTest do
   end
 
   describe "inclusion/2" do
+    test "doesn't name a backfill word, which could never go here" do
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          lower_inclusion(~s[split(a, ",")])
+        end
+
+      refute Exception.message(error) =~ "query word"
+    end
+
     test "absorbs a bare name after a path through it" do
       assert lower_inclusion("[tasks.owner, tasks]") == [tasks: [:owner]]
     end
@@ -684,6 +699,18 @@ defmodule Hologram.Query.ExpressionTest do
   end
 
   describe "ordering/2" do
+    test "names a backfill word as a sort's direction" do
+      assert_error Hologram.CompileError, ~r/if you meant the query word coalesce/, fn ->
+        lower_ordering(~s{[a: coalesce(b, "x")]})
+      end
+    end
+
+    test "names a backfill word" do
+      assert_error Hologram.CompileError,
+                   ~r/sort names an attribute .* - if you meant the query word coalesce, it works only in a migration's backfill: for now$/,
+                   fn -> lower_ordering(~s[coalesce(a, "x")]) end
+    end
+
     test "lowers a bare name" do
       assert lower_ordering("priority") == :priority
     end
@@ -1015,6 +1042,42 @@ defmodule Hologram.Query.ExpressionTest do
   end
 
   describe "predicates/2" do
+    test "names a backfill word on the left side of a comparison" do
+      assert_error Hologram.CompileError,
+                   ~s[lib/my_app/queries.ex:12: the left side of a comparison names an attribute of the queried entity or a path to one, got: coalesce(a, "x") - if you meant the query word coalesce, it works only in a migration's backfill: for now],
+                   fn -> lower_predicates(~s[coalesce(a, "x") == "y"]) end
+    end
+
+    test "names a backfill word on the right side of a comparison" do
+      assert_error Hologram.CompileError,
+                   ~r/a comparison operand is .* got: split\(b, " "\) - .* - if you meant the query word split, it works only in a migration's backfill: for now$/,
+                   fn -> lower_predicates(~s[a == split(b, " ")]) end
+    end
+
+    test "names a backfill word in a membership" do
+      assert_error Hologram.CompileError, ~r/if you meant the query word split/, fn ->
+        lower_predicates(~s[a in split(b, ",")])
+      end
+    end
+
+    test "names a backfill word as a quantifier's source" do
+      assert_error Hologram.CompileError, ~r/if you meant the query word split/, fn ->
+        lower_predicates(~s[any(split(a, ","))])
+      end
+    end
+
+    test "names a backfill word in a list of predicates" do
+      assert_error Hologram.CompileError, ~r/if you meant the query word coalesce/, fn ->
+        lower_predicates(~s{[coalesce(a, "x")]})
+      end
+    end
+
+    test "names a backfill word making up the whole filter" do
+      assert_error Hologram.CompileError,
+                   ~r/unsupported expression in a filter: most_common\(a, b\) - .* - if you meant the query word most_common, it works only in a migration's backfill: for now$/,
+                   fn -> lower_predicates("most_common(a, b)") end
+    end
+
     test "raises on a call of new as the left side" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: the left side of a comparison names an attribute of the queried entity or a path to one, got: new(status)",

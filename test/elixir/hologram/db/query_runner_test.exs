@@ -860,9 +860,9 @@ defmodule Hologram.DB.QueryRunnerTest do
       term = Stage.normalize(Module3)
 
       assert [%Module3{} = entity] = run(term, @mapping)
-      assert entity.a == %NotIncluded{relationship: :a}
-      assert entity.b == %NotIncluded{relationship: :b}
-      assert entity.c == %NotIncluded{relationship: :c}
+      assert entity.a == %NotIncluded{__meta__: %{field: :a}}
+      assert entity.b == %NotIncluded{__meta__: %{field: :b}}
+      assert entity.c == %NotIncluded{__meta__: %{field: :c}}
     end
 
     test "filters and orders a to-many include whose target names columns like the join table" do
@@ -1027,6 +1027,32 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       assert Enum.map(source.a, &{&1.c, &1.server_created_seq != nil}) ==
                [{"banana", true}, {"cherry", false}]
+    end
+
+    test "keeps the numbers it hides in the metadata, in the row and in what it includes", %{
+      limit: limit
+    } do
+      term =
+        Module3
+        |> narrowed_include(:a, fn related_query -> sort(related_query, c) end)
+        |> Stage.normalize()
+
+      assert [raw_source] = run(term, @mapping, raw: true)
+      assert [source] = FinalSeq.with_pinned(limit, fn -> run(term, @mapping) end)
+
+      assert source.__meta__.waiting == hidden_numbers(raw_source, limit)
+      assert source.__meta__.waiting.server_created_seq == raw_source.server_created_seq
+
+      assert Enum.map(source.a, & &1.__meta__.waiting) ==
+               Enum.map(raw_source.a, &hidden_numbers(&1, limit))
+
+      assert hd(source.a).__meta__.waiting == %{}
+    end
+
+    defp hidden_numbers(row, limit) do
+      row
+      |> Map.take([:server_created_seq, :server_updated_seq])
+      |> Map.filter(fn {_field, number} -> is_integer(number) and number > limit end)
     end
 
     test "reads the numbers as stored when raw", %{limit: limit, third: third} do
@@ -1479,7 +1505,7 @@ defmodule Hologram.DB.QueryRunnerTest do
         |> derived_query_results(:authored_messages)
 
       assert message.author.id == author.id
-      assert message.channel == %NotIncluded{relationship: :channel}
+      assert message.channel == %NotIncluded{__meta__: %{field: :channel}}
     end
 
     test "includes the rows of the branch an if chooses, and none for nil" do

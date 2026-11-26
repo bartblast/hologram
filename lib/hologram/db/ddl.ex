@@ -283,6 +283,16 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
+  Returns the statement asking whether any row holds a NULL in the given column. It stops at the
+  first one, so a fill that only needs to know whether to run doesn't count a whole table.
+  """
+  @spec null_exists_statement(String.t(), String.t()) :: String.t()
+  def null_exists_statement(table, column) do
+    "SELECT EXISTS (SELECT 1 FROM #{qualified(table)} " <>
+      "WHERE #{Mapper.quote_identifier(column)} IS NULL)"
+  end
+
+  @doc """
   Returns the pre-flight check statement counting the key groups of the given table's
   columns that hold more than one row - the duplicates that block a unique index build.
 

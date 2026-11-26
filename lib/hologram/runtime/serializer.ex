@@ -22,7 +22,7 @@ defmodule Hologram.Runtime.Serializer do
   carry: a function that is not a named function capture, or an improper list.
 
   Values of attributes declared server_only never reach the output: every entity struct in the
-  term, at any nesting depth, has them replaced with the `Hologram.Entity.ServerOnly` sentinel
+  term, at any nesting depth, has them replaced with the `Hologram.Entity.ServerOnly` placeholder
   first.
 
   ## Examples

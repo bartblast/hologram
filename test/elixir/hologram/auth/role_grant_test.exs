@@ -271,7 +271,7 @@ defmodule Hologram.Auth.RoleGrantTest do
       assert Map.from_struct(entity) == %{
                __meta__: %Metadata{},
                created_at: nil,
-               granted_by: %NotIncluded{relationship: :granted_by},
+               granted_by: %NotIncluded{__meta__: %{field: :granted_by}},
                granted_by_id: nil,
                id: nil,
                entity_id: nil,
@@ -282,7 +282,7 @@ defmodule Hologram.Auth.RoleGrantTest do
                server_updated_at: nil,
                server_updated_seq: nil,
                updated_at: nil,
-               user: %NotIncluded{relationship: :user},
+               user: %NotIncluded{__meta__: %{field: :user}},
                user_id: nil
              }
     end

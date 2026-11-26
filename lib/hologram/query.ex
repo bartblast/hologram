@@ -140,6 +140,17 @@ defmodule Hologram.Query do
   @spec add_relationship(Entity.t(), atom, Entity.id()) :: Entity.t()
   defdelegate add_relationship(entity, relationship_name, target_id), to: Stage
 
+  # TODO(#1438): replace this with the real aggregate. Importing it now means a function of this
+  # name that an app calls fails today rather than when the aggregate arrives.
+  @doc false
+  @spec average(Macro.t(), Macro.t()) :: no_return
+  defmacro average(_query, _attribute) do
+    reserved_error!(
+      "average/2 is reserved for a query word Hologram doesn't have yet",
+      __CALLER__
+    )
+  end
+
   @doc """
   Marks the given query as counting and returns the resulting query term.
 
@@ -484,6 +495,26 @@ defmodule Hologram.Query do
   @spec increment(Entity.t(), atom, integer) :: Entity.t()
   defdelegate increment(entity, name, amount), to: Stage
 
+  # TODO(#1854): replace these two with the real words. Importing them now means a function of
+  # either name that an app calls fails today rather than when the words arrive.
+  @doc false
+  @spec inverse(Macro.t(), Macro.t()) :: no_return
+  defmacro inverse(_type, _reference) do
+    reserved_error!(
+      "inverse/2 is reserved for a query word Hologram doesn't have yet",
+      __CALLER__
+    )
+  end
+
+  @doc false
+  @spec most_common(Macro.t(), Macro.t()) :: no_return
+  defmacro most_common(_set, _attribute) do
+    reserved_error!(
+      "most_common/2 is reserved - if you meant the query word most_common, it works only in a migration's backfill: for now",
+      __CALLER__
+    )
+  end
+
   @doc """
   Marks the given query as single-result and returns the resulting query term.
 
@@ -640,6 +671,14 @@ defmodule Hologram.Query do
     end
   end
 
+  # TODO(#1438): replace this with the real aggregate. Importing it now means a function of this
+  # name that an app calls fails today rather than when the aggregate arrives.
+  @doc false
+  @spec sum(Macro.t(), Macro.t()) :: no_return
+  defmacro sum(_query, _attribute) do
+    reserved_error!("sum/2 is reserved for a query word Hologram doesn't have yet", __CALLER__)
+  end
+
   @doc """
   Sets how many results the given query takes at most and returns the resulting query term.
 
@@ -727,5 +766,13 @@ defmodule Hologram.Query do
     defp field_doc({name, value}, opts) do
       concat([Atom.to_string(name), ": ", to_doc(value, opts)])
     end
+  end
+
+  @spec reserved_error!(String.t(), Macro.Env.t()) :: no_return
+  defp reserved_error!(message, env) do
+    raise Hologram.CompileError,
+      message: "#{message} - if this is your own function, rename it",
+      file: env.file,
+      line: env.line
   end
 end

@@ -1403,7 +1403,7 @@ defmodule Hologram.Template.Renderer do
           Map.update!(acc, name, &included_as_asked(&1, rows_term))
 
         :error ->
-          Map.put(acc, name, %NotIncluded{relationship: name})
+          Map.put(acc, name, %NotIncluded{__meta__: %{field: name}})
       end
     end)
   end

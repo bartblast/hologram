@@ -85,7 +85,7 @@ defmodule Hologram.Auth.RoleGrant do
             created_at: nil,
             entity_id: nil,
             entity_type: nil,
-            granted_by: %NotIncluded{relationship: :granted_by},
+            granted_by: %NotIncluded{__meta__: %{field: :granted_by}},
             granted_by_id: nil,
             id: nil,
             role: nil,
@@ -94,7 +94,7 @@ defmodule Hologram.Auth.RoleGrant do
             server_updated_at: nil,
             server_updated_seq: nil,
             updated_at: nil,
-            user: %NotIncluded{relationship: :user},
+            user: %NotIncluded{__meta__: %{field: :user}},
             user_id: nil
 
   @type t :: %__MODULE__{

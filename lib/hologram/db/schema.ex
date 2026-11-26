@@ -8,7 +8,10 @@ defmodule Hologram.DB.Schema do
   # Apply phases: the renames the pairing pass finds first, so every later op can name
   # objects by their target names; then destructive ops in reverse dependency order, and
   # constructive ops after in dependency order. Enum value adds and rebuilds share one phase -
-  # a given type emits either, never both.
+  # a given type emits either, never both. An enum type drops after the column alters, since
+  # PostgreSQL refuses to drop a type a column still uses. A replaced type, a name another column
+  # takes over, has to be gone before its create, so its column converts and it drops ahead of
+  # the creates.
   @phases %{
     rename_table: 0,
     rename_enum_type: 0,
@@ -17,16 +20,18 @@ defmodule Hologram.DB.Schema do
     drop_index: 2,
     drop_column: 3,
     drop_table: 4,
-    drop_enum_type: 5,
-    create_enum_type: 6,
-    add_enum_value: 7,
-    rebuild_enum_type: 7,
-    create_table: 8,
-    add_column: 9,
-    alter_column: 10,
-    rename_constraint: 11,
-    add_foreign_key: 12,
-    create_index: 13
+    alter_replaced_enum_column: 5,
+    drop_replaced_enum_type: 6,
+    create_enum_type: 7,
+    add_enum_value: 8,
+    rebuild_enum_type: 8,
+    create_table: 9,
+    add_column: 10,
+    alter_column: 11,
+    drop_enum_type: 12,
+    rename_constraint: 13,
+    add_foreign_key: 14,
+    create_index: 15
   }
 
   @doc """
@@ -61,7 +66,9 @@ defmodule Hologram.DB.Schema do
   :position ({:before, value} anchored on the nearest following pre-existing value, nil
   to append at the tail) - anything else (removal, reorder) emits :rebuild_enum_type
   carrying the new values and the columns using the type. A name-keyed diff cannot
-  detect value renames - they surface as rebuilds.
+  detect value renames - they surface as rebuilds. A name both sides hold with no column
+  keeping it is a replaced type, one column leaving it and another taking the name: it
+  emits :drop_enum_type plus :create_enum_type, whatever the values.
 
   With renames: true, the default, a pairing pass runs first and recognises an object
   whose name changed while its definition didn't. A join table only in the actual term
@@ -81,11 +88,11 @@ defmodule Hologram.DB.Schema do
 
   The op list is ordered by apply phase - the renames first (tables, then enum types,
   then indexes), then destructive kinds in reverse dependency order, constructive kinds
-  after in dependency order (drop_foreign_key, drop_index, drop_column, drop_table,
-  drop_enum_type, create_enum_type, enum value changes, create_table, add_column,
-  alter_column, rename_constraint, add_foreign_key, create_index) - and alphabetically
-  by table and name within each phase, so the same terms always produce the same op
-  sequence.
+  after in dependency order (drop_foreign_key, drop_index, drop_column, drop_table, the
+  conversions off a replaced enum type and its drop, create_enum_type, enum value changes,
+  create_table, add_column, alter_column, drop_enum_type, rename_constraint, add_foreign_key,
+  create_index) - and alphabetically by table and name within each phase, so the same terms
+  always produce the same op sequence.
   """
   @spec diff(%{atom => any}, %{atom => any}, keyword) :: list(%{atom => any})
   def diff(actual, target, opts \\ []) do
@@ -94,13 +101,15 @@ defmodule Hologram.DB.Schema do
         do: pair_renames(actual, target),
         else: {[], actual}
 
+    replaced = replaced_enum_types(actual, target)
+
     ops =
       table_ops(actual.tables, target.tables) ++
         column_ops(actual.tables, target.tables) ++
         constraint_index_ops(actual.tables, target.tables) ++
-        enum_ops(actual, target)
+        enum_ops(actual, target, replaced)
 
-    Enum.sort_by(rename_ops ++ ops, &@phases[&1.op])
+    Enum.sort_by(rename_ops ++ ops, &phase(&1, replaced))
   end
 
   @doc """
@@ -304,17 +313,19 @@ defmodule Hologram.DB.Schema do
      }}
   end
 
-  defp enum_ops(actual, target) do
+  defp enum_ops(actual, target, replaced) do
+    standing = Map.drop(actual.enum_types, MapSet.to_list(replaced))
+
     drops =
       actual.enum_types
       |> Map.keys()
-      |> Enum.reject(&Map.has_key?(target.enum_types, &1))
+      |> Enum.reject(&(Map.has_key?(standing, &1) and Map.has_key?(target.enum_types, &1)))
       |> Enum.sort()
       |> Enum.map(&%{op: :drop_enum_type, enum_type: &1})
 
     creates =
       target.enum_types
-      |> Enum.reject(fn {name, _values} -> Map.has_key?(actual.enum_types, name) end)
+      |> Enum.reject(fn {name, _values} -> Map.has_key?(standing, name) end)
       |> Enum.sort_by(fn {name, _values} -> name end)
       |> Enum.map(fn {name, values} ->
         %{op: :create_enum_type, enum_type: name, values: values}
@@ -324,7 +335,7 @@ defmodule Hologram.DB.Schema do
       target.enum_types
       |> Enum.sort_by(fn {name, _values} -> name end)
       |> Enum.flat_map(fn {name, target_values} ->
-        enum_value_ops(name, actual.enum_types[name], target_values, target.tables)
+        enum_value_ops(name, standing[name], target_values, target.tables)
       end)
 
     drops ++ creates ++ changes
@@ -622,6 +633,16 @@ defmodule Hologram.DB.Schema do
     {table_ops ++ enum_type_ops ++ index_ops, renamed}
   end
 
+  defp phase(%{op: :alter_column, before: %{type: type}} = op, replaced) do
+    if type in replaced, do: @phases.alter_replaced_enum_column, else: @phases[op.op]
+  end
+
+  defp phase(%{op: :drop_enum_type, enum_type: type} = op, replaced) do
+    if type in replaced, do: @phases.drop_replaced_enum_type, else: @phases[op.op]
+  end
+
+  defp phase(op, _replaced), do: @phases[op.op]
+
   defp pk_rename_ops(_table, nil, _target_pk), do: []
 
   defp pk_rename_ops(table, actual_pk, target_pk) do
@@ -644,6 +665,19 @@ defmodule Hologram.DB.Schema do
       true ->
         []
     end
+  end
+
+  # A type no column carries across has nothing to keep, so it isn't a change of values even when
+  # the name stays: the column that had it leaves or converts, and another takes the name.
+  defp replaced_enum_types(actual, target) do
+    for {name, _values} <- actual.enum_types,
+        Map.has_key?(target.enum_types, name),
+        actual_columns = enum_type_columns(name, actual.tables),
+        actual_columns != [],
+        target_columns = enum_type_columns(name, target.tables),
+        not Enum.any?(actual_columns, &(&1 in target_columns)),
+        into: MapSet.new(),
+        do: name
   end
 
   defp subsequence?([], _list), do: true

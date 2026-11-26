@@ -1,6 +1,7 @@
 defmodule Hologram.Migration.Diff do
   @moduledoc false
 
+  alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
 
   @doc """
@@ -10,8 +11,9 @@ defmodule Hologram.Migration.Diff do
 
   A question carries the detected facts (:kind plus the deleted/created member lists),
   :hints (resolutions that look likely, never auto-selected), and :withheld_ops (the
-  no-intent interpretation, emitted only if the human confirms it). Ops carry no lines -
-  the generator assigns them at render.
+  no-intent interpretation, emitted only if the human confirms it). A :fill question also
+  carries :freeing_ops, the ops taking away a member whose column a fill of the same entity
+  type takes. Ops carry no lines - the generator assigns them at render.
   """
   @spec diff(%{atom => any}, %{atom => any}) :: %{atom => any}
   def diff(replayed, current) do
@@ -30,6 +32,13 @@ defmodule Hologram.Migration.Diff do
   defp add_role_opts(%{extends: []}), do: []
 
   defp add_role_opts(%{extends: extends}), do: [extends: extends]
+
+  # The column a fill's op adds, or nil for a tightening, whose column is already there.
+  defp added_column(%{op: :add_attribute, name: name}), do: Atom.to_string(name)
+
+  defp added_column(%{op: :add_relationship, name: name}), do: Mapper.reference_column_name(name)
+
+  defp added_column(_op), do: nil
 
   defp attribute_changes(old_type, new_type, old_opts, new_opts) do
     type_changes = if old_type == new_type, do: [], else: [type: new_type]
@@ -167,7 +176,7 @@ defmodule Hologram.Migration.Diff do
     class_plan =
       add_ops
       |> class_plan(change_ops, delete_ops, deleted, added, question_fun)
-      |> withhold_unfilled_adds(entity_type)
+      |> withhold_unfilled(entity_type, new_members, old_members)
 
     merge_plans([class_plan | enum_plans])
   end
@@ -204,6 +213,7 @@ defmodule Hologram.Migration.Diff do
     plans
     |> merge_plans()
     |> put_key_ops(entity_type, old_entry, new_entry)
+    |> put_freeing_ops(old_entry)
   end
 
   defp diff_entity_roles(entity_type, old_members, new_members) do
@@ -322,7 +332,9 @@ defmodule Hologram.Migration.Diff do
       }
     end
 
-    class_plan(add_ops, change_ops, delete_ops, deleted, added, question_fun)
+    add_ops
+    |> class_plan(change_ops, delete_ops, deleted, added, question_fun)
+    |> withhold_unfilled(entity_type, new_members, old_members)
   end
 
   # A created entity type whose attribute name set equals a deleted one's looks like a
@@ -466,6 +478,18 @@ defmodule Hologram.Migration.Diff do
 
   defp extends_delta(%{extends: extends}), do: extends
 
+  defp fill_member(%{changes: changes} = op), do: {op.op, op.name, changes}
+
+  defp fill_member(op), do: {op.op, op.name, op.type, op.opts}
+
+  defp frees_column?(%{op: op}) when op in [:delete_attribute, :delete_relationship], do: true
+
+  # A to-one turning into a to-many leaves its column for a join table.
+  defp frees_column?(%{op: :change_relationship, changes: changes}),
+    do: is_list(Keyword.get(changes, :type))
+
+  defp frees_column?(_op), do: false
+
   defp key_ops(kind, entity_type, keys) do
     Enum.map(keys, &%{op: kind, entity: entity_type, fields: &1})
   end
@@ -495,7 +519,8 @@ defmodule Hologram.Migration.Diff do
       new_value = Keyword.fetch(new_opts, key)
 
       cond do
-        old_value == new_value -> []
+        # Strict, since 1 == 1.0 would keep an integer default on an attribute turning float.
+        old_value === new_value -> []
         new_value == :error -> [{key, Model.neutral_value(key)}]
         true -> [{key, elem(new_value, 1)}]
       end
@@ -528,6 +553,40 @@ defmodule Hologram.Migration.Diff do
       true ->
         List.insert_at(placed, -1, value)
     end
+  end
+
+  # A backfill answering a fill applies apart from the ops around it, so a member a fill adds
+  # can't take the column of one the ops below it take away. Every fill question of the entity
+  # type names the ops freeing such a column, since moving them above the fills changes what each
+  # fill can read.
+  defp put_freeing_ops({ops, questions}, old_entry) do
+    attribute_columns =
+      for {name, _type, _opts} <- old_entry.attributes, do: {name, Atom.to_string(name)}
+
+    to_one_columns =
+      for {name, type, _opts} <- old_entry.relationships,
+          not is_list(type),
+          do: {name, Mapper.reference_column_name(name)}
+
+    old_columns = Map.new(attribute_columns ++ to_one_columns)
+
+    taken =
+      questions
+      |> Enum.filter(&(&1.kind == :fill))
+      |> Enum.flat_map(& &1.withheld_ops)
+      |> Enum.map(&added_column/1)
+      |> Enum.reject(&is_nil/1)
+
+    freeing_ops =
+      Enum.filter(ops, &(frees_column?(&1) and Map.get(old_columns, &1.name) in taken))
+
+    questions =
+      Enum.map(questions, fn
+        %{kind: :fill} = question -> %{question | freeing_ops: freeing_ops}
+        question -> question
+      end)
+
+    {ops, questions}
   end
 
   # A key leaves before the members it names and arrives after them: the replay refuses a
@@ -588,7 +647,30 @@ defmodule Hologram.Migration.Diff do
     op.opts[:optional] != true and not Keyword.has_key?(op.opts, :default)
   end
 
+  defp unfilled_add?(%{op: :add_relationship, type: type} = op) when not is_list(type) do
+    op.opts[:optional] != true
+  end
+
   defp unfilled_add?(_op), do: false
+
+  # A member turning required with nothing to fill its nils: no default, or one that can't fill
+  # them because the type changes in the same op. A to-many holds no nil, and one narrowing to a
+  # to-one is refused whatever the answer, so it isn't asked about.
+  defp unfilled_tightening?(%{op: :change_attribute} = op, members, _old_members) do
+    {_name, _type, opts} = List.keyfind!(members, op.name, 0)
+
+    op.changes[:optional] == false and
+      (is_nil(opts[:default]) or Keyword.has_key?(op.changes, :type))
+  end
+
+  defp unfilled_tightening?(%{op: :change_relationship} = op, members, old_members) do
+    {_name, type, _opts} = List.keyfind!(members, op.name, 0)
+    {_name, old_type, _opts} = List.keyfind!(old_members, op.name, 0)
+
+    op.changes[:optional] == false and not is_list(type) and not is_list(old_type)
+  end
+
+  defp unfilled_tightening?(_op, _members, _old_members), do: false
 
   defp withhold_key_ops(%{kind: kind} = question, delete_ops, add_ops)
        when kind in [:attributes, :relationships] do
@@ -606,13 +688,15 @@ defmodule Hologram.Migration.Diff do
 
   defp withhold_key_ops(question, _delete_ops, _add_ops), do: {question, []}
 
-  # An attribute added to an entity the history already carries meets rows that predate
-  # it, and a required one leaves them without a value. Which value is the author's to
-  # know - the model cannot hold it, and the database it will meet is not the one being
-  # generated against - so the op is withheld and asked about, the same way an ambiguous
-  # rename is. Entities created in this file are exempt: their table is born empty.
-  defp withhold_unfilled_adds({ops, questions}, entity_type) do
-    {unfilled, filled} = Enum.split_with(ops, &unfilled_add?/1)
+  # An attribute or to-one added to an entity the history already carries meets rows that predate
+  # it, and a required one leaves them without a value, as a member turning required does for the
+  # rows holding nil. Which value is the author's to know - the model cannot hold it, and the
+  # database it will meet is not the one being generated against - so the op is withheld and
+  # asked about, the same way an ambiguous rename is. Entities created in this file are exempt:
+  # their table is born empty.
+  defp withhold_unfilled({ops, questions}, entity_type, members, old_members) do
+    {unfilled, filled} =
+      Enum.split_with(ops, &(unfilled_add?(&1) or unfilled_tightening?(&1, members, old_members)))
 
     if unfilled == [] do
       {ops, questions}
@@ -621,8 +705,9 @@ defmodule Hologram.Migration.Diff do
         kind: :fill,
         entity: entity_type,
         attributes: Enum.map(unfilled, & &1.name),
-        members: Enum.map(unfilled, &{&1.name, &1.type, &1.opts}),
-        withheld_ops: unfilled
+        members: Enum.map(unfilled, &fill_member/1),
+        withheld_ops: unfilled,
+        freeing_ops: []
       }
 
       {filled, Enum.concat(questions, [question])}

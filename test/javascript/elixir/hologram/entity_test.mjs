@@ -1086,7 +1086,10 @@ describe("Elixir_Hologram_Entity", () => {
     it("passes over a server-only value the client may not have", () => {
       const entity = doc();
       const sentinel = Type.struct(SERVER_ONLY, [
-        [Type.atom("attribute"), Type.atom("api_token")],
+        [
+          Type.atom("__meta__"),
+          Type.map([[Type.atom("field"), Type.atom("api_token")]]),
+        ],
       ]);
 
       const withSentinel = Type.map([

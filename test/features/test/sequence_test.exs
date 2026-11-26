@@ -10,6 +10,8 @@ defmodule HologramFeatureTests.SequenceTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Query
+  alias Hologram.Sync.Dispatcher
+  alias Hologram.Sync.FinalSeq
   alias HologramFeatureTests.Entities.Notice
   alias HologramFeatureTests.SequencePage
 
@@ -26,7 +28,7 @@ defmodule HologramFeatureTests.SequenceTest do
     create_notice("first")
 
     session
-    |> visit(SequencePage)
+    |> visit(SequencePage, carried: :notices)
     |> await_local_fill()
     |> await_local_read("Show view", "view", "first | first | first | first | first")
 
@@ -65,7 +67,7 @@ defmodule HologramFeatureTests.SequenceTest do
     create_notice("first")
 
     session
-    |> visit(SequencePage)
+    |> visit(SequencePage, carried: :notices)
     |> await_local_fill()
     |> await_local_read("Show view", "view", "first | first | first | first | first")
     |> click(button("Mark read"))
@@ -105,13 +107,60 @@ defmodule HologramFeatureTests.SequenceTest do
     )
   end
 
-  # The reload brings back the newer notice's number as waiting, from the store and from the page's
-  # render alike, so the lists leave it out until the held save commits.
+  # The reload's render hides the newer notice's number, as it isn't final, and the page carries it
+  # as waiting. The page brought the row, so the browser takes no stored number into it, and the
+  # lists leave the newer notice out until the held save commits.
   feature "holds a number back across a reload", %{session: session} do
+    assert_number_held_across_reload(session, :notices)
+  end
+
+  # The page carries no notices, so the reload brings back the newer notice's number as waiting from
+  # the store alone.
+  feature "holds a stored number back across a reload", %{session: session} do
+    assert_number_held_across_reload(session, :none)
+  end
+
+  # The first notice comes over the stream once the browser's point is past its numbers, so its
+  # stored record holds them in its row, and the second moves the stored place past it, so the
+  # reload's catch-up doesn't send it again. A node that just restarted publishes a limit below
+  # every number, so the reload's render hides the first notice's numbers, and the page carries
+  # them as waiting. The reload brings back the stored point, which is past them, so the browser
+  # files them right away.
+  feature "keeps a row's updated number across a reload rendered by a node that is behind",
+          %{session: session} do
+    session
+    |> visit(SequencePage, carried: :notices)
+    |> await_local_fill()
+
+    first = create_notice("first")
+
+    session
+    |> await_local_read("Show updated", "updated", "first")
+    |> await_stored_final(first)
+
+    second = create_notice("second")
+
+    stored =
+      session
+      |> await_local_read("Show updated", "updated", "first, second")
+      |> await_stored_final(second)
+
+    assert is_integer(stored_updated_seq(stored, first))
+    assert stored_waiting_numbers(stored, first) == nil
+
+    put_published_limit_behind()
+
+    stored
+    |> reload()
+    |> await_page_mount(SequencePage)
+    |> await_local_read("Show updated", "updated", "first, second")
+  end
+
+  defp assert_number_held_across_reload(session, carried) do
     create_notice("first")
 
     session
-    |> visit(SequencePage)
+    |> visit(SequencePage, carried: carried)
     |> await_local_fill()
 
     held = hold_save("held")
@@ -177,8 +226,72 @@ defmodule HologramFeatureTests.SequenceTest do
     assert {:ok, :ok} = Task.await(task)
   end
 
+  # Holds the node's published limit at 0, as a node that just restarted has it, until the test
+  # ends. The dispatcher is suspended first, so it doesn't publish over it, and the limit is read
+  # after, so it is the last one the dispatcher published. On exit the limit goes back before the
+  # dispatcher resumes, since it only publishes above what it thinks it published.
+  defp put_published_limit_behind do
+    [dispatcher] =
+      for {Dispatcher, pid, _type, _modules} <-
+            Supervisor.which_children(Hologram.Sync.Supervisor),
+          do: pid
+
+    :sys.suspend(dispatcher)
+
+    published = FinalSeq.published()
+
+    on_exit(fn ->
+      FinalSeq.publish(published)
+      :sys.resume(dispatcher)
+    end)
+
+    FinalSeq.publish(0)
+  end
+
   # The created number the stored record of the given notice keeps waiting beside it, or nil.
   defp stored_waiting_created_seq(session, notice) do
+    session
+    |> stored_value(notice, "record?.waiting?.numbers?.server_created_seq")
+    |> then(&if(is_binary(&1), do: String.to_integer(&1), else: &1))
+  end
+
+  # Blocks until the stored record of the given notice holds its updated number in its row and
+  # nothing waiting beside it, as one the stream brought once the browser's point passed it does.
+  # The stored place is written in the same transaction as the record.
+  defp await_stored_final(session, notice, attempts_left \\ 100)
+
+  defp await_stored_final(session, notice, 0) do
+    raise Wallaby.ExpectationNotMetError,
+          "Timed out waiting for the stored record to hold its numbers final, it reads " <>
+            inspect(stored_value(session, notice, "JSON.stringify(record)"))
+  end
+
+  defp await_stored_final(session, notice, attempts_left) do
+    expression = "record?.row?.server_updated_seq != null && record?.waiting === undefined"
+
+    if stored_value(session, notice, expression) do
+      session
+    else
+      Process.sleep(50)
+      await_stored_final(session, notice, attempts_left - 1)
+    end
+  end
+
+  # The numbers the stored record of the given notice keeps waiting beside it, or nil.
+  defp stored_waiting_numbers(session, notice) do
+    stored_value(session, notice, "record?.waiting?.numbers")
+  end
+
+  # The updated number in the stored record's row of the given notice, or nil.
+  defp stored_updated_seq(session, notice) do
+    session
+    |> stored_value(notice, "record?.row?.server_updated_seq")
+    |> then(&if(is_binary(&1), do: String.to_integer(&1), else: &1))
+  end
+
+  # The value the given JavaScript expression reads from the stored record of the given notice,
+  # bound as record, or nil.
+  defp stored_value(session, notice, expression) do
     script = """
     return indexedDB.databases().then((databases) => new Promise((resolve, reject) => {
       const name = databases
@@ -201,15 +314,14 @@ defmodule HologramFeatureTests.SequenceTest do
 
         reading.onsuccess = () => {
           db.close();
-          resolve(reading.result?.waiting?.numbers?.server_created_seq ?? null);
+          const record = reading.result;
+          resolve((#{expression}) ?? null);
         };
       };
     }));
     """
 
-    session
-    |> script_result(script)
-    |> then(&if(is_binary(&1), do: String.to_integer(&1), else: &1))
+    script_result(session, script)
   end
 
   # The notice's created number as the table holds it, which a server read masks while it waits.

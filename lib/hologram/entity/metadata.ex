@@ -12,10 +12,19 @@ defmodule Hologram.Entity.Metadata do
   # A write authored elsewhere carries its writer's stamp too, which the executor stores as the
   # revision of every column the write sets, in place of one from this node's clock - the writer's
   # next write says it was based on that exact value, so nothing may re-author it on the way in.
+  #
+  # A struct a read filled under a final-sequence limit also holds, by field name, each sequence
+  # number the read hid because it was above the limit - the field itself reads nil - so a page
+  # that carries the row can tell the browser its version's numbers (see Hologram.Sync.WireData).
 
   alias Hologram.Entity
 
-  defstruct attribute_ops: %{}, claim: nil, relationship_ops: %{}, revisions: %{}, stamp: nil
+  defstruct attribute_ops: %{},
+            claim: nil,
+            relationship_ops: %{},
+            revisions: %{},
+            stamp: nil,
+            waiting: %{}
 
   @type attribute_op :: {:put, any} | {:increment, integer}
 
@@ -24,12 +33,13 @@ defmodule Hologram.Entity.Metadata do
           claim: :client | :trust | nil,
           relationship_ops: %{{atom, Entity.id()} => :add | :delete},
           revisions: %{atom => pos_integer},
-          stamp: pos_integer | nil
+          stamp: pos_integer | nil,
+          waiting: %{atom => pos_integer}
         }
 
   # Rendered as what is recorded and nothing else - a clean struct shows an empty pair of
   # brackets, and a field at its default is left out. Bare, the struct wraps to four lines inside
-  # every entity struct's inspect and every KeyError naming one, with three of them saying
+  # every entity struct's inspect and every KeyError naming one, with most of them saying
   # "nothing".
   defimpl Inspect do
     import Inspect.Algebra
@@ -43,7 +53,8 @@ defmodule Hologram.Entity.Metadata do
             claim: metadata.claim,
             relationship_ops: metadata.relationship_ops,
             revisions: metadata.revisions,
-            stamp: metadata.stamp
+            stamp: metadata.stamp,
+            waiting: metadata.waiting
           ],
           fn {_name, value} -> value in [%{}, nil] end
         )

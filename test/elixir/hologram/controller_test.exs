@@ -1272,7 +1272,7 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
 
       expected_sentinel =
-        ~s'["atoken",{"t":"m","d":[["aattribute","atoken"],["a__struct__","aElixir.Hologram.Entity.ServerOnly"]]}]'
+        ~s'["atoken",{"t":"m","d":[["a__struct__","aElixir.Hologram.Entity.ServerOnly"],["a__meta__",{"t":"m","d":[["afield","atoken"]]}]]}]'
 
       assert String.contains?(conn.resp_body, expected_sentinel)
       refute String.contains?(conn.resp_body, "note_secret_v5")
@@ -3322,7 +3322,7 @@ defmodule Hologram.ControllerTest do
         |> handle_initial_page_request(Module52)
 
       expected_sentinel =
-        ~s'["atoken",{"t":"m","d":[["aattribute","atoken"],["a__struct__","aElixir.Hologram.Entity.ServerOnly"]]}]'
+        ~s'["atoken",{"t":"m","d":[["a__struct__","aElixir.Hologram.Entity.ServerOnly"],["a__meta__",{"t":"m","d":[["afield","atoken"]]}]]}]'
 
       assert String.contains?(conn.resp_body, expected_sentinel)
       refute String.contains?(conn.resp_body, "note_secret_v7")

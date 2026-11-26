@@ -664,6 +664,7 @@ function storedEntity(entity, entityType, stamp) {
     [Type.atom("relationship_ops"), Type.map([])],
     [Type.atom("revisions"), Type.map(revisions)],
     [Type.atom("stamp"), Type.nil()],
+    [Type.atom("waiting"), Type.map([])],
   ]);
 
   const stored = Type.cloneMap(entity);

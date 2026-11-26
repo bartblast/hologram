@@ -1547,7 +1547,8 @@ describe("Deltas", () => {
       assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
     });
 
-    it("keeps a carried number for a row it holds, writing nothing", () => {
+    // The held row's values aren't the page's version, so the page's numbers aren't its own.
+    it("takes no carried number for a row it holds, writing nothing", () => {
       LocalDatabase.raiseFinal(10);
 
       Deltas.apply({put_entity: {[TASK]: [numbered(5, 8)]}});
@@ -1563,12 +1564,7 @@ describe("Deltas", () => {
 
       assert.equal(row.title, "Draft copy");
       assert.equal(row.server_updated_seq, 8);
-
-      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
-        numbers: {},
-        own: false,
-        shown: {server_updated_seq: 14},
-      });
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
     });
 
     it("holds nothing for a patch naming a row it doesn't hold", () => {

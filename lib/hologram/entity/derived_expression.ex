@@ -17,9 +17,14 @@ defmodule Hologram.Entity.DerivedExpression do
   # A derived field is computed by the database, so anything else is refused at its line: Elixir
   # over a row is a plain def in the module. A def a derived body calls is a query builder, held to
   # the query vocabulary by the build's walk.
+  #
+  # TODO(#1853): read a body the way a migration's backfill fn is read: a query only when its
+  # outermost part is a query word or query(...), or it's only a field or a path, and a module
+  # attribute in a query spelled ^@x.
 
   alias Hologram.Entity.Derived
   alias Hologram.Query.Expression
+  alias Hologram.Query.Words
 
   @comparison_operators [:!=, :<, :<=, :==, :>, :>=]
 
@@ -54,6 +59,9 @@ defmodule Hologram.Entity.DerivedExpression do
   @own_builder_key :hologram_own_builder
 
   @quantifiers [:all, :any, :none]
+
+  # The two-argument functions use Hologram.DB reserves for query words.
+  @reserved_names [:average, :inverse, :most_common, :sum]
 
   @search_operators [:contains, :starts_with]
 
@@ -101,6 +109,9 @@ defmodule Hologram.Entity.DerivedExpression do
     lowered_body = body(body, state)
 
     {names, lowered_body, builder_call?(lowered_body)}
+  rescue
+    error in Hologram.CompileError ->
+      reraise Words.add_backfill_only_hint(error, body), __STACKTRACE__
   end
 
   @doc """
@@ -138,6 +149,23 @@ defmodule Hologram.Entity.DerivedExpression do
 
       Macro.prewalk(body, &validate_own_builder!(&1, module, state))
     end)
+  end
+
+  # A reserved name another import also brings in can't be called, so the refusal says which
+  # import to change. Any other clash reads as the module's own call and is refused there.
+  defp ambiguous_module(name, arity, meta, modules, state) do
+    if name in @reserved_names and Hologram.Query in modules do
+      others =
+        modules
+        |> List.delete(Hologram.Query)
+        |> Enum.map_join(", ", &inspect/1)
+
+      compile_error!(
+        "#{state.field} calls #{name}/#{arity}, imported from #{others}, which is reserved for a query word by use Hologram.DB - rename the function or leave it out of the import",
+        {name, meta, []},
+        state
+      )
+    end
   end
 
   # The whole body: a condition, which makes a boolean field, or anything an Elixir position takes.
@@ -428,6 +456,15 @@ defmodule Hologram.Entity.DerivedExpression do
     vocabulary_error!(described_use(ast), ast, state)
   end
 
+  # A name use Hologram.DB reserves says so itself, since the module's own function of that name
+  # has to be renamed, which the refusal of a call into Hologram.Query wouldn't tell.
+  defp expand_reserved(Hologram.Query, {name, _meta, [_left, _right]} = ast, state)
+       when name in @reserved_names do
+    Macro.expand(ast, %{state.env | line: line(ast, state)})
+  end
+
+  defp expand_reserved(_module, ast, _state), do: ast
+
   defp field_call(path, state) do
     quote do
       Derived.field(unquote(state.env.module), unquote(path))
@@ -458,6 +495,7 @@ defmodule Hologram.Entity.DerivedExpression do
     case Macro.Env.expand_import(state.env, meta, name, arity, allow_locals: false) do
       {:function, module, _name} -> module
       {:macro, module, _expander} -> module
+      {:error, {:ambiguous, modules}} -> ambiguous_module(name, arity, meta, modules, state)
       {:error, _reason} -> nil
     end
   end
@@ -486,6 +524,8 @@ defmodule Hologram.Entity.DerivedExpression do
         vocabulary_error!(described_use(ast), ast, state)
 
       module = imported_module(name, meta, arity, state) ->
+        expand_reserved(module, ast, state)
+
         if module == Hologram.Query or own_module?(module) do
           vocabulary_error!(described_use(ast), ast, state)
         end
@@ -847,6 +887,9 @@ defmodule Hologram.Entity.DerivedExpression do
 
   @spec vocabulary_error!(String.t(), Macro.t(), map) :: no_return
   defp vocabulary_error!(what, ast, state) do
-    compile_error!("#{state.field} #{what} - #{@vocabulary_reason}", ast, state)
+    # An own builder's refusal comes once the module body has run, outside function/3's rescue.
+    hint = Words.backfill_only_hint(ast)
+
+    compile_error!("#{state.field} #{what} - #{@vocabulary_reason}#{hint}", ast, state)
   end
 end

@@ -319,7 +319,7 @@ defmodule Hologram.Sync.CarryTest do
     end
 
     test "passes over a relationship the query did not ask for" do
-      collect([module_3(%{a: %NotIncluded{relationship: :a}})])
+      collect([module_3(%{a: %NotIncluded{__meta__: %{field: :a}}})])
 
       assert %{put_entity: %{@module_3_type => [_row]}} = take(nil)
     end
@@ -338,11 +338,22 @@ defmodule Hologram.Sync.CarryTest do
       refute Map.has_key?(row, :b)
     end
 
+    test "hands a row the numbers its read hid" do
+      task = module_2()
+      hidden = %{task | __meta__: %{task.__meta__ | waiting: %{server_created_seq: 5}}}
+
+      collect([hidden])
+
+      %{put_entity: %{@module_2_type => [row]}} = take(nil)
+
+      assert row[:"$waiting"] == %{server_created_seq: 5}
+    end
+
     test "never spells a value the client may not have" do
       user =
         Module14.new(
           email: "user@test.com",
-          password_hash: %ServerOnly{attribute: :password_hash}
+          password_hash: %ServerOnly{__meta__: %{field: :password_hash}}
         )
 
       collect([user])

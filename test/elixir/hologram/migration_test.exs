@@ -17,6 +17,7 @@ defmodule Hologram.MigrationTest do
 
   import Hologram.Migration
 
+  alias Hologram.Migration.Value
   alias Hologram.MigrationTest.AliasReferenceTracer
 
   defp ops(body) do
@@ -44,6 +45,77 @@ defmodule Hologram.MigrationTest do
       end
     end
 
+    test "refuses a backfill naming a function of the module the backfill didn't generate" do
+      body = """
+      def opts do
+        value = %Hologram.Migration.Value{
+          args: [:status],
+          term: {:function, __MODULE__, :module_info, [:status]}
+        }
+
+        [backfill: value]
+      end
+
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, opts()
+      end
+      """
+
+      assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses a module body setting the list of generated backfill functions" do
+      body = """
+      @__hologram_migration_backfill_functions__ [{__MODULE__, :module_info, [:status]}]
+
+      def opts do
+        value = %Hologram.Migration.Value{
+          args: [:status],
+          term: {:function, __MODULE__, :module_info, [:status]}
+        }
+
+        [backfill: value]
+      end
+
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, opts()
+      end
+      """
+
+      assert_raise Hologram.CompileError, ~r/is the attribute Hologram lists the functions/, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses a module body making the list of generated backfill functions accumulate" do
+      body = """
+      Module.register_attribute(__MODULE__, :__hologram_migration_backfill_functions__,
+        accumulate: true
+      )
+
+      @__hologram_migration_backfill_functions__ {__MODULE__, :module_info, [:status]}
+
+      def opts do
+        value = %Hologram.Migration.Value{
+          args: [:status],
+          term: {:function, __MODULE__, :module_info, [:status]}
+        }
+
+        [backfill: value]
+      end
+
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, opts()
+      end
+      """
+
+      assert_raise Hologram.CompileError, ~r/is the attribute Hologram lists the functions/, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
     test "fails the build when an op cannot be evaluated" do
       body = """
       change_entity MyApp.Task do
@@ -58,6 +130,24 @@ defmodule Hologram.MigrationTest do
   end
 
   describe "__before_compile__/1" do
+    test "refuses an Elixir backfill fn reading an attribute in code that never runs" do
+      body = """
+      @suffix "!"
+
+      if false do
+        change_entity MyApp.Task do
+          add_attribute :first, :string, backfill: fn title -> title <> @suffix end
+        end
+      end
+      """
+
+      ExUnit.CaptureIO.capture_io(:stderr, fn ->
+        assert_raise Hologram.CompileError, ~r/reads @suffix/, fn ->
+          compile_migration("20260813091522", body)
+        end
+      end)
+    end
+
     test "refuses an op that reads an attribute in module-body code that never runs" do
       body = """
       @default "a"
@@ -287,9 +377,515 @@ defmodule Hologram.MigrationTest do
       assert_received {:ops, [%{opts: [default: "a"]}]}
     end
 
+    test "reads an attribute a quote runs where the op is written" do
+      for {backfill, value} <- [
+            {"fn title -> inspect(quote(bind_quoted: [x: @o], do: x)) <> title end", ~s("1")},
+            {"fn title -> inspect([bind_quoted: [x: @o], do: x] |> quote()) <> title end",
+             ~s("1")},
+            {"fn title -> coalesce(title, ^inspect(quote(do: unquote(@o)))) end", ~s("1")},
+            # A bare atom in the option list sets its option to true, and the first one counts.
+            {"fn title -> coalesce(title, ^inspect(quote([:unquote, unquote: false], " <>
+               "do: unquote(@o)))) end", ~s("1")},
+            # A quote's separate options are code even in a quote of a quote.
+            {"fn title -> coalesce(title, ^inspect(quote(do: quote(unquote(@o), do: 1)))) end",
+             ~s("1")},
+            {"fn title -> coalesce(title, ^inspect([] |> quote(do: unquote(@o)))) end", ~s("1")}
+          ] do
+        module =
+          compile_migration("20260813091522", """
+          @o "1"
+
+          change_entity MyApp.Task do
+            add_attribute :first, :string, backfill: #{backfill}
+          end
+
+          @o "2"
+
+          change_entity MyApp.Task do
+            add_attribute :second, :string, default: @o
+          end
+          """)
+
+        assert [%{opts: [backfill: backfill_value]}, %{opts: [default: "2"]}] =
+                 module.__hologram_migration__().ops
+
+        result =
+          case backfill_value.term do
+            {:function, ^module, name, [:title]} -> apply(module, name, [""])
+            {:coalesce, [{:name, [:title]}, {:value, result}]} -> result
+          end
+
+        assert result =~ value
+        refute result =~ ~s("2")
+      end
+    end
+
+    test "reads an attribute in a quote's option list where the op is written" do
+      for quoted <- ["quote([@opts, do: x])", "[@opts, do: x] |> quote()"] do
+        module =
+          compile_migration("20260813091522", """
+          @opts {:bind_quoted, [x: "early"]}
+
+          change_entity MyApp.Task do
+            add_attribute :first, :string,
+              backfill: fn title -> coalesce(title, ^inspect(#{quoted})) end
+          end
+
+          @opts {:bind_quoted, [x: "late"]}
+
+          change_entity MyApp.Task do
+            add_attribute :second, :string, default: inspect(@opts)
+          end
+          """)
+
+        assert [%{opts: [backfill: %{term: {:coalesce, [_title, {:value, result}]}}]}, _second] =
+                 module.__hologram_migration__().ops
+
+        assert result =~ "early"
+        refute result =~ "late"
+      end
+    end
+
+    test "leaves an attribute in a quote's body as data, piped or not" do
+      for quoted <- [
+            "quote(do: @o)",
+            "[do: @o] |> quote()",
+            "quote(do: quote(do: unquote(@o)))",
+            "quote(unquote: false, do: unquote(@o))",
+            # Left of the pipe are the quote's separate options.
+            "[unquote: false] |> quote(do: unquote(@o))",
+            "Kernel.|>([bind_quoted: [y: 2]], quote(do: unquote(@o)))",
+            # The function splices nothing in code a quote runs, so a quote piped there follows
+            # its own options.
+            "quote(do: unquote([unquote: false, do: unquote(@o)] |> quote()))",
+            "quote(do: unquote([bind_quoted: [y: 1], do: unquote(@o)] |> quote()))",
+            "quote(bind_quoted: [x: [unquote: false, do: unquote(@o)] |> quote()], do: x)",
+            # A pipe on the right side is the stages after the left side, the first a quote.
+            "[do: @o] |> (quote() |> inspect())",
+            "Kernel.|>([do: @o], quote() |> inspect())",
+            # So is Kernel's pipe given only a stage.
+            "[do: @o] |> Kernel.|>(quote())",
+            "[unquote: false] |> Kernel.|>(quote(do: unquote(@o)))"
+          ] do
+        module =
+          compile_migration("20260813091522", """
+          change_entity MyApp.Task do
+            add_attribute :first, :string, backfill: fn title -> coalesce(title, ^inspect(#{quoted})) end
+          end
+          """)
+
+        assert [%{opts: [backfill: %{term: {:coalesce, [{:name, [:title]}, {:value, result}]}}]}] =
+                 module.__hologram_migration__().ops
+
+        assert result =~ "{:o, "
+        refute result =~ "__hologram_migration_"
+      end
+    end
+
+    test "refuses an attribute a quote unquotes under options only the compiler can read" do
+      for quoted <- ["quote(@opts, do: unquote(@o))", "@opts |> quote(do: unquote(@o))"] do
+        body = """
+        @opts []
+        @o "1"
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string,
+            backfill: fn title -> coalesce(title, ^inspect(#{quoted})) end
+        end
+        """
+
+        error =
+          assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+        assert error.message ==
+                 "an op can't unquote @o in a quote whose options only the compiler can read, " <>
+                   "like an attribute (line 9) - write the options out, or don't unquote the " <>
+                   "attribute"
+      end
+    end
+
+    test "refuses an attribute a quote unquotes under an option an attribute in its list sets" do
+      for {opts, quoted} <- [
+            {"{:unquote, true}", "quote([@opts, bind_quoted: [x: 1], do: unquote(@o)])"},
+            {"{:unquote, false}", "quote([@opts, do: unquote(@o)])"}
+          ] do
+        body = """
+        @opts #{opts}
+        @o "1"
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string,
+            backfill: fn title -> coalesce(title, ^inspect(#{quoted})) end
+        end
+        """
+
+        error =
+          assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+        assert error.message ==
+                 "an op can't unquote @o in a quote whose options only the compiler can read, " <>
+                   "like an attribute (line 9) - write the options out, or don't unquote the " <>
+                   "attribute"
+      end
+    end
+
+    test "reads an attribute a quote unquotes under an unquote written before an attribute in its list" do
+      module =
+        compile_migration("20260813091522", """
+        @opts {:unquote, false}
+        @o "early"
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string,
+            backfill: fn title ->
+              coalesce(title, ^inspect(quote([{:unquote, true}, @opts, {:do, unquote(@o)}])))
+            end
+        end
+
+        @o "late"
+
+        change_entity MyApp.Task do
+          add_attribute :second, :string, default: @o
+        end
+        """)
+
+      assert [%{opts: [backfill: %{term: {:coalesce, [_title, {:value, result}]}}]}, _second] =
+               module.__hologram_migration__().ops
+
+      assert result == inspect("early")
+    end
+
+    test "refuses an unquote the function an op is compiled into splices in" do
+      pins = [
+        "unquote(quote(do: @o))",
+        "unquote(@ast)",
+        "[unquote: false, do: unquote(@o)] |> quote()",
+        "[bind_quoted: [y: 1], do: unquote(title)] |> quote()",
+        "Kernel.|>([do: unquote(@o)], quote())",
+        "[do: String.unquote(@fun)(1)] |> quote()",
+        # The function splices in a quote's separate options when it has another unquote, which
+        # another op can add.
+        "quote([bind_quoted: [x: unquote(@o)]], do: x)",
+        "quote([bind_quoted: [x: [do: unquote(@o)] |> quote()]], do: x)",
+        "[do: quote([bind_quoted: [x: unquote(@o)]], do: x)] |> quote()",
+        "[unquote: false, do: quote(unquote(@o), do: 1)] |> quote()"
+      ]
+
+      elixir_bodies = [
+        "unquote(@o) <> title",
+        "String.unquote(@fun)(title)",
+        "title |> String.unquote(@fun)",
+        "Kernel.|>(title, String.unquote(@fun))",
+        "inspect([do: unquote(title)] |> quote()) <> title"
+      ]
+
+      options =
+        ["default: unquote(@o)"] ++
+          Enum.map(pins, &"backfill: fn title -> coalesce(title, ^inspect(#{&1})) end") ++
+          Enum.map(elixir_bodies, &"backfill: fn title -> #{&1} end")
+
+      for {option, form} <- [
+            {"default: [unquote_splicing([@o])]", :unquote_splicing},
+            {"backfill: fn title -> Enum.join([unquote_splicing([@o]), title]) end",
+             :unquote_splicing}
+            | Enum.map(options, &{&1, :unquote})
+          ] do
+        body = """
+        @ast quote(do: @o)
+        @fun :upcase
+        @o "1"
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string, #{option}
+        end
+        """
+
+        error =
+          assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+        assert error.message ==
+                 "an op can't #{form} where the function it's compiled into may splice the " <>
+                   "code in, like outside a quote, in a body piped into one or in a quote's " <>
+                   "separate options (line 9) - write @x for a value of the file, or put a " <>
+                   "quote's body in its parentheses"
+      end
+    end
+
+    test "refuses an alias the op's code declares" do
+      pin = &"backfill: fn title -> coalesce(title, ^#{&1}) end"
+      declared = ~s[alias String, as: Lib; Lib.reverse("abc")]
+
+      for {option, form} <- [
+            {pin.("(#{declared})"), :alias},
+            {pin.(~s[(alias String; Lib.reverse("abc"))]), :alias},
+            {pin.(~s[(alias String.{Chars}; Lib.reverse("abc"))]), :alias},
+            {pin.(~s[(require String, as: Lib; Lib.reverse("abc"))]), :require},
+            # Options not written out may hold as:.
+            {pin.(~s[(require String, @o; Lib.reverse("abc"))]), :require},
+            {pin.("inspect(quote(do: unquote((#{declared}))))"), :alias},
+            {pin.("inspect(quote(bind_quoted: [x: (#{declared})], do: x))"), :alias},
+            # Options only the compiler can read may let the unquote run.
+            {pin.("inspect(quote(@opts, do: unquote((#{declared}))))"), :alias},
+            {"backfill: fn title -> (alias String, as: Lib; Lib.reverse(title)) end", :alias},
+            {"default: (#{declared})", :alias}
+          ] do
+        body = """
+        @o [as: Lib]
+        @opts []
+        alias Enum, as: Lib
+        change_entity MyApp.Task do
+          add_attribute :first, :string, #{option}
+        end
+        """
+
+        error =
+          assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+        assert error.message ==
+                 "an op can't declare an alias inside its code - put the #{form} at the top of " <>
+                   "the module"
+
+        assert error.line == 8
+      end
+    end
+
+    test "keeps a require that declares no alias, and what only looks like an alias" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :first, :string,
+          backfill: fn title -> coalesce(title, ^(require Integer; inspect(Integer.is_even(2)))) end
+
+        add_attribute :second, :string,
+          backfill: fn title -> coalesce(title, ^inspect(quote(do: alias(String, as: Lib)))) end
+
+        add_attribute :third, :string, default: (alias = "a"; alias)
+        add_attribute :fourth, :string, default: inspect(%{alias: 1}.alias)
+
+        add_attribute :fifth, :string,
+          backfill: fn title -> coalesce(title, ^(require Integer, warn: false; "a")) end
+      end
+      """
+
+      module = compile_migration("20260813091523", body)
+
+      assert [first, second, third, fourth, fifth] = module.__hologram_migration__().ops
+
+      assert %{name: :first, opts: [backfill: %Value{term: {:coalesce, [_title, value: "true"]}}]} =
+               first
+
+      assert %{
+               name: :second,
+               opts: [backfill: %Value{term: {:coalesce, [_title, value: quoted]}}]
+             } =
+               second
+
+      assert quoted =~
+               ~s({:alias, [context: #{inspect(module)}], [{:__aliases__, [alias: false], [:String]})
+
+      assert %{name: :third, opts: [default: "a"]} = third
+      assert %{name: :fourth, opts: [default: "1"]} = fourth
+
+      assert %{name: :fifth, opts: [backfill: %Value{term: {:coalesce, [_title, value: "a"]}}]} =
+               fifth
+    end
+
+    test "keeps an alias a quote takes from a pipe on a pipe's right side" do
+      for default <- [
+            "[do: (alias String, as: Lib)] |> (quote() |> Macro.to_string())",
+            "Macro.to_string([do: (alias String, as: Lib)] |> Kernel.|>(quote()))"
+          ] do
+        body = """
+        change_entity MyApp.Task do
+          add_attribute :first, :string, default: #{default}
+        end
+        """
+
+        module = compile_migration("20260813091522", body)
+
+        assert [%{op: :add_attribute, opts: opts}] = module.__hologram_migration__().ops
+        assert opts[:default] == "alias String, as: Lib"
+      end
+    end
+
+    test "keeps an alias in a do that a quote with separate options ignores" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :first, :string,
+          default: Macro.to_string(quote([], [do: :standard, do: unquote((alias String, as: Lib))]))
+      end
+      """
+
+      module = compile_migration("20260813091522", body)
+
+      assert [%{op: :add_attribute, opts: opts}] = module.__hologram_migration__().ops
+      assert opts[:default] == ":standard"
+    end
+
+    test "refuses a call to the migration's macro in an op" do
+      macros = """
+      defmacrop same(x), do: quote(do: unquote(x) == @o)
+      defmacrop up(x), do: x
+      """
+
+      cases = [
+        {"default: o()", "", "o/0"},
+        {~s|default: "a" \|> up()|, macros, "up/1"},
+        {"backfill: fn title -> coalesce(title, ^o()) end", "", "o/0"},
+        {~s|default: (case "1" do x when same(x) -> "y"; _x -> "n" end)|, macros, "same/1"},
+        # An unquote under options only the compiler can read may run.
+        {"default: inspect(quote(@opts, do: unquote(o())))", "", "o/0"},
+        # A guard defined where the module body doesn't run vouches for nothing.
+        {"default: g(1)", "if false, do: defguardp(g(x) when x == 1)\ndefmacrop g(x), do: x",
+         "g/1"},
+        # Nor does one beside another clause of its name, or one a macro replaced.
+        {"default: g(1)", "defmacrop g(1), do: quote(do: @o)\ndefguardp g(x) when x == 2", "g/1"},
+        {"default: g(1)",
+         "defguardp g(x) when x == 1\ndefoverridable g: 1\ndefmacrop g(_x), do: quote(do: @o)",
+         "g/1"},
+        {"default: g(1)",
+         "defguardp g(x) when x == 1\nModule.delete_definition(__MODULE__, {:g, 1})\n" <>
+           "defmacrop g(_x), do: quote(do: @o)", "g/1"},
+        # A head's defaults go only to the clause right after it.
+        {"default: g(1)",
+         "defguardp g(x, y \\\\ 1)\ndefguardp g(x, y) when x == y\n" <>
+           "Module.delete_definition(__MODULE__, {:g, 2})\n" <>
+           "Module.delete_definition(__MODULE__, {:g, 1})\n" <>
+           "defmacrop g(_x), do: quote(do: @o)\ndefguardp g(x, y) when x == y", "g/1"}
+      ]
+
+      for kind <- ["defmacro", "defmacrop"],
+          {option, extra, call} <- cases do
+        body = """
+        @o "1"
+        @opts []
+        #{kind} o, do: quote(do: @o)
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string, #{option}
+        end
+
+        #{extra}
+        @o "2"
+        """
+
+        error =
+          assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+        assert error.message ==
+                 "a migration op can't call the migration's macro #{call} - make it a defp, or " <>
+                   "a defguardp in a guard"
+
+        assert error.line == 8
+      end
+    end
+
+    test "refuses a guard's shorter arity once a macro replaced its full one" do
+      body = """
+      @o "1"
+      defguardp g(x, y \\\\ "1") when x == y
+      defoverridable g: 2
+      defmacrop g(_x, _y), do: quote(do: @o)
+
+      change_entity MyApp.Task do
+        add_attribute :first, :string, default: if(g("1"), do: "y", else: "n")
+      end
+      """
+
+      error =
+        assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+      assert error.message ==
+               "a migration op can't call the migration's macro g/1 - make it a defp, or " <>
+                 "a defguardp in a guard"
+    end
+
+    test "accepts a guard of the migration and a quoted call to its macro in an op" do
+      module =
+        compile_migration("20260813091522", """
+        @o "1"
+        defguardp short(x) when byte_size(x) < 3 and x != @o
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string, default: (case "ab" do x when short(x) -> "y"; _x -> "n" end)
+          add_attribute :second, :string, default: if(short("1"), do: "y", else: "n")
+          add_attribute :third, :string, default: inspect(quote(do: o()))
+        end
+
+        defmacrop o, do: quote(do: @o)
+        @o "2"
+        """)
+
+      assert [
+               %{opts: [default: "y"]},
+               %{opts: [default: "n"]},
+               %{opts: [default: "{:o, [], []}"]}
+             ] =
+               module.__hologram_migration__().ops
+    end
+
+    test "accepts a guard of the migration called with its defaults in an op" do
+      # The defaults can be declared in a head of their own.
+      for guard <- [
+            "defguardp long(text, limit \\\\ 3) when byte_size(text) > limit",
+            "defguardp long(text, limit \\\\ 3)\ndefguardp long(text, limit) when byte_size(text) > limit"
+          ] do
+        module =
+          compile_migration("20260813091522", """
+          #{guard}
+
+          change_entity MyApp.Task do
+            add_attribute :first, :string, default: if(long("Paris"), do: "y", else: "n")
+            add_attribute :second, :string, default: if(long("Paris", 9), do: "y", else: "n")
+          end
+          """)
+
+        assert [%{opts: [default: "y"]}, %{opts: [default: "n"]}] =
+                 module.__hologram_migration__().ops
+      end
+    end
+
+    test "keeps a field access a quote holds as data in an op" do
+      module =
+        compile_migration("20260813091522", """
+        change_entity MyApp.Task do
+          add_attribute :first, :string, default: Macro.to_string(quote(do: x.y))
+          add_attribute :second, :string, default: Macro.to_string([do: x.y] |> quote())
+          add_attribute :third, :string, default: Macro.to_string(quote(do: unquote(%{y: "z"}.y)))
+        end
+        """)
+
+      assert [
+               %{opts: [default: "x.y"]},
+               %{opts: [default: "x.y"]},
+               %{opts: [default: ~s("z")]}
+             ] = module.__hologram_migration__().ops
+    end
+
+    test "refuses a field access in an unquote of a quote whose options only the compiler can read" do
+      body = """
+      @opts []
+
+      change_entity MyApp.Task do
+        add_attribute :first, :string,
+          default: Macro.to_string(quote(@opts, do: unquote(%{y: "z"}.y)))
+      end
+      """
+
+      error =
+        assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+      assert error.message ==
+               "a migration can't read a field in an unquote of a quote whose options only the " <>
+                 "compiler can read, like an attribute - write the options out, or read the field " <>
+                 "with Map.fetch!/2"
+
+      assert error.line == 8
+    end
+
+    # Collected from this compile alone, since stderr takes other tests' output too.
     test "raises no unused alias warning for an alias used only in ops" do
-      output =
-        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+      {_module, diagnostics} =
+        Code.with_diagnostics(fn ->
           compile_migration("20260813091522", """
           alias MyApp.Task
 
@@ -297,7 +893,7 @@ defmodule Hologram.MigrationTest do
           """)
         end)
 
-      refute output =~ "unused alias"
+      assert Enum.map(diagnostics, & &1.message) == []
     end
 
     test "names the entity types of its ops as runtime references, not compile-time ones" do
@@ -562,6 +1158,125 @@ defmodule Hologram.MigrationTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         compile_migration("20260813091522", body)
       end
+    end
+  end
+
+  describe "change_entity/2, backfill" do
+    test "an add_attribute op carries a computed backfill as data" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 add_attribute :city, :string, backfill: destination |> split(", ") |> at(0)
+               end
+               """)
+
+      assert op.opts == [
+               backfill: %Value{
+                 term: {:at, {:split, {:name, [:destination]}, {:value, ", "}}, {:value, 0}}
+               }
+             ]
+    end
+
+    test "an add_relationship op carries a computed backfill as data" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 add_relationship :owner, MyApp.User, backfill: creator_id
+               end
+               """)
+
+      assert op.opts == [backfill: %Value{term: {:name, [:creator_id]}}]
+    end
+
+    test "a change_attribute op carries a computed backfill as data" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 change_attribute :notes, optional: false, backfill: coalesce(description, "")
+               end
+               """)
+
+      assert op.changes == [
+               optional: false,
+               backfill: %Value{
+                 term: {:coalesce, [{:name, [:description]}, {:value, ""}]}
+               }
+             ]
+    end
+
+    test "a change_relationship op carries a computed backfill as data" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 change_relationship :owner, optional: false, backfill: trip.owner_id
+               end
+               """)
+
+      assert op.changes == [
+               optional: false,
+               backfill: %Value{term: {:name, [:trip, :owner_id]}}
+             ]
+    end
+
+    test "a pinned attribute inside an expression reads its value at the op's line" do
+      assert [first, second] =
+               ops("""
+               @fallback "first"
+
+               change_entity MyApp.Task do
+                 add_attribute :a, :string, backfill: coalesce(title, ^@fallback)
+               end
+
+               @fallback "second"
+
+               change_entity MyApp.Task do
+                 add_attribute :b, :string, backfill: coalesce(title, ^@fallback)
+               end
+               """)
+
+      assert first.opts[:backfill].term == {:coalesce, [{:name, [:title]}, {:value, "first"}]}
+      assert second.opts[:backfill].term == {:coalesce, [{:name, [:title]}, {:value, "second"}]}
+    end
+
+    test "a pinned call to the migration's own function reads its result" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 add_attribute :tier, :string, backfill: ^default_tier()
+               end
+
+               def default_tier, do: "standard"
+               """)
+
+      assert op.opts == [backfill: "standard"]
+    end
+
+    test "options from a call pass through unlowered" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 add_attribute :tier, :string, tier_opts()
+               end
+
+               def tier_opts, do: [backfill: "standard"]
+               """)
+
+      assert op.opts == [backfill: "standard"]
+    end
+
+    test "refuses at the line of the op" do
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          ops("""
+          change_entity MyApp.Task do
+            add_attribute :a, :string
+
+            add_attribute :b, :string, backfill: at(split(title, ""), 0)
+          end
+          """)
+        end
+
+      assert error.line == 7
     end
   end
 

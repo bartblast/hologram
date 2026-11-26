@@ -2066,7 +2066,7 @@ defmodule Hologram.Query.InterpreterTest do
       [message] = general.authored_messages
 
       assert message.author.id == author.id
-      assert message.channel == %NotIncluded{relationship: :channel}
+      assert message.channel == %NotIncluded{__meta__: %{field: :channel}}
     end
 
     test "includes the rows of the branch an if chooses, and none for nil" do
@@ -2164,8 +2164,8 @@ defmodule Hologram.Query.InterpreterTest do
     # something an empty value cannot: that nobody asked.
     test "leaves the relationships the query did not ask for alone" do
       assert [row] = agreed(include(Module3, b))
-      assert row.a == %NotIncluded{relationship: :a}
-      assert row.c == %NotIncluded{relationship: :c}
+      assert row.a == %NotIncluded{__meta__: %{field: :a}}
+      assert row.c == %NotIncluded{__meta__: %{field: :c}}
     end
 
     test "fills a to-many relationship with the rows the pairs name", %{source: source} do
