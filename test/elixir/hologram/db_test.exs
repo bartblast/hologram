@@ -37,6 +37,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Entity.Module54
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.TCPProxy
+  alias Hologram.Test.TLSProxy
   alias Hologram.WriteError
 
   @stale_model_msg "the code changed since the last compile that validated the data model - fix the compile error, if there is one, and save again"
@@ -446,6 +447,53 @@ defmodule Hologram.DBTest do
         pool = start_unreachable_pool()
 
         assert_raise Postgrex.Error, ~r/hologram_no_such_database/, fn ->
+          Connection.with_connection(pool, fn ->
+            await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+          end)
+        end
+
+        stop_unreachable_pool()
+      end)
+    end
+
+    # A refused handshake is refused the same way on every try.
+    test "raises when the server's certificate is signed by a CA it wasn't given" do
+      proxy = start_supervised!(Supervisor.child_spec(TLSProxy, id: :proxy))
+      other_proxy = start_supervised!(Supervisor.child_spec(TLSProxy, id: :other_proxy))
+
+      connection_opts =
+        Config.connection_opts(
+          port: TLSProxy.port(proxy),
+          ssl: [cacertfile: TLSProxy.ca_cert_path(other_proxy), verify: :verify_peer]
+        )
+
+      capture_log(fn ->
+        pool = start_unreachable_pool()
+
+        assert_raise DBConnection.ConnectionError, ~r/^ssl connect: .*:unknown_ca/s, fn ->
+          Connection.with_connection(pool, fn ->
+            await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+          end)
+        end
+
+        stop_unreachable_pool()
+      end)
+    end
+
+    test "raises when the TLS options are refused" do
+      proxy = start_supervised!(TLSProxy)
+      cacertfile = Path.join(System.tmp_dir!(), "hologram_no_such_ca.pem")
+
+      connection_opts =
+        Config.connection_opts(
+          port: TLSProxy.port(proxy),
+          ssl: [cacertfile: cacertfile, verify: :verify_peer]
+        )
+
+      capture_log(fn ->
+        pool = start_unreachable_pool()
+
+        assert_raise DBConnection.ConnectionError, ~r/^ssl connect: .*:options/s, fn ->
           Connection.with_connection(pool, fn ->
             await_database(connection_opts: connection_opts, retry_interval_ms: 10)
           end)

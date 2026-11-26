@@ -733,9 +733,11 @@ defmodule Hologram.DB do
   that are wrong look the same through. So a failed try opens one connection of its own to learn
   which: a server that refuses or cannot be reached - a host name that does not resolve included -
   or one still starting up or shutting down, is waited for. Any other error - a wrong password, a
-  database that does not exist, a connection limit - raises, failing the boot as it did before the
-  wait. In dev, a database that does not exist raises naming mix holo.db.reset, which creates it.
-  An error the query itself answers with raises the same way, unless it is one of those.
+  database that does not exist, a connection limit, a TLS handshake refused over a certificate or
+  over the TLS options - raises, failing the boot as it did before the wait. A TLS handshake that
+  times out or is closed is waited for. In dev, a database that does not exist raises naming
+  mix holo.db.reset, which creates it. An error the query itself answers with raises the same way,
+  unless it is one of those.
 
   It runs inside the start of the database's supervisor, so a restart of that supervisor while the
   database is away - rare, since the pool waits rather than failing - holds the unit above it, and
@@ -1067,8 +1069,8 @@ defmodule Hologram.DB do
 
         nil
 
-      {:error, %DBConnection.ConnectionError{} = error} ->
-        error
+      {:error, %DBConnection.ConnectionError{message: message} = error} ->
+        if tls_misconfiguration?(message), do: raise(error), else: error
 
       {:error, %Postgrex.Error{postgres: %{code: code}} = error}
       when code in @unavailable_error_codes ->
@@ -1080,6 +1082,16 @@ defmodule Hologram.DB do
       {:error, error} ->
         raise error
     end
+  end
+
+  # A TLS handshake the server or the client refused - an alert, like a certificate no CA given
+  # trusts or a host name it doesn't cover - or TLS options the client refused, like a CA file
+  # that doesn't exist. Either fails the same way on every try. A handshake that timed out or was
+  # closed is a server that is away. Postgrex gives the reason only inside the message, as
+  # "ssl connect: <formatted reason> - <inspected reason>", so the match is on that.
+  defp tls_misconfiguration?(message) do
+    String.starts_with?(message, "ssl connect: ") and
+      String.contains?(message, [" - {:tls_alert, ", " - {:options, "])
   end
 
   # In dev the reset creates the database along with Hologram's tables, so the error names it.
