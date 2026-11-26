@@ -309,7 +309,7 @@ defmodule Hologram.Query do
   set, and an ordering comparison matches no row with either side missing. Two strings compare
   through their sort keys, as a string does against a literal, and `==` stays exact.
 
-  Ordering comparisons require an orderable attribute - every type but boolean and uuid - and a
+  Ordering comparisons require an orderable attribute - every type but boolean, id and uuid - and a
   non-nil operand - SQL comparisons with NULL never match, so a nil operand would mean different
   things on the two execution tiers. A comparison on an enum attribute reads the declared
   `values:` order, so `priority >= :medium` on `[:low, :medium, :high]` means medium or high. A
@@ -321,9 +321,9 @@ defmodule Hologram.Query do
   attribute's type, and so does each element of a membership list and each bound of a range: a
   string for a string attribute, `true` or `false` for a boolean, a `Date`, `DateTime` or `Time`
   struct for those types, an integer that fits in 64 bits for an integer, one of the declared
-  values for an enum, and for a uuid or a reference field the lowercase hyphenated spelling ids are
-  stored in. A float attribute takes a float or such an integer, the same number compared. Nil fits
-  any type where the operator takes it.
+  values for an enum, the 22 base62 characters of an entity id for an id or a reference field, and
+  the lowercase hyphenated spelling for a uuid. A float attribute takes a float or such an integer,
+  the same number compared. Nil fits any type where the operator takes it.
 
   An integer range (`priority in 3..10`) is shorthand for the inclusive bounds - it expands into
   a `>=` triple and a `<=` triple. Ranges require an integer attribute, step 1, and at least one

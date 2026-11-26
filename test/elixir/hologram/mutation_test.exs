@@ -1743,6 +1743,32 @@ defmodule Hologram.MutationTest do
       assert kept == %{"0" => %{"$withheld" => true}}
     end
 
+    # Any entity can have columns named like a grant's, and the grant id derivation raises on ids
+    # that aren't entity ids.
+    test "answers a recorded row shaped like a grant whose ids aren't entity ids as recorded" do
+      %{batch: batch, holder: holder} = answered_repeat()
+
+      entry = %{
+        "id" => Entity.generate_id(),
+        "entity_id" => "0190a8e2-7c4d-7a3b-8f1e-2d5c6b7a8e9f",
+        "entity_type" => "Membership",
+        "role" => "member",
+        "user_id" => holder.id
+      }
+
+      {:ok, %Postgrex.Result{num_rows: 1}} =
+        Connection.query(
+          ~s|UPDATE "#{Mapper.system_schema()}"."mutation" | <>
+            ~s|SET "result" = jsonb_set("result", '{kept,0}', $3) | <>
+            ~s|WHERE "replica_id" = $1 AND "seq" = $2|,
+          [batch["replica_id"], batch["seq"], entry]
+        )
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} = run(batch, server(holder.id))
+
+      assert kept == %{"0" => entry}
+    end
+
     test "withholds a resent stale revocation's row its user may no longer read" do
       member = create_user("resend-revoker@example.com")
       user = create_user("resend-regranted@example.com")

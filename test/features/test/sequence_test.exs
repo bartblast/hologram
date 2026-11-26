@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.SequenceTest do
   require Hologram.Query
 
   alias Hologram.DB
+  alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Query
@@ -216,8 +217,8 @@ defmodule HologramFeatureTests.SequenceTest do
     {:ok, %{rows: [[seq]]}} =
       Connection.query(
         ~s(SELECT "server_created_seq" FROM "hologram_data"."#{Mapper.table_name(Notice)}" ) <>
-          ~s(WHERE "id"::text = $1),
-        [notice.id]
+          ~s(WHERE "id" = $1),
+        [Codec.encode(notice.id, :id)]
       )
 
     seq

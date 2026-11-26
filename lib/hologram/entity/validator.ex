@@ -344,7 +344,7 @@ defmodule Hologram.Entity.Validator do
   Validates the given partial changes map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} in the validate/2 shape and reason vocabulary.
   Only present pairs are validated - absence is legal in a partial map. A nil value for a non-optional attribute reports :required - a nil value for an optional attribute is valid (clearing).
-  To-one reference field pairs (`<name>_id`) follow the same rules: nil is valid only for an optional relationship, and a present value must be a canonical entity id.
+  To-one reference field pairs (`<name>_id`) follow the same rules: nil is valid only for an optional relationship, and a present value must be an entity id ({:type, :id}).
   """
   @spec validate_changes(module, %{atom => any}) ::
           :ok | {:error, list({atom, atom | {atom, any}})}
