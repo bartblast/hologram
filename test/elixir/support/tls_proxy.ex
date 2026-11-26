@@ -116,8 +116,7 @@ defmodule Hologram.Test.TLSProxy do
     connection_opts = Config.connection_opts()
     upstream = {String.to_charlist(connection_opts[:hostname]), connection_opts[:port]}
 
-    dir = Path.join(System.tmp_dir!(), "hologram_tls_proxy_#{System.unique_integer([:positive])}")
-    File.mkdir_p!(dir)
+    dir = make_pem_dir!()
 
     certs = generate_certs(Keyword.get(opts, :cert, :localhost))
 
@@ -322,6 +321,22 @@ defmodule Hologram.Test.TLSProxy do
       {error, _socket, _reason} when error in [:ssl_error, :tcp_error] ->
         transport.close(client)
         :gen_tcp.close(upstream_socket)
+    end
+  end
+
+  # A random name created with File.mkdir/1, which fails on one that exists, so that two test runs
+  # at once never share a directory, or remove each other's files on teardown.
+  defp make_pem_dir! do
+    suffix =
+      12
+      |> :crypto.strong_rand_bytes()
+      |> Base.url_encode64(padding: false)
+
+    dir = Path.join(System.tmp_dir!(), "hologram_tls_proxy_#{suffix}")
+
+    case File.mkdir(dir) do
+      :ok -> dir
+      {:error, :eexist} -> make_pem_dir!()
     end
   end
 
