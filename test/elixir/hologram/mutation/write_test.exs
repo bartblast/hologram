@@ -168,7 +168,7 @@ defmodule Hologram.Mutation.WriteTest do
                created_at: nil,
                id: @id,
                name: nil,
-               secrets: %Hologram.Entity.NotIncluded{relationship: :secrets},
+               secrets: %Hologram.Entity.NotIncluded{__meta__: %{field: :secrets}},
                updated_at: nil
              }
     end
@@ -226,14 +226,14 @@ defmodule Hologram.Mutation.WriteTest do
       assert entity == %RoleGrant{
                __meta__: %Metadata{stamp: 5},
                created_at: nil,
-               granted_by: %NotIncluded{relationship: :granted_by},
+               granted_by: %NotIncluded{__meta__: %{field: :granted_by}},
                granted_by_id: @actor_id,
                id: @id,
                entity_id: @target_id,
                entity_type: PolicyModule2,
                role: :member,
                updated_at: nil,
-               user: %NotIncluded{relationship: :user},
+               user: %NotIncluded{__meta__: %{field: :user}},
                user_id: @user_id
              }
     end
@@ -252,14 +252,14 @@ defmodule Hologram.Mutation.WriteTest do
       assert entity == %RoleGrant{
                __meta__: %Metadata{revisions: %{role: 3}, stamp: 5},
                created_at: nil,
-               granted_by: %NotIncluded{relationship: :granted_by},
+               granted_by: %NotIncluded{__meta__: %{field: :granted_by}},
                granted_by_id: nil,
                id: @id,
                entity_id: @target_id,
                entity_type: PolicyModule2,
                role: :member,
                updated_at: nil,
-               user: %NotIncluded{relationship: :user},
+               user: %NotIncluded{__meta__: %{field: :user}},
                user_id: @user_id
              }
     end

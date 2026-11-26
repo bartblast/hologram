@@ -302,8 +302,8 @@ defmodule Hologram.EntityTest do
                :updated_at
              ]
 
-      assert %Module26{}.messages == %NotIncluded{relationship: :messages}
-      assert %Module26{}.topic == %NotIncluded{relationship: :topic}
+      assert %Module26{}.messages == %NotIncluded{__meta__: %{field: :messages}}
+      assert %Module26{}.topic == %NotIncluded{__meta__: %{field: :topic}}
     end
 
     test "derives one field per derived field, holding the sentinel" do
@@ -330,8 +330,8 @@ defmodule Hologram.EntityTest do
                :updated_at
              ]
 
-      assert %Module32{}.message_count == %NotIncluded{relationship: :message_count}
-      assert %Module32{}.recent_messages == %NotIncluded{relationship: :recent_messages}
+      assert %Module32{}.message_count == %NotIncluded{__meta__: %{field: :message_count}}
+      assert %Module32{}.recent_messages == %NotIncluded{__meta__: %{field: :recent_messages}}
     end
 
     test "includes declared attribute fields" do
@@ -374,9 +374,9 @@ defmodule Hologram.EntityTest do
     test "defaults relationship embed and to-many fields to the NotIncluded sentinel" do
       entity = %Module3{}
 
-      assert entity.a == %NotIncluded{relationship: :a}
-      assert entity.b == %NotIncluded{relationship: :b}
-      assert entity.c == %NotIncluded{relationship: :c}
+      assert entity.a == %NotIncluded{__meta__: %{field: :a}}
+      assert entity.b == %NotIncluded{__meta__: %{field: :b}}
+      assert entity.c == %NotIncluded{__meta__: %{field: :c}}
       assert entity.b_id == nil
       assert entity.c_id == nil
     end
@@ -718,6 +718,32 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "included?/1" do
+    test "returns false for a not-included placeholder" do
+      refute included?(%NotIncluded{__meta__: %{field: :project}})
+    end
+
+    test "returns true for nil" do
+      assert included?(nil)
+    end
+
+    test "returns true for a list" do
+      assert included?([])
+    end
+
+    test "returns true for an entity" do
+      assert included?(new(Module2, a: true, b: 5, c: "abc"))
+    end
+
+    test "returns true for a server-only placeholder" do
+      assert included?(%ServerOnly{__meta__: %{field: :token}})
+    end
+
+    test "returns true for a plain value" do
+      assert included?("abc")
+    end
+  end
+
   describe "inverse_relationship/2" do
     test "describes an inverse set of a to-one" do
       assert inverse_relationship(Module26, :messages) == %{
@@ -935,7 +961,9 @@ defmodule Hologram.EntityTest do
     end
 
     test "leaves a derived field at the sentinel" do
-      assert new(Module33, body: "hi").later_count == %NotIncluded{relationship: :later_count}
+      assert new(Module33, body: "hi").later_count == %NotIncluded{
+               __meta__: %{field: :later_count}
+             }
     end
 
     test "applies declared defaults to absent attributes" do
@@ -1259,6 +1287,32 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "server_only?/1" do
+    test "returns true for a server-only placeholder" do
+      assert server_only?(%ServerOnly{__meta__: %{field: :token}})
+    end
+
+    test "returns false for nil" do
+      refute server_only?(nil)
+    end
+
+    test "returns false for a list" do
+      refute server_only?([])
+    end
+
+    test "returns false for an entity" do
+      refute server_only?(new(Module2, a: true, b: 5, c: "abc"))
+    end
+
+    test "returns false for a not-included placeholder" do
+      refute server_only?(%NotIncluded{__meta__: %{field: :project}})
+    end
+
+    test "returns false for a plain value" do
+      refute server_only?("abc")
+    end
+  end
+
   describe "server_only_attribute_names/1" do
     test "returns the server-only attribute names sorted" do
       assert server_only_attribute_names(Module15) == [:secret_note, :token]
@@ -1275,8 +1329,8 @@ defmodule Hologram.EntityTest do
 
       stripped = strip_server_only(entity)
 
-      assert stripped.secret_note == %ServerOnly{attribute: :secret_note}
-      assert stripped.token == %ServerOnly{attribute: :token}
+      assert stripped.secret_note == %ServerOnly{__meta__: %{field: :secret_note}}
+      assert stripped.token == %ServerOnly{__meta__: %{field: :token}}
       assert stripped.label == "Report"
       assert stripped.id == entity.id
     end

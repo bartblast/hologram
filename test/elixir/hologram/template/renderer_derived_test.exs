@@ -360,10 +360,14 @@ defmodule Hologram.Template.RendererDerivedTest do
 
       assert String.contains?(
                html,
-               "secret_note = %Hologram.Entity.ServerOnly{attribute: :secret_note}"
+               "secret_note = %Hologram.Entity.ServerOnly{__meta__: %{field: :secret_note}}"
              )
 
-      assert String.contains?(html, "token = %Hologram.Entity.ServerOnly{attribute: :token}")
+      assert String.contains?(
+               html,
+               "token = %Hologram.Entity.ServerOnly{__meta__: %{field: :token}}"
+             )
+
       refute String.contains?(html, "note_secret_v7")
       refute String.contains?(html, "tok_R4mQ")
     end
@@ -500,7 +504,7 @@ defmodule Hologram.Template.RendererDerivedTest do
       {html, _component_registry, _server_struct} =
         render_dom({:component, Module164, [], []}, @env, @server)
 
-      not_included = inspect(%NotIncluded{relationship: :messages})
+      not_included = inspect(%NotIncluded{__meta__: %{field: :messages}})
 
       assert String.contains?(html, "counts = 3")
       assert String.contains?(html, "recent = 3-2")
@@ -522,7 +526,7 @@ defmodule Hologram.Template.RendererDerivedTest do
       {html, _component_registry, _server_struct} =
         render_dom({:component, Module164, [], []}, @env, @server)
 
-      not_included = inspect(%NotIncluded{relationship: :messages})
+      not_included = inspect(%NotIncluded{__meta__: %{field: :messages}})
 
       assert String.contains?(html, "authors = nil")
       assert String.contains?(html, "room messages = #{not_included}")
@@ -787,7 +791,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     end
 
     test "hands the template no relationship the query did not include" do
-      not_included = inspect(%NotIncluded{relationship: :h})
+      not_included = inspect(%NotIncluded{__meta__: %{field: :h}})
 
       assert render_dom({:component, Module158, [], []}, @env, @server) ==
                {"h = #{not_included},#{not_included},#{not_included}", %{}, @server}
@@ -826,7 +830,7 @@ defmodule Hologram.Template.RendererDerivedTest do
       {html, _component_registry, _server_struct} =
         render_dom({:component, Module171, [], []}, @env, @server)
 
-      not_included = inspect(%NotIncluded{relationship: :channel})
+      not_included = inspect(%NotIncluded{__meta__: %{field: :channel}})
 
       assert String.contains?(html, "channel = #{not_included}")
     end
@@ -917,7 +921,7 @@ defmodule Hologram.Template.RendererDerivedTest do
 
       html = render_page_html(Module173, %Server{user_id: user.id})
 
-      not_included = inspect(%NotIncluded{relationship: :parent})
+      not_included = inspect(%NotIncluded{__meta__: %{field: :parent}})
 
       assert String.contains?(html, "parents = #{not_included},#{not_included}")
     end
@@ -1343,7 +1347,7 @@ defmodule Hologram.Template.RendererDerivedTest do
 
       context_user = component_registry["page"].struct.emitted_context[{Hologram, :user}]
 
-      assert context_user.password_hash == %ServerOnly{attribute: :password_hash}
+      assert context_user.password_hash == %ServerOnly{__meta__: %{field: :password_hash}}
       assert context_user.email == "renderer_5@example.com"
     end
 

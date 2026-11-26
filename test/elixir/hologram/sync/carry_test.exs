@@ -319,7 +319,7 @@ defmodule Hologram.Sync.CarryTest do
     end
 
     test "passes over a relationship the query did not ask for" do
-      collect([module_3(%{a: %NotIncluded{relationship: :a}})])
+      collect([module_3(%{a: %NotIncluded{__meta__: %{field: :a}}})])
 
       assert %{put_entity: %{@module_3_type => [_row]}} = take(nil)
     end
@@ -353,7 +353,7 @@ defmodule Hologram.Sync.CarryTest do
       user =
         Module14.new(
           email: "user@test.com",
-          password_hash: %ServerOnly{attribute: :password_hash}
+          password_hash: %ServerOnly{__meta__: %{field: :password_hash}}
         )
 
       collect([user])
