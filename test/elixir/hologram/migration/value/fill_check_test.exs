@@ -123,9 +123,18 @@ defmodule Hologram.Migration.Value.FillCheckTest do
           insert_task(title, "018f0000-0000-7000-8000-00000000000#{index}")
         end)
 
+        on_page = &send(self(), {:page, &1})
+
         assert_raise RuntimeError, ~r/must be at most 2 characters \(3 rows\)/, fn ->
-          check!(@fill, page_size: 1)
+          check!(@fill, page_size: 1, on_page: on_page)
         end
+
+        for title <- ["ok", "long", "longer", "longest"] do
+          assert_received {:page, [[_id, ^title]]}
+        end
+
+        assert_received {:page, []}
+        refute_received {:page, _rows}
       end)
     end
 
