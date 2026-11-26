@@ -31,6 +31,8 @@ defmodule Hologram.DB.EntityOperations do
   # sobelow_skip ["SQL.Query"]
   def add_relationship(entity_type, id, relationship_name, target_id) do
     join_table = fetch_join_table!(entity_type, relationship_name)
+    validate_id!(id)
+    validate_id!(target_id)
 
     statement =
       ~s|INSERT INTO #{qualified_table(join_table.name)} ("source_id", "target_id") VALUES ($1, $2) ON CONFLICT DO NOTHING|
@@ -151,6 +153,8 @@ defmodule Hologram.DB.EntityOperations do
   @doc false
   @spec delete(module, String.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity_type, id) do
+    validate_id!(id)
+
     %{table: table, join_tables: join_tables} = Map.fetch!(DB.mapping(), entity_type)
 
     encoded_id = Codec.encode(id, :id)
@@ -181,6 +185,8 @@ defmodule Hologram.DB.EntityOperations do
   # sobelow_skip ["SQL.Query"]
   def delete_relationship(entity_type, id, relationship_name, target_id) do
     join_table = fetch_join_table!(entity_type, relationship_name)
+    validate_id!(id)
+    validate_id!(target_id)
 
     statement =
       ~s|DELETE FROM #{qualified_table(join_table.name)} WHERE "source_id" = $1 AND "target_id" = $2|

@@ -144,6 +144,24 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "add_relationship/4" do
+    test "refuses a source id that isn't a canonical id" do
+      expected_msg =
+        ~s(invalid id "1" - entity ids are strings of 22 base62 characters)
+
+      assert_error MisuseError, expected_msg, fn ->
+        add_relationship(Module3, "1", :a, Entity.generate_id())
+      end
+    end
+
+    test "refuses a target id that isn't a canonical id" do
+      expected_msg =
+        ~s(invalid id "1" - entity ids are strings of 22 base62 characters)
+
+      assert_error MisuseError, expected_msg, fn ->
+        add_relationship(Module3, Entity.generate_id(), :a, "1")
+      end
+    end
+
     test "adds an edge to the join table" do
       {:ok, required_target} = create(Module1.new())
 
@@ -1218,6 +1236,13 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "delete/2" do
+    test "refuses an id that isn't a canonical id" do
+      expected_msg =
+        ~s(invalid id "1" - entity ids are strings of 22 base62 characters)
+
+      assert_error MisuseError, expected_msg, fn -> delete(Module1, "1") end
+    end
+
     test "deletes the entity row" do
       {:ok, created_entity} = create(Module1.new())
 
@@ -1454,6 +1479,24 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "delete_relationship/4" do
+    test "refuses a source id that isn't a canonical id" do
+      expected_msg =
+        ~s(invalid id "1" - entity ids are strings of 22 base62 characters)
+
+      assert_error MisuseError, expected_msg, fn ->
+        delete_relationship(Module3, "1", :a, Entity.generate_id())
+      end
+    end
+
+    test "refuses a target id that isn't a canonical id" do
+      expected_msg =
+        ~s(invalid id "1" - entity ids are strings of 22 base62 characters)
+
+      assert_error MisuseError, expected_msg, fn ->
+        delete_relationship(Module3, Entity.generate_id(), :a, "1")
+      end
+    end
+
     test "deletes an edge from the join table" do
       {:ok, required_target} = create(Module1.new())
 
@@ -1777,7 +1820,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       end
     end
 
-    test "refuses an id that isn't a canonical UUID" do
+    test "refuses an id that isn't a canonical id" do
       expected_msg =
         ~s(invalid id "constructor" - entity ids are strings of 22 base62 characters)
 
