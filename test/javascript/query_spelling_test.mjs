@@ -100,7 +100,7 @@ describe("QuerySpelling", () => {
     globalThis.Hologram.sync = {
       model: {
         [typeName(2)]: {
-          attributes: {a: "boolean", b: "integer", c: "string", id: "uuid"},
+          attributes: {a: "boolean", b: "integer", c: "string", id: "id"},
           enumValues: {},
           relationships: {},
           serverOnly: [],
@@ -109,7 +109,7 @@ describe("QuerySpelling", () => {
           attributes: {
             count: "integer",
             held_at: "datetime",
-            id: "uuid",
+            id: "id",
             rating: "float",
             released_on: "date",
           },
@@ -118,19 +118,19 @@ describe("QuerySpelling", () => {
           serverOnly: [],
         },
         [typeName(17)]: {
-          attributes: {id: "uuid", label: "string", priority: "enum"},
+          attributes: {id: "id", label: "string", priority: "enum"},
           enumValues: {priority: ["low", "medium", "high"]},
           relationships: {},
           serverOnly: [],
         },
         [typeName(22)]: {
-          attributes: {id: "uuid", opens_at: "time"},
+          attributes: {id: "id", opens_at: "time"},
           enumValues: {},
           relationships: {},
           serverOnly: [],
         },
         [typeName(26)]: {
-          attributes: {id: "uuid", name: "string"},
+          attributes: {id: "id", name: "string"},
           enumValues: {},
           inverses: {
             messages: {
@@ -145,7 +145,7 @@ describe("QuerySpelling", () => {
           serverOnly: [],
         },
         [typeName(28)]: {
-          attributes: {body: "string", id: "uuid", position: "integer"},
+          attributes: {body: "string", id: "id", position: "integer"},
           enumValues: {},
           relationships: {
             channel: {toMany: false, type: typeName(26)},
@@ -154,13 +154,13 @@ describe("QuerySpelling", () => {
           serverOnly: [],
         },
         [typeName(29)]: {
-          attributes: {id: "uuid", name: "string"},
+          attributes: {id: "id", name: "string"},
           enumValues: {},
           relationships: {},
           serverOnly: [],
         },
         [typeName(38)]: {
-          attributes: {id: "uuid", pinned: "boolean"},
+          attributes: {id: "id", pinned: "boolean"},
           derived: {
             sibling_count: {
               definition: {value: 0},
@@ -294,16 +294,13 @@ describe("QuerySpelling", () => {
     it("spells a reference as its id", () => {
       const query = count(
         filter(module(28), [
-          [
-            "channel_id",
-            Type.bitstring("0190e4c1-0000-7000-8000-000000000001"),
-          ],
+          ["channel_id", Type.bitstring("02xCwuPMdKjmyGDidbWxLF")],
         ]),
       );
 
       assert.equal(
         spell(query),
-        String.raw`{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[["channel_id","==","0190e4c1-0000-7000-8000-000000000001"]],"include":{},"skip":null,"sort":[],"take":null}`,
+        String.raw`{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[["channel_id","==","02xCwuPMdKjmyGDidbWxLF"]],"include":{},"skip":null,"sort":[],"take":null}`,
       );
     });
 

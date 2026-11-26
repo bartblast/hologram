@@ -15,6 +15,7 @@ import Elixir_Hologram_Entity, {
 import HologramRuntimeError from "../../../../assets/js/errors/runtime_error.mjs";
 import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
+import Utils from "../../../../assets/js/utils.mjs";
 
 defineRuntimeGlobals();
 
@@ -87,7 +88,7 @@ describe("Elixir_Hologram_Entity", () => {
 
   const systemAttributes = {
     created_at: "datetime",
-    id: "uuid",
+    id: "id",
     updated_at: "datetime",
   };
 
@@ -170,7 +171,7 @@ describe("Elixir_Hologram_Entity", () => {
         [NOTIFY]: {
           attributes: {
             ...systemAttributes,
-            actor_id: "uuid",
+            actor_id: "id",
             attempt: "integer",
             error: "string",
             scheduled_at: "datetime",
@@ -270,13 +271,18 @@ describe("Elixir_Hologram_Entity", () => {
   const structField = field;
 
   describe("generate_id/0", () => {
-    it("returns a boxed version 7 UUID string", () => {
+    it("returns a boxed entity id of 22 base62 characters", () => {
       const result = Elixir_Hologram_Entity["generate_id/0"]();
 
       assert.isTrue(Type.isBitstring(result));
+      assert.match(Bitstring.toText(result), /^[0-9A-Za-z]{22}$/);
+    });
+
+    it("returns the bits of a version 7 UUID", () => {
+      const id = Bitstring.toText(Elixir_Hologram_Entity["generate_id/0"]());
 
       assert.match(
-        Bitstring.toText(result),
+        Utils.entityIdToUuid(id),
         /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
       );
     });
@@ -516,7 +522,7 @@ describe("Elixir_Hologram_Entity", () => {
       assert.deepEqual(field(entity, "__struct__"), Type.alias(EMPTY));
 
       assert.match(
-        Bitstring.toText(field(entity, "id")),
+        Utils.entityIdToUuid(Bitstring.toText(field(entity, "id"))),
         /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
       );
 
@@ -691,10 +697,7 @@ describe("Elixir_Hologram_Entity", () => {
 
     it("raises on an assigned job actor", () => {
       const values = Type.map([
-        [
-          Type.atom("actor_id"),
-          Type.bitstring("018f4c11-1111-7111-8111-111111111111"),
-        ],
+        [Type.atom("actor_id"), Type.bitstring("02wTiQpCtbKJxz7pUTfNFB")],
       ]);
 
       assertBoxedError(
@@ -945,6 +948,45 @@ describe("Elixir_Hologram_Entity", () => {
       }
     });
 
+    // The same kinds of case as the :id clause in test/elixir/hologram/entity/validator_test.exs.
+    it("accepts an id only as 22 base62 characters writing a 128-bit number", () => {
+      assert.isTrue(typeValid(Type.bitstring("0000000000000000000000"), "id"));
+      assert.isTrue(typeValid(Type.bitstring("02wLIRxqmq3AUo6vl2OW37"), "id"));
+      assert.isTrue(typeValid(Type.bitstring("7n42DGM5Tflk9n8mt7Fhc7"), "id"));
+
+      for (const value of [
+        "02wLIRxqmq3AUo6vl2OW3",
+        "02wLIRxqmq3AUo6vl2OW377",
+        "02wLIRxqmq3AUo6vl2OW3-",
+        "02wLIRxqmq3AUo6vl2OW37\n",
+        "7n42DGM5Tflk9n8mt7Fhc8",
+        "zzzzzzzzzzzzzzzzzzzzzz",
+        "018f0000-0000-7000-8000-000000000001",
+      ]) {
+        assert.isFalse(typeValid(Type.bitstring(value), "id"), value);
+      }
+
+      assert.isFalse(typeValid(Type.integer(1), "id"));
+      assert.isFalse(typeValid(Bitstring.fromBytes([255]), "id"));
+    });
+
+    it("accepts a uuid only in its lowercase 8-4-4-4-12 form", () => {
+      assert.isTrue(
+        typeValid(
+          Type.bitstring("018f0000-0000-7000-8000-000000000001"),
+          "uuid",
+        ),
+      );
+
+      for (const value of [
+        "018F0000-0000-7000-8000-000000000001",
+        "018f0000000070008000000000000001",
+        "02wLIRxqmq3AUo6vl2OW37",
+      ]) {
+        assert.isFalse(typeValid(Type.bitstring(value), "uuid"), value);
+      }
+    });
+
     it("refuses a float that isn't finite", () => {
       assert.isTrue(typeValid(Type.float(1.5), "float"));
       assert.isFalse(typeValid(Type.float(Infinity), "float"));
@@ -1010,10 +1052,7 @@ describe("Elixir_Hologram_Entity", () => {
 
     it("accepts a to-one reference holding a canonical entity id", () => {
       const values = Type.map([
-        [
-          Type.atom("author_id"),
-          Type.bitstring("018f4c11-1111-7111-8111-111111111111"),
-        ],
+        [Type.atom("author_id"), Type.bitstring("02wTiQpCtbKJxz7pUTfNFB")],
       ]);
 
       assert.deepEqual(
@@ -1034,7 +1073,7 @@ describe("Elixir_Hologram_Entity", () => {
           Type.map([
             [
               Type.atom("author_id"),
-              Type.list([Type.tuple([Type.atom("type"), Type.atom("uuid")])]),
+              Type.list([Type.tuple([Type.atom("type"), Type.atom("id")])]),
             ],
           ]),
         ]),
@@ -1077,10 +1116,7 @@ describe("Elixir_Hologram_Entity", () => {
     it("judges neither the system attributes nor the relationships", () => {
       const values = Type.map([
         [Type.atom("created_at"), Type.integer(1)],
-        [
-          Type.atom("author_id"),
-          Type.bitstring("018f4c11-1111-7111-8111-111111111111"),
-        ],
+        [Type.atom("author_id"), Type.bitstring("02wTiQpCtbKJxz7pUTfNFB")],
       ]);
 
       assert.deepEqual(

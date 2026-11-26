@@ -23,6 +23,7 @@ import Interpreter from "../../../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
 import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
+import Utils from "../../../../assets/js/utils.mjs";
 
 defineRuntimeGlobals();
 
@@ -44,13 +45,13 @@ describe("Elixir_Hologram_Auth", () => {
   const TAG = "MyApp.Tag";
   const USER = "MyApp.User";
 
-  const ALICE = "018f4571-a1b2-7c3d-8e4f-000000000001";
-  const BOB = "018f4571-a1b2-7c3d-8e4f-000000000002";
-  const DOC = "018f4571-a1b2-7c3d-8e4f-00000000000a";
-  const FOLDER_ID = "018f4571-a1b2-7c3d-8e4f-00000000000b";
-  const PARENT_ID = "018f4571-a1b2-7c3d-8e4f-00000000000c";
-  const OTHER_DOC = "018f4571-a1b2-7c3d-8e4f-00000000000d";
-  const TAG_ID = "018f4571-a1b2-7c3d-8e4f-00000000000e";
+  const ALICE = "02wSyz8E9khZO7aC2RayBN";
+  const BOB = "02wSyz8E9khZO7aC2RayBO";
+  const DOC = "02wSyz8E9khZO7aC2RayBW";
+  const FOLDER_ID = "02wSyz8E9khZO7aC2RayBX";
+  const PARENT_ID = "02wSyz8E9khZO7aC2RayBY";
+  const OTHER_DOC = "02wSyz8E9khZO7aC2RayBZ";
+  const TAG_ID = "02wSyz8E9khZO7aC2RayBa";
 
   const can = Elixir_Hologram_Auth["can?/3"];
 
@@ -105,11 +106,11 @@ describe("Elixir_Hologram_Auth", () => {
       model: {
         [DOCUMENT]: {
           attributes: {
-            author_id: "uuid",
+            author_id: "id",
             count: "integer",
             due_on: "date",
             held_at: "datetime",
-            id: "uuid",
+            id: "id",
             priority: "integer",
             public: "boolean",
             rating: "float",
@@ -247,7 +248,7 @@ describe("Elixir_Hologram_Auth", () => {
         },
         [FOLDER]: {
           attributes: {
-            id: "uuid",
+            id: "id",
             archived: "boolean",
             kind: "enum",
             name: "string",
@@ -312,7 +313,7 @@ describe("Elixir_Hologram_Auth", () => {
           serverOnly: [],
         },
         [TAG]: {
-          attributes: {id: "uuid", name: "string"},
+          attributes: {id: "id", name: "string"},
           expandedRoles: {},
           inverses: {
             documents: {
@@ -333,8 +334,8 @@ describe("Elixir_Hologram_Auth", () => {
         // a reference field rather than an attribute, which is the shape a grant row has.
         [GRANT]: {
           attributes: {
-            id: "uuid",
-            entity_id: "uuid",
+            id: "id",
+            entity_id: "id",
             entity_type: "enum",
             role: "enum",
           },
@@ -6090,9 +6091,9 @@ describe("Elixir_Hologram_Auth", () => {
     };
 
     for (const userId of [
-      Type.bitstring("018F4571-A1B2-7C3D-8E4F-000000000001"),
-      Type.bitstring("018f4571a1b27c3d8e4f000000000001"),
-      Type.bitstring("018f4571-a1b2-7c3d-8e4f-000000000001\n"),
+      Type.bitstring("018f4571-a1b2-7c3d-8e4f-000000000001"),
+      Type.bitstring("02wSyz8E9khZO7aC2RayBN\n"),
+      Type.bitstring("7n42DGM5Tflk9n8mt7Fhc8"),
       Type.bitstring("user_id_1"),
       Type.integer(7),
       Type.boolean(false),
@@ -6540,9 +6541,9 @@ describe("Elixir_Hologram_Auth", () => {
 // (describe "derive_id/4"), and the three pinned vectors are the same strings on both sides.
 // Always update both together.
 describe("deriveGrantId()", () => {
-  const USER_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12";
-  const OTHER_USER_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e13";
-  const RESOURCE_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10";
+  const USER_ID = "02y1zRviSAYGVwSyzxs4qA";
+  const OTHER_USER_ID = "02y1zRviSAYGVwSyzxs4qB";
+  const RESOURCE_ID = "02y1zRviSAYGVwSyzxs4q8";
   const RESOURCE_TYPE = "Hologram.Test.Fixtures.Policy.Module2";
 
   it("answers the same id for the same grant", () => {
@@ -6566,9 +6567,13 @@ describe("deriveGrantId()", () => {
     );
   });
 
-  it("answers a version 5 id under the RFC variant, in the canonical spelling", () => {
+  it("answers a version 5 id under the RFC variant, as an entity id", () => {
+    const id = deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member");
+
+    assert.isTrue(Utils.isEntityId(id));
+
     assert.match(
-      deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),
+      Utils.entityIdToUuid(id),
       /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
   });
@@ -6586,17 +6591,17 @@ describe("deriveGrantId()", () => {
   it("answers the vectors the server twin is held to", () => {
     assert.equal(
       deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "member"),
-      "2c56252b-0c90-5cd9-b15d-91c5e5bf968e",
+      "1Lf1ua2cLkzFFU7EXpk9WA",
     );
 
     assert.equal(
       deriveGrantId(USER_ID, null, null, "Hologram.Test.Fixtures.Role.Module1"),
-      "f0fd8d8d-3d3f-5dd8-9027-2441a5a93040",
+      "7Kk20ttSQPWqmKPr4oRnay",
     );
 
     assert.equal(
       deriveGrantId(USER_ID, RESOURCE_TYPE, RESOURCE_ID, "café"),
-      "84121d8c-09a3-57fa-96e3-bd966906ce20",
+      "41DGUEuAJu7pquECzp0tqS",
     );
   });
 });
@@ -6608,13 +6613,13 @@ describe("a grant written into a batch", () => {
   // The type is spelled as the vectors above spell it: a grant row names its scope by the entity
   // type's own name, so the pinned id derives from the same four parts the server hashes.
   const ENTITY_TYPE = "Hologram.Test.Fixtures.Policy.Module2";
-  const GRANT_ID = "2c56252b-0c90-5cd9-b15d-91c5e5bf968e";
+  const GRANT_ID = "1Lf1ua2cLkzFFU7EXpk9WA";
   const NOW_MS = 1_756_100_000_123;
   const STAMP = NOW_MS * 1024;
 
-  const ACTOR_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11";
-  const RESOURCE_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10";
-  const USER_ID = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12";
+  const ACTOR_ID = "02y1zRviSAYGVwSyzxs4q9";
+  const RESOURCE_ID = "02y1zRviSAYGVwSyzxs4q8";
+  const USER_ID = "02y1zRviSAYGVwSyzxs4qA";
 
   let timers;
 
@@ -6622,7 +6627,7 @@ describe("a grant written into a batch", () => {
     globalThis.Hologram.sync = {
       model: {
         [ENTITY_TYPE]: {
-          attributes: {id: "uuid"},
+          attributes: {id: "id"},
           policy: {},
           relationships: {},
           roles: ["member"],
@@ -6683,9 +6688,9 @@ describe("a grant written into a batch", () => {
 // rules given per test, and the grant store.
 const GATED_DOCUMENT = "MyApp.Document";
 const GATED_GRANT = "Hologram.Auth.RoleGrant";
-const GATED_ALICE = "018f4571-a1b2-7c3d-8e4f-000000000001";
-const GATED_BOB = "018f4571-a1b2-7c3d-8e4f-000000000002";
-const GATED_DOC = "018f4571-a1b2-7c3d-8e4f-0000000000d1";
+const GATED_ALICE = "02wSyz8E9khZO7aC2RayBN";
+const GATED_BOB = "02wSyz8E9khZO7aC2RayBO";
+const GATED_DOC = "02wSyz8E9khZO7aC2RayEj";
 
 const gateRule = (to) => ({predicates: [], to: to, via: null});
 
@@ -6702,7 +6707,7 @@ const defineGates = (policy) => {
   globalThis.Hologram.sync = {
     model: {
       [GATED_DOCUMENT]: {
-        attributes: {id: "uuid"},
+        attributes: {id: "id"},
         policy: policy,
         relationships: {},
         roles: ["editor", "owner", "viewer"],
@@ -6710,8 +6715,8 @@ const defineGates = (policy) => {
       },
       [GATED_GRANT]: {
         attributes: {
-          id: "uuid",
-          entity_id: "uuid",
+          id: "id",
+          entity_id: "id",
           entity_type: "enum",
           role: "enum",
         },
@@ -6833,7 +6838,7 @@ describe("unqualifiedRoleMessage()", () => {
     LocalDatabase.putRow(
       GRANT,
       grantRow({
-        entity_id: "018f4571-a1b2-7c3d-8e4f-0000000000d2",
+        entity_id: "02wSyz8E9khZO7aC2RayEk",
         entity_type: DOCUMENT,
         role: "editor",
       }),
@@ -7100,7 +7105,7 @@ describe("grant_role/3", () => {
     assertBoxedError(
       () => grant(Type.bitstring("nope"), Type.atom("viewer"), document()),
       "Hologram.MisuseError",
-      'invalid user id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+      'invalid user id "nope" - entity ids are strings of 22 base62 characters',
     );
   });
 
@@ -7112,7 +7117,7 @@ describe("grant_role/3", () => {
     assertBoxedError(
       () => grant(userId, Type.atom("viewer"), document()),
       "Hologram.MisuseError",
-      `invalid user id ${Interpreter.inspect(userId)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
+      `invalid user id ${Interpreter.inspect(userId)} - entity ids are strings of 22 base62 characters`,
     );
   });
 
@@ -7122,7 +7127,7 @@ describe("grant_role/3", () => {
     assertBoxedError(
       () => grant(Type.map([]), Type.atom("viewer"), document()),
       "Hologram.MisuseError",
-      "invalid user id %{} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings",
+      "invalid user id %{} - entity ids are strings of 22 base62 characters",
     );
   });
 
@@ -7448,7 +7453,7 @@ describe("revoke_role/3", () => {
 
   // Carol holds nothing. The gate passes (the actor may revoke viewer), and then there is no row.
   it("answers :ok and appends nothing for a role the user does not hold", () => {
-    const CAROL = "018f4571-a1b2-7c3d-8e4f-000000000003";
+    const CAROL = "02wSyz8E9khZO7aC2RayBP";
 
     const result = revoke(
       Type.bitstring(CAROL),
@@ -7573,8 +7578,8 @@ describe("revoke_role/2", () => {
 describe("a creator's own grant", () => {
   const NOTE = "MyApp.Note";
 
-  const NOTE_ID = "018f4571-a1b2-7c3d-8e4f-0000000000c1";
-  const OWNER = "018f4571-a1b2-7c3d-8e4f-0000000000c2";
+  const NOTE_ID = "02wSyz8E9khZO7aC2RayET";
+  const OWNER = "02wSyz8E9khZO7aC2RayEU";
 
   const can = Elixir_Hologram_Auth["can?/3"];
   const create = Elixir_Hologram_DB["create/1"];
@@ -7592,7 +7597,7 @@ describe("a creator's own grant", () => {
     globalThis.Hologram.sync = {
       model: {
         [NOTE]: {
-          attributes: {id: "uuid", title: "string"},
+          attributes: {id: "id", title: "string"},
           constraints: {},
           creatorRoles: ["owner"],
           defaults: {},
@@ -7605,8 +7610,8 @@ describe("a creator's own grant", () => {
         },
         [GATED_GRANT]: {
           attributes: {
-            id: "uuid",
-            entity_id: "uuid",
+            id: "id",
+            entity_id: "id",
             entity_type: "enum",
             role: "enum",
           },

@@ -664,7 +664,7 @@ defmodule Hologram.EntityTest do
   end
 
   # IMPORTANT!
-  # Each test in this describe block has a related JavaScript test in test/javascript/utils_test.mjs (describe "uuidv7()")
+  # Each test in this describe block has a related JavaScript test in test/javascript/utils_test.mjs (describe "entityId()")
   # Always update both together.
   describe "generate_id/0" do
     test "returns 22 base62 characters holding the bits of a version 7 UUID" do

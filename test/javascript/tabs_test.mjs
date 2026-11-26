@@ -624,7 +624,7 @@ describe("Tabs", () => {
       globalThis.Hologram.sync = {
         model: {
           "MyApp.Task": {
-            attributes: {id: "uuid", title: "string"},
+            attributes: {id: "id", title: "string"},
             enumValues: {},
             relationships: {},
             serverOnly: [],
@@ -2759,7 +2759,7 @@ describe("Tabs", () => {
       // takes up the store, then takes the lead, and the server confirms the batch it sends again.
       it("moves a counter the store already holds moved only once, when it takes the lead after reading the store", async () => {
         globalThis.Hologram.sync.model["MyApp.Task"] = {
-          attributes: {count: "integer", id: "uuid"},
+          attributes: {count: "integer", id: "id"},
           enumValues: {},
           relationships: {},
           serverOnly: [],
@@ -4133,7 +4133,7 @@ describe("Tabs", () => {
       globalThis.Hologram.sync = {
         model: {
           "MyApp.Task": {
-            attributes: {count: "integer", id: "uuid"},
+            attributes: {count: "integer", id: "id"},
             enumValues: {},
             relationships: {},
             serverOnly: [],

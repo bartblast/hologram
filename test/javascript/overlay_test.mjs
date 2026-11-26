@@ -27,7 +27,7 @@ describe("Overlay", () => {
           attributes: {
             created_at: "datetime",
             done: "boolean",
-            id: "uuid",
+            id: "id",
             title: "string",
             updated_at: "datetime",
             votes: "integer",
@@ -149,11 +149,11 @@ describe("Overlay", () => {
 
       globalThis.Hologram.sync.model[JOB] = {
         attributes: {
-          actor_id: "uuid",
+          actor_id: "id",
           attempt: "integer",
           created_at: "datetime",
           error: "string",
-          id: "uuid",
+          id: "id",
           scheduled_at: "datetime",
           status: "enum",
           updated_at: "datetime",
@@ -675,7 +675,7 @@ describe("Overlay", () => {
       };
 
       globalThis.Hologram.sync.model[LABEL] = {
-        attributes: {id: "uuid", name: "string"},
+        attributes: {id: "id", name: "string"},
         constraints: {},
         defaults: {},
         enumValues: {},
@@ -1086,7 +1086,7 @@ describe("Overlay", () => {
         };
 
         globalThis.Hologram.sync.model[LABEL] = {
-          attributes: {id: "uuid", name: "string"},
+          attributes: {id: "id", name: "string"},
           constraints: {},
           defaults: {},
           enumValues: {},

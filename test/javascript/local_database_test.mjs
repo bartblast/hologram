@@ -94,7 +94,7 @@ describe("LocalDatabase", () => {
       globalThis.Hologram.sync = {
         model: {
           [TASK]: {
-            attributes: {id: "uuid", title: "string"},
+            attributes: {id: "id", title: "string"},
             constraints: {},
             defaults: {},
             enumValues: {},
@@ -829,12 +829,12 @@ describe("LocalDatabase", () => {
       globalThis.Hologram.sync = {
         model: {
           [PROJECT]: {
-            attributes: {id: "uuid"},
+            attributes: {id: "id"},
             relationships: {tasks: {toMany: true, type: TASK}},
             serverOnly: [],
           },
           [TASK]: {
-            attributes: {id: "uuid"},
+            attributes: {id: "id"},
             inverses: {
               owners: {
                 forward: "tasks",
@@ -937,12 +937,12 @@ describe("LocalDatabase", () => {
         globalThis.Hologram.sync = {
           model: {
             [PROJECT]: {
-              attributes: {id: "uuid"},
+              attributes: {id: "id"},
               relationships: {tasks: {toMany: true, type: TASK}},
               serverOnly: [],
             },
             [TASK]: {
-              attributes: {id: "uuid"},
+              attributes: {id: "id"},
               relationships: {},
               serverOnly: [],
             },
@@ -1125,7 +1125,7 @@ describe("LocalDatabase", () => {
       globalThis.Hologram.sync = {
         model: {
           [TAG]: {
-            attributes: {id: "uuid", name: "string"},
+            attributes: {id: "id", name: "string"},
             enumValues: {},
             inverses: {
               tasks: {
@@ -1140,7 +1140,7 @@ describe("LocalDatabase", () => {
             serverOnly: [],
           },
           [TASK]: {
-            attributes: {id: "uuid", title: "string"},
+            attributes: {id: "id", title: "string"},
             enumValues: {},
             inverses: {},
             relationships: {
@@ -1364,7 +1364,7 @@ describe("LocalDatabase", () => {
       globalThis.Hologram.sync = {
         model: {
           [TAG]: {
-            attributes: {id: "uuid", name: "string"},
+            attributes: {id: "id", name: "string"},
             enumValues: {},
             inverses: {
               tasks: {
@@ -1379,7 +1379,7 @@ describe("LocalDatabase", () => {
             serverOnly: [],
           },
           [TASK]: {
-            attributes: {id: "uuid", title: "string"},
+            attributes: {id: "id", title: "string"},
             enumValues: {},
             relationships: {
               project: {optional: false, toMany: false, type: "MyApp.Project"},
@@ -1715,7 +1715,7 @@ describe("LocalDatabase", () => {
         model: {
           [TASK]: {
             attributes: {
-              id: "uuid",
+              id: "id",
               server_created_seq: "integer",
               server_updated_seq: "integer",
               title: "string",
@@ -2514,7 +2514,7 @@ describe("LocalDatabase", () => {
         model: {
           [TASK]: {
             attributes: {
-              id: "uuid",
+              id: "id",
               server_created_at: "utc_datetime_usec",
               server_created_seq: "integer",
               server_updated_seq: "integer",

@@ -6500,7 +6500,7 @@ describe("Hologram", () => {
         block.id = "hologram-boot-data";
 
         block.textContent = JSON.stringify({
-          actorEntityId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+          actorEntityId: "02x9QDX4pOzriCIlt0xKjn",
           actorUserId: "u02x9QDX4pOzriCIlt0xKjn",
           syncCountTypes: {},
           syncCounts: {},
@@ -6570,7 +6570,7 @@ describe("Hologram", () => {
         await Hologram.handlePopstateEvent({state: "history-unmounted-1"});
 
         sinon.assert.calledOnceWithExactly(dataLayer.ingestMountData, {
-          actorEntityId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+          actorEntityId: "02x9QDX4pOzriCIlt0xKjn",
           actorUserId: "u02x9QDX4pOzriCIlt0xKjn",
           identityPeriod: IdentityTracker.documentPeriod,
           syncCountTypes: {},
@@ -10253,8 +10253,8 @@ describe("Hologram", () => {
       block.id = "hologram-boot-data";
 
       block.textContent = JSON.stringify({
-        actorEntityId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
-        actorUserId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+        actorEntityId: "02x9QDX4pOzriCIlt0xKjn",
+        actorUserId: "02x9QDX4pOzriCIlt0xKjn",
         syncCountTypes: {"App.Page/total/": ["App.Task"]},
         syncCounts: {"App.Page/total/": 3},
         syncRows: syncRows,
@@ -10302,8 +10302,8 @@ describe("Hologram", () => {
       Hologram.restoreDocumentSnapshot(pageSnapshot);
 
       sinon.assert.calledOnceWithExactly(ingestMountDataSpy, {
-        actorEntityId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
-        actorUserId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+        actorEntityId: "02x9QDX4pOzriCIlt0xKjn",
+        actorUserId: "02x9QDX4pOzriCIlt0xKjn",
         identityPeriod: IdentityTracker.documentPeriod,
         syncCountTypes: {"App.Page/total/": ["App.Task"]},
         syncCounts: {"App.Page/total/": 3},
