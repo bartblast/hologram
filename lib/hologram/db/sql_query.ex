@@ -138,13 +138,14 @@ defmodule Hologram.DB.SQLQuery do
     Enum.zip_with(params, oids, &encode_value/2)
   end
 
-  # A string that is not a canonical id goes to the driver untouched, which refuses it the way it
-  # refuses a binary of the wrong size.
+  # An entity id and the 36-character UUID spelling of a number both encode to its 16 bytes - the
+  # widths differ, so no string is both. Any other string goes to the driver untouched, which
+  # refuses it the way it refuses a binary of the wrong size.
   defp encode_value(value, @uuid_oid) when is_binary(value) do
-    if Validator.attribute_value_valid?(value, :uuid) do
-      Codec.encode(value, :uuid)
-    else
-      value
+    cond do
+      Validator.attribute_value_valid?(value, :id) -> Codec.encode(value, :id)
+      Validator.attribute_value_valid?(value, :uuid) -> Codec.encode(value, :uuid)
+      true -> value
     end
   end
 

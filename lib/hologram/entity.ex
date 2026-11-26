@@ -1,6 +1,7 @@
 defmodule Hologram.Entity do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
+  alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.DerivedExpression
@@ -482,6 +483,22 @@ defmodule Hologram.Entity do
   end
 
   @doc """
+  Returns the 36-character UUID spelling of the given entity id - the same 128-bit number, in the
+  lowercase 8-4-4-4-12 form DB.sql/3 returns uuid columns in and SQL consoles show.
+  Raises ArgumentError for a value that is not an entity id.
+  """
+  @spec id_to_uuid(id) :: String.t()
+  def id_to_uuid(id) do
+    if Validator.attribute_value_valid?(id, :id) do
+      id
+      |> Codec.encode(:id)
+      |> Codec.decode(:uuid)
+    else
+      raise ArgumentError, "expected an entity id (22 base62 characters), got: #{inspect(id)}"
+    end
+  end
+
+  @doc """
   Builds a new entity struct of the given entity type from the given values (a map or a keyword list).
   The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
   To-one references are set via their `<name>_id` fields - relationship values themselves cannot be assigned at construction.
@@ -497,6 +514,23 @@ defmodule Hologram.Entity do
     fields = Map.put_new(values_map, :id, generate_id())
 
     struct!(entity_type, fields)
+  end
+
+  @doc """
+  Returns the entity id spelling of the given UUID - the same 128-bit number in 22 base62
+  characters, for an id a uuid column returned through DB.sql/3 or one copied from an SQL console.
+  Takes the lowercase 8-4-4-4-12 form only. Raises ArgumentError for any other value.
+  """
+  @spec uuid_to_id(String.t()) :: id
+  def uuid_to_id(uuid) do
+    if Validator.attribute_value_valid?(uuid, :uuid) do
+      uuid
+      |> Codec.encode(:uuid)
+      |> Codec.decode(:id)
+    else
+      raise ArgumentError,
+            "expected a lowercase 8-4-4-4-12 UUID, got: #{inspect(uuid)}"
+    end
   end
 
   # The body is kept as the definition function will run it, so the function is built once every

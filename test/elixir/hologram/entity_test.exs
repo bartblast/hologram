@@ -692,6 +692,41 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "id_to_uuid/1" do
+    test "returns the 36-character spelling of the same number" do
+      assert id_to_uuid("02y9GOZb4QYpMlaccFSmK2") == "0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6a"
+    end
+
+    test "converts the smallest and the largest id" do
+      assert id_to_uuid("0000000000000000000000") == "00000000-0000-0000-0000-000000000000"
+      assert id_to_uuid("7n42DGM5Tflk9n8mt7Fhc7") == "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    end
+
+    test "is undone by uuid_to_id/1" do
+      id = uuid_to_id(generate_id())
+
+      assert uuid_to_id(id_to_uuid(id)) == id
+    end
+
+    test "raises on an id past the largest 128-bit number" do
+      assert_error ArgumentError,
+                   ~s[expected an entity id (22 base62 characters), got: "7n42DGM5Tflk9n8mt7Fhc8"],
+                   fn -> id_to_uuid("7n42DGM5Tflk9n8mt7Fhc8") end
+    end
+
+    test "raises on the 36-character form" do
+      assert_error ArgumentError,
+                   ~s[expected an entity id (22 base62 characters), got: "0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6a"],
+                   fn -> id_to_uuid("0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6a") end
+    end
+
+    test "raises on a value that is not a string" do
+      assert_error ArgumentError,
+                   "expected an entity id (22 base62 characters), got: 123",
+                   fn -> id_to_uuid(123) end
+    end
+  end
+
   describe "includable_names/1" do
     test "returns the stored and inverse relationship names, sorted" do
       defmodule IncludableNamesFixture do
@@ -1507,6 +1542,41 @@ defmodule Hologram.EntityTest do
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
+    end
+  end
+
+  describe "uuid_to_id/1" do
+    test "returns the entity id spelling of the same number" do
+      assert uuid_to_id("0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6a") == "02y9GOZb4QYpMlaccFSmK2"
+    end
+
+    test "converts the smallest and the largest UUID" do
+      assert uuid_to_id("00000000-0000-0000-0000-000000000000") == "0000000000000000000000"
+      assert uuid_to_id("ffffffff-ffff-ffff-ffff-ffffffffffff") == "7n42DGM5Tflk9n8mt7Fhc7"
+    end
+
+    test "is undone by id_to_uuid/1" do
+      uuid = generate_id()
+
+      assert id_to_uuid(uuid_to_id(uuid)) == uuid
+    end
+
+    test "raises on an uppercase UUID" do
+      assert_error ArgumentError,
+                   ~s(expected a lowercase 8-4-4-4-12 UUID, got: "0192F3A0-7B1E-7C2D-9A4B-1F2E3D4C5B6A"),
+                   fn -> uuid_to_id("0192F3A0-7B1E-7C2D-9A4B-1F2E3D4C5B6A") end
+    end
+
+    test "raises on an entity id" do
+      assert_error ArgumentError,
+                   ~s(expected a lowercase 8-4-4-4-12 UUID, got: "02y9GOZb4QYpMlaccFSmK2"),
+                   fn -> uuid_to_id("02y9GOZb4QYpMlaccFSmK2") end
+    end
+
+    test "raises on a value that is not a string" do
+      assert_error ArgumentError, "expected a lowercase 8-4-4-4-12 UUID, got: nil", fn ->
+        uuid_to_id(nil)
+      end
     end
   end
 

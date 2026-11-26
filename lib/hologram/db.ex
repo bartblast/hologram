@@ -405,10 +405,12 @@ defmodule Hologram.DB do
   {:error, %Hologram.SQLError{}} carrying the server's condition name as its code and the server's
   message.
 
-  A uuid column or uuid array comes back as canonical id strings, the spelling every entity
-  carries, and an id string given for a uuid parameter or uuid array parameter is encoded for the
-  driver - a 16-byte binary passes through either way. The conversion goes by the types PostgreSQL
-  reports for the statement, so a text column holding a uuid-shaped string stays as it is. Other
+  A uuid column or uuid array comes back in the 36-character lowercase 8-4-4-4-12 form, since
+  PostgreSQL can't tell an entity id from another system's UUID - Hologram.Entity.uuid_to_id/1
+  gives the entity id spelling, to compare with an entity's id. A uuid parameter or uuid array
+  parameter takes either spelling, an entity id or the 36-character form, and a 16-byte binary
+  passes through. The conversion goes by the types PostgreSQL reports for the statement, so a text
+  column holding a uuid-shaped string stays as it is. Other
   types arrive as the driver decodes them: `int8` as an integer, `float8` as a float, `text` as a
   string, `boolean`, `date` as a Date, `time` as a Time, `timestamptz` as a DateTime, an enum as
   its label string and `jsonb` as a map.

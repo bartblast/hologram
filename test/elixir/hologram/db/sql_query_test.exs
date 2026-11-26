@@ -20,6 +20,9 @@ defmodule Hologram.DB.SQLQueryTest do
 
   @id "0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6a"
 
+  # The entity id spelling of @id, the same number.
+  @id_short "02y9GOZb4QYpMlaccFSmK2"
+
   @insert_given_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions") VALUES ($1, now(), now(), 0, now(), 0, now(), '{}')|
 
   @insert_returning_id_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions") VALUES (gen_random_uuid(), now(), now(), 0, now(), 0, now(), '{}') RETURNING "id"|
@@ -27,6 +30,9 @@ defmodule Hologram.DB.SQLQueryTest do
   @lock_by_id_sql ~s|SELECT "id" FROM "hologram_data"."test_fixtures_entity_module1" WHERE "id" = $1 FOR UPDATE|
 
   @other_id "0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6b"
+
+  # The entity id spelling of @other_id, the same number.
+  @other_id_short "02y9GOZb4QYpMlaccFSmK3"
 
   @remove_by_id_in_cte_sql ~s|WITH removed AS (DELETE FROM "hologram_data"."test_fixtures_entity_module1" WHERE "id" = $1 RETURNING "id") SELECT count(*) AS "count" FROM removed|
 
@@ -216,6 +222,40 @@ defmodule Hologram.DB.SQLQueryTest do
     test "encodes a canonical id string for a uuid param" do
       assert run(~s|SELECT $1::uuid = '#{@id}'::uuid AS "same"|, [@id], []) ==
                {:ok, %{columns: ["same"], rows: [[true]]}}
+    end
+
+    test "encodes an entity id string for a uuid param" do
+      assert run(~s|SELECT $1::uuid = '#{@id}'::uuid AS "same"|, [@id_short], []) ==
+               {:ok, %{columns: ["same"], rows: [[true]]}}
+    end
+
+    test "decodes a uuid column given an entity id param to the 36-character form" do
+      assert run(~s|SELECT $1::uuid AS "id"|, [@id_short], []) ==
+               {:ok, %{columns: ["id"], rows: [[@id]]}}
+    end
+
+    test "matches the same row with a uuid param in either spelling" do
+      id = Entity.generate_id()
+      short_id = Entity.uuid_to_id(id)
+      bytes = Codec.encode(id, :uuid)
+
+      {:ok, _result} = Connection.query(@insert_given_id_sql, [bytes])
+
+      statement =
+        ~s|SELECT "id" FROM "hologram_data"."test_fixtures_entity_module1" WHERE "id" = $1|
+
+      assert run(statement, [id], []) == {:ok, %{columns: ["id"], rows: [[id]]}}
+      assert run(statement, [short_id], []) == {:ok, %{columns: ["id"], rows: [[id]]}}
+
+      delete_by_id(bytes)
+    end
+
+    test "encodes the elements of a uuid array param mixing both spellings" do
+      assert run(~s|SELECT $1::uuid[] AS "ids"|, [[@id_short, nil, @other_id]], []) ==
+               {:ok, %{columns: ["ids"], rows: [[[@id, nil, @other_id]]]}}
+
+      assert run(~s|SELECT $1::uuid[] AS "ids"|, [[[@id], [@other_id_short]]], []) ==
+               {:ok, %{columns: ["ids"], rows: [[[[@id], [@other_id]]]]}}
     end
 
     test "encodes the elements of a uuid array param" do
