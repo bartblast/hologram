@@ -718,8 +718,9 @@ defmodule Hologram.Migration.Renderer do
   defp render_chunk([%{op: :change_relationship} = first | _rest] = chunk, model) do
     cond do
       # An op can state the target a relationship has, which retargets nothing. A backfill sits in
-      # a chunk of its own, so it fills even when its op states one.
-      retargets?(chunk, model) ->
+      # a chunk of its own, so it fills even when its op states one. A chunk of other changes can
+      # cast an attribute, which is no retarget either.
+      retarget?(first) and retargets?(chunk, model) ->
         Enum.reduce(chunk, {[], model}, fn op, {acc, current_model} ->
           next_model = Model.fold(current_model, [op])
 

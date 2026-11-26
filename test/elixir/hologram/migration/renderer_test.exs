@@ -1403,6 +1403,45 @@ defmodule Hologram.Migration.RendererTest do
       assert %{op: :alter_column, column: "owner_id", filled: true} = alter
     end
 
+    test "renders an attribute cast in a chunk led by a relationship change as no retarget" do
+      pre_model =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:seats, :integer, []}],
+            relationships: [{:owner, MyApp.User, [optional: true]}]
+          },
+          MyApp.User => %{}
+        })
+
+      ops = [
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          changes: [optional: false],
+          line: 3
+        },
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :seats,
+          changes: [type: :string],
+          line: 4
+        },
+        %{op: :create_entity, entity: MyApp.Place, line: 5}
+      ]
+
+      %{transactional: transactional} = render(ops, pre_model)
+
+      assert %{op: :create_table} = Enum.find(transactional, &(&1[:table] == "my_app_place"))
+
+      assert %{after: %{null: false}} =
+               Enum.find(transactional, &(&1.op == :alter_column and &1.column == "owner_id"))
+
+      assert %{after: %{type: "text"}} =
+               Enum.find(transactional, &(&1.op == :alter_column and &1.column == "seats"))
+    end
+
     test "renders a required retarget widened by the next op, which drops the column" do
       pre_model =
         model(%{
