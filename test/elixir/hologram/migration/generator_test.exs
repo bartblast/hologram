@@ -1229,12 +1229,18 @@ defmodule Hologram.Migration.GeneratorTest do
                  "  change_entity MyApp.Alpha do"
 
       # A retarget can add a required edge, and it, optional or not, a to-many and a delete change
-      # what Beta's own backfill can still read.
-      assert beta_question =~ "change_relationship :c, optional: true, type: MyApp.Gamma"
-      assert beta_question =~ "change_relationship :d, type: [MyApp.Alpha]"
-      assert beta_question =~ "change_relationship :g, type: MyApp.Gamma"
-      assert beta_question =~ "change_relationship :e, unique: true"
-      assert beta_question =~ "delete_relationship :f"
+      # what Beta's own backfill can still read. The cycle note lists them too, as comments.
+      beta_lines = String.split(beta_question, "\n")
+
+      for line <- [
+            "change_relationship :c, optional: true, type: MyApp.Gamma",
+            "change_relationship :d, type: [MyApp.Alpha]",
+            "change_relationship :g, type: MyApp.Gamma",
+            "change_relationship :e, unique: true",
+            "delete_relationship :f"
+          ] do
+        assert ("    " <> line) in beta_lines
+      end
     end
 
     test "notes the lines that can end a required to-one in the fill questions below another block's fill" do
