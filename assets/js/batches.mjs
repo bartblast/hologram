@@ -63,7 +63,35 @@ export default class Batches {
   // that make it harmless, and a clear on every entry would be a line nothing could ever observe.
   static #retryTimer = null;
 
+  // The batch whose refused switch the retry was set for, which waits out that retry and no other
+  // (see flush).
+  static #retryFor = null;
+
   static #running = null;
+
+  // Batches of another user still on their way into the store. They have left the queue, and a page
+  // about to be loaded afresh has to wait for them all the same (see recorded).
+  static #filing = new Set();
+
+  // Batches of actions still open that a change of user took off the screen. Nothing else holds
+  // them for the overlay, so this is what puts them back if their user returns before they close.
+  static #releasedOpen = new Set();
+
+  // Sealed batches of other users that no store holds, by user: the ones this tab made where there
+  // was nowhere to file them. A change of user takes them off the queue, and nothing else holds
+  // them, so this is what sends them once their user is signed in again.
+  static #setAside = new Map();
+
+  // Batches of other users whose filing was still out at the change of user, by user. Where the
+  // filing finds no store they're set aside like the ones above. A user signed in again before that
+  // takes theirs back at once, rather than after the actions started since.
+  static #filingAside = new Map();
+
+  // The order the batches of both maps above were made in, which is the order they come back in:
+  // one still filing can be older than one set aside, and neither has a number to sort by yet. A
+  // batch keeps its place until it comes back, however many times it moves between the maps.
+  static #asideOrder = new Map();
+  static #asideCount = 0;
 
   // One batch is in flight at a time, and the loop that keeps it that way must not be entered
   // twice - every close calls flush, and an answer can arrive while another action is running. Held
@@ -167,6 +195,7 @@ export default class Batches {
     }
 
     Batches.#running = null;
+    Batches.#releasedOpen.delete(batch);
 
     if (batch.writes.length === 0) {
       Overlay.remove(batch);
@@ -174,12 +203,20 @@ export default class Batches {
       return null;
     }
 
-    // Whose work this is, taken at seal rather than at send: a batch outlives the page that made
-    // it, and the page that eventually sends it may belong to somebody else. Only a page mounted
-    // under this user will take it up again.
-    batch.actorUserId = LocalDatabase.actorUserId ?? null;
-
     batch.mark("pending");
+
+    // The user changed while the action was suspended, so this tab can't send the batch: the server
+    // applies a batch under the user of the session that sends it. It waits in the store for a page
+    // of its owner. Where there is no store, it waits in this tab (see releaseForeign).
+    if (batch.actorUserId !== (LocalDatabase.actorUserId ?? null)) {
+      Overlay.remove(batch);
+
+      batch.recorded = Batches.#number(batch);
+      Batches.#trackFiling(batch);
+      Batches.#putAside([batch]);
+
+      return batch;
+    }
 
     Batches.pending.push(batch);
 
@@ -210,7 +247,9 @@ export default class Batches {
     const waited = new Set();
 
     while (true) {
-      const sealed = Batches.pending.filter((batch) => !waited.has(batch));
+      const sealed = [...Batches.pending, ...Batches.#filing].filter(
+        (batch) => !waited.has(batch),
+      );
 
       if (sealed.length === 0) {
         return;
@@ -250,6 +289,75 @@ export default class Batches {
     });
   }
 
+  // Lets go of every batch of a user other than the given one: out of the queue, so this tab does
+  // not send it under the new user's session, and out of the overlay, so the new user doesn't see
+  // it. An action still open counts, since its batch is in the overlay from the moment it opens.
+  // The given user's that an earlier change took off the queue or the screen come back.
+  //
+  // Unlike disown, nothing else holds these for this tab. They stay in the store, which is where
+  // their owner's next page takes them up. The ones no store holds stay in this tab, which sends
+  // them once their owner is signed in again. Until then they're the reason to keep the owner's
+  // pair (see heldFor).
+  static releaseForeign(owner) {
+    // A mount can leave the actor undefined, and batches of a visitor are stamped null.
+    const current = owner ?? null;
+    const isForeign = (batch) => batch.actorUserId !== current;
+    const foreign = Batches.pending.filter(isForeign);
+
+    foreign.forEach(Batches.#trackFiling);
+    Batches.#putAside(foreign);
+    Batches.pending = Batches.pending.filter((batch) => !isForeign(batch));
+
+    for (const batch of Overlay.removeWhere(isForeign)) {
+      if (batch.state === "open") {
+        Batches.#releasedOpen.add(batch);
+      }
+    }
+
+    // Ahead of the open ones, which were made after them, in the order they were made. One answered
+    // while it waited is done.
+    const away = [
+      ...(Batches.#setAside.get(current) ?? []),
+      ...(Batches.#filingAside.get(current) ?? []),
+    ].sort(
+      (left, right) =>
+        Batches.#asideOrder.get(left) - Batches.#asideOrder.get(right),
+    );
+
+    Batches.#setAside.delete(current);
+    Batches.#filingAside.delete(current);
+    away.forEach((batch) => Batches.#asideOrder.delete(batch));
+
+    const returning = away.filter(
+      (batch) => batch.seq === null || !Batches.#answered.has(batch.seq),
+    );
+
+    for (const batch of returning) {
+      Batches.pending.push(batch);
+
+      if (batch.seq === null) {
+        Overlay.push(batch);
+      } else {
+        Overlay.insert(batch);
+      }
+    }
+
+    Batches.#sort();
+
+    for (const batch of Batches.#releasedOpen) {
+      if (!isForeign(batch)) {
+        Batches.#releasedOpen.delete(batch);
+        Overlay.push(batch);
+      }
+    }
+  }
+
+  // Whether this tab holds batches of the given user that no store holds, set aside at a change of
+  // user until that user is signed in again.
+  static heldFor(owner) {
+    return Batches.#setAside.has(owner ?? null);
+  }
+
   // The landed marks the store records, taken into the batches this tab holds - for a tab taking
   // up rows from the store that a stored frame already wrote a batch's writes into (see
   // Tabs.#takeStore). Only added, never taken away: a mark this tab set itself is as true as one
@@ -273,6 +381,7 @@ export default class Batches {
 
     if (batch !== null) {
       Batches.#running = null;
+      Batches.#releasedOpen.delete(batch);
 
       Overlay.remove(batch);
     }
@@ -338,8 +447,14 @@ export default class Batches {
         }
 
         // Nothing leaves under an identity still on its way to the store (see
-        // Durability.replicaWritten).
-        await Durability.replicaWritten();
+        // Durability.replicaWritten). A pair written during the wait has a write of its own, which
+        // is waited for too.
+        let identityWrite;
+
+        do {
+          identityWrite = Durability.replicaWritten();
+          await identityWrite;
+        } while (identityWrite !== Durability.replicaWritten());
 
         // Either wait is long enough for the batch to be let go of (see disown) or answered through
         // another tab, and then it isn't this tab's to send.
@@ -412,10 +527,35 @@ export default class Batches {
         // Asked here, after the store has been read and right before the send, rather than once on
         // the way in: the queue is still taken up, so a batch another tab filed is on this tab's
         // screen too, and a stop that arrives while a send is out stops the drain behind it.
+        //
+        // A hold that ends during that read is asked about once more: the flush its end starts
+        // finds this sender busy, so nothing else sends the queue.
         if (SyncStream.holdsWrites()) {
           await Batches.#takeUpWhileHeld();
 
+          if (SyncStream.holdsWrites()) {
+            return;
+          }
+
+          continue;
+        }
+
+        // Asked again here for the same reason: a tab that follows a change of user moves to the
+        // new user's group, where it may not be the one that sends. Its send already out finishes,
+        // and the queue behind it goes to whichever tab leads there, under that tab's identity.
+        if (!Tabs.sends()) {
           return;
+        }
+
+        // The user can have changed during the waits above, and the send goes out under the session
+        // of whoever is signed in now. A batch with a lower number can have arrived from another
+        // tab too, and has to go first. Nothing is awaited from here to the request.
+        const owner = LocalDatabase.actorUserId ?? null;
+
+        if (batch.actorUserId !== owner || Batches.pending[0] !== batch) {
+          Batches.releaseForeign(owner);
+
+          continue;
         }
 
         // Told to every tab here, by the tab sending it, whoever filed it. The filing tab's own
@@ -423,10 +563,16 @@ export default class Batches {
         // it doesn't hold can't tell what it already has: it would apply the write again over rows
         // that hold it. Frames and answers reach the other tabs from this tab too, after this, and
         // one tab's messages arrive in order.
-        Tabs.postNow({kind: "sealed", record: batch.record()});
+        //
+        // Not one an open store never got, whose answer is withheld too (see below): a tab that
+        // took it up would hold a number the store never recorded, and keep it on screen.
+        if (batch.filed !== false || Durability.mode === "memory") {
+          Tabs.postNow({kind: "sealed", record: batch.record()});
+        }
 
         batch.mark("sending");
 
+        const sentUnder = Durability.sentUnder();
         const answer = await Batches.#answerFor(batch);
 
         // No verdict about the writes, so the batch stays exactly where it is and the queue stops
@@ -440,6 +586,14 @@ export default class Batches {
         // neither of those is coming when the stream stays up while the endpoint fails - a retry
         // on the stream's own backoff, scheduled below.
         if (answer.status === "failed") {
+          // Let go of while it was out, so it waits in the store for its owner. Its failure says
+          // nothing about the pair or the server this tab goes on with.
+          if (!Batches.pending.includes(batch)) {
+            batch.mark("pending");
+
+            continue;
+          }
+
           // Refused with no store to record a new identity in, a stored batch can't move to one:
           // if an earlier send landed, the server would apply it again. It waits in the store for
           // the next page load.
@@ -465,16 +619,25 @@ export default class Batches {
           // stops this client applying its own writes twice. The batch keeps its number: nothing
           // has been recorded against the new identity, so any number is free under it.
           //
-          // Once per page load. `refresh` answers false when the fresh pair is already the one in
-          // use, which is the case where the session changed after this page loaded and there is
-          // nothing here that can help.
+          // Once per backoff: a batch refused again under the pair it switched to waits for the
+          // retry timer, which lets it switch again (see #scheduleRetry). Every handshake hands the
+          // tab a new pair (see DataLayer.takeHandshake), so a refusal that no pair cures, a failed
+          // CSRF check after the session was reset, would otherwise switch, reconnect and resend
+          // for as long as it lasts - the new stream's flush included. `refresh` answers false
+          // when the fresh pair is already the one in use, which nothing here can help.
           //
           // AWAITED, the same discipline the counter's write gets and for the same reason: nothing
           // is sent under an identity that is not recorded. Fired and forgotten, a reload landing
           // before the write commits would take up the REFUSED pair again while the counter had
           // moved on - and the batch that followed would be refused a second time before this path
           // could recover it.
-          if (answer.httpStatus === 403 && Replica.refresh()) {
+          if (
+            answer.httpStatus === 403 &&
+            !batch.switchedPair &&
+            Replica.refresh()
+          ) {
+            batch.switchedPair = true;
+
             await Durability.persistReplica(Replica.current());
 
             // The other tabs of this browser present the refused pair too, and would each find
@@ -493,10 +656,28 @@ export default class Batches {
           );
 
           // Before the retry is set: one firing during this read would find the sender busy and
-          // be lost.
+          // be lost. A batch waiting out a switch waits for the retry set for it, and not for one
+          // an earlier batch left, which ends sooner. Pushed back by every flush the user's actions
+          // start, it would never get to switch to the pair the next handshake hands.
+          const waitingOut = batch.switchedPair && Batches.#retryFor === batch;
+
           await Batches.#takeUpWhileHeld();
 
-          Batches.#scheduleRetry();
+          // The tab can have followed another user during that read, and that user's batches wait
+          // in the queue: the flush the move started found this sender busy.
+          if (!Batches.pending.includes(batch)) {
+            continue;
+          }
+
+          // Its wait ended during the read, and the flush the retry started found this sender
+          // busy. It may switch now, rather than after another backoff.
+          if (waitingOut && !batch.switchedPair) {
+            continue;
+          }
+
+          if (!batch.switchedPair || Batches.#retryFor !== batch) {
+            Batches.#scheduleRetry(batch.switchedPair ? batch : null);
+          }
 
           return;
         }
@@ -537,9 +718,15 @@ export default class Batches {
         // answer reaches them as it arrived, undecoded, because a client term is not something a
         // browser can carry from one tab to another. Told first: a delete that fails on the spot
         // ends the group, and a tab that never heard would send the batch again.
-        Tabs.post({answer, kind: "answered", seq: batch.seq});
+        //
+        // Not for a batch an open store never got, though: no tab heard of it, and its number was
+        // never recorded, so what the store holds under it can be another tab's batch. A tab with
+        // no store files nothing, and its forget checks whose the number is (see forgetBatch).
+        if (batch.filed !== false || Durability.mode === "memory") {
+          Tabs.post({answer, kind: "answered", seq: batch.seq});
 
-        Durability.forgetBatch(batch.seq);
+          Durability.forgetBatch(batch.seq, sentUnder);
+        }
 
         Batches.settle(batch.seq, answer);
       }
@@ -672,8 +859,13 @@ export default class Batches {
     }));
   }
 
+  // Stamped with its user here rather than at seal: an action can be suspended across a login, and
+  // what it wrote before and after that is still the work of the user who started it.
   static open(target) {
     const batch = new Batch(target);
+
+    batch.actorUserId = LocalDatabase.actorUserId ?? null;
+    batch.actorUserChanges = LocalDatabase.actorUserChanges;
 
     Batches.#running = batch;
     Overlay.push(batch);
@@ -686,6 +878,11 @@ export default class Batches {
   static reset() {
     Batches.#clearRetry();
 
+    Batches.#filing.clear();
+    Batches.#releasedOpen.clear();
+    Batches.#setAside.clear();
+    Batches.#filingAside.clear();
+    Batches.#asideOrder.clear();
     Batches.pending = [];
     Batches.rejected = [];
     Batches.#answered = new Set();
@@ -735,7 +932,8 @@ export default class Batches {
     SyncStream.scheduleRender();
   }
 
-  // Where the previous page load's numbering got to, so this one counts on from there. Never
+  // Where the previous page load's numbering got to, so this one counts on from there - or where the
+  // store's got to, for a tab moving to another user's group (see DataLayer.followIdentity). Never
   // backwards: a number is identified with its replica, and the server answers a repeat from its
   // record of the first batch to carry it.
   //
@@ -746,7 +944,7 @@ export default class Batches {
   // work takes the number inside the same lock that puts the batch in the shared queue, which
   // removes the case rather than detecting it.
   static resumeFrom(seq) {
-    Batches.#seq = seq;
+    Batches.#seq = Math.max(Batches.#seq, seq);
   }
 
   // The number a batch ships under, and its place in the queue once it has one.
@@ -838,7 +1036,85 @@ export default class Batches {
     // heard of it. As the RECORD, because that is what a tab rebuilds a batch from whether it
     // reads it here or out of the store, and because a Batch is not something a browser can carry
     // from one tab to another.
-    Tabs.post({kind: "sealed", record: batch.record()});
+    //
+    // Not one of a user this tab no longer serves: a tab that hasn't heard of the change yet would
+    // take it up and send it under the new session.
+    //
+    // Nor one the store never got: its number was never written down, so the store can hand it
+    // to another batch, and a tab sending it under the group's pair would have the server answer
+    // that batch from this one's record. And this tab keeps it to send under its own pair (see
+    // disown), so the server would apply it twice.
+    if (
+      batch.filed !== false &&
+      batch.actorUserId === (LocalDatabase.actorUserId ?? null)
+    ) {
+      Tabs.post({kind: "sealed", record: batch.record()});
+    }
+  }
+
+  // Only the ones the store never got. One whose filing is still in flight is decided when it
+  // settles, unless its owner is signed in again by then and took it back (see #filingAside).
+  static #putAside(batches) {
+    for (const batch of batches) {
+      // The retry that would end its wait reaches only the batches the tab sends, and its owner is
+      // back in another session, which the newest pair can cure. A retry set for its switch is no
+      // longer its wait: one refused again once it is back waits out a retry of its own.
+      batch.switchedPair = false;
+
+      if (Batches.#retryFor === batch) {
+        Batches.#retryFor = null;
+      }
+
+      if (batch.filed !== true && !Batches.#asideOrder.has(batch)) {
+        Batches.#asideOrder.set(batch, Batches.#asideCount++);
+      }
+
+      if (batch.filed === false) {
+        if (!Batches.#setAside.has(batch.actorUserId)) {
+          Batches.#setAside.set(batch.actorUserId, []);
+        }
+
+        Batches.#setAside.get(batch.actorUserId).push(batch);
+      } else if (batch.filed === null) {
+        const owner = batch.actorUserId;
+
+        if (!Batches.#filingAside.has(owner)) {
+          Batches.#filingAside.set(owner, []);
+        }
+
+        Batches.#filingAside.get(owner).push(batch);
+
+        batch.recorded.then(() => {
+          const waiting = Batches.#filingAside.get(owner) ?? [];
+
+          // Back already, or decided by an earlier change of user.
+          if (!waiting.includes(batch)) {
+            return;
+          }
+
+          if (waiting.length === 1) {
+            Batches.#filingAside.delete(owner);
+          } else {
+            waiting.splice(waiting.indexOf(batch), 1);
+          }
+
+          if (batch.filed === false) {
+            Batches.#putAside([batch]);
+            Batches.releaseForeign(LocalDatabase.actorUserId);
+            Batches.flush();
+          } else {
+            Batches.#asideOrder.delete(batch);
+          }
+        });
+      }
+    }
+  }
+
+  static #trackFiling(batch) {
+    const filed = () => Batches.#filing.delete(batch);
+
+    Batches.#filing.add(batch);
+    batch.recorded.then(filed, filed);
   }
 
   static #isNextToNumber(batch) {
@@ -924,6 +1200,8 @@ export default class Batches {
       clearTimeout(Batches.#retryTimer);
       Batches.#retryTimer = null;
     }
+
+    Batches.#retryFor = null;
   }
 
   // The rows the given batches create of the given types that the base doesn't hold, each keyed
@@ -988,11 +1266,20 @@ export default class Batches {
   // The DELAY IS THE STREAM'S, not one of this module's own. How eagerly this client retries a
   // server that is not answering is one policy, already argued and bounded where the stream
   // defines it, and a second set of numbers here would be a second answer to the same question.
-  static #scheduleRetry() {
+  static #scheduleRetry(switched = null) {
     Batches.#clearRetry();
+
+    Batches.#retryFor = switched;
 
     Batches.#retryTimer = setTimeout(() => {
       Batches.#retryTimer = null;
+
+      // The wait the refused switch was held to is over (see flush). Only that batch's: another one
+      // switched while this was set, its send still out, waits out the retry its refusal sets.
+      if (Batches.#retryFor !== null) {
+        Batches.#retryFor.switchedPair = false;
+        Batches.#retryFor = null;
+      }
 
       Batches.flush();
     }, Sse.computeReconnectDelay(++Batches.#retryAttempts));

@@ -7,6 +7,7 @@ defmodule HologramSyncTests.Helpers do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Connection
+  alias Hologram.Sync.ReadEdge
   alias HologramSyncTests.Consistency.Model
   alias HologramSyncTests.Entities.Board
   alias HologramSyncTests.Entities.Card
@@ -26,6 +27,18 @@ defmodule HologramSyncTests.Helpers do
     |> Map.new()
     |> type.new()
     |> DB.create!()
+  end
+
+  @doc """
+  Returns the seq of the last log entry this node's dispatcher has read, 0 before its first round
+  or once it found a loss and cleared its edge.
+  """
+  @spec read_seq() :: non_neg_integer
+  def read_seq do
+    case ReadEdge.get(ReadEdge) do
+      {{seq, _tx, _inserted_at}, _log_id} -> seq
+      nil -> 0
+    end
   end
 
   @doc """

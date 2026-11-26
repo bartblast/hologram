@@ -143,19 +143,19 @@ defmodule HologramFeatureTests.TaskRulesPage do
     put_action(server, :show_result, result: "holding_supervised")
   end
 
-  # Lets the held task read while this request is served, for whoever it arrived as. The result
-  # tells whether this request came over the connection the task was started from.
+  # Lets the held task read while this request is served, for whoever it arrived as. Whether this
+  # request comes over the connection the task was started from is the browser's choice, so a
+  # unit test covers that case (see Hologram.Auth.ContextTest).
   def command(:release_held, _params, server) do
     holder = :global.whereis_name({__MODULE__, :held})
     monitor = Process.monitor(holder)
     send(holder, {:go, self()})
 
     receive do
-      {:held_result, result, holder_command_pid} ->
+      {:held_result, result, _command_pid} ->
         Process.demonitor(monitor, [:flush])
-        connection = if holder_command_pid == self(), do: "reused", else: "fresh"
 
-        put_action(server, :show_result, result: "released_#{result}_#{connection}")
+        put_action(server, :show_result, result: "released_#{result}")
 
       {:DOWN, ^monitor, :process, ^holder, reason} ->
         raise "the held task ended without answering: #{inspect(reason)}"

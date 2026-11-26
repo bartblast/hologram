@@ -68,9 +68,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   defp insert_module2_row(b_value, c_value) do
     statement = """
     INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-      ("id", "a", "b", "c", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      ("id", "a", "b", "c", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
     VALUES ('00000000-0000-0000-0000-000000000001', TRUE, #{b_value}, #{c_value},
-            '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+            '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', '{}')
     """
 
     {:ok, _result} = Connection.query(statement)
@@ -93,9 +93,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     |> Enum.each(fn {c_value, index} ->
       statement = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-        ("id", "a", "b", "c", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+        ("id", "a", "b", "c", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-00000000000#{index}', TRUE, NULL, '#{c_value}',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(statement)
@@ -187,8 +187,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     {:ok, _result} =
       Connection.query("""
       INSERT INTO "hologram_data"."test_fixtures_entity_module1"
-        ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-      VALUES ('#{module1_id}', now(), now(), now(), now(), '{}')
+        ("id", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+      VALUES ('#{module1_id}', now(), now(), 0, now(), 0, now(), '{}')
       """)
 
     insert_module2_row("NULL", "'x'")
@@ -196,8 +196,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     {:ok, _result} =
       Connection.query("""
       INSERT INTO "hologram_data"."test_fixtures_entity_module3"
-        ("id", "c_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-      VALUES ('#{module3_id}', '#{module1_id}', now(), now(), now(), now(), '{}')
+        ("id", "c_id", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+      VALUES ('#{module3_id}', '#{module1_id}', now(), now(), 0, now(), 0, now(), '{}')
       """)
 
     {:ok, _result} =
@@ -211,9 +211,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   defp insert_module4_row(c_value) do
     insert_statement = """
     INSERT INTO "hologram_data"."test_fixtures_entity_module4"
-      ("id", "a", "b", "c", "d", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      ("id", "a", "b", "c", "d", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
     VALUES ('00000000-0000-0000-0000-000000000001', '2026-01-01', '2026-01-01 00:00:00+00',
-            '#{c_value}', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+            '#{c_value}', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', '{}')
     """
 
     {:ok, _result} = Connection.query(insert_statement)
@@ -516,8 +516,25 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                ["migration"],
                ["mutation"],
                ["oplog"],
-               ["schema_object"]
+               ["schema_object"],
+               ["server_run"]
              ]
+    end
+
+    test "names this copy of the database in a view a restore fills again" do
+      drop_hologram_schemas()
+      {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
+
+      assert create_system_tables() == :ok
+
+      statement = """
+      SELECT c.relispopulated
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'hologram_system' AND c.relname = 'database_copy' AND c.relkind = 'm'
+      """
+
+      assert {:ok, %{rows: [[true]]}} = Connection.query(statement)
     end
 
     test "gives the oplog the indexes reading it forward and by time need" do
@@ -544,9 +561,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       # kept for the history-by-time read that comes next.
       assert rows == [
                ["oplog_inserted_at_$idx", "brin", "inserted_at"],
-               ["oplog_pkey", "btree", "seq"],
-               ["oplog_tx_seq_$idx", "btree", "tx"],
-               ["oplog_tx_seq_$idx", "btree", "seq"]
+               ["oplog_pkey", "btree", "seq"]
              ]
     end
 
@@ -1818,10 +1833,10 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         {:ok, _result} =
           Connection.query("""
           INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-            ("id", "a", "b", "c", "y", "z", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+            ("id", "a", "b", "c", "y", "z", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
           VALUES ('00000000-0000-0000-0000-00000000000#{index}', TRUE, NULL, 'abc',
                   '#{y_value}', '#{z_value}',
-                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', '{}')
           """)
       end)
 
@@ -2252,9 +2267,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       insert_statement = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module4"
-        ("id", "a", "b", "c", "d", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+        ("id", "a", "b", "c", "d", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000001', '2026-01-01', '2026-01-01 00:00:00+00',
-              'y', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              'y', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert_statement)
@@ -2451,20 +2466,20 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       {:ok, _result} =
         Connection.query("""
         INSERT INTO "hologram_data"."test_fixtures_entity_module26"
-          ("id", "name", "name_$sort", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+          ("id", "name", "name_$sort", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
         VALUES ('00000000-0000-0000-0000-000000000001', 'general', NULL,
-                '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+                '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', '{}')
         """)
 
       Enum.each(1..2, fn index ->
         {:ok, _result} =
           Connection.query("""
           INSERT INTO "hologram_data"."test_fixtures_entity_module27"
-            ("id", "channel_id", "code", "summary", "summary_$sort", "created_at", "server_created_at", "server_updated_at", "updated_at",
+            ("id", "channel_id", "code", "summary", "summary_$sort", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at",
              "$revisions")
           VALUES ('00000000-0000-0000-0000-00000000001#{index}',
                   '00000000-0000-0000-0000-000000000001', NULL, 'welcome', NULL,
-                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', 0, '2026-01-01 00:00:00+00', '{}')
           """)
       end)
 

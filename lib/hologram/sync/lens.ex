@@ -287,7 +287,8 @@ defmodule Hologram.Sync.Lens do
   their old labels. A patch left with nothing to say is dropped, and so is an edge of a
   relationship new since. Verdicts pass as they are: a verdict is keyed by a digest of its
   condition, so one whose condition the tab's rules spell the same way keeps its key and meaning,
-  and one they spell otherwise is a key the tab never asks for.
+  and one they spell otherwise is a key the tab never asks for. A row marked as the tab's own keeps
+  its mark.
 
   A grant's entity type and role take their old labels too: an entity role is named per entity
   type, a global role by its module when the grant names no entity type.
@@ -296,17 +297,17 @@ defmodule Hologram.Sync.Lens do
   reaching here goes as a dropped delta rather than with a label the tab doesn't know.
   """
   @spec message(t, tuple) :: tuple
-  def message(lens, {:sync_deltas, cursor, deltas, claim}) do
-    {:sync_deltas, cursor, Enum.flat_map(deltas, &delta(lens, &1)), claim}
+  def message(lens, {:sync_deltas, cursor, deltas, claim, final_seq}) do
+    {:sync_deltas, cursor, Enum.flat_map(deltas, &delta(lens, &1)), claim, final_seq}
   end
 
-  def message(lens, {:sync_synced, {:types, types, applied_seq}, cursor}) do
+  def message(lens, {:sync_synced, {:types, types, applied_seq}, cursor, final_seq}) do
     old_types =
       types
       |> Enum.map(&old_type(lens, &1))
       |> Enum.reject(&(&1 == @new))
 
-    {:sync_synced, {:types, old_types, applied_seq}, cursor}
+    {:sync_synced, {:types, old_types, applied_seq}, cursor, final_seq}
   end
 
   def message(_lens, message), do: message

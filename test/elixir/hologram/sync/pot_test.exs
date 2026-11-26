@@ -54,7 +54,7 @@ defmodule Hologram.Sync.PotTest do
     |> Pot.from_held()
   end
 
-  # A part as `Hologram.Sync.Live.parts/5` builds it: checked ids, readable rows, the batch's
+  # A part as `Hologram.Sync.Live.parts/7` builds it: checked ids, readable rows, the batch's
   # pairs and its pair effects given as plain values, and packed here.
   defp part(opts) do
     readable =

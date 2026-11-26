@@ -2,21 +2,19 @@ defmodule HologramSyncTests.Consistency.Run do
   @moduledoc false
 
   # One randomized run of a plan: the data written first, then the writers' transactions and the
-  # clients' schedules all at once, then every client connected again and both checks. Answers
-  # what each check found, with what the report needs to explain it.
+  # clients' schedules all at once, then every client connected again and the three checks.
+  # Answers what each check found, with what the report needs to explain it.
   #
   # The run traps exits while it goes, so a client, writer or schedule that crashes is a failure in
   # the report, with the seed and the trace, rather than one that takes the test down without them.
 
-  import HologramSyncTests.Helpers, only: [create!: 2, truncate_tables: 0]
+  import HologramSyncTests.Helpers, only: [create!: 2, read_seq: 0, truncate_tables: 0]
 
   alias Hologram.DB
-  alias Hologram.DB.Connection
   alias Hologram.DB.Oplog
   alias Hologram.Entity.Model, as: EntityModel
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
-  alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.Sessions
   alias HologramSyncTests.Consistency.Checks
   alias HologramSyncTests.Consistency.Client
@@ -38,11 +36,12 @@ defmodule HologramSyncTests.Consistency.Run do
 
   @typedoc """
   What a run found: the differences check 1 left in each client's store, the records check 2
-  flagged, the clients' failures and the run's own, and the clients whose gap outgrew a replay
-  and who weren't told to start over - with the history and each client's events and records for
-  the report.
+  flagged, the rows check 3 found missing below a final limit, the clients' failures and the run's
+  own, and the clients whose gap outgrew a replay and who weren't told to start over - with the
+  history and each client's events and records for the report.
   """
   @type outcome :: %{
+          below_final: list(map),
           clients: list(map),
           differences: list(map),
           failures: list(map),
@@ -151,6 +150,8 @@ defmodule HologramSyncTests.Consistency.Run do
 
   defp run_step(:connect, pid), do: Client.connect(pid)
 
+  defp run_step(:reload, pid), do: Client.reload(pid)
+
   defp run_step(:connect_cut_mid_fill, pid) do
     Client.connect(pid, cut_when: &match?([%{frame: "sync_deltas"} | _events], &1))
   end
@@ -191,6 +192,12 @@ defmodule HologramSyncTests.Consistency.Run do
     {reports, dead} = split_dead(clients, settled)
 
     %{
+      below_final:
+        for(
+          report <- reports,
+          problem <- report.below_final,
+          do: Map.put(problem, :client, report.name)
+        ),
       clients: reports ++ dead,
       differences:
         for(
@@ -279,6 +286,7 @@ defmodule HologramSyncTests.Consistency.Run do
     settled = Checks.diff(store, expected)
     incomplete = if complete?, do: [], else: [:incomplete]
     records = Client.records(client.pid)
+    {views, final_seq} = Client.final_views(client.pid)
 
     differences =
       if first_differences == [],
@@ -287,24 +295,26 @@ defmodule HologramSyncTests.Consistency.Run do
 
     %{
       client
-      | differences: differences,
+      | below_final: Checks.below_final(views, entries, client.user_id, final_seq),
+        differences: differences,
         events: Client.events(client.pid),
         leaks: Checks.leaks(records, entries, client.user_id),
         records: records
     }
   end
 
-  # The server has routed every commit once the dispatcher's read edge is past the last one's
-  # transaction id: everything below the edge had ended when it was read.
-  defp await_log_read([]), do: :ok
-
+  # The server has routed every commit once the dispatcher's read edge reaches the last serial a
+  # commit's log entries hold: the edge is the last entry it read.
   defp await_log_read(entries) do
-    last_xid =
+    seqs =
       entries
-      |> Enum.map(& &1.xid)
-      |> Enum.max()
+      |> Enum.map(& &1.max_seq)
+      |> Enum.reject(&is_nil/1)
 
-    await(fn -> (ReadEdge.get(ReadEdge) || 0) > last_xid end, @read_ms)
+    case seqs do
+      [] -> :ok
+      seqs -> await(fn -> read_seq() >= Enum.max(seqs) end, @read_ms)
+    end
   end
 
   # Every batch routed is in a session's mailbox once the read edge passes the last commit. A
@@ -319,7 +329,9 @@ defmodule HologramSyncTests.Consistency.Run do
   end
 
   # A client away until the writers were done has to have been told to start over when its gap
-  # outgrew a replay - counted from the place it came back with, in the log as it stands.
+  # outgrew a replay - counted from the place it came back with, in the log as it stands. The
+  # server checks the place's log, rules and types before the gap, so a start over for any reason
+  # answers it.
   @doc false
   # The client's return is the first connect after its cut: nothing reconnects it while it's away,
   # and a reconnect of its own, or the run's last connect, comes later, from a later place. What
@@ -330,7 +342,7 @@ defmodule HologramSyncTests.Consistency.Run do
     with true <- :await_writers in report.schedule,
          {connect, after_return} <- return(report.events) do
       gap_too_large?(connect) and
-        "gap_too_large" not in resync_reasons(after_return, connect.cursor)
+        resync_reasons(after_return, connect.cursor) == []
     else
       _no_return -> false
     end
@@ -357,9 +369,9 @@ defmodule HologramSyncTests.Consistency.Run do
 
   defp gap_too_large?(%{cursor: cursor}) when is_binary(cursor) do
     case Cursor.decode(cursor) do
-      {:ok, tx, seq, _policy_hash, _types_hash} ->
+      {:ok, {seq, _tx, _at}, _log_id, _policy_hash, _types_hash} ->
         limit = Catchup.gap_limit()
-        {count, _other_model?} = Oplog.count_after(tx, seq, limit + 1, EntityModel.hash())
+        {count, _other_model?} = Oplog.count_after(seq, limit + 1, EntityModel.hash())
 
         count > limit
 
@@ -381,31 +393,41 @@ defmodule HologramSyncTests.Consistency.Run do
     |> elem(1)
   end
 
-  # A session's first place is the oldest transaction still running when it starts, which a
-  # transaction anywhere on the database server can hold back. Below the log's oldest change, a
-  # returning client's place reads as one from before the log, and it's sent everything again for
-  # retention - on a fresh log, every client coming back from its first place would be, and no
-  # catch-up would run. So the log gets a change first, and the run starts once nothing older than
-  # it still runs. The row goes with the truncate after; the change stays in the log.
+  # A save left running anywhere on the database server holds the final limit below its serial, and
+  # with it every place a session reaches and every number a client is shown - the run would then
+  # fail on what that save held back rather than on what it checks. So the log gets a change first,
+  # and the run starts once the dispatcher has read past it. The row goes with the truncate after;
+  # the change stays in the log.
+  #
+  # The row's own number, read as stored, rather than the last serial handed out: a save that took
+  # one after it and rolled back leaves no entry for the dispatcher to reach.
   defp warm_up_log do
-    {:ok, xid} =
-      DB.transaction(fn ->
-        create!(Tag, name: "warm-up")
-        {:ok, %{rows: [[xid]]}} = Connection.query("SELECT pg_current_xact_id()::text", [])
+    # Picked by its id: a run stopped before the truncate leaves its own warm-up row behind.
+    warm_up = create!(Tag, name: "warm-up")
 
-        String.to_integer(xid)
-      end)
+    %{rows: [[serial]]} =
+      DB.sql!(
+        ~s(SELECT "server_created_seq" FROM "hologram_data"."#{DB.table_name(Tag)}" WHERE "id"::text = $1),
+        [warm_up.id]
+      )
 
-    if await(fn -> Oplog.current_xmin() > xid end, @read_ms) == :timeout do
-      raise "a transaction elsewhere on the database server kept running for #{@read_ms} ms, " <>
-              "so a returning client's place would read as one from before the log"
+    if await(fn -> read_seq() >= serial end, @read_ms) == :timeout do
+      raise "a save elsewhere on the database server kept running for #{@read_ms} ms, " <>
+              "so the final limit stayed below the run's first change"
     end
   end
 
   defp start_client(planned, base_url) do
     {:ok, pid} = Client.start_link(base_url: base_url, user_id: planned.user_id)
 
-    Map.merge(planned, %{differences: [], events: [], leaks: [], pid: pid, records: []})
+    Map.merge(planned, %{
+      below_final: [],
+      differences: [],
+      events: [],
+      leaks: [],
+      pid: pid,
+      records: []
+    })
   end
 
   # Every client is stopped, whatever the others do: one that died meanwhile, or one stuck in a

@@ -878,7 +878,7 @@ defmodule Hologram.DBTest do
         end
 
       assert error.reason == %{referenced_by: Module3, relationship: :c}
-      assert read(Module1, target.id) == target
+      assert unnumbered(read(Module1, target.id)) == target
     end
   end
 
@@ -1204,7 +1204,7 @@ defmodule Hologram.DBTest do
         transaction(fn ->
           refusal = delete(Module1, target.id)
 
-          {refusal, read(Module1, target.id)}
+          {refusal, unnumbered(read(Module1, target.id))}
         end)
 
       assert result == {:ok, {{:error, %{referenced_by: Module3, relationship: :c}}, target}}

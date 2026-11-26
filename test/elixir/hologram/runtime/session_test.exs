@@ -3,6 +3,7 @@ defmodule Hologram.Runtime.SessionTest do
 
   import Hologram.Runtime.Session
 
+  @identity_stamp_key :hologram_identity_stamp
   @session_id_key :hologram_session_id
   @user_id_key :hologram_user_id
 
@@ -25,6 +26,12 @@ defmodule Hologram.Runtime.SessionTest do
   end
 
   describe "get_session/1" do
+    test "strips the identity stamp key while preserving app entries" do
+      conn = conn_with_session(%{@identity_stamp_key => 123, "role" => "admin"})
+
+      assert get_session(conn) == %{"role" => "admin"}
+    end
+
     test "strips the session_id key while preserving app entries" do
       conn = conn_with_session(%{@session_id_key => "abc", "role" => "admin"})
 
@@ -69,10 +76,12 @@ defmodule Hologram.Runtime.SessionTest do
       assert get_user_id(conn_with_empty_session()) == nil
     end
 
-    test "returns nil for a boolean persisted before booleans were refused" do
-      conn = conn_with_session(%{@user_id_key => false})
+    test "returns nil for a value persisted before it was refused" do
+      for user_id <- [false, true, :admin, <<255, 254>>] do
+        conn = conn_with_session(%{@user_id_key => user_id})
 
-      assert get_user_id(conn) == nil
+        assert get_user_id(conn) == nil
+      end
     end
   end
 
@@ -98,11 +107,6 @@ defmodule Hologram.Runtime.SessionTest do
                identity_tag_of(%{@session_id_key => "session-1", @user_id_key => 2})
     end
 
-    test "differs when the user ID differs, given as an atom" do
-      refute identity_tag_of(%{@session_id_key => "session-1", @user_id_key => :alice}) ==
-               identity_tag_of(%{@session_id_key => "session-1", @user_id_key => :bob})
-    end
-
     test "differs between a logged-in user and no user" do
       refute identity_tag_of(%{@session_id_key => "session-1", @user_id_key => 42}) ==
                identity_tag_of(%{@session_id_key => "session-1"})
@@ -123,7 +127,68 @@ defmodule Hologram.Runtime.SessionTest do
     test "is 43 URL-safe characters" do
       tag = identity_tag_of(%{@session_id_key => "session-1", @user_id_key => 42})
 
-      assert tag =~ ~r/\A[A-Za-z0-9_-]{43}\z/
+      assert tag =~ ~r/\A0\.[A-Za-z0-9_-]{43}\z/
+    end
+
+    test "starts with the session's identity stamp" do
+      session = %{@identity_stamp_key => 123, @session_id_key => "session-1"}
+
+      assert identity_tag_of(session) =~ ~r/\A123\./
+    end
+
+    test "starts with 0 for a session holding no stamp" do
+      assert identity_tag_of(%{@session_id_key => "session-1"}) =~ ~r/\A0\./
+    end
+
+    test "starts with none for a request with no session" do
+      assert identity_tag_of(%{}) =~ ~r/\Anone\./
+    end
+  end
+
+  describe "identity_tag/3" do
+    # What the response will name, once it persists the identity the run ended with.
+    test "is the tag the conn's session would have with the given identity" do
+      conn = conn_with_session(%{@identity_stamp_key => 123, @session_id_key => "session-1"})
+
+      assert identity_tag(conn, "session-1", 42) ==
+               identity_tag_of(%{
+                 @identity_stamp_key => 123,
+                 @session_id_key => "session-1",
+                 @user_id_key => 42
+               })
+    end
+
+    test "starts with none for no session ID, whatever stamp the conn's session holds" do
+      conn = conn_with_session(%{@identity_stamp_key => 123})
+
+      assert identity_tag(conn, nil, nil) =~ ~r/\Anone\./
+    end
+  end
+
+  describe "stamp_identity/1" do
+    test "stamps the session with the current time" do
+      before_ms = System.system_time(:millisecond)
+
+      stamp =
+        %{@session_id_key => "session-1"}
+        |> conn_with_session()
+        |> stamp_identity()
+        |> Plug.Conn.get_session(@identity_stamp_key)
+
+      assert stamp >= before_ms
+      assert stamp <= System.system_time(:millisecond)
+    end
+
+    # The server making the next change can have a clock behind the one that made this one.
+    test "moves past a stamp that is ahead of this server's clock" do
+      ahead = System.system_time(:millisecond) + 60_000
+
+      conn =
+        %{@identity_stamp_key => ahead, @session_id_key => "session-1"}
+        |> conn_with_session()
+        |> stamp_identity()
+
+      assert Plug.Conn.get_session(conn, @identity_stamp_key) == ahead + 1
     end
   end
 
@@ -135,6 +200,23 @@ defmodule Hologram.Runtime.SessionTest do
                conn
                |> Plug.Conn.get_session(@session_id_key)
                |> UUID.info()
+    end
+
+    test "stamps the new session's identity" do
+      conn = init(conn_with_empty_session())
+
+      assert is_integer(Plug.Conn.get_session(conn, @identity_stamp_key))
+    end
+
+    test "leaves the stamp of a session already present" do
+      session = %{@identity_stamp_key => 123, @session_id_key => "session-1"}
+
+      conn =
+        session
+        |> conn_with_session()
+        |> init()
+
+      assert Plug.Conn.get_session(conn, @identity_stamp_key) == 123
     end
 
     test "is idempotent when a session ID is already present" do
@@ -181,7 +263,7 @@ defmodule Hologram.Runtime.SessionTest do
 
     test "raises Hologram.MisuseError when given a boolean" do
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      put_user_id(conn_with_empty_session(), false)
                    end

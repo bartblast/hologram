@@ -5,6 +5,7 @@ import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Replica from "./replica.mjs";
 import Tabs from "./tabs.mjs";
+import Utils from "./utils.mjs";
 
 // What this browser keeps between page loads, and where it keeps it.
 //
@@ -38,6 +39,12 @@ import Tabs from "./tabs.mjs";
 // its record if it has seen them, and anything newer goes out under an identity the server mints
 // for it (see Replica.requestMint).
 //
+// The identity is kept PER USER, each under a key of its own in `meta`, because a replica's
+// numbering is that user's. A user who comes back to a browser somebody else used in between has to
+// send their queued batches under the pair they were numbered under, or a batch whose answer was
+// lost is applied a second time. And a tab whose store another user took can go on writing its own
+// pair without touching theirs.
+//
 // ONE DATABASE PER MODEL VERSION, named for the layout of the store itself and the model this
 // bundle speaks. A deploy that changes the model lands in a new tab while an old tab is still open,
 // and the two would otherwise share one store - a v1 tab must never read rows v2 rewrote, and no
@@ -65,6 +72,12 @@ const LAYOUT = 1;
 
 const META = "meta";
 const QUEUE = "queue";
+
+// What starts the key in META of each user's replica pair. One key per user rather than one map,
+// so that a storage failure drops a pair with a delete: a write can be refused on a full disk, and
+// refused inside the failure's transaction it would roll the whole cleanup back.
+const REPLICA_PREFIX = "replica:";
+
 const VERSION = 1;
 
 export default class Durability {
@@ -114,8 +127,21 @@ export default class Durability {
   // How this tab's latest filing ended, once it has (see fileBatch).
   static #lastFiling = null;
 
+  // Filings aborted on purpose, behind a failed one of the same user (see fileBatch). The store
+  // didn't fail them.
+  static #heldBack = new WeakSet();
+
   // The last identity write started, for a send to wait on (see replicaWritten).
   static #replicaWrite = Promise.resolve();
+
+  // The id of the last claim this tab knows of. Every change of owner writes a new one, so a tab
+  // holding an older id knows the store was wiped since, even when it is back under this tab's user
+  // and holds rows this tab never saw. A frame written over them would date them at a place they
+  // are not at.
+  //
+  // Moved only inside a transaction (see #whileOwned), because transactions on one store run in the
+  // order they were created, so a write started after a claim always sees that claim.
+  static #claimId = null;
 
   // The batches this browser has filed, oldest first, or only those numbered below `below` - what
   // a tab reads before it sends, so that what it ships is the queue as the DATABASE holds it rather
@@ -156,9 +182,14 @@ export default class Durability {
 
   // Drops what the SERVER said and keeps what this browser did: the rows go, the place they were
   // dated at goes with them, and the identity, the counter and the clock stay. Called when a
-  // resync replaces the whole pot, and when what is stored cannot be read by this page.
+  // resync replaces the whole pot, and when what is stored cannot be read by this page. Never over
+  // another user's rows.
   static clear() {
-    return Durability.#write([ENTITIES, META], Durability.#wipe);
+    return Durability.#write([ENTITIES, META], (transaction) =>
+      Durability.#whileOwned(transaction, () => Durability.#wipe(transaction), {
+        settlesStore: true,
+      }),
+    );
   }
 
   // `hologram.<layout>.<protocol version>.<model hash>` - a bundle carrying another store layout,
@@ -182,6 +213,59 @@ export default class Durability {
     const sync = globalThis.Hologram.sync;
 
     return `hologram.${LAYOUT}.${sync.protocolVersion}.${sync.modelHash}`;
+  }
+
+  // The group of the given user's tabs over this database, so that two owners the store tells apart
+  // are two groups.
+  static groupName(owner) {
+    return `${Durability.databaseName()}.${Durability.#ownerKey(owner)}`;
+  }
+
+  // Makes the store the given user's, with the given replica pair. The stored rows and place go
+  // when they were somebody else's, and stay when the store is already this user's: a tab can have
+  // read it before another tab of its group claimed it.
+  //
+  // ONE transaction, with the owner read inside it. Cleared in one and owned in another, a tab
+  // reading between the two would find an empty store under the previous owner, and one reading
+  // after a frame landed there would find the new user's rows under the old name. The pair goes
+  // down with the owner, under that owner's name, and every other user's stays.
+  //
+  // The queue stays, as it does through every clear: the previous owner's batches wait there for a
+  // page mounted under them.
+  static claim(owner, replica) {
+    const claimId = Utils.uuidv7();
+
+    Durability.#replicaWrite = Durability.#write(
+      [ENTITIES, META],
+      (transaction) => {
+        const meta = transaction.objectStore(META);
+        const stored = meta.get("actorUserId");
+        const storedClaim = meta.get("claim");
+
+        storedClaim.onsuccess = () => {
+          if ((stored.result ?? null) === owner) {
+            Durability.#claimId = storedClaim.result ?? null;
+          } else {
+            Durability.#wipe(transaction);
+
+            meta.put(owner, "actorUserId");
+            meta.put(claimId, "claim");
+
+            Durability.#claimId = claimId;
+          }
+
+          Durability.#writePair(transaction, owner, replica);
+        };
+      },
+    ).then((stored) => {
+      if (stored) {
+        Durability.noteStoredReplica(replica);
+      }
+
+      return stored;
+    });
+
+    return Durability.#replicaWrite;
   }
 
   // Lets go of the database without touching what it holds. For a tab told that the tab leading its
@@ -263,9 +347,30 @@ export default class Durability {
     //
     // This transaction starts only once the earlier one has finished, but the event saying how can
     // still be on its way. Reading again keeps this one open until it arrives.
+    //
+    // Only a filing of the same visit to a group takes this one down with it. One made for a group
+    // the tab has since left fails that group (see #write), and the new group's next filing is
+    // this one.
+    //
+    // Unless it's a batch of the same user: an action can close in the new visit with a batch for
+    // the user it started under, and name a row the failed batch created. Carried down the line,
+    // since filings of another user can come in between. Held back like that, it is no failure of
+    // the store, and the filings of the new visit's user behind it still go in. Unless the tab is
+    // back with the user it held back.
+    const owner = batch.actorUserId ?? null;
+
     const stored = await Durability.#write([META, QUEUE], (transaction) => {
       const earlier = Durability.#lastFiling;
-      const filing = {aborted: false, done: false};
+
+      const filing = {
+        aborted: false,
+        done: false,
+        earlier,
+        failedOwners: null,
+        heldBack: false,
+        owner,
+        visit: Tabs.visit,
+      };
 
       Durability.#lastFiling = filing;
 
@@ -291,7 +396,25 @@ export default class Durability {
             return;
           }
 
-          if (earlier?.aborted) {
+          const followsFailure =
+            earlier?.aborted &&
+            !earlier.heldBack &&
+            earlier.visit === filing.visit;
+
+          if (followsFailure || Durability.#failedBefore(filing).has(owner)) {
+            // A batch of the user the tab is back to fails the store, as a filing behind a failure
+            // of the same visit does: every batch of that user would be held back for good, and
+            // none would say why. One of a visit already over can't, and a later filing of its
+            // user does it instead.
+            if (
+              !followsFailure &&
+              ((filing.visit !== null && !Tabs.isVisit(filing.visit)) ||
+                owner !== (LocalDatabase.actorUserId ?? null))
+            ) {
+              filing.heldBack = true;
+              Durability.#heldBack.add(transaction);
+            }
+
             transaction.abort();
 
             return;
@@ -310,7 +433,7 @@ export default class Durability {
 
             queue.put(batch.record());
             meta.put(batch.seq, "seq");
-            meta.put(Clock.last(), "clock");
+            Durability.#putClock(meta);
           };
         };
       };
@@ -327,6 +450,28 @@ export default class Durability {
     return stored;
   }
 
+  // The users whose filing aborted anywhere before this one in line. Worked out once the filing
+  // needs it, or a later one does: a filing that aborted before reading the counter never did, and
+  // still passes on what it inherited.
+  static #failedBefore(filing) {
+    if (filing.failedOwners === null) {
+      const earlier = filing.earlier;
+
+      filing.failedOwners =
+        earlier === null
+          ? new Set()
+          : new Set(Durability.#failedBefore(earlier));
+
+      if (earlier?.aborted) {
+        filing.failedOwners.add(earlier.owner);
+      }
+
+      filing.earlier = null;
+    }
+
+    return filing.failedOwners;
+  }
+
   // A batch the server has ruled on, gone from the queue. Confirmed or refused alike: either way
   // nothing is waiting on it any more, and a later page load has no reason to take it up.
   //
@@ -335,12 +480,12 @@ export default class Durability {
   // is answered from it, so that costs a round trip. One that isn't is judged afresh (see
   // #forgetWithoutStore).
   //
-  // Whose batch it is gets read here, before the wait: an answer to the next batch can move this
-  // tab to another identity while the delete is running.
-  static async forgetBatch(seq) {
-    const replicaId = Replica.id;
-    const holdsIdentity = Durability.hadStore && Durability.holdsIdentity();
-
+  // Given the identity the batch was sent under (see sentUnder), since the tab can follow a sign-in
+  // while the batch is out, and an answer to the next batch can move it during the delete too.
+  static async forgetBatch(
+    seq,
+    {holdsIdentity, owner, replicaId} = Durability.sentUnder(),
+  ) {
     if (Durability.mode !== "memory") {
       const deleted = await Durability.#write([QUEUE], (transaction) =>
         transaction.objectStore(QUEUE).delete(seq),
@@ -352,7 +497,7 @@ export default class Durability {
     }
 
     if (holdsIdentity) {
-      await Durability.#forgetWithoutStore(seq, replicaId);
+      await Durability.#forgetWithoutStore(seq, owner, replicaId);
     }
   }
 
@@ -368,7 +513,7 @@ export default class Durability {
   // Only while the store still names this identity. Under another one, the same number can be a
   // different batch. And a database deleted meanwhile stays deleted: opening it would otherwise
   // bring it back with no stores in it, and every later load would fall to memory mode.
-  static async #forgetWithoutStore(seq, replicaId) {
+  static async #forgetWithoutStore(seq, owner, replicaId) {
     let db = null;
 
     try {
@@ -383,7 +528,9 @@ export default class Durability {
       db.onversionchange = () => db.close();
 
       const transaction = db.transaction([META, QUEUE], "readwrite");
-      const stored = transaction.objectStore(META).get("replica");
+      const stored = transaction
+        .objectStore(META)
+        .get(Durability.#pairKey(owner));
 
       stored.onsuccess = () => {
         if (stored.result?.id === replicaId) {
@@ -406,7 +553,11 @@ export default class Durability {
   //
   // Answers nothing, and never throws, the same as open(): a store that cannot be read is a page
   // that carries on from memory.
-  static async load() {
+  //
+  // Read again by a tab moving to another user's group, which can move on again while this reads
+  // (see DataLayer.followIdentity). `isCurrent` says whether the move that asked still stands, and
+  // a read it no longer wants is dropped, so the next restore can't take it up.
+  static async load(isCurrent = () => true) {
     if (Durability.mode === "memory") {
       return;
     }
@@ -416,6 +567,12 @@ export default class Durability {
     try {
       loaded = await Durability.#read();
     } catch (error) {
+      // A move the tab has moved on from says nothing about the store the next move reads, which
+      // fails on its own if it fails at all.
+      if (!isCurrent()) {
+        return;
+      }
+
       return Durability.#memoryMode(`read failed (${error})`);
     }
 
@@ -423,12 +580,15 @@ export default class Durability {
     // Closing a database lets a transaction already running finish, so the read still answers,
     // and taking up what it found would hand this tab, which now leads itself, the identity and the
     // queue the group's leader is still sending: two senders under one replica.
-    if (Durability.mode !== "indexeddb") {
+    if (Durability.mode !== "indexeddb" || !isCurrent()) {
       return;
     }
 
+    Durability.#claimId = loaded.claim;
     Durability.#loaded = loaded;
-    Durability.#storedReplicaId = loaded.replica?.id ?? null;
+    Durability.#storedReplicaId =
+      loaded.replicas[Durability.#ownerKey(Durability.#pairOwner())]?.id ??
+      null;
     Durability.storedBatches = loaded.queue.length;
   }
 
@@ -510,33 +670,44 @@ export default class Durability {
   // screen, and what this buys is only whether they are still there after a reload. What waits for
   // it is telling the other tabs (see Tabs.post).
   //
+  // Only into a store this tab's user owns. The clock goes down either way, since it is what this
+  // browser did rather than anything about the rows.
+  //
   // `factRemovals` are pairs to take out of stored sets, leaving the rest of each record as stored
   // (see `LocalDatabase.takeStoredFactRemovals`). Read after the frame's own puts, which a
   // transaction runs in order, so a record this frame wrote is judged as written.
-  static persistFrame(records, cursor, factRemovals = []) {
+  //
+  // How far the numbers are final goes down with the place, and only with it: a frame naming no
+  // place can come mid-fill, when the rows of a type still to come are not yet stored, and the
+  // point a reload takes up has to hold for every row stored beside it. A point written with an
+  // earlier place is lower, which holds back more numbers than it needs to and nothing else.
+  static persistFrame(records, cursor, factRemovals = [], finalSeq = null) {
     return Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);
       const meta = transaction.objectStore(META);
 
-      for (const record of records) {
-        if (record.row === null) {
-          entities.delete([record.type, record.id]);
-        } else {
-          entities.put(record);
+      Durability.#whileOwned(transaction, () => {
+        for (const record of records) {
+          if (record.row === null) {
+            entities.delete([record.type, record.id]);
+          } else {
+            entities.put(record);
+          }
         }
-      }
 
-      Durability.#removeStoredFacts(entities, factRemovals);
+        Durability.#removeStoredFacts(entities, factRemovals);
 
-      // A frame sent mid-fill names no place, because a client holding part of a pot could not
-      // honour the claim one makes. The place already stored still describes the rows that were
-      // there before this fill started, so it is left standing rather than cleared - which is what
-      // lets a client cut off mid-fill come back asking for what it can still honour.
-      if (cursor !== null) {
-        meta.put(cursor, "cursor");
-      }
+        // A frame sent mid-fill names no place, because a client holding part of a pot could not
+        // honour the claim one makes. The place already stored still describes the rows that were
+        // there before this fill started, so it is left standing rather than cleared - which is
+        // what lets a client cut off mid-fill come back asking for what it can still honour.
+        if (cursor !== null) {
+          meta.put(cursor, "cursor");
+          Durability.#putFinal(meta, finalSeq);
+        }
+      });
 
-      meta.put(Clock.last(), "clock");
+      Durability.#putClock(meta);
     });
   }
 
@@ -599,9 +770,13 @@ export default class Durability {
 
   // The identity this browser presents, kept so that the next page load can ignore the fresh pair
   // it is offered and go on numbering where this one left off.
+  //
+  // Under this tab's own user, whoever owns the store's rows at the moment.
   static persistReplica(replica) {
+    const owner = Durability.#pairOwner();
+
     Durability.#replicaWrite = Durability.#write([META], (transaction) => {
-      transaction.objectStore(META).put(replica, "replica");
+      Durability.#writePair(transaction, owner, replica);
     }).then((stored) => {
       if (stored) {
         Durability.noteStoredReplica(replica);
@@ -623,6 +798,15 @@ export default class Durability {
   // Whether the identity this tab presents is the one the store holds. A tab without a store that
   // does may send the stored batches under it, and nothing else: their numbers are recorded, and a
   // new one would be recorded nowhere, so the next load could spend it again.
+  // The identity a batch goes out under, read as it is sent, for forgetting it once answered.
+  static sentUnder() {
+    return {
+      holdsIdentity: Durability.hadStore && Durability.holdsIdentity(),
+      owner: Durability.#pairOwner(),
+      replicaId: Replica.id,
+    };
+  }
+
   static holdsIdentity() {
     return Replica.id !== null && Replica.id === Durability.#storedReplicaId;
   }
@@ -640,6 +824,7 @@ export default class Durability {
   // restore refuses them. Answers the stored place, with every stored record, or with
   // `records: null` when the place is the given one or there is none - and the user the store
   // belongs to, since one store serves every user of the browser, each in a group of their own.
+  // The records come with how far the numbers they hold are final, which is written with the place.
   //
   // With the rows comes what the queue records as landed, batch by batch: a stored frame can
   // have landed a batch this tab holds unlanded, and promoted again over rows that already hold
@@ -670,9 +855,11 @@ export default class Durability {
         // Requests on one transaction answer in the order they were made, so the owner is in by the
         // time the place's callback runs.
         const owned = meta.get("actorUserId");
+        const final = meta.get("finalSeq");
         const stored = meta.get("cursor");
 
         owned.onerror = () => reject(owned.error);
+        final.onerror = () => reject(final.error);
         stored.onerror = () => reject(stored.error);
 
         stored.onsuccess = () => {
@@ -693,6 +880,7 @@ export default class Durability {
               ([records, queued]) =>
                 resolve({
                   cursor: place,
+                  finalSeq: final.result ?? null,
                   // A record can predate the marks (see Batch#record).
                   landed: (queued ?? []).map(({landed, seq}) => ({
                     landed: landed ?? [],
@@ -742,36 +930,49 @@ export default class Durability {
   // So a read that fails is a write that fails, and stops the storage the way any failed write
   // does (see #fail) - rather than skipping the repair, which would leave the store naming another
   // place than this tab with nothing to say so.
-  static async repair(records, cursor) {
+  //
+  // Over a store another user owns it writes nothing and answers false. What that store holds or
+  // lacks says nothing about this tab's rows, so the tab keeps its place and works from memory.
+  // Over this user's store it takes up the current claim, since it leaves the store matching this
+  // tab, or starts over from it.
+  static async repair(records, cursor, finalSeq = null) {
     let placeless = false;
 
     await Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);
       const meta = transaction.objectStore(META);
-      const stored = meta.get("cursor");
 
-      stored.onsuccess = () => {
-        const place = stored.result ?? null;
+      Durability.#whileOwned(
+        transaction,
+        () => {
+          const stored = meta.get("cursor");
 
-        if (place === null) {
-          placeless = true;
+          stored.onsuccess = () => {
+            const place = stored.result ?? null;
 
-          return;
-        }
+            if (place === null) {
+              placeless = true;
 
-        if (place === cursor) {
-          return;
-        }
+              return;
+            }
 
-        entities.clear();
+            if (place === cursor) {
+              return;
+            }
 
-        for (const record of records) {
-          entities.put(record);
-        }
+            entities.clear();
 
-        meta.put(cursor, "cursor");
-        meta.put(Clock.last(), "clock");
-      };
+            for (const record of records) {
+              entities.put(record);
+            }
+
+            meta.put(cursor, "cursor");
+            Durability.#putFinal(meta, finalSeq);
+            Durability.#putClock(meta);
+          };
+        },
+        {settlesStore: true},
+      );
     });
 
     return placeless;
@@ -793,13 +994,17 @@ export default class Durability {
   // this page may send.
   //
   // `leader` says whether this tab is the one that speaks to the store for the group of tabs
-  // sharing it. A FOLLOWER TAKES WHAT THE STORE HOLDS AND JUDGES NOTHING: it refuses no rows,
-  // clears nothing, writes no identity and records no owner. Not because the judgements below are
-  // wrong for it - they are the same store, so they would come out the same - but because the
-  // leader makes them once for everyone, and tells the group to start over when it refuses (the
-  // same frame a server resync sends). A follower that read a stale store resets on that and takes
-  // the refill from the channel, and one that reads the store after the leader cleared it finds it
-  // empty. What that buys is the one case where a follower's own judgement WOULD be wrong: rows
+  // sharing it. A FOLLOWER ASKS ONE THING OF THE STORE: whose it is. One store serves every user of
+  // the browser, so rows of another user are never taken up, by any tab, not even until the leader
+  // has judged them: a query answered from them in that gap would show one person another's data.
+  // The follower takes no rows and no place then, and what its own leader stores from here reaches
+  // it as frames.
+  //
+  // Beyond that it refuses no rows, clears nothing, writes no identity and records no owner. The
+  // leader makes those calls once for everyone, and tells the group to start over when it refuses
+  // (the same frame a server resync sends). A follower that read a stale store refills on that and
+  // takes the fill from the channel, and one that reads the store after the leader cleared it finds
+  // it empty. What that buys is the one case where a follower's own judgement WOULD be wrong: rows
   // with no place because the leader is filling right now, which are half of a base the frames
   // are about to complete - refused, nothing would bring that half back.
   //
@@ -812,7 +1017,9 @@ export default class Durability {
   // Answers NOTHING when there is nothing to take up - a browser with no durable storage, and
   // every call after the first. The second matters: the runtime's page-script listener runs again
   // on each client-side navigation, so this is reached once per page visit, and a later call that
-  // answered a place of null would take away the one the stream had been keeping all along.
+  // answered a place of null would take away the one the stream had been keeping all along. A tab
+  // moving to another user's group loads again and takes that up the same way, as the user it now
+  // holds (see DataLayer.followIdentity).
   //
   // The rows are dropped rather than used in two cases, and each is a case where showing them
   // would be showing something untrue. (A model change is not among them any more: a bundle on
@@ -856,60 +1063,71 @@ export default class Durability {
       loaded.actorUserId !== (LocalDatabase.actorUserId ?? null);
 
     const refusal = leader ? Durability.#refusal(loaded, ownerChanged) : null;
+    const takesRows = refusal === null && !ownerChanged;
+    const owner = LocalDatabase.actorUserId ?? null;
+    const storedPair = loaded.replicas[Durability.#ownerKey(owner)] ?? null;
 
-    if (refusal === null) {
-      LocalDatabase.restore(loaded.records);
-    } else {
+    if (takesRows) {
+      LocalDatabase.restore(loaded.records, loaded.finalSeq);
+    }
+
+    // A page load offers a fresh pair and a browser already holding one for this user ignores it -
+    // re-minting per load would abandon the numbering its batches are identified by. Taken up
+    // whoever's rows the store holds now, and before the claim below writes the pair in use.
+    if (storedPair !== null) {
+      Replica.adopt(storedPair);
+    }
+
+    Replica.owner = owner;
+
+    if (refusal !== null) {
       Logger.debug(
         `Hologram: the stored rows were dropped (${refusal}), this page fills from nothing`,
       );
 
-      Durability.clear();
+      // Somebody else's store becomes this user's. Once for the group, and the first send waits
+      // for it (see replicaWritten).
+      if (ownerChanged) {
+        Durability.claim(owner, Replica.current());
+      } else {
+        Durability.clear();
+      }
 
-      // The other tabs of the group hold the same rows, read from the same store, and are told to
-      // let go of them the way a server resync tells everyone - AFTER the clear's transaction is
-      // created, so a tab that reads the store on hearing this reads it cleared.
+      // The other tabs of the group are told to start over the way a server resync tells everyone
+      // - AFTER the transaction is created, so a tab that reads the store on hearing this reads it
+      // as it now stands.
       //
-      // Somebody else signing in is spelled the way the SERVER spells it, because it is the same
-      // event noticed here rather than there, and the reader keeps rows or drops them on that one
-      // word. The sentence above stays what it is: a line to read in a log, free to be reworded.
+      // Never as `identity`, even over another user's rows, since that word drops what a tab holds
+      // at once. Every tab hearing this was mounted for this tab's user and took none of those
+      // rows (see above), so what it holds is its own page's, which a refill keeps readable.
       Tabs.post({
         event: "sync_resync",
-        frame: {reason: ownerChanged ? "identity" : refusal},
+        frame: {reason: refusal},
         kind: "frame",
       });
     }
 
-    // A page load offers a fresh pair and a browser already holding one ignores it - re-minting per
-    // load would abandon the numbering its batches are identified by. Somebody else signing in is
-    // the one case where the held pair goes too: it was minted for the previous owner, or for a
-    // session that is no longer theirs - and the leader writes the page's pair in its place, once
-    // for the group, which its first send waits for (see replicaWritten). A follower writes none:
-    // it presents no identity of its own to the server, and the pair the leader settled on reaches
-    // it with the group's state.
+    // With none stored for this user, the leader writes the page's, once for the group, which its
+    // first send waits for (see replicaWritten). A follower writes none: it presents no identity of
+    // its own to the server, and the pair the leader settled on reaches it with the group's state.
     //
     // A store let go after this read can't record that pair, so the tab asks for one of its own.
-    if (loaded.replica !== null && !ownerChanged) {
-      Replica.adopt(loaded.replica);
-    } else if (Durability.mode === "memory") {
+    if (storedPair === null && Durability.mode === "memory") {
       Replica.requestMint();
-    } else if (leader) {
+    } else if (storedPair === null && leader && !ownerChanged) {
       Durability.persistReplica(Replica.current());
     }
 
-    if (leader) {
-      Durability.#rememberOwner(loaded);
-    }
-
-    const owner = LocalDatabase.actorUserId ?? null;
     const queued = loaded.queue.map((record) => record.seq);
     const seq = Math.max(loaded.seq, ...queued);
 
     Durability.#queueAtRestore = {highest: seq, numbers: new Set(queued)};
+    Durability.#storedReplicaId = storedPair?.id ?? null;
 
     return {
       batches: loaded.queue.filter((record) => record.actorUserId === owner),
-      cursor: refusal === null ? loaded.cursor : null,
+      cursor: takesRows ? loaded.cursor : null,
+      readForeign: !leader && ownerChanged,
       seq,
     };
   }
@@ -938,6 +1156,7 @@ export default class Durability {
     Durability.#restored = false;
     Durability.#storedReplicaId = null;
     Durability.#replicaWrite = Promise.resolve();
+    Durability.#claimId = null;
   }
 
   // Whether a batch was answered before this page read the store, which a tab that started later
@@ -972,7 +1191,8 @@ export default class Durability {
   //
   // They go because a base missing one frame's is worse than no base at all - the next startup
   // cannot tell the two apart, and would resume from a place claiming rows that were never
-  // written. What this browser DID is left alone, as everywhere else: a number reused and a clock
+  // written. Only this tab's user's rows: a store another user took holds nothing this failure made
+  // untrue. What this browser DID is left alone, as everywhere else: a number reused and a clock
   // restarted low cost more than a re-download.
   //
   // That includes the identity and its counter, which stay true: nothing spends a number under the
@@ -1003,8 +1223,22 @@ export default class Durability {
 
     if (Tabs.leader) {
       try {
-        Durability.#wipe(
-          Durability.#db.transaction([ENTITIES, META], "readwrite"),
+        const transaction = Durability.#db.transaction(
+          [ENTITIES, META],
+          "readwrite",
+        );
+
+        // Judged by whose the store was when the write failed: the tab can follow another user
+        // before the read below lands, and the store it failed on is still the previous user's.
+        Durability.#whileOwned(
+          transaction,
+          () => Durability.#wipe(transaction),
+          {
+            asOf: {
+              claim: Durability.#claimId,
+              pairOwner: Durability.#pairOwner(),
+            },
+          },
         );
       } catch {
         // There is nothing further to try - this page stops storing either way.
@@ -1088,7 +1322,7 @@ export default class Durability {
     }
   }
 
-  // Everything the previous page load left, in one read - the six things `meta` holds and every
+  // Everything the previous page load left, in one read - what `meta` holds, the queue and every
   // row record. Absences are normalized here rather than at every reader: a key nothing was ever
   // written under reads as undefined, and "nothing stored" is a state restore has to reason about.
   static async #read() {
@@ -1101,24 +1335,49 @@ export default class Durability {
     const meta = transaction.objectStore(META);
     const queue = transaction.objectStore(QUEUE);
 
-    const [actorUserId, clock, cursor, queued, records, replica, seq] =
-      await Promise.all([
-        Durability.#request(meta.get("actorUserId")),
-        Durability.#request(meta.get("clock")),
-        Durability.#request(meta.get("cursor")),
-        Durability.#request(queue.getAll()),
-        Durability.#request(entities.getAll()),
-        Durability.#request(meta.get("replica")),
-        Durability.#request(meta.get("seq")),
-      ]);
+    const pairKeys = globalThis.IDBKeyRange.bound(
+      REPLICA_PREFIX,
+      `${REPLICA_PREFIX}\uffff`,
+    );
+
+    const [
+      actorUserId,
+      claim,
+      clock,
+      cursor,
+      finalSeq,
+      queued,
+      records,
+      storedPairKeys,
+      storedPairs,
+      seq,
+    ] = await Promise.all([
+      Durability.#request(meta.get("actorUserId")),
+      Durability.#request(meta.get("claim")),
+      Durability.#request(meta.get("clock")),
+      Durability.#request(meta.get("cursor")),
+      Durability.#request(meta.get("finalSeq")),
+      Durability.#request(queue.getAll()),
+      Durability.#request(entities.getAll()),
+      Durability.#request(meta.getAllKeys(pairKeys)),
+      Durability.#request(meta.getAll(pairKeys)),
+      Durability.#request(meta.get("seq")),
+    ]);
 
     return {
       actorUserId: actorUserId ?? null,
+      claim: claim ?? null,
       clock: clock ?? 0,
       cursor: cursor ?? null,
+      finalSeq: finalSeq ?? null,
       queue: queued ?? [],
       records: records ?? [],
-      replica: replica ?? null,
+      replicas: Object.fromEntries(
+        storedPairKeys.map((key, index) => [
+          key.slice(REPLICA_PREFIX.length),
+          storedPairs[index],
+        ]),
+      ),
       seq: seq ?? 0,
     };
   }
@@ -1144,18 +1403,32 @@ export default class Durability {
     return null;
   }
 
-  // Who this page belongs to, so the next load can ask whether it still does. Written only when
-  // that has moved - a page load in a new session - never on the ordinary case.
-  static #rememberOwner(loaded) {
-    const actorUserId = LocalDatabase.actorUserId ?? null;
+  // The text naming an owner in a key or a group name. A user's is the server's exact text (see
+  // Hologram.Auth.owner_key/1), which starts with i, s or u, so it is never the word for a visitor.
+  static #ownerKey(owner) {
+    return owner ?? "anonymous";
+  }
 
-    if (loaded.actorUserId === actorUserId) {
+  static #pairKey(owner) {
+    return `${REPLICA_PREFIX}${Durability.#ownerKey(owner)}`;
+  }
+
+  // Whose the pair in use is. The actor can move on at a page visit while the pair stays the one
+  // this document took up, and written under the new actor it would replace that user's own.
+  static #pairOwner() {
+    return Replica.owner === undefined
+      ? (LocalDatabase.actorUserId ?? null)
+      : Replica.owner;
+  }
+
+  // Nothing for a tab holding no pair: one that followed a page to another user is given none (see
+  // DataLayer.followIdentity), and the slot it would write over is that user's own.
+  static #writePair(transaction, owner, replica) {
+    if (!replica?.id) {
       return;
     }
 
-    Durability.#write([META], (transaction) => {
-      transaction.objectStore(META).put(actorUserId, "actorUserId");
-    });
+    transaction.objectStore(META).put(replica, Durability.#pairKey(owner));
   }
 
   // One read per record, applying all its removals at once: two reads of one record would both see
@@ -1225,6 +1498,69 @@ export default class Durability {
     db.createObjectStore(QUEUE, {keyPath: "seq"});
   }
 
+  // Where this tab's clock stands, unless the store's already stands further. Every user's tabs
+  // write it, and a tab of another user can be behind the clock this user's rows were stamped
+  // with: written over, the next load would start the clock below revisions it holds.
+  static #putClock(meta) {
+    const stored = meta.get("clock");
+
+    stored.onsuccess = () => {
+      meta.put(Math.max(stored.result ?? 0, Clock.last()), "clock");
+    };
+  }
+
+  // Runs the given write only if the store is this tab's user's and has not been claimed since this
+  // tab last knew it, both read inside the write's own transaction, so another tab's claim lands
+  // wholly before it or wholly after it.
+  //
+  // A write that leaves the whole store matching this tab settles it, and takes up a newer claim of
+  // the same user: a follower can have read the store before its leader claimed it.
+  //
+  // The tab's user has to be the one its document took the store up for too. A navigation can move
+  // the actor to another user while the tab still holds the previous user's rows and place, and
+  // those must not land under the new user's name.
+  //
+  // A tab refused here goes on from memory. Its queue and its pair stay writable, since both are
+  // kept per user.
+  //
+  // `asOf` holds the claim and the pair's owner to judge by instead of the ones the tab holds when
+  // the read lands.
+  static #whileOwned(
+    transaction,
+    write,
+    {asOf = null, settlesStore = false} = {},
+  ) {
+    const owner = LocalDatabase.actorUserId ?? null;
+    const meta = transaction.objectStore(META);
+    const storedOwner = meta.get("actorUserId");
+    const storedClaim = meta.get("claim");
+
+    storedClaim.onsuccess = () => {
+      const claim = storedClaim.result ?? null;
+      const {claim: claimId, pairOwner} = asOf ?? {
+        claim: Durability.#claimId,
+        pairOwner: Durability.#pairOwner(),
+      };
+
+      if (
+        pairOwner !== owner ||
+        (storedOwner.result ?? null) !== owner ||
+        (claim !== claimId && !settlesStore)
+      ) {
+        // What was refused is missing from the store, so no later frame may date the rows at a
+        // place past it, even once the owner matches again. No stored id equals undefined, so only
+        // a write that settles the whole store, or this tab's own claim, opens it again.
+        Durability.#claimId = undefined;
+
+        return;
+      }
+
+      Durability.#claimId = claim;
+
+      write();
+    };
+  }
+
   // What is stored ON BEHALF OF THE SERVER, gone: the rows and the place they are dated at. Shared
   // by the resync path, which means it deliberately, and by the failure path, which has no choice.
   //
@@ -1234,6 +1570,17 @@ export default class Durability {
   static #wipe(transaction) {
     transaction.objectStore(ENTITIES).clear();
     transaction.objectStore(META).delete("cursor");
+    transaction.objectStore(META).delete("finalSeq");
+  }
+
+  // A place told with no final point - a server of a build from before it, or a point forgotten
+  // since - takes away the one stored with an earlier place.
+  static #putFinal(meta, finalSeq) {
+    if (finalSeq === null) {
+      meta.delete("finalSeq");
+    } else {
+      meta.put(finalSeq, "finalSeq");
+    }
   }
 
   // Every write goes through here, so there is one place that counts what is in flight and one
@@ -1254,8 +1601,11 @@ export default class Durability {
 
     Durability.inFlight += 1;
 
+    const visit = Tabs.visit;
+    let transaction = null;
+
     try {
-      const transaction = Durability.#db.transaction(storeNames, "readwrite", {
+      transaction = Durability.#db.transaction(storeNames, "readwrite", {
         durability: "relaxed",
       });
 
@@ -1265,6 +1615,15 @@ export default class Durability {
 
       return true;
     } catch (error) {
+      // Made on a visit to a group this tab has since left. Its failure is no reason to end the
+      // group the tab is in now: a store that really failed fails that group's own next write.
+      if (
+        (visit !== null && !Tabs.isVisit(visit)) ||
+        Durability.#heldBack.has(transaction)
+      ) {
+        return false;
+      }
+
       Durability.#fail(`write failed (${error})`);
 
       return false;

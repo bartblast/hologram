@@ -1558,7 +1558,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - unknown attribute :position in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - known attributes: :created_at, :id, :server_created_at, :server_updated_at, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - unknown attribute :position in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - known attributes: :created_at, :id, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture142], [])
@@ -1575,7 +1575,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - unknown attribute :published in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - known attributes: :created_at, :id, :server_created_at, :server_updated_at, :title, :updated_at"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - unknown attribute :published in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - known attributes: :created_at, :id, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :title, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture3], [])
@@ -2462,6 +2462,82 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a read rule naming a sequence number" do
+      defmodule InlinePolicyFixture200 do
+        use Hologram.Entity
+
+        allow :read, when: server_updated_seq < 1000
+      end
+
+      expected_msg =
+        "invalid predicate :server_updated_seq for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture200 - :server_updated_seq is a sequence number. A browser and the server can read one differently until it's final, so no rule can depend on it. A rule about time can read server_created_at or server_updated_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture200], [])
+      end
+    end
+
+    test "rejects a rule of another operation naming a sequence number" do
+      defmodule InlinePolicyFixture201 do
+        use Hologram.Entity
+
+        allow :update, when: server_created_seq > 5
+      end
+
+      expected_msg =
+        "invalid predicate :server_created_seq for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture201 - :server_created_seq is a sequence number. A browser and the server can read one differently until it's final, so no rule can depend on it. A rule about time can read server_created_at or server_updated_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture201], [])
+      end
+    end
+
+    test "rejects a path to a related row's sequence number" do
+      defmodule InlinePolicyFixture202 do
+        use Hologram.Entity
+
+        allow :read
+      end
+
+      defmodule InlinePolicyFixture203 do
+        use Hologram.Entity
+
+        relationship :project, Hologram.Policy.ValidatorTest.InlinePolicyFixture202
+
+        allow :read, when: project.server_updated_seq < 1000
+      end
+
+      expected_msg =
+        "invalid predicate project.server_updated_seq for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture203 - project.server_updated_seq is a sequence number. A browser and the server can read one differently until it's final, so no rule can depend on it. A rule about time can read server_created_at or server_updated_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture202, InlinePolicyFixture203], [])
+      end
+    end
+
+    test "rejects a quantifier's condition over a sequence number of the set's rows" do
+      defmodule InlinePolicyFixture204 do
+        use Hologram.Entity
+
+        allow :read
+      end
+
+      defmodule InlinePolicyFixture205 do
+        use Hologram.Entity
+
+        relationship :seats, [Hologram.Policy.ValidatorTest.InlinePolicyFixture204]
+
+        allow :read, when: any(seat <- seats, seat.server_created_seq > 5)
+      end
+
+      expected_msg =
+        "invalid predicate seats.server_created_seq for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture205 - seats.server_created_seq is a sequence number. A browser and the server can read one differently until it's final, so no rule can depend on it. A rule about time can read server_created_at or server_updated_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture204, InlinePolicyFixture205], [])
+      end
+    end
+
     test "rejects a non-read predicate over a server-only attribute inside a disjunction" do
       defmodule InlinePolicyFixture36 do
         use Hologram.Entity
@@ -3344,7 +3420,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownPredicatePolicy - unknown attribute :published in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity - known attributes: :created_at, :id, :server_created_at, :server_updated_at, :title, :updated_at"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownPredicatePolicy - unknown attribute :published in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity - known attributes: :created_at, :id, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :title, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([TakenUnknownPredicateEntity], [])

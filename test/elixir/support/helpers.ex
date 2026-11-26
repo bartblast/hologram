@@ -220,14 +220,25 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Returns the given entity, or each of the given entities, with its sequence numbers cleared - a
+  row read back holds them, and the struct its write answered with doesn't.
+  """
+  @spec unnumbered(struct | list(struct) | nil) :: struct | list(struct) | nil
+  def unnumbered(nil), do: nil
+
+  def unnumbered(entities) when is_list(entities), do: Enum.map(entities, &unnumbered/1)
+
+  def unnumbered(entity), do: %{entity | server_created_seq: nil, server_updated_seq: nil}
+
+  @doc """
   Writes a global role grant row directly, for tests needing a grant the public surface does not create.
   """
   @spec insert_global_grant(String.t(), atom) :: :ok
   def insert_global_grant(user_id, role) do
     insert_sql =
       ~s|INSERT INTO "hologram_data"."hologram_role_grant" | <>
-        ~s|("id", "user_id", "role", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
-        ~s|VALUES ($1, $2, $3::"hologram_data"."hologram_role_grant_role_$enum", $4, $4, $4, $4, '{}')|
+        ~s|("id", "user_id", "role", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions") | <>
+        ~s|VALUES ($1, $2, $3::"hologram_data"."hologram_role_grant_role_$enum", $4, $4, 0, $4, 0, $4, '{}')|
 
     params = [
       Codec.encode(Entity.generate_id(), :uuid),

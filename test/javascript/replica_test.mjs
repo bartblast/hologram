@@ -226,6 +226,58 @@ describe("Replica", () => {
     });
   });
 
+  describe("adoptOwn()", () => {
+    const own = {id: "replica-own", token: "token-own"};
+
+    it("puts the pair in use and stops waiting", () => {
+      Replica.requestMint();
+      Replica.adoptOwn(own);
+
+      assert.deepStrictEqual(Replica.current(), own);
+      assert.isFalse(Replica.awaitingMint);
+    });
+
+    // Its batches are numbered under it as under one the tab asked for.
+    it("counts the pair as minted for this tab", () => {
+      Replica.adoptOwn(own);
+
+      assert.isTrue(Replica.minted);
+    });
+
+    it("ends a refusal", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+      Replica.adoptOwn(own);
+
+      assert.isFalse(Replica.withoutIdentity());
+    });
+  });
+
+  // Both were about the user the tab followed away from.
+  describe("endMint()", () => {
+    it("stops waiting for a pair", () => {
+      Replica.requestMint();
+      Replica.endMint();
+
+      assert.isFalse(Replica.awaitingMint);
+    });
+
+    it("forgets a pair minted for the tab", () => {
+      Replica.adoptOwn({id: "replica-own", token: "token-own"});
+      Replica.endMint();
+
+      assert.isFalse(Replica.minted);
+    });
+
+    it("forgets a refusal", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+      Replica.endMint();
+
+      assert.isFalse(Replica.withoutIdentity());
+    });
+  });
+
   it("reset() stops waiting for a pair", () => {
     Replica.requestMint();
     Replica.reset();

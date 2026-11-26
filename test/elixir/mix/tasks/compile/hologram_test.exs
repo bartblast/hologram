@@ -118,7 +118,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
               owner: %NotIncluded{relationship: :owner},
               owner_id: nil,
               server_created_at: nil,
+              server_created_seq: nil,
               server_updated_at: nil,
+              server_updated_seq: nil,
               updated_at: nil
 
     @spec __attributes__() :: list({atom, atom, keyword})
@@ -166,7 +168,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
         {:created_at, :datetime, []},
         {:id, :uuid, []},
         {:server_created_at, :datetime, []},
+        {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},
+        {:server_updated_seq, :integer, []},
         {:updated_at, :datetime, []}
       ]
     end
@@ -187,7 +191,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
               b_c: %NotIncluded{relationship: :b_c},
               b_c_id: nil,
               server_created_at: nil,
+              server_created_seq: nil,
               server_updated_at: nil,
+              server_updated_seq: nil,
               updated_at: nil
 
     @spec __attributes__() :: list({atom, atom, keyword})
@@ -235,7 +241,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
         {:created_at, :datetime, []},
         {:id, :uuid, []},
         {:server_created_at, :datetime, []},
+        {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},
+        {:server_updated_seq, :integer, []},
         {:updated_at, :datetime, []}
       ]
     end
@@ -254,7 +262,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
               c: %NotIncluded{relationship: :c},
               c_id: nil,
               server_created_at: nil,
+              server_created_seq: nil,
               server_updated_at: nil,
+              server_updated_seq: nil,
               updated_at: nil
 
     @spec __attributes__() :: list({atom, atom, keyword})
@@ -302,7 +312,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
         {:created_at, :datetime, []},
         {:id, :uuid, []},
         {:server_created_at, :datetime, []},
+        {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},
+        {:server_updated_seq, :integer, []},
         {:updated_at, :datetime, []}
       ]
     end

@@ -15,6 +15,8 @@ defmodule Hologram.Sync.Frame do
   alias Hologram.DB.QueryCache
   alias Hologram.Entity.Model
   alias Hologram.Policy
+  alias Hologram.Server
+  alias Hologram.Sync.PackedIds
   alias Hologram.Sync.WireData
 
   @protocol_version 1
@@ -23,7 +25,7 @@ defmodule Hologram.Sync.Frame do
   Turns what a session worked out for one client into the deltas a frame carries.
 
   A row that appeared travels whole, because a client that did not have it needs all of it, with
-  the server's verdicts for the given user (see `put_entity/2`): the ones given for it, per entity
+  the server's verdicts for the given user (see `put_entity/3`): the ones given for it, per entity
   type and id - worked out already, as a batch's recheck works them out - and otherwise worked out
   here (see `row_verdicts/2`). A row that changed travels as the attributes that moved, each patch
   given as `{row, changes, verdicts}` - the verdicts that moved beside them, or nil when none did.
@@ -36,12 +38,22 @@ defmodule Hologram.Sync.Frame do
 
   News may also hold `hidden`, the rows a client may hold that no longer reach it, as
   `{entity_type, salt, ids}` - told by hash rather than by id (see `unsync_hashed/3`).
+
+  A row that appeared among the given ones, per entity type, packed (see
+  `Hologram.Sync.PackedIds.pack/1`), is one the client's own batches created, and travels marked as
+  its own (see `put_entity/3`).
   """
-  @spec deltas(map, Hologram.Server.identity_id() | nil, %{module => %{String.t() => map}}) ::
-          list(map)
-  def deltas(news, actor_user_id, verdicts \\ %{}) do
+  @spec deltas(
+          map,
+          Hologram.Server.identity_id() | nil,
+          %{module => %{String.t() => map}},
+          %{module => binary}
+        ) :: list(map)
+  def deltas(news, actor_user_id, verdicts \\ %{}, own \\ %{}) do
     Enum.concat([
-      Enum.map(news.appeared, &put_entity(&1, appeared_verdicts(&1, actor_user_id, verdicts))),
+      Enum.map(news.appeared, fn row ->
+        put_entity(row, appeared_verdicts(row, actor_user_id, verdicts), own?(own, row))
+      end),
       Enum.map(news.patched, fn {row, patch, verdicts} -> patch_entity(row, patch, verdicts) end),
       Enum.map(news.unsynced, fn {id, entity_type} -> unsync_entity(id, entity_type) end),
       Enum.map(Map.get(news, :hidden, []), fn {entity_type, salt, ids} ->
@@ -108,6 +120,14 @@ defmodule Hologram.Sync.Frame do
   whole target set of the relationship, the edge states one pair of it, and both were read
   from the one round. Whichever is applied first, the same facts are left behind.
 
+  The final sequence number says how far the numbers the rows carry are final: the client holds
+  every row it may read numbered at or below it, so a number there tells it nothing it holds is
+  missing below it, and a number above it may still be passed by a save that hasn't ended. Nil says
+  nothing, as on every frame of a batch but its last, which a client cut off among them replays.
+  Each node works out its own, so a client keeps the highest it was told under one log id: a fill
+  under a new one (see `Hologram.Sync.Cursor`) starts it over, since the log's numbers may have
+  been given out again.
+
   The applied sequence number says how far the receiving replica's own writes are reflected in
   what this frame carries: every batch it sent up to that number has been applied to the rows the
   frame was built from. That is what lets it tell a change of its own, arriving back, from one it
@@ -121,13 +141,19 @@ defmodule Hologram.Sync.Frame do
   Nil says nothing rather than nothing-applied: a stream serving no replica has no number to give,
   and a reader must not read that as "none of my writes have landed".
   """
-  @spec encode_deltas_envelope(integer, String.t() | nil, list(map), non_neg_integer | nil) ::
-          String.t()
-  def encode_deltas_envelope(id, cursor, deltas, applied_seq) do
+  @spec encode_deltas_envelope(
+          integer,
+          String.t() | nil,
+          list(map),
+          non_neg_integer | nil,
+          non_neg_integer | nil
+        ) :: String.t()
+  def encode_deltas_envelope(id, cursor, deltas, applied_seq, final_seq) do
     payload = %{
       applied_seq: applied_seq,
       cursor: cursor,
       deltas: group(deltas),
+      final_seq: Codec.encode_wire(final_seq, :integer),
       model_hash: Model.hash(),
       protocol_version: @protocol_version
     }
@@ -158,8 +184,13 @@ defmodule Hologram.Sync.Frame do
   without this a quiet app would keep everything it was sent and still have nowhere to resume
   from, and would be filled from nothing on its next visit.
 
-  It names the model the server runs, as a deltas frame does (see `encode_deltas_envelope/4`): a
+  It names the model the server runs, as a deltas frame does (see `encode_deltas_envelope/5`): a
   client caught up with nothing to be told receives no deltas frame.
+
+  The final sequence number says how far the numbers the rows of the scope carry are final, as a
+  deltas frame's does. Past what a JavaScript number holds exactly it travels as its decimal
+  text, as the rows' numbers do (see `Hologram.DB.Codec.encode_wire/2`). A fill has one for all of it, read before its first type, so a marker for
+  some types says it of those, and the rows a fill sends carry none until their type's marker.
 
   Whether the marker names a place is about the CLIENT, not the scope. A first arrival holds a
   whole pot only once `:all` has been announced, so its types markers name none - the scope is
@@ -168,14 +199,16 @@ defmodule Hologram.Sync.Frame do
   @spec encode_synced_envelope(
           integer,
           :all | {:types, list(module), non_neg_integer | nil},
-          String.t() | nil
+          String.t() | nil,
+          non_neg_integer | nil
         ) :: String.t()
-  def encode_synced_envelope(id, scope, cursor) do
+  def encode_synced_envelope(id, scope, cursor, final_seq) do
     payload =
       scope
       |> scope_payload()
       |> Map.merge(%{
         cursor: cursor,
+        final_seq: Codec.encode_wire(final_seq, :integer),
         model_hash: Model.hash(),
         protocol_version: @protocol_version
       })
@@ -195,12 +228,47 @@ defmodule Hologram.Sync.Frame do
 
   It is its own chunk rather than a flag on the rows that follow, because there may be none: a
   client whose rows are all gone still has to be told to let go of them.
+
+  A resync a change of identity sends names the tag of the identity it is for (see
+  `Hologram.Runtime.Session.identity_tag/1`), so a client that already followed that change from
+  `encode_identity_envelope/4` lets it pass instead of dropping its rows a second time.
   """
-  @spec encode_resync_envelope(integer, atom) :: String.t()
-  def encode_resync_envelope(id, reason) do
-    payload = %{protocol_version: @protocol_version, reason: reason}
+  @spec encode_resync_envelope(integer, atom, String.t() | nil) :: String.t()
+  def encode_resync_envelope(id, reason, identity_tag \\ nil) do
+    payload =
+      maybe_put_identity_tag(%{protocol_version: @protocol_version, reason: reason}, identity_tag)
 
     "event: sync_resync\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
+  end
+
+  @doc """
+  Builds the SSE event-stream chunk telling a client who its session is now: the user's id as the
+  browser keys its store by it (see `Hologram.Auth.owner_key/1`), the id its rules compare (see
+  `Hologram.Auth.canonical_id/1`), and the tag of the identity (see
+  `Hologram.Runtime.Session.identity_tag/1`), with the user's row spelled the way a page carries its
+  rows (see `Hologram.Template.Renderer.session_user_rows/1`), or nil when there's none to carry.
+
+  Sent on every stream of a session whose identity changed, whether or not it syncs, so that every
+  tab hears it from its own stream, whichever tab leads its group. It carries no replica pair: each
+  tab takes one from its next handshake, which mints a pair for it alone.
+  """
+  @spec encode_identity_envelope(
+          integer,
+          Server.identity_id() | nil,
+          String.t() | nil,
+          map | nil
+        ) :: String.t()
+  def encode_identity_envelope(id, user_id, identity_tag, user_rows) do
+    payload =
+      %{
+        actor_entity_id: Auth.canonical_id(user_id),
+        actor_user_id: Auth.owner_key(user_id),
+        protocol_version: @protocol_version
+      }
+      |> maybe_put_identity_tag(identity_tag)
+      |> maybe_put_user_rows(user_rows)
+
+    "event: sync_identity\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
   end
 
   @doc """
@@ -256,13 +324,23 @@ defmodule Hologram.Sync.Frame do
   The verdicts travel beside the row's data as `$verdicts`, a name no attribute can have, the way
   its revisions travel as `$revisions` - and only when there are some, so a row of a type the
   server sends no verdict on is spelled as it always was.
+
+  A row the client's own batch created travels with `$own` set, the same way. Its numbers come
+  back with it, and while they aren't final it is the client's own unnumbered row to the client's
+  queries, whichever of its tabs it reaches, the one that wrote it or not (see
+  `Hologram.Sync.Live.parts/7`'s `own_puts`).
   """
-  @spec put_entity(struct, %{String.t() => boolean}) :: map
-  def put_entity(row, verdicts) do
+  @spec put_entity(struct, %{String.t() => boolean}, boolean) :: map
+  def put_entity(row, verdicts, own? \\ false) do
     row_data = WireData.row(row)
     data = if verdicts == %{}, do: row_data, else: Map.put(row_data, :"$verdicts", verdicts)
 
-    %{data: data, id: row.id, op: :put_entity, type: type_of(row)}
+    %{
+      data: if(own?, do: Map.put(data, :"$own", true), else: data),
+      id: row.id,
+      op: :put_entity,
+      type: type_of(row)
+    }
   end
 
   @doc """
@@ -339,6 +417,12 @@ defmodule Hologram.Sync.Frame do
     end
   end
 
+  defp own?(own, %entity_type{id: id}) do
+    own
+    |> Map.get(entity_type, "")
+    |> PackedIds.member?(id)
+  end
+
   defp group(deltas) do
     deltas
     |> Enum.group_by(& &1.op)
@@ -350,6 +434,18 @@ defmodule Hologram.Sync.Frame do
     |> Enum.group_by(& &1.type)
     |> Map.new(fn {type, grouped} -> {type, Enum.map(grouped, &payload(op, &1))} end)
   end
+
+  # A tag is named only when there is one: a client reads a missing one as a server that says
+  # nothing of whom it serves.
+  defp maybe_put_identity_tag(payload, nil), do: payload
+
+  defp maybe_put_identity_tag(payload, identity_tag) do
+    Map.put(payload, :identity_tag, identity_tag)
+  end
+
+  defp maybe_put_user_rows(payload, nil), do: payload
+
+  defp maybe_put_user_rows(payload, user_rows), do: Map.put(payload, :user_row, user_rows)
 
   # The row comes along for its type as much as its id: a bag of changed attributes cannot say
   # what it belongs to, and without that the values cannot be written the way the wire wants them.

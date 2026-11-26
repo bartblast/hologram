@@ -76,6 +76,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module55
   alias Hologram.Test.Fixtures.Controller.Module56
   alias Hologram.Test.Fixtures.Controller.Module57
+  alias Hologram.Test.Fixtures.Controller.Module58
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
   alias Hologram.Test.Fixtures.Controller.Module9
@@ -90,7 +91,6 @@ defmodule Hologram.ControllerTest do
   @csrf_token_session_key CSRFProtection.session_key()
   @hologram_session_id "test-session-id"
   @replica_id "test-replica-id"
-  @replica_token "test-replica-token"
 
   @session %{
     @csrf_token_session_key => @unmasked_csrf_token,
@@ -212,6 +212,19 @@ defmodule Hologram.ControllerTest do
     |> Session.identity_tag()
   end
 
+  # The tag of the identity a response left, the stamp its session holds included.
+  defp identity_tag_left_by(conn, session \\ %{}) do
+    identity_tag_of(
+      Map.merge(
+        %{
+          hologram_identity_stamp: Plug.Conn.get_session(conn, :hologram_identity_stamp),
+          hologram_session_id: Session.get_session_id(conn)
+        },
+        session
+      )
+    )
+  end
+
   defp page_request_body(instance_id \\ "test-instance-id", client_claimed_sub_keys \\ []) do
     serialized_keys =
       Enum.map(client_claimed_sub_keys, fn {channel, cid} ->
@@ -294,8 +307,7 @@ defmodule Hologram.ControllerTest do
       initial_page?: true,
       instance_id: instance_id,
       csrf_token: @masked_csrf_token,
-      replica_id: @replica_id,
-      replica_token: @replica_token
+      replica_id: @replica_id
     )
   end
 
@@ -644,7 +656,7 @@ defmodule Hologram.ControllerTest do
       boot_data = build_boot_data(put_in(fields.mount_data.actor_user_id, 7))
 
       assert boot_data.actorEntityId == nil
-      assert boot_data.actorUserId == 7
+      assert boot_data.actorUserId == "i7"
     end
 
     test "builds the page fields as a navigation's payload does", %{fields: fields} do
@@ -667,7 +679,9 @@ defmodule Hologram.ControllerTest do
                "/hologram/runtime-1234567890abcdef.js"
 
       assert decoded["actorEntityId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
-      assert decoded["actorUserId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
+
+      assert decoded["actorUserId"] == "u02x9QDX4pOzriCIlt0xKjn"
+
       assert decoded["chunks"] == ["AAAAAAAA"]
       assert decoded["csrfToken"] == "my_csrf_token"
       assert decoded["identityTag"] == "my_identity_tag"
@@ -750,22 +764,40 @@ defmodule Hologram.ControllerTest do
         |> Jason.decode!()
 
       assert decoded["actorEntityId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
-      assert decoded["actorUserId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
+
+      assert decoded["actorUserId"] == "u02x9QDX4pOzriCIlt0xKjn"
+
       assert decoded["syncCountTypes"] == %{"posts" => ["MyApp.Post"]}
       assert decoded["syncCounts"] == %{"posts" => 2}
       assert decoded["syncRows"] == %{"posts" => []}
     end
 
     # The browser's rules read the acting user as the server's data layer does, so a user id no user
-    # entity can have goes as no entity id - an atom spelled as a uuid included, which JSON would
-    # turn into the id itself - while the id as it is still says whose rows and writes they are.
-    test "sends a user id no user entity can have as it is, with no entity id", %{fields: fields} do
-      for user_id <- [7, "abc", :admin, :"0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"] do
+    # entity can have goes as no entity id, while the id's exact text still says whose rows and
+    # writes they are.
+    test "sends a user id no user entity can have as text, with no entity id", %{fields: fields} do
+      for {user_id, owner_key} <- [{7, "i7"}, {"abc", "sabc"}] do
         payload = build_page_data_payload(put_in(fields.mount_data.actor_user_id, user_id))
 
         assert payload.actorEntityId == nil
-        assert payload.actorUserId == user_id
+        assert payload.actorUserId == owner_key
       end
+    end
+
+    # A browser reads a JSON number as a double, so these two would arrive as one owner.
+    test "keeps two integer user ids past 2^53 apart in JSON", %{fields: fields} do
+      [first, second] =
+        for user_id <- [9_007_199_254_740_992, 9_007_199_254_740_993] do
+          fields
+          |> put_in([:mount_data, :actor_user_id], user_id)
+          |> build_page_data_payload()
+          |> Jason.encode!()
+          |> Jason.decode!()
+          |> Map.fetch!("actorUserId")
+        end
+
+      assert first == "i9007199254740992"
+      assert second == "i9007199254740993"
     end
 
     test "sends no acting user as none", %{fields: fields} do
@@ -2061,7 +2093,36 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
       |> handle_command_request()
 
-      assert_receive {:identity_changed, ^session_id, 7}
+      assert_receive {:identity_changed, ^session_id, 7, _identity_tag}
+    end
+
+    # A client hearing the announcement and the response both, in either order, follows one change.
+    test "announces the tag the response names" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      session = Map.put(@session, :hologram_session_id, session_id)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_changing_user_id,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert_receive {:identity_changed, ^session_id, 7, identity_tag}
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [identity_tag]
     end
 
     test "does not broadcast {:identity_changed, ...} when the handler leaves identity unchanged" do
@@ -2087,7 +2148,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
       |> handle_command_request()
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "does not broadcast {:identity_changed, ...} when the handler changes identity but raises" do
@@ -2115,7 +2176,7 @@ defmodule Hologram.ControllerTest do
         |> handle_command_request()
       end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when the handler sets the user id to false directly" do
@@ -2137,7 +2198,7 @@ defmodule Hologram.ControllerTest do
         |> Jason.decode!()
 
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      :post
                      |> conn_with_parsed_json("/hologram/command", parsed_json, session)
@@ -2145,7 +2206,7 @@ defmodule Hologram.ControllerTest do
                      |> handle_command_request()
                    end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "broadcasts {:identity_changed, ...} on the pre session's announce topic when middleware changes identity and terminates" do
@@ -2171,7 +2232,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
       |> handle_command_request()
 
-      assert_receive {:identity_changed, ^session_id, 7}
+      assert_receive {:identity_changed, ^session_id, 7, _identity_tag}
     end
 
     test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when middleware sets the user id to false directly and terminates" do
@@ -2193,7 +2254,7 @@ defmodule Hologram.ControllerTest do
         |> Jason.decode!()
 
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      :post
                      |> conn_with_parsed_json("/hologram/command", parsed_json, session)
@@ -2201,7 +2262,7 @@ defmodule Hologram.ControllerTest do
                      |> handle_command_request()
                    end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "does not broadcast {:identity_changed, ...} when middleware terminates without changing identity" do
@@ -2227,7 +2288,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
       |> handle_command_request()
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "persists the changed user_id into the session when the handler changes identity" do
@@ -2292,10 +2353,58 @@ defmodule Hologram.ControllerTest do
         |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
-      expected_tag =
-        identity_tag_of(%{hologram_session_id: @hologram_session_id, hologram_user_id: 7})
+      expected_tag = identity_tag_left_by(conn, %{hologram_user_id: 7})
 
       assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
+    end
+
+    # The stream hears of the change first, so it has to be stamped by then.
+    test "stamps the identity a command changed" do
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_changing_user_id,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert is_integer(Plug.Conn.get_session(conn, :hologram_identity_stamp))
+    end
+
+    test "leaves the stamp alone when the command leaves the identity alone" do
+      conn = execute_successful_command_request()
+
+      assert Plug.Conn.get_session(conn, :hologram_identity_stamp) == nil
+    end
+
+    test "stamps the identity that middleware answering a command changed" do
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module27,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert is_integer(Plug.Conn.get_session(conn, :hologram_identity_stamp))
     end
 
     test "tells the browser to store nothing of the response of a command that logs the user in" do
@@ -2345,8 +2454,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
-      expected_tag =
-        identity_tag_of(%{hologram_session_id: @hologram_session_id, hologram_user_id: 7})
+      expected_tag = identity_tag_left_by(conn, %{hologram_user_id: 7})
 
       assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
     end
@@ -2471,7 +2579,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
-      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+      expected_tag = identity_tag_left_by(conn)
 
       assert conn.status == 403
       assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
@@ -3117,7 +3225,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module5)
 
-      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+      expected_tag = identity_tag_left_by(conn)
 
       assert boot_data(conn.resp_body)["identityTag"] == expected_tag
     end
@@ -3156,6 +3264,33 @@ defmodule Hologram.ControllerTest do
 
       assert ReplicaIdentity.verify(replica_token, replica_id, "another-session", "test-user-id") ==
                :ok
+    end
+
+    # A token for the identity before the init would be refused for good once it changed.
+    test "mints a replica identity bound to the user an init/3 signed in" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module58, :dummy_module_58_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module58")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module58)
+
+      {replica_id, replica_token} = extract_replica_identity(conn.resp_body)
+
+      assert ReplicaIdentity.verify(replica_token, replica_id, "another-session", 7) == :ok
+    end
+
+    test "names the user an init/3 signed in as the page's owner" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module58, :dummy_module_58_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module58")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module58)
+
+      assert boot_data(conn.resp_body)["actorUserId"] == "i7"
     end
 
     test "mints a fresh replica id on each initial page request" do
@@ -3521,8 +3656,7 @@ defmodule Hologram.ControllerTest do
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token,
-          replica_id: @replica_id,
-          replica_token: @replica_token
+          replica_id: @replica_id
         )
 
       assert String.contains?(conn.resp_body, "actor=019ff5c2-0000-7000-8000-000000000002")
@@ -3667,11 +3801,35 @@ defmodule Hologram.ControllerTest do
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token,
-        replica_id: @replica_id,
-        replica_token: @replica_token
+        replica_id: @replica_id
       )
 
-      assert_receive {:identity_changed, ^session_id, 7}
+      assert_receive {:identity_changed, ^session_id, 7, _identity_tag}
+    end
+
+    test "announces the tag the page's response names" do
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+        |> Plug.Conn.fetch_cookies()
+        |> handle_page_request(Module21, %{}, [],
+          csp_nonce: @csp_nonce,
+          csp_nonced_elements: @csp_nonced_elements,
+          initial_page?: true,
+          instance_id: "test-instance-id",
+          csrf_token: @masked_csrf_token,
+          replica_id: @replica_id
+        )
+
+      assert_receive {:identity_changed, ^session_id, 7, identity_tag}
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [identity_tag]
     end
 
     test "does not broadcast {:identity_changed, ...} when init/3 leaves identity unchanged" do
@@ -3691,11 +3849,10 @@ defmodule Hologram.ControllerTest do
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token,
-        replica_id: @replica_id,
-        replica_token: @replica_token
+        replica_id: @replica_id
       )
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "does not broadcast {:identity_changed, ...} when init/3 changes identity but raises" do
@@ -3716,12 +3873,11 @@ defmodule Hologram.ControllerTest do
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token,
-          replica_id: @replica_id,
-          replica_token: @replica_token
+          replica_id: @replica_id
         )
       end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when init/3 sets the user id to false directly" do
@@ -3732,7 +3888,7 @@ defmodule Hologram.ControllerTest do
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      :get
                      |> Plug.Test.conn("/")
@@ -3744,12 +3900,11 @@ defmodule Hologram.ControllerTest do
                        initial_page?: true,
                        instance_id: "test-instance-id",
                        csrf_token: @masked_csrf_token,
-                       replica_id: @replica_id,
-                       replica_token: @replica_token
+                       replica_id: @replica_id
                      )
                    end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when page middleware sets the user id to false directly and terminates" do
@@ -3758,7 +3913,7 @@ defmodule Hologram.ControllerTest do
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      :get
                      |> Plug.Test.conn("/")
@@ -3770,12 +3925,11 @@ defmodule Hologram.ControllerTest do
                        initial_page?: true,
                        instance_id: "test-instance-id",
                        csrf_token: @masked_csrf_token,
-                       replica_id: @replica_id,
-                       replica_token: @replica_token
+                       replica_id: @replica_id
                      )
                    end
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "broadcasts {:identity_changed, ...} on the pre session's announce topic when page middleware changes identity and terminates" do
@@ -3793,11 +3947,10 @@ defmodule Hologram.ControllerTest do
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token,
-        replica_id: @replica_id,
-        replica_token: @replica_token
+        replica_id: @replica_id
       )
 
-      assert_receive {:identity_changed, ^session_id, 7}
+      assert_receive {:identity_changed, ^session_id, 7, _identity_tag}
     end
 
     test "does not broadcast {:identity_changed, ...} when page middleware terminates without changing identity" do
@@ -3815,11 +3968,10 @@ defmodule Hologram.ControllerTest do
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token,
-        replica_id: @replica_id,
-        replica_token: @replica_token
+        replica_id: @replica_id
       )
 
-      refute_receive {:identity_changed, _session_id, _user_id}
+      refute_receive {:identity_changed, _session_id, _user_id, _identity_tag}
     end
 
     test "persists the changed user_id into the session when init/3 changes identity" do
@@ -3836,8 +3988,7 @@ defmodule Hologram.ControllerTest do
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token,
-          replica_id: @replica_id,
-          replica_token: @replica_token
+          replica_id: @replica_id
         )
 
       assert Plug.Conn.get_session(conn, :hologram_user_id) == 7
@@ -3860,8 +4011,7 @@ defmodule Hologram.ControllerTest do
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token,
-          replica_id: @replica_id,
-          replica_token: @replica_token
+          replica_id: @replica_id
         )
 
       assert Plug.Conn.get_session(conn, :hologram_user_id) == 7
@@ -4013,6 +4163,93 @@ defmodule Hologram.ControllerTest do
       conn = post_handshake("test-instance-id", session_data, [], cookies)
 
       assert {:ok, %{"heartbeatIntervalMs" => 1000}} = Jason.decode(conn.resp_body)
+    end
+
+    test "names the identity tag and the user the cookie signs in" do
+      session_data = %{
+        hologram_identity_stamp: 5,
+        hologram_session_id: "test-session-id",
+        hologram_user_id: 7
+      }
+
+      conn = post_handshake("test-instance-id", session_data)
+
+      expected_tag =
+        :post
+        |> Plug.Test.conn("/", "")
+        |> Plug.Test.init_test_session(session_data)
+        |> Session.identity_tag()
+
+      assert {:ok,
+              %{
+                "actorEntityId" => nil,
+                "actorUserId" => "i7",
+                "identityTag" => ^expected_tag
+              }} = Jason.decode(conn.resp_body)
+
+      assert String.starts_with?(expected_tag, "5.")
+    end
+
+    test "names a user entity's id as the actor's entity id" do
+      user_id = UUID.uuid4()
+
+      conn =
+        post_handshake("test-instance-id", %{
+          hologram_session_id: "test-session-id",
+          hologram_user_id: user_id
+        })
+
+      assert {:ok, %{"actorEntityId" => ^user_id, "actorUserId" => "u" <> _base62}} =
+               Jason.decode(conn.resp_body)
+    end
+
+    test "names no actor for a visitor" do
+      conn = post_handshake("test-instance-id", %{hologram_session_id: "test-session-id"})
+
+      assert {:ok, %{"actorEntityId" => nil, "actorUserId" => nil}} =
+               Jason.decode(conn.resp_body)
+    end
+
+    test "mints a replica pair for the signed-in user" do
+      conn =
+        post_handshake("test-instance-id", %{
+          hologram_session_id: "test-session-id",
+          hologram_user_id: 7
+        })
+
+      assert {:ok, %{"sessionReplica" => %{"id" => replica_id, "token" => token}}} =
+               Jason.decode(conn.resp_body)
+
+      assert {:ok, _info} = UUID.info(replica_id)
+      assert ReplicaIdentity.verify(token, replica_id, "other-session-id", 7) == :ok
+    end
+
+    test "mints a replica pair for a visitor's session" do
+      conn = post_handshake("test-instance-id", %{hologram_session_id: "test-session-id"})
+
+      assert {:ok, %{"sessionReplica" => %{"id" => replica_id, "token" => token}}} =
+               Jason.decode(conn.resp_body)
+
+      assert ReplicaIdentity.verify(token, replica_id, "test-session-id", nil) == :ok
+      assert ReplicaIdentity.verify(token, replica_id, "other-session-id", nil) != :ok
+    end
+
+    test "mints a new replica pair on every handshake" do
+      session_data = %{hologram_session_id: "test-session-id"}
+
+      {:ok, %{"sessionReplica" => %{"id" => first_id}}} =
+        "test-instance-id"
+        |> post_handshake(session_data)
+        |> Map.fetch!(:resp_body)
+        |> Jason.decode()
+
+      {:ok, %{"sessionReplica" => %{"id" => second_id}}} =
+        "test-instance-id"
+        |> post_handshake(session_data)
+        |> Map.fetch!(:resp_body)
+        |> Jason.decode()
+
+      assert first_id != second_id
     end
 
     test "returns 401 when the session has no Hologram session_id" do
@@ -4338,7 +4575,7 @@ defmodule Hologram.ControllerTest do
         |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module4)
 
-      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+      expected_tag = identity_tag_left_by(conn)
 
       assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
     end
@@ -4351,7 +4588,7 @@ defmodule Hologram.ControllerTest do
         |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module29)
 
-      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+      expected_tag = identity_tag_left_by(conn)
 
       assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
     end

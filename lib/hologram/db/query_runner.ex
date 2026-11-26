@@ -11,6 +11,7 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Stage
+  alias Hologram.Sync.FinalSeq
 
   @doc """
   Runs the given normalized query term against the database and returns its decoded
@@ -26,33 +27,40 @@ defmodule Hologram.DB.QueryRunner do
   embedding what the definition and the include ask for. One not included keeps its
   NotIncluded default.
 
+  `server_created_seq` and `server_updated_seq` read nil where they are above the limit (see
+  `Hologram.Sync.FinalSeq.current/0`), in what the query returns and in what it filters, orders and
+  computes by. `raw: true` reads them as stored, as sync does.
+
   Raises Hologram.MisuseError when the term holds a placeholder (see
   `Hologram.Query.Stage.assert_no_placeholders!/1`).
   """
-  @spec run(Query.t(), %{module => %{atom => any}}) :: list(struct) | struct | integer | nil
-  def run(term, mapping) do
+  @spec run(Query.t(), %{module => %{atom => any}}, keyword) ::
+          list(struct) | struct | integer | nil
+  def run(term, mapping, opts \\ []) do
     Stage.assert_no_placeholders!(term)
 
     compiled = QueryCompiler.compile(term, mapping)
-    values = Enum.map(compiled.params, fn {:value, encoded_value} -> encoded_value end)
+    limit = limit(opts)
+    values = Enum.map(compiled.params, &resolve_param(&1, nil, limit))
 
     case Connection.query(compiled.sql, values) do
-      {:ok, result} -> decode_result(result, term, mapping)
+      {:ok, result} -> decode_result(result, term, mapping, limit)
       {:error, error} -> raise error
     end
   end
 
-  # A session's user id may be any string, integer or atom, and one that isn't an id Hologram
+  # A session's user id may be any UTF-8 string or integer, and one that isn't an id Hologram
   # generates names no user entity, so the rules read it as an anonymous session - the way
   # Hologram.Auth.can?/3 and the recheck do.
   @doc false
-  @spec run_policied(Query.t(), %{module => %{atom => any}}, any) ::
+  @spec run_policied(Query.t(), %{module => %{atom => any}}, any, keyword) ::
           list(struct) | struct | integer | nil
-  def run_policied(term, mapping, session_user_id) do
-    {compiled, values} = compile_policied(term, mapping, session_user_id)
+  def run_policied(term, mapping, session_user_id, opts \\ []) do
+    limit = limit(opts)
+    {compiled, values} = compile_policied(term, mapping, session_user_id, limit)
 
     case Connection.query(compiled.sql, values) do
-      {:ok, result} -> decode_result(result, term, mapping)
+      {:ok, result} -> decode_result(result, term, mapping, limit)
       {:error, error} -> raise error
     end
   end
@@ -60,10 +68,13 @@ defmodule Hologram.DB.QueryRunner do
   # One value worked out by Postgres over the rows a query takes and the given session's user may
   # read: the given aggregate expression, over the query's rows as `"$rows"` - for whoever needs
   # less than the rows, where decoding every column of every row costs several times as much.
+  # `"$rows"` holds the sequence numbers as stored, since only the query's conditions and order
+  # mask them.
   @doc false
-  @spec run_policied_aggregate(Query.t(), %{module => %{atom => any}}, any, String.t()) :: any
-  def run_policied_aggregate(term, mapping, session_user_id, aggregate_sql) do
-    {compiled, values} = compile_policied(term, mapping, session_user_id)
+  @spec run_policied_aggregate(Query.t(), %{module => %{atom => any}}, any, String.t(), keyword) ::
+          any
+  def run_policied_aggregate(term, mapping, session_user_id, aggregate_sql, opts \\ []) do
+    {compiled, values} = compile_policied(term, mapping, session_user_id, limit(opts))
     sql = ~s|SELECT #{aggregate_sql} FROM (#{compiled.sql}) AS "$rows"|
 
     case Connection.query(sql, values) do
@@ -126,6 +137,10 @@ defmodule Hologram.DB.QueryRunner do
         {:value, encoded_value} ->
           encoded_value
 
+        # A recheck reads for sync, which takes the numbers as stored.
+        :final_seq ->
+          FinalSeq.all_final()
+
         # Every user is read off a row of its own, so a slot for the acting user means a path
         # the expression did not reach - answering it with anybody would be wrong for everybody else.
         :actor ->
@@ -140,7 +155,7 @@ defmodule Hologram.DB.QueryRunner do
           {column_values, [everyone, anonymous, reader_ids | verdict_columns]} =
             Enum.split(row, -flag_count)
 
-          entity = decode_row(column_values, term, mapping)
+          entity = decode_row(column_values, term, mapping, FinalSeq.all_final())
           readers = readers(everyone, anonymous, reader_ids)
 
           {entity.id, {entity, readers, verdicts(verdict_keys, verdict_columns, anonymous?)}}
@@ -151,24 +166,28 @@ defmodule Hologram.DB.QueryRunner do
     end
   end
 
-  defp decode_embed(nil, _sub_term, _mapping), do: nil
+  defp decode_embed(nil, _sub_term, _mapping, _limit), do: nil
 
-  defp decode_embed(values, sub_term, mapping) when is_list(values) do
-    Enum.map(values, &decode_embedded_map(&1, sub_term, mapping))
+  defp decode_embed(values, sub_term, mapping, limit) when is_list(values) do
+    Enum.map(values, &decode_embedded_map(&1, sub_term, mapping, limit))
   end
 
-  defp decode_embed(object, sub_term, mapping) do
-    decode_embedded_map(object, sub_term, mapping)
+  defp decode_embed(object, sub_term, mapping, limit) do
+    decode_embedded_map(object, sub_term, mapping, limit)
   end
 
-  defp decode_embedded_map(object, sub_term, mapping) do
+  defp decode_embedded_map(object, sub_term, mapping, limit) do
     target_mapping = Map.fetch!(mapping, sub_term.entity)
 
     base_fields =
       target_mapping.columns
       |> Enum.reject(&(&1.source == :revisions or Mapper.derived?(&1)))
       |> Map.new(fn column ->
-        value = decode_embedded_value(Map.fetch!(object, column.name), column.type)
+        value =
+          object
+          |> Map.fetch!(column.name)
+          |> decode_embedded_value(column.type)
+          |> masked(column, limit)
 
         {field_name(column), value}
       end)
@@ -179,10 +198,9 @@ defmodule Hologram.DB.QueryRunner do
           object
           |> Map.fetch!(Atom.to_string(name))
           |> decode_included(
-            sub_term.entity,
-            name,
-            nested_sub_term,
+            {sub_term.entity, name, nested_sub_term},
             mapping,
+            limit,
             &decode_embedded_value/2
           )
 
@@ -245,32 +263,32 @@ defmodule Hologram.DB.QueryRunner do
   # What an include holds: the related rows it embeds, a derived field's value read by its declared
   # type with the given decoder, or the rows a derived field holding rows embeds, each read with
   # what its definition and the include embed.
-  defp decode_included(value, entity_type, name, nil, _mapping, decode_value) do
+  defp decode_included(value, {entity_type, name, nil}, _mapping, _limit, decode_value) do
     {^name, type, _opts} = List.keyfind(entity_type.__derived__(), name, 0)
 
     decode_value.(value, type)
   end
 
-  defp decode_included(value, entity_type, name, sub_term, mapping, _decode_value) do
+  defp decode_included(value, {entity_type, name, sub_term}, mapping, limit, _decode_value) do
     rows_term = Derived.rows_term(entity_type, name, sub_term)
 
-    decode_embed(value, rows_term, mapping)
+    decode_embed(value, rows_term, mapping, limit)
   end
 
-  defp decode_result(%{rows: [[count]]}, %{cardinality: :count}, _mapping), do: count
+  defp decode_result(%{rows: [[count]]}, %{cardinality: :count}, _mapping, _limit), do: count
 
-  defp decode_result(%{rows: rows}, %{cardinality: :one} = term, mapping) do
+  defp decode_result(%{rows: rows}, %{cardinality: :one} = term, mapping, limit) do
     case rows do
       [] -> nil
-      [row] -> decode_row(row, term, mapping)
+      [row] -> decode_row(row, term, mapping, limit)
     end
   end
 
-  defp decode_result(%{rows: rows}, term, mapping) do
-    Enum.map(rows, &decode_row(&1, term, mapping))
+  defp decode_result(%{rows: rows}, term, mapping, limit) do
+    Enum.map(rows, &decode_row(&1, term, mapping, limit))
   end
 
-  defp decode_row(row, term, mapping) do
+  defp decode_row(row, term, mapping, limit) do
     entity_mapping = Map.fetch!(mapping, term.entity)
     selected_columns = Enum.reject(entity_mapping.columns, &Mapper.derived?/1)
     {column_values, include_values} = Enum.split(row, length(selected_columns))
@@ -284,7 +302,8 @@ defmodule Hologram.DB.QueryRunner do
 
     base_fields =
       Map.new(value_pairs, fn {column, value} ->
-        {field_name(column), Codec.decode(value, column.type)}
+        decoded = Codec.decode(value, column.type)
+        {field_name(column), masked(decoded, column, limit)}
       end)
 
     include_fields =
@@ -292,7 +311,8 @@ defmodule Hologram.DB.QueryRunner do
       |> Enum.sort_by(fn {name, _sub_term} -> name end)
       |> Enum.zip(include_values)
       |> Map.new(fn {{name, sub_term}, value} ->
-        {name, decode_included(value, term.entity, name, sub_term, mapping, &Codec.decode/2)}
+        {name,
+         decode_included(value, {term.entity, name, sub_term}, mapping, limit, &Codec.decode/2)}
       end)
 
     revisions =
@@ -314,6 +334,20 @@ defmodule Hologram.DB.QueryRunner do
 
   defp field_name(%{source: {:relationship, name}}), do: String.to_existing_atom("#{name}_id")
 
+  # The limit is read once per statement, before it is sent: in read committed every save at or
+  # below it has ended by then, so the statement's snapshot holds every row it makes final. Inside
+  # `Hologram.DB.Connection.snapshot/1` the snapshot can be older than the limit - only sync reads
+  # there, and sync reads raw.
+  defp limit(opts) do
+    if Keyword.get(opts, :raw, false), do: FinalSeq.all_final(), else: FinalSeq.current()
+  end
+
+  # A number above the limit is not final yet, so the row holds it as nil, the way the browser holds
+  # it until it is.
+  defp masked(value, column, limit) do
+    if is_integer(value) and value > limit and Mapper.sequence?(column), do: nil, else: value
+  end
+
   defp readers(true, _anonymous, _reader_ids), do: :all
 
   defp readers(false, anonymous, reader_ids) do
@@ -322,7 +356,7 @@ defmodule Hologram.DB.QueryRunner do
     if anonymous, do: MapSet.put(readers, nil), else: readers
   end
 
-  defp compile_policied(term, mapping, session_user_id) do
+  defp compile_policied(term, mapping, session_user_id, limit) do
     Stage.assert_no_placeholders!(term)
 
     actor_user_id = Auth.canonical_id(session_user_id)
@@ -333,7 +367,7 @@ defmodule Hologram.DB.QueryRunner do
     }
 
     compiled = QueryCompiler.compile(term, mapping, policy)
-    values = Enum.map(compiled.params, &resolve_param(&1, actor_user_id))
+    values = Enum.map(compiled.params, &resolve_param(&1, actor_user_id, limit))
 
     {compiled, values}
   end
@@ -346,9 +380,11 @@ defmodule Hologram.DB.QueryRunner do
 
   # The actor slot never appears in an anonymous statement - actor-referencing rules are
   # elided at composition, so there is no nil to bind.
-  defp resolve_param(:actor, actor_user_id), do: Codec.encode(actor_user_id, :uuid)
+  defp resolve_param(:actor, actor_user_id, _limit), do: Codec.encode(actor_user_id, :uuid)
 
-  defp resolve_param({:value, encoded_value}, _actor_user_id), do: encoded_value
+  defp resolve_param(:final_seq, _actor_user_id, limit), do: limit
+
+  defp resolve_param({:value, encoded_value}, _actor_user_id, _limit), do: encoded_value
 
   # The same reading EntityOperations.revisions_from_row/2 does for a by-id read, beside the
   # field_name/1 clauses this module already keeps its own copy of.

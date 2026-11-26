@@ -3,7 +3,7 @@ defmodule Hologram.Template.RendererDerivedTest do
   # restart the asset path registry under its registered name, both shared by the whole node.
   use Hologram.Test.DatabaseCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
+  import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1, update: 3]
   import Hologram.Query, only: [filter: 2, sort: 2]
   import Hologram.Template.Renderer
   import Hologram.Test.Stubs
@@ -23,6 +23,7 @@ defmodule Hologram.Template.RendererDerivedTest do
   alias Hologram.Policy
   alias Hologram.Server
   alias Hologram.Sync.Carry
+  alias Hologram.Sync.FinalSeq
   alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module13
@@ -75,6 +76,11 @@ defmodule Hologram.Template.RendererDerivedTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module174
   alias Hologram.Test.Fixtures.Template.Renderer.Module175
   alias Hologram.Test.Fixtures.Template.Renderer.Module177
+  alias Hologram.Test.Fixtures.Template.Renderer.Module178
+  alias Hologram.Test.Fixtures.Template.Renderer.Module179
+  alias Hologram.Test.Fixtures.Template.Renderer.Module180
+  alias Hologram.Test.Fixtures.Template.Renderer.Module182
+  alias Hologram.Test.Fixtures.Template.Renderer.Module183
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -631,6 +637,38 @@ defmodule Hologram.Template.RendererDerivedTest do
       assert String.contains?(html, ~S|"c":"\u003C/script>\u003Cscript>alert(1)\u003C/script>"|)
     end
 
+    # The carry spells the numbers as the render read them, so a number above the limit the
+    # render pinned travels nil, as the page showed it.
+    test "carries a number above the render's limit as nil" do
+      {:ok, required} = create(Module1.new())
+
+      {:ok, target} =
+        %{a: true, c: "the embedded row"}
+        |> Entity2.new()
+        |> create()
+
+      {:ok, source} =
+        %{c_id: required.id}
+        |> Module3.new()
+        |> create()
+
+      :ok = add_relationship(Module3, source.id, :a, target.id)
+      :ok = update(Entity2, target.id, %{c: "the updated row"})
+
+      stored = DB.read(Entity2, target.id)
+
+      html =
+        FinalSeq.with_pinned(stored.server_updated_seq - 1, fn ->
+          render_page_html(Module167)
+        end)
+
+      rows = boot_data(html)["syncRows"]["put_entity"][@entity_2_type]
+      row = Enum.find(rows, &(&1["id"] == target.id))
+
+      assert row["server_created_seq"] == stored.server_created_seq
+      assert Map.fetch(row, "server_updated_seq") == {:ok, nil}
+    end
+
     test "carries nothing for a page whose fields read no rows" do
       html = render_page_html(Module167)
 
@@ -691,7 +729,7 @@ defmodule Hologram.Template.RendererDerivedTest do
 
       html = render_page_html(Module167, %Server{user_id: user.id})
 
-      assert String.contains?(html, ~s|"actorUserId":"#{user.id}"|)
+      assert String.contains?(html, ~s|"actorUserId":"#{Auth.owner_key(user.id)}"|)
     end
 
     test "names nobody for a visitor" do
@@ -1020,6 +1058,262 @@ defmodule Hologram.Template.RendererDerivedTest do
     end
   end
 
+  # The page's writes go out under the session the init left behind, so that's who it renders for.
+  describe "a page whose init/3 changes who is signed in" do
+    setup do
+      setup_page_rendering([
+        {Module178, :dummy_module_178_digest},
+        {Module179, :dummy_module_179_digest},
+        {Module182, :dummy_module_182_digest},
+        {Module183, :dummy_module_183_digest}
+      ])
+
+      dump_query_cache(QueryCacheStub)
+      QueryCache.init(nil)
+
+      Process.delete(:module_180_inits)
+
+      public_entity =
+        %{priority: 1, public: true}
+        |> PolicyEntity.new()
+        |> DB.create!()
+
+      private_entity =
+        %{priority: 2, public: false}
+        |> PolicyEntity.new()
+        |> DB.create!()
+
+      user =
+        %{email: "renderer_signed_in@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      Auth.grant_role(user, :viewer, private_entity)
+
+      {:ok, private_entity: private_entity, public_entity: public_entity, user: user}
+    end
+
+    defp boot_row_ids(boot, type) do
+      boot["syncRows"]["put_entity"]
+      |> Map.get(inspect(type), [])
+      |> Enum.map(& &1["id"])
+      |> Enum.sort()
+    end
+
+    test "renders for the user the init signed in", %{user: user} do
+      html = render_page_html(Module178, %Server{}, %{user_id: user.id})
+
+      assert String.contains?(html, "page = 1,2;")
+      assert String.contains?(html, "entities = 1,2")
+    end
+
+    test "names that user as the page's owner", %{user: user} do
+      boot =
+        Module178
+        |> render_page_html(%Server{}, %{user_id: user.id})
+        |> boot_data()
+
+      assert boot["actorUserId"] == Auth.owner_key(user.id)
+      assert boot["actorEntityId"] == user.id
+    end
+
+    test "carries the rows that user reads", %{
+      private_entity: private_entity,
+      public_entity: public_entity,
+      user: user
+    } do
+      boot =
+        Module178
+        |> render_page_html(%Server{}, %{user_id: user.id})
+        |> boot_data()
+
+      assert boot_row_ids(boot, PolicyEntity) == Enum.sort([public_entity.id, private_entity.id])
+      assert boot_row_ids(boot, Module14) == [user.id]
+    end
+
+    test "carries the counts that user gets", %{user: user} do
+      boot =
+        Module178
+        |> render_page_html(%Server{}, %{user_id: user.id})
+        |> boot_data()
+
+      assert Map.values(boot["syncCounts"]) == [2]
+      assert Map.keys(boot["syncCountTypes"]) == Map.keys(boot["syncCounts"])
+    end
+
+    test "carries the counts nobody gets after the init signed out", %{user: user} do
+      boot =
+        Module178
+        |> render_page_html(%Server{user_id: user.id}, %{user_id: nil})
+        |> boot_data()
+
+      assert Map.values(boot["syncCounts"]) == [1]
+    end
+
+    test "renders for nobody after the init signed out", %{user: user} do
+      html = render_page_html(Module178, %Server{user_id: user.id}, %{user_id: nil})
+
+      assert String.contains?(html, "page = 1;")
+      assert String.contains?(html, "entities = 1")
+      refute String.contains?(html, "entities = 1,2")
+    end
+
+    # Read before the init signed out, and that user's alone.
+    test "leaves behind the rows only the previous user could read", %{
+      public_entity: public_entity,
+      user: user
+    } do
+      boot =
+        Module178
+        |> render_page_html(%Server{user_id: user.id}, %{user_id: nil})
+        |> boot_data()
+
+      assert boot["actorUserId"] == nil
+      assert boot_row_ids(boot, PolicyEntity) == [public_entity.id]
+      assert boot_row_ids(boot, Module14) == []
+    end
+
+    test "gives the actor back once the render is done", %{user: user} do
+      render_page(Module178, %{user_id: user.id}, %Server{}, @page_opts)
+
+      assert Context.actor_user_id() == nil
+    end
+
+    # By then part of the page was rendered as the previous user.
+    test "renders the whole page again for the user a child's init/3 signed in", %{user: user} do
+      html = render_page_html(Module179, %Server{}, %{user_id: user.id})
+
+      assert String.contains?(html, "page = 1,2;")
+      assert String.contains?(html, "entities = 1,2")
+      assert Process.get(:module_180_inits) == 2
+    end
+
+    test "carries that user's rows and names them after a child's init/3", %{
+      private_entity: private_entity,
+      public_entity: public_entity,
+      user: user
+    } do
+      boot =
+        Module179
+        |> render_page_html(%Server{}, %{user_id: user.id})
+        |> boot_data()
+
+      assert boot["actorUserId"] == Auth.owner_key(user.id)
+      assert boot_row_ids(boot, PolicyEntity) == Enum.sort([public_entity.id, private_entity.id])
+      assert boot_row_ids(boot, Module14) == [user.id]
+    end
+
+    test "renders the whole page again for the user a layout's init/3 signed in", %{user: user} do
+      html = render_page_html(Module182, %Server{}, %{user_id: user.id})
+
+      assert String.contains?(html, "page = 1,2;")
+      assert String.contains?(html, "entities = 1,2")
+      assert boot_data(html)["actorUserId"] == Auth.owner_key(user.id)
+    end
+
+    test "leaves the server struct with the new user after rendering again", %{user: user} do
+      %{server_struct: server_struct} =
+        render_page(Module179, %{user_id: user.id}, %Server{}, @page_opts)
+
+      assert server_struct.user_id == user.id
+    end
+
+    # The render for the new user starts from the struct the first one began with, and the child
+    # signs nobody in then.
+    test "keeps the session, cookies, headers and status the init/3 that signed in set", %{
+      user: user
+    } do
+      %{server_struct: server_struct} =
+        render_page(Module179, %{user_id: user.id}, %Server{}, @page_opts)
+
+      assert server_struct.session["signed_in_by"] == "module_180"
+      assert server_struct.cookies["welcome"] == "module_180"
+      assert server_struct.response_headers["x-signed-in-by"] == "module_180"
+      assert server_struct.status == 302
+      assert server_struct.__meta__.session_ops["signed_in_by"] == {:put, "module_180"}
+      assert %{value: "module_180"} = server_struct.__meta__.cookie_ops["welcome"]
+    end
+
+    test "keeps what the init/3 that signed in set when its component doesn't render again", %{
+      user: user
+    } do
+      %{server_struct: server_struct} =
+        render_page(Module179, %{renames_child: true, user_id: user.id}, %Server{}, @page_opts)
+
+      assert server_struct.session["signed_in_by"] == "module_180"
+    end
+
+    # As on the first run, where the child's init/3 came after the page's.
+    test "keeps what the init/3 that signed in set over what an earlier init/3 sets", %{
+      user: user
+    } do
+      %{server_struct: server_struct} =
+        render_page(Module179, %{signs_in_over: true, user_id: user.id}, %Server{}, @page_opts)
+
+      assert server_struct.session["signed_in_by"] == "module_180"
+    end
+
+    # The child's write left the value as it was, and the page's init/3 sets another one when it
+    # runs again for the new user.
+    test "keeps the value the init/3 that signed in wrote over the one already there", %{
+      user: user
+    } do
+      %{server_struct: server_struct} =
+        render_page(
+          Module179,
+          %{signs_in_over_user: true, user_id: user.id},
+          %Server{session: %{"signed_in_by" => "module_180"}},
+          @page_opts
+        )
+
+      assert server_struct.session["signed_in_by"] == "module_180"
+      assert server_struct.__meta__.session_ops["signed_in_by"] == {:put, "module_180"}
+    end
+
+    test "gives the actor back after rendering again", %{user: user} do
+      render_page(Module179, %{user_id: user.id}, %Server{}, @page_opts)
+
+      assert Context.actor_user_id() == nil
+    end
+
+    # An init/3 that picks another user every time would otherwise never settle.
+    test "raises when the render for the new user changes the user again", %{user: user} do
+      assert_raise Hologram.MisuseError, ~r/init\/3 again when it was rendered/, fn ->
+        render_page(
+          Module179,
+          %{change_each_time: true, user_id: user.id},
+          %Server{},
+          @page_opts
+        )
+      end
+
+      assert Process.get(:module_180_inits) == 2
+      assert Context.actor_user_id() == nil
+    end
+
+    # Its context user was read for the visitor before the child's init/3 ran.
+    test "renders a page that read no rows again for the user a child's init/3 signed in", %{
+      user: user
+    } do
+      html = render_page_html(Module183, %Server{}, %{user_id: user.id})
+      boot = boot_data(html)
+
+      assert String.contains?(html, "current user = renderer_signed_in@example.com")
+      assert boot["actorUserId"] == Auth.owner_key(user.id)
+      assert boot_row_ids(boot, Module14) == [user.id]
+    end
+
+    test "leaves the actor alone outside a page render" do
+      Carry.take_grant_scopes()
+
+      node = {:component, Module180, [{"cid", [text: "c"]}, {"user_id", [text: "abc"]}], []}
+
+      render_dom(node, @env, @server)
+
+      assert Context.actor_user_id() == nil
+    end
+  end
+
   describe "current-user context" do
     setup do
       setup_page_rendering([{Module131, :dummy_module_131_digest}])
@@ -1112,6 +1406,85 @@ defmodule Hologram.Template.RendererDerivedTest do
       html = render_page_html(Module131, %Server{user_id: user.id <> "\n"})
 
       assert String.contains?(html, "current user = none")
+    end
+  end
+
+  # What a stream tells a tab whose session changed user.
+  describe "session_user_rows/1" do
+    setup do
+      setup_page_rendering([{Module131, :dummy_module_131_digest}])
+
+      :ok
+    end
+
+    test "spells the session user's row the way a page carries it" do
+      user =
+        %{email: "renderer_7@example.com", password_hash: "hash_2mPx"}
+        |> Module14.new()
+        |> DB.create!()
+
+      assert %{put_entity: %{"Hologram.Test.Fixtures.Entity.Module14" => [row]}} =
+               session_user_rows(user.id)
+
+      assert row.id == user.id
+      assert row.email == "renderer_7@example.com"
+      refute Map.has_key?(row, :password_hash)
+    end
+
+    test "carries the row the page would" do
+      user =
+        %{email: "renderer_8@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      %{mount_data: mount_data} =
+        render_page(Module131, %{}, %Server{user_id: user.id}, @page_opts)
+
+      assert session_user_rows(user.id) == mount_data.sync_rows
+    end
+
+    test "leaves nothing gathered behind" do
+      user =
+        %{email: "renderer_9@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      session_user_rows(user.id)
+
+      assert Carry.take(user.id) == %{}
+    end
+
+    # A stream's process never renders, so nothing else clears what an earlier read that raised
+    # gathered, and those rows were read for another user.
+    test "carries none of the rows gathered before it" do
+      user =
+        %{email: "renderer_10@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      other_user =
+        %{email: "renderer_11@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      Carry.collect(other_user)
+
+      assert %{put_entity: %{"Hologram.Test.Fixtures.Entity.Module14" => [row]}} =
+               session_user_rows(user.id)
+
+      assert row.id == user.id
+    end
+
+    test "answers nil for an anonymous session" do
+      assert session_user_rows(nil) == nil
+    end
+
+    test "answers nil when no row carries the session user id" do
+      assert session_user_rows(Entity.generate_id()) == nil
+    end
+
+    test "answers nil for a session user id that is not a canonical entity id" do
+      assert session_user_rows(7) == nil
     end
   end
 end

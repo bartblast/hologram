@@ -39,8 +39,10 @@ defmodule Hologram.Sync.Outbox do
         }
 
   @type message ::
-          {:sync_deltas, String.t() | nil, list(map), non_neg_integer | nil}
-          | {:sync_synced, :all | {:types, list(module), non_neg_integer | nil}, String.t() | nil}
+          {:sync_deltas, String.t() | nil, list(map), non_neg_integer | nil,
+           non_neg_integer | nil}
+          | {:sync_synced, :all | {:types, list(module), non_neg_integer | nil}, String.t() | nil,
+             non_neg_integer | nil}
 
   @doc """
   Returns an outbox sending to the given client, which it monitors from the calling process - the
@@ -122,12 +124,12 @@ defmodule Hologram.Sync.Outbox do
   # The id is stamped here, when the frame is encoded, while the stream stamps its own events when
   # it writes them, so the ids on a stream do not rise in the order they are written. Nothing reads
   # them: no client asks for an event's id or hands one back.
-  defp encode({:sync_deltas, cursor, deltas, applied_seq}) do
-    Frame.encode_deltas_envelope(event_id(), cursor, deltas, applied_seq)
+  defp encode({:sync_deltas, cursor, deltas, applied_seq, final_seq}) do
+    Frame.encode_deltas_envelope(event_id(), cursor, deltas, applied_seq, final_seq)
   end
 
-  defp encode({:sync_synced, scope, cursor}) do
-    Frame.encode_synced_envelope(event_id(), scope, cursor)
+  defp encode({:sync_synced, scope, cursor, final_seq}) do
+    Frame.encode_synced_envelope(event_id(), scope, cursor, final_seq)
   end
 
   defp event_id, do: System.unique_integer([:positive, :monotonic])

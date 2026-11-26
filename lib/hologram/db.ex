@@ -393,8 +393,8 @@ defmodule Hologram.DB do
   come from this module at run time, quoted in the SQL - a join table's name carries `$`, and an
   attribute may be named by a reserved word (`"user"` unquoted is the database role). An
   attribute's column has the attribute's name, a to-one relationship's column is `<name>_id`,
-  every table has `id`, `created_at`, `updated_at`, `server_created_at` and `server_updated_at`,
-  and a join table has `source_id` and `target_id`. Columns whose names contain `$` are the
+  every table has `id`, `created_at`, `updated_at`, `server_created_at`, `server_updated_at`,
+  `server_created_seq` and `server_updated_seq`, and a join table has `source_id` and `target_id`. Columns whose names contain `$` are the
   framework's own, and what they hold can change between versions. Select attributes by name.
 
   Policies do not apply: the read sees every row. A read on behalf of a user keeps to what that
@@ -416,6 +416,9 @@ defmodule Hologram.DB do
   types arrive as the driver decodes them: `int8` as an integer, `float8` as a float, `text` as a
   string, `boolean`, `date` as a Date, `time` as a Time, `timestamptz` as a DateTime, an enum as
   its label string and `jsonb` as a map.
+
+  `server_created_seq` and `server_updated_seq` come back as stored, and a stored number may not be
+  final yet, so take a cursor or a read marker from a query, which hides a number until it is.
 
   Inside an enclosing transaction the statement runs on the transaction's connection and sees its
   uncommitted rows, and the transaction stays writable afterwards.
@@ -534,8 +537,9 @@ defmodule Hologram.DB do
 
   @doc """
   Updates the entity of the given type with the given id, setting exactly the changed
-  columns plus updated_at and server_updated_at - there is no full-row variant. Changes (a map
-  or keyword list) are keyed by declared attribute names and to-one reference fields
+  columns plus updated_at, server_updated_at and server_updated_seq - there is no full-row
+  variant. Changes (a map or keyword list) are keyed by declared attribute names and to-one
+  reference fields
   (`<relationship name>_id`) - a to-one reference is set, reassigned, or cleared (nil) through
   its reference field. Changing any other name, system attributes and the attributes the framework
   sets on a job included, raises Hologram.MisuseError - as do empty changes and an id that names no

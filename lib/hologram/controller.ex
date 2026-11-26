@@ -340,12 +340,41 @@ defmodule Hologram.Controller do
   # doesn't match - the caller is using an `instance_id` they didn't
   # establish (forgery, or post-logout stale state).
   defp caller_owns_instance_id?(conn, instance_id) do
-    case SubscriptionRegistry.identity_of(instance_id) do
-      nil ->
-        true
+    instance_ownership(conn, instance_id) == :owned
+  end
 
-      registry_identity ->
-        registry_identity == {Session.get_session_id(conn), Session.get_user_id(conn)}
+  # The same session under another user is a login or logout the stream hasn't recorded yet, rather
+  # than a caller claiming somebody else's tab.
+  defp instance_ownership(conn, instance_id) do
+    session_id = Session.get_session_id(conn)
+    user_id = Session.get_user_id(conn)
+
+    case SubscriptionRegistry.identity_of(instance_id) do
+      nil -> :owned
+      {^session_id, ^user_id} -> :owned
+      {^session_id, _other_user_id} -> :user_changed
+      _other_identity -> :foreign
+    end
+  end
+
+  defp handle_validated_mutation_request(conn) do
+    ownership = instance_ownership(conn, conn.body_params["instance_id"])
+
+    cond do
+      ownership == :foreign ->
+        forbid(conn, "instance_id cross-check failed")
+
+      ownership == :user_changed or not batch_of_session_user?(conn) ->
+        conn
+        |> Plug.Conn.put_status(409)
+        |> Controller.text("Conflict")
+        |> Plug.Conn.halt()
+
+      not replica_identity_verified?(conn) ->
+        forbid(conn, "replica identity check failed")
+
+      true ->
+        send_mutation_response(conn)
     end
   end
 
@@ -395,9 +424,9 @@ defmodule Hologram.Controller do
       # Middleware produced a terminal response - skip the command and send it,
       # still applying the decorations accumulated by the steps that ran.
       ensure_valid_user_id!(middleware_server_struct)
-      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
 
       conn
+      |> announce_identity_change(server_struct, middleware_server_struct)
       |> decorate_conn(server_struct, middleware_server_struct)
       |> send_response(middleware_server_struct)
       |> Plug.Conn.halt()
@@ -423,7 +452,7 @@ defmodule Hologram.Controller do
       # side effects land.
       {sub_receipt_adds, sub_receipt_drops} = apply_subscription_deltas(processed_server_struct)
 
-      Realtime.maybe_announce_identity_change(server_struct, processed_server_struct)
+      announced_conn = announce_identity_change(conn, server_struct, processed_server_struct)
 
       # Snapshot self-echoes before flush_broadcasts/1 clears the queue. Self-echoes
       # reach every component on the originating instance subscribed to the
@@ -445,7 +474,7 @@ defmodule Hologram.Controller do
           {:error, message} -> {message, 0}
         end
 
-      conn
+      announced_conn
       |> decorate_conn(server_struct, flushed_server_struct)
       |> send_json(%{
         action: action,
@@ -511,16 +540,6 @@ defmodule Hologram.Controller do
     instance_id = UUID.uuid4()
     replica_id = UUID.uuid4()
 
-    # Minted before the lifecycle, from the session as it stands: a page whose middleware signs
-    # the visitor in gets a session-bound identity that keeps working in that session, and the
-    # next page load mints a user-bound one.
-    replica_token =
-      ReplicaIdentity.issue(
-        replica_id,
-        Session.get_session_id(conn_with_session),
-        Session.get_user_id(conn_with_session)
-      )
-
     # Read once, so the nonce and the elements it is stamped on follow the same policy. A page sent
     # without a policy carries no nonce at all, since nothing would read it.
     csp_directives = ContentSecurityPolicy.directives()
@@ -533,8 +552,7 @@ defmodule Hologram.Controller do
       csrf_token: masked_csrf_token,
       initial_page?: true,
       instance_id: instance_id,
-      replica_id: replica_id,
-      replica_token: replica_token
+      replica_id: replica_id
     ]
 
     handle_page_request(conn_with_session, page_module, params, [], renderer_opts)
@@ -544,8 +562,9 @@ defmodule Hologram.Controller do
   Handles an HTTP POST carrying a batch of client writes.
 
   Checks the CSRF token and the instance cross-check exactly as a command request does, checks that
-  the batch's replica id is one the session presenting it was given, applies the batch on behalf of
-  the session, and answers with what became of it as JSON.
+  the batch was made for the session's user and that its replica id is one the session presenting
+  it was given, applies the batch on behalf of the session, and answers with what became of it as
+  JSON.
 
   ## Parameters
 
@@ -557,23 +576,19 @@ defmodule Hologram.Controller do
   """
   @spec handle_mutation_request(mutation_conn()) :: Plug.Conn.t()
   def handle_mutation_request(initial_conn) do
+    # Every reply names the identity, since a tab that only saves learns of a change here (a save
+    # never changes it). Named after Session.init/1, which mints a session for a browser that lost
+    # its own.
     conn =
       initial_conn
       |> PlugConnUtils.init_conn()
       |> Session.init()
+      |> put_identity_tag_header()
 
-    cond do
-      not validate_csrf_token(conn) ->
-        forbid(conn, "CSRF token validation failed")
-
-      not caller_owns_instance_id?(conn, conn.body_params["instance_id"]) ->
-        forbid(conn, "instance_id cross-check failed")
-
-      not replica_identity_verified?(conn) ->
-        forbid(conn, "replica identity check failed")
-
-      true ->
-        send_mutation_response(conn)
+    if validate_csrf_token(conn) do
+      handle_validated_mutation_request(conn)
+    else
+      forbid(conn, "CSRF token validation failed")
     end
   end
 
@@ -603,6 +618,17 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, conn, result} ->
+        replica_id = renderer_opts[:replica_id]
+
+        # Minted from the session the lifecycle leaves behind: middleware or an init/3 can have
+        # changed who is signed in, and a token for the previous user would be refused for good.
+        replica_token =
+          ReplicaIdentity.issue(
+            replica_id,
+            Session.get_session_id(conn),
+            Session.get_user_id(conn)
+          )
+
         boot_data =
           build_boot_data(%{
             chunk_digests: result.chunk_digests,
@@ -611,8 +637,8 @@ defmodule Hologram.Controller do
             instance_id: renderer_opts[:instance_id],
             mount_data: result.mount_data,
             page_digest: PageDigestRegistry.lookup(page_module),
-            replica_id: renderer_opts[:replica_id],
-            replica_token: renderer_opts[:replica_token],
+            replica_id: replica_id,
+            replica_token: replica_token,
             self_echoes: result.self_echoes,
             sub_receipt_adds: result.sub_receipt_adds,
             sub_receipt_drops: result.sub_receipt_drops
@@ -694,12 +720,26 @@ defmodule Hologram.Controller do
           expires_at
         )
 
+        # Who the stream will serve, as the cookie says: the cookie can lag an identity change the
+        # tab has already heard of, or tell the tab of one it never heard of. And a replica pair for
+        # this session, as a page render mints one, for a tab whose pair a change of user dropped.
+        # A tab that shows a pair asks for one minted for that pair's owner (see
+        # maybe_mint_replica/4).
+        session_replica_id = UUID.uuid4()
+
         response =
           maybe_mint_replica(
             %{
+              actorEntityId: Auth.canonical_id(current_user_id),
+              actorUserId: Auth.owner_key(current_user_id),
               handshakeId: handshake_id,
               heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
-              refreshedReceipts: serialize_to_fragment(refreshed_receipts)
+              identityTag: Session.identity_tag(conn),
+              refreshedReceipts: serialize_to_fragment(refreshed_receipts),
+              sessionReplica: %{
+                id: session_replica_id,
+                token: ReplicaIdentity.issue(session_replica_id, session_id, current_user_id)
+              }
             },
             payload,
             session_id,
@@ -796,6 +836,20 @@ defmodule Hologram.Controller do
       end
     end)
     |> Enum.unzip()
+  end
+
+  # A batch applies as the session's user, and a tab that hasn't heard of a login yet can still send
+  # what the previous user wrote. A visitor's replica token keeps verifying after they sign in, so
+  # the token can't catch this. This and a stream that hasn't recorded the login answer 409 rather
+  # than 403, since a 403 makes the client replace its pair, and a batch resent under a new pair
+  # has no record on the server to be answered from.
+  defp batch_of_session_user?(conn) do
+    session_owner =
+      conn
+      |> Session.get_user_id()
+      |> Auth.owner_key()
+
+    conn.body_params["actor_user_id"] == session_owner
   end
 
   # The statement proves that the session presenting this replica id is the one it was minted for -
@@ -1020,6 +1074,25 @@ defmodule Hologram.Controller do
     end
   end
 
+  # Stamped ahead of the announcement, so that the streams hearing of a change and the response
+  # making it name the same tag. The response persists the new identity only later, so the tag is
+  # made from the identity the run ends with.
+  defp announce_identity_change(conn, pre_server, post_server) do
+    if {pre_server.session_id, pre_server.user_id} ==
+         {post_server.session_id, post_server.user_id} do
+      conn
+    else
+      stamped_conn = Session.stamp_identity(conn)
+
+      identity_tag =
+        Session.identity_tag(stamped_conn, post_server.session_id, post_server.user_id)
+
+      Realtime.maybe_announce_identity_change(pre_server, post_server, identity_tag)
+
+      stamped_conn
+    end
+  end
+
   # Persists a handler-driven `server.user_id` change into the Phoenix session
   # (the opaque `:hologram_user_id` key) so later requests resolve the new
   # identity. No-op when unchanged, leaving the session - and any Set-Cookie -
@@ -1068,12 +1141,11 @@ defmodule Hologram.Controller do
   # The acting user and the rows the render read are plain JSON, which the data layer reads as it
   # is, so they are nested as they are rather than serialized as terms.
   #
-  # The acting user goes twice. As it is, it names whose rows and queued writes the browser holds,
-  # and two users of the same browser must stay apart there whatever their ids. As the data layer
-  # reads it - a user entity's id, or nil for a user id no user entity can have, like an app's own
-  # serial id - it is what the browser's rules and grants ask about, so they answer such a session
-  # as the server does, a visitor. Worked out here rather than in the browser, which can't tell an
-  # atom spelled as a uuid, which JSON turns into a string, from the id itself.
+  # The acting user goes twice. As exact text (see Auth.owner_key/1), it names whose rows and queued
+  # writes the browser holds, and two users of the same browser must stay apart there whatever their
+  # ids. As the data layer reads it - a user entity's id, or nil for a user id no user entity can
+  # have, like an app's own serial id - it is what the browser's rules and grants ask about, so they
+  # answer such a session as the server does, a visitor.
   defp page_fields(%{
          chunk_digests: chunk_digests,
          mount_data: mount_data,
@@ -1084,7 +1156,7 @@ defmodule Hologram.Controller do
        }) do
     %{
       actorEntityId: Auth.canonical_id(mount_data.actor_user_id),
-      actorUserId: mount_data.actor_user_id,
+      actorUserId: Auth.owner_key(mount_data.actor_user_id),
       chunks: chunk_digests,
       componentRegistry: serialize_to_fragment(mount_data.component_registry),
       pageDigest: page_digest,
@@ -1153,9 +1225,10 @@ defmodule Hologram.Controller do
       # Middleware answered before anything was rendered - skip the render, still applying the
       # decorations accumulated by the steps that ran.
       ensure_valid_user_id!(middleware_server_struct)
-      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
 
-      {:terminal, decorate_conn(conn, server_struct, middleware_server_struct),
+      announced_conn = announce_identity_change(conn, server_struct, middleware_server_struct)
+
+      {:terminal, decorate_conn(announced_conn, server_struct, middleware_server_struct),
        middleware_server_struct}
     else
       %{
@@ -1182,7 +1255,7 @@ defmodule Hologram.Controller do
       {sub_receipt_adds, sub_receipt_drops} =
         transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
 
-      Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
+      announced_conn = announce_identity_change(conn, server_struct, rendered_server_struct)
 
       # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The renderer stays out of
       # them on purpose, so this Realtime-domain computation lives in the controller, which is also
@@ -1202,7 +1275,7 @@ defmodule Hologram.Controller do
         tree: rendered_tree
       }
 
-      {:rendered, decorate_conn(conn, server_struct, flushed_server_struct), result}
+      {:rendered, decorate_conn(announced_conn, server_struct, flushed_server_struct), result}
     end
   end
 

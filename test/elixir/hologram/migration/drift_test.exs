@@ -252,14 +252,14 @@ defmodule Hologram.Migration.DriftTest do
 
         {:ok, _result} =
           Connection.query("""
-          INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-          VALUES ('00000000-0000-0000-0000-000000000001', now(), now(), now(), now(), '{}')
+          INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+          VALUES ('00000000-0000-0000-0000-000000000001', now(), now(), 0, now(), 0, now(), '{}')
           """)
 
         {:ok, _result} =
           Connection.query("""
-          INSERT INTO "hologram_data"."my_app_task" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-          VALUES ('00000000-0000-0000-0000-000000000002', now(), now(), now(), now(), '{}')
+          INSERT INTO "hologram_data"."my_app_task" ("id", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+          VALUES ('00000000-0000-0000-0000-000000000002', now(), now(), 0, now(), 0, now(), '{}')
           """)
 
         {:ok, _result} =

@@ -1,6 +1,7 @@
 defmodule Hologram.Realtime.SSETest do
   use Hologram.Test.BasicCase, async: false
 
+  import ExUnit.CaptureLog
   import Hologram.Realtime.SSE
   import Hologram.Test.Stubs
   import Mox
@@ -503,7 +504,7 @@ defmodule Hologram.Realtime.SSETest do
     end
 
     defp connection do
-      %{applied_seq: 3, fill_place: {200, 0}, replica_id: nil}
+      %{applied_seq: 3, replica_id: nil}
     end
 
     # What the places the session hands over are stamped with, beside the rules.
@@ -524,7 +525,6 @@ defmodule Hologram.Realtime.SSETest do
       opts = sync_session_opts(nil, MyApp.Page, @policy_hash, sync_start(nil), connection())
 
       assert opts[:applied_seq] == 3
-      assert opts[:fill_place] == {200, 0}
       assert opts[:replica_id] == nil
     end
 
@@ -743,6 +743,18 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ "event: sync_resync\nid: "
       assert updated_conn.resp_body =~ ~s["reason":"retention"]
+    end
+  end
+
+  describe "process_message/4 on {:sync_resync, reason, identity_tag}" do
+    test "pushes a sync_resync SSE event naming the identity's tag" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_resync, :identity, "1.tag"})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: sync_resync\nid: "
+      assert updated_conn.resp_body =~ ~s["identity_tag":"1.tag"]
     end
   end
 
@@ -1406,11 +1418,99 @@ defmodule Hologram.Realtime.SSETest do
   end
 
   describe "process_message/4 on {:identity_changed, ...}" do
+    # Every tab hears it from its own stream, whichever tab of its group leads.
+    test "tells the client who its session is now, though it isn't syncing" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      send(self(), {:identity_changed, "session-1", 8, "1.tag"})
+
+      {:cont, updated_conn, _session_id, _user_id, nil} = process_message(conn, "session-1", 7)
+
+      assert "event: sync_identity\nid: " <> rest = updated_conn.resp_body
+      [_match, data] = Regex.run(~r/\A\d+\ndata: (.*)\n\n\z/, rest)
+
+      assert Jason.decode!(data) == %{
+               "actor_entity_id" => nil,
+               "actor_user_id" => "i8",
+               "identity_tag" => "1.tag",
+               "protocol_version" => 1
+             }
+    end
+
+    # The client follows the change from it, and then knows the resync for its tag.
+    test "tells the client ahead of the resync" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      send(self(), {:identity_changed, "session-1", 8, "1.tag"})
+
+      {:cont, followed_conn, _session_id, _user_id, _sync_session} =
+        process_message(conn, "session-1", 7, sync_session: sync_session_stub())
+
+      {:cont, resynced_conn} = process_message(followed_conn, "session-1", 8)
+
+      assert Regex.scan(~r/^event: (\w+)$/m, resynced_conn.resp_body, capture: :all_but_first) ==
+               [["sync_identity"], ["sync_resync"]]
+    end
+
+    # A raise would end the stream, and the tab would never hear of the change. This suite stands
+    # up no query cache, so the read of a user's row raises.
+    test "tells the client without the user's row when reading it fails" do
+      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      send(self(), {:identity_changed, "session-1", user_id, "1.tag"})
+
+      log =
+        capture_log(fn ->
+          assert {:cont, updated_conn, _session_id, _user_id, nil} =
+                   process_message(conn, "session-1", 7)
+
+          send(self(), {:updated_conn, updated_conn})
+        end)
+
+      assert_received {:updated_conn, updated_conn}
+
+      assert "event: sync_identity\nid: " <> rest = updated_conn.resp_body
+      [_match, data] = Regex.run(~r/\A\d+\ndata: (.*)\n\n\z/, rest)
+
+      assert %{"actor_entity_id" => ^user_id, "identity_tag" => "1.tag"} =
+               payload = Jason.decode!(data)
+
+      refute Map.has_key?(payload, "user_row")
+
+      assert log =~ "reading the session user's row failed"
+    end
+
+    # The stream's fill after the hold brings the row, for a type the tab syncs.
+    test "tells the client without the user's row while the data model is held" do
+      on_exit(&Model.release/0)
+
+      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      Model.hold()
+      send(self(), {:identity_changed, "session-1", user_id, "1.tag"})
+
+      log =
+        capture_log(fn ->
+          assert {:cont, updated_conn, _session_id, _user_id, nil} =
+                   process_message(conn, "session-1", 7)
+
+          send(self(), {:updated_conn, updated_conn})
+        end)
+
+      assert_received {:updated_conn, updated_conn}
+
+      assert "event: sync_identity\nid: " <> rest = updated_conn.resp_body
+      [_match, data] = Regex.run(~r/\A\d+\ndata: (.*)\n\n\z/, rest)
+
+      payload = Jason.decode!(data)
+
+      refute Map.has_key?(payload, "user_row")
+      assert log == ""
+    end
+
     test "carries the new identity in the return tuple" do
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
-      send(self(), {:identity_changed, "new-session-id", 7})
+      send(self(), {:identity_changed, "new-session-id", 7, "1.tag"})
 
-      assert {:cont, ^conn, "new-session-id", 7, _sync_session} =
+      assert {:cont, _conn, "new-session-id", 7, _sync_session} =
                process_message(conn, "old-session-id", nil)
     end
 
@@ -1421,12 +1521,53 @@ defmodule Hologram.Realtime.SSETest do
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
       old_session = sync_session_stub()
 
-      send(self(), {:identity_changed, "session-1", 8})
+      send(self(), {:identity_changed, "session-1", 8, "1.tag"})
 
       {:cont, _conn, _session_id, _user_id, _sync_session} =
         process_message(conn, "session-1", 7, sync_session: old_session)
 
-      assert_received {:sync_resync, :identity}
+      assert_received {:sync_resync, :identity, "1.tag"}
+    end
+
+    # The rows are still this user's, so the client keeps them readable through the refill.
+    test "refills in place when only the session id changes" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      old_session = sync_session_stub()
+
+      send(self(), {:identity_changed, "session-2", 7, "1.tag"})
+
+      {:cont, _conn, "session-2", 7, _sync_session} =
+        process_message(conn, "session-1", 7, sync_session: old_session)
+
+      assert_received {:sync_resync, :session, "1.tag"}
+      refute_received {:sync_resync, :identity, _tag}
+    end
+
+    test "refills in place when a visitor gets a new session id" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      old_session = sync_session_stub()
+
+      send(self(), {:identity_changed, "session-2", nil, "1.tag"})
+
+      {:cont, _conn, "session-2", nil, _sync_session} =
+        process_message(conn, "session-1", nil, sync_session: old_session)
+
+      assert_received {:sync_resync, :session, "1.tag"}
+      refute_received {:sync_resync, :identity, _tag}
+    end
+
+    test "refills in place a stream waiting for a held data model when only the session id changes" do
+      on_exit(&Model.release/0)
+
+      conn = prepared_greeting_conn()
+      Model.hold()
+      send(self(), {:identity_changed, "session-2", 7, "1.tag"})
+
+      assert {:cont, _conn, "session-2", 7, {:held, false}} =
+               process_message(conn, "session-1", 7, sync_session: {:held, true})
+
+      assert_received {:sync_resync, :session, "1.tag"}
+      refute_received {:sync_resync, :identity, _tag}
     end
 
     test "stops the session that was serving the identity it replaced" do
@@ -1434,7 +1575,7 @@ defmodule Hologram.Realtime.SSETest do
       old_session = sync_session_stub()
       ref = Process.monitor(old_session)
 
-      send(self(), {:identity_changed, "session-1", 8})
+      send(self(), {:identity_changed, "session-1", 8, "1.tag"})
 
       process_message(conn, "session-1", 7, sync_session: old_session)
 
@@ -1456,7 +1597,7 @@ defmodule Hologram.Realtime.SSETest do
 
       on_exit(fn -> Process.exit(old_session, :kill) end)
 
-      send(self(), {:identity_changed, "session-1", 8})
+      send(self(), {:identity_changed, "session-1", 8, "1.tag"})
 
       assert {:cont, _conn, _session_id, _user_id, _sync_session} =
                process_message(conn, "session-1", 7, sync_session: old_session)
@@ -1473,29 +1614,29 @@ defmodule Hologram.Realtime.SSETest do
 
       conn = prepared_greeting_conn()
       Model.hold()
-      send(self(), {:identity_changed, "session-1", 8})
+      send(self(), {:identity_changed, "session-1", 8, "1.tag"})
 
       assert {:cont, _conn, "session-1", 8, {:held, false}} =
                process_message(conn, "session-1", 7, sync_session: {:held, true})
 
-      assert_received {:sync_resync, :identity}
+      assert_received {:sync_resync, :identity, "1.tag"}
     end
 
     # A stream carrying no sync at all - a client built before any of it, or one whose build has
     # no data model - has nothing to rescope, and must not be disturbed for it.
     test "leaves a connection that is not syncing alone" do
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
-      send(self(), {:identity_changed, "session-1", 8})
+      send(self(), {:identity_changed, "session-1", 8, "1.tag"})
 
       assert {:cont, _conn, _session_id, _user_id, nil} =
                process_message(conn, "session-1", 7)
 
-      refute_received {:sync_resync, _reason}
+      refute_received {:sync_resync, _reason, _tag}
     end
 
     test "subscribes to the user identity topic on login (nil -> 7)" do
       conn = prepared_test_conn()
-      send(self(), {:identity_changed, "session-1", 7})
+      send(self(), {:identity_changed, "session-1", 7, "1.tag"})
 
       process_message(conn, "session-1", nil)
 
@@ -1510,7 +1651,7 @@ defmodule Hologram.Realtime.SSETest do
       user_topic = Realtime.identity_topic(:user, 7)
       Phoenix.PubSub.subscribe(Hologram.PubSub, user_topic)
 
-      send(self(), {:identity_changed, "session-1", nil})
+      send(self(), {:identity_changed, "session-1", nil, "1.tag"})
 
       process_message(conn, "session-1", 7)
 
@@ -1526,7 +1667,7 @@ defmodule Hologram.Realtime.SSETest do
 
       Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
 
-      send(self(), {:identity_changed, "session-1", 8})
+      send(self(), {:identity_changed, "session-1", 8, "1.tag"})
 
       process_message(conn, "session-1", 7)
 
@@ -1544,7 +1685,7 @@ defmodule Hologram.Realtime.SSETest do
 
       Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
 
-      send(self(), {:identity_changed, "session-new", 7})
+      send(self(), {:identity_changed, "session-new", 7, "1.tag"})
 
       process_message(conn, "session-old", 7)
 
@@ -1561,7 +1702,7 @@ defmodule Hologram.Realtime.SSETest do
       SubscriptionRegistry.attach_connection(instance_id, "old-session", 7, self(), [])
 
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:identity_changed, "new-session", 8})
+      send(self(), {:identity_changed, "new-session", 8, "1.tag"})
 
       process_message(conn, "old-session", 7)
 
@@ -1580,7 +1721,7 @@ defmodule Hologram.Realtime.SSETest do
       )
 
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:identity_changed, "session-1", 8})
+      send(self(), {:identity_changed, "session-1", 8, "1.tag"})
 
       {:cont, updated_conn, _session, _user, _sync_session} =
         process_message(conn, "session-1", 7)
@@ -1601,7 +1742,7 @@ defmodule Hologram.Realtime.SSETest do
       )
 
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:identity_changed, "session-new", 7})
+      send(self(), {:identity_changed, "session-new", 7, "1.tag"})
 
       {:cont, updated_conn, _session, _user, _sync_session} =
         process_message(conn, "session-old", 7)
@@ -1625,7 +1766,7 @@ defmodule Hologram.Realtime.SSETest do
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:identity_changed, "session-1", 8})
+      send(self(), {:identity_changed, "session-1", 8, "1.tag"})
 
       process_message(conn, "session-1", 7)
 

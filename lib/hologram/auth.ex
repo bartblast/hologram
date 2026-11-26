@@ -29,6 +29,12 @@ defmodule Hologram.Auth do
   # assets/js/elixir/hologram/auth.mjs) - a hand-ported pair, pinned on both tiers.
   @operation_shape_message "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
+  # In ASCII order, so that owner texts of the same width sort the way their ids do.
+  @base62_digits "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+  # The digits any 128-bit id fits in.
+  @base62_id_width 22
+
   # Marks a struct as a row of the database as a change would leave it. Kept on the struct rather
   # than in its metadata, whose fields travel to the browser with every entity: a marked row lives
   # only for the length of a rule's evaluation.
@@ -534,7 +540,7 @@ defmodule Hologram.Auth do
 
   @doc false
   # The given id when it is one Hologram generates - the canonical lowercase uuid an entity id is -
-  # and nil otherwise, for any value. A session's user id may be any string, integer or atom (see
+  # and nil otherwise, for any value. A session's user id may be any UTF-8 string or integer (see
   # Hologram.Server.put_user_id/2), and one that names no user entity is anonymous to the rules,
   # the way the render's session user is nil for it.
   # The validator's pattern also takes a canonical id followed by a newline, which the uuid encoder
@@ -543,6 +549,29 @@ defmodule Hologram.Auth do
   def canonical_id(id) do
     if is_binary(id) and byte_size(id) == 36 and Validator.attribute_value_valid?(id, :uuid),
       do: id
+  end
+
+  @doc false
+  # The text that names a session's user in the browser, or nil for a visitor: i and the digits for
+  # an integer, u and 22 base62 characters for an entity id, s and the text for any other string.
+  # As a JSON number, an integer past 2^53 would round into its neighbor, and the type letter keeps
+  # the id 1 and the id "1" apart, so two users never read as one owner. Browsers store this text
+  # across deploys, so its format must never change, which rules out inspect/1 and the term
+  # serializer, whose output can move between versions.
+  @spec owner_key(Server.identity_id() | nil) :: String.t() | nil
+  def owner_key(nil), do: nil
+
+  def owner_key(user_id) when is_integer(user_id), do: "i#{user_id}"
+
+  def owner_key(user_id) when is_binary(user_id) do
+    case canonical_id(user_id) do
+      nil ->
+        "s" <> user_id
+
+      entity_id ->
+        <<number::128>> = Codec.encode(entity_id, :uuid)
+        "u" <> base62(number, @base62_id_width, [])
+    end
   end
 
   @doc """
@@ -673,6 +702,13 @@ defmodule Hologram.Auth do
     end
 
     :ok
+  end
+
+  defp base62(_number, 0, digits), do: List.to_string(digits)
+
+  defp base62(number, width, digits) do
+    digit = :binary.at(@base62_digits, rem(number, 62))
+    base62(div(number, 62), width - 1, [digit | digits])
   end
 
   # The per-role question both gates ask, with the answer held until the transaction ends: the

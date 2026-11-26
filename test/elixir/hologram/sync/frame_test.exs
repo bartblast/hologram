@@ -5,10 +5,12 @@ defmodule Hologram.Sync.FrameTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Auth
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Model
   alias Hologram.Policy
+  alias Hologram.Sync.PackedIds
   alias Hologram.Sync.WireData
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -47,6 +49,12 @@ defmodule Hologram.Sync.FrameTest do
     allow :delete, when: none(card <- board.cards, card.author_id == user_id())
   end
 
+  defp envelope_data(envelope) do
+    [_head, json] = String.split(envelope, "data: ", parts: 2)
+
+    Jason.decode!(json)
+  end
+
   defp delete_key do
     Policy.verdict_key(VerdictTask, :delete)
   end
@@ -60,7 +68,7 @@ defmodule Hologram.Sync.FrameTest do
     on_exit(fn -> :persistent_term.erase(QueryCacheStub.persistent_term_key()) end)
   end
 
-  describe "deltas/3" do
+  describe "deltas/4" do
     defp news(overrides) do
       Map.merge(%{appeared: [], edges: [], patched: [], unsynced: []}, overrides)
     end
@@ -268,6 +276,29 @@ defmodule Hologram.Sync.FrameTest do
                deltas(news(%{appeared: [row]}), nil)
     end
 
+    test "marks a row that appeared as the client's own when its batches created it" do
+      own = Module2.new(a: true)
+      other = Module2.new(a: false)
+      created = %{Module2 => PackedIds.pack([own.id])}
+
+      assert [own_put, other_put] = deltas(news(%{appeared: [own, other]}), nil, %{}, created)
+
+      assert own_put.data ==
+               own
+               |> WireData.row()
+               |> Map.put(:"$own", true)
+
+      assert other_put.data == WireData.row(other)
+    end
+
+    test "marks no row of a type whose created rows name its id under another type" do
+      row = Module2.new(a: true)
+      created = %{Module3 => PackedIds.pack([row.id])}
+
+      assert [put] = deltas(news(%{appeared: [row]}), nil, %{}, created)
+      assert put.data == WireData.row(row)
+    end
+
     test "sends nothing for news holding nothing" do
       assert deltas(news(%{}), nil) == []
     end
@@ -311,12 +342,12 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
-  describe "encode_deltas_envelope/4" do
+  describe "encode_deltas_envelope/5" do
     test "spells a put's verdicts as a $verdicts object beside the row's values" do
       row = Module2.new(a: true, c: "first")
 
       envelope =
-        encode_deltas_envelope(42, @cursor, [put_entity(row, %{"delete:abc" => true})], nil)
+        encode_deltas_envelope(42, @cursor, [put_entity(row, %{"delete:abc" => true})], nil, nil)
 
       [_event, _id, "data: " <> json, _blank, _end] = String.split(envelope, "\n")
 
@@ -335,7 +366,8 @@ defmodule Hologram.Sync.FrameTest do
     test "carries a hashed drop as its salt and hashes, under its type" do
       id = Entity.generate_id()
 
-      envelope = encode_deltas_envelope(42, @cursor, [unsync_hashed(Module2, "q3Vx", [id])], nil)
+      envelope =
+        encode_deltas_envelope(42, @cursor, [unsync_hashed(Module2, "q3Vx", [id])], nil, nil)
 
       assert decoded_deltas(envelope) == %{
                "unsync_hashed" => %{
@@ -349,7 +381,8 @@ defmodule Hologram.Sync.FrameTest do
     test "carries a keep list as its salt and hashes, under its type" do
       id = Entity.generate_id()
 
-      envelope = encode_deltas_envelope(42, @cursor, [keep_hashed(Module2, "q3Vx", [id])], nil)
+      envelope =
+        encode_deltas_envelope(42, @cursor, [keep_hashed(Module2, "q3Vx", [id])], nil, nil)
 
       assert decoded_deltas(envelope) == %{
                "keep_hashed" => %{
@@ -367,13 +400,14 @@ defmodule Hologram.Sync.FrameTest do
         applied_seq: nil,
         cursor: @cursor,
         deltas: %{put_entity: %{"Hologram.Test.Fixtures.Entity.Module2" => [WireData.row(row)]}},
+        final_seq: nil,
         model_hash: Model.hash(),
         protocol_version: 1
       }
 
       encoded = Jason.encode!(payload)
 
-      assert encode_deltas_envelope(42, @cursor, [put_entity(row, %{})], nil) ==
+      assert encode_deltas_envelope(42, @cursor, [put_entity(row, %{})], nil, nil) ==
                "event: sync_deltas\nid: 42\ndata: #{encoded}\n\n"
     end
 
@@ -387,7 +421,7 @@ defmodule Hologram.Sync.FrameTest do
       embedded_parent = %{parent | a: [child]}
 
       news = news(%{appeared: [embedded_parent, child]})
-      envelope = encode_deltas_envelope(42, @cursor, deltas(news, nil), nil)
+      envelope = encode_deltas_envelope(42, @cursor, deltas(news, nil), nil, nil)
 
       assert decoded_deltas(envelope) == %{
                "put_entity" => %{
@@ -400,7 +434,9 @@ defmodule Hologram.Sync.FrameTest do
                      "created_at" => nil,
                      "id" => parent.id,
                      "server_created_at" => nil,
+                     "server_created_seq" => nil,
                      "server_updated_at" => nil,
+                     "server_updated_seq" => nil,
                      "updated_at" => nil
                    }
                  ],
@@ -413,7 +449,9 @@ defmodule Hologram.Sync.FrameTest do
                      "created_at" => nil,
                      "id" => child.id,
                      "server_created_at" => nil,
+                     "server_created_seq" => nil,
                      "server_updated_at" => nil,
+                     "server_updated_seq" => nil,
                      "updated_at" => nil
                    }
                  ]
@@ -441,7 +479,7 @@ defmodule Hologram.Sync.FrameTest do
           unsynced: [{gone_id, Module2}]
         })
 
-      envelope = encode_deltas_envelope(42, @cursor, deltas(news, nil), nil)
+      envelope = encode_deltas_envelope(42, @cursor, deltas(news, nil), nil, nil)
 
       assert decoded_deltas(envelope) == %{
                "patch_entity" => %{
@@ -459,31 +497,31 @@ defmodule Hologram.Sync.FrameTest do
     end
 
     test "stamps the model the values were read under" do
-      envelope = encode_deltas_envelope(42, @cursor, [], nil)
+      envelope = encode_deltas_envelope(42, @cursor, [], nil, nil)
 
       assert String.contains?(envelope, Model.hash())
     end
 
     test "stamps the protocol version the frame is spelled in" do
-      envelope = encode_deltas_envelope(42, @cursor, [], nil)
+      envelope = encode_deltas_envelope(42, @cursor, [], nil, nil)
 
       assert String.contains?(envelope, ~s["protocol_version":#{protocol_version()}])
     end
 
     test "carries the cursor the client hands back" do
-      envelope = encode_deltas_envelope(42, @cursor, [], nil)
+      envelope = encode_deltas_envelope(42, @cursor, [], nil, nil)
 
       assert String.contains?(envelope, ~s["cursor":"#{@cursor}"])
     end
 
     test "carries no cursor when there is nowhere to resume from" do
-      envelope = encode_deltas_envelope(42, nil, [], nil)
+      envelope = encode_deltas_envelope(42, nil, [], nil, nil)
 
       assert String.contains?(envelope, ~s["cursor":null])
     end
 
     test "carries how far the receiving replica's own batches are applied" do
-      envelope = encode_deltas_envelope(42, @cursor, [], 7)
+      envelope = encode_deltas_envelope(42, @cursor, [], 7, nil)
 
       assert String.contains?(envelope, ~s["applied_seq":7])
     end
@@ -492,15 +530,33 @@ defmodule Hologram.Sync.FrameTest do
     # to say - a client reading it as "none of mine have landed" would put its own writes back on
     # top of rows that already hold them.
     test "carries no number for a stream serving no replica" do
-      envelope = encode_deltas_envelope(42, @cursor, [], nil)
+      envelope = encode_deltas_envelope(42, @cursor, [], nil, nil)
 
       assert String.contains?(envelope, ~s["applied_seq":null])
+    end
+
+    test "carries how far the numbers the client's rows carry are final" do
+      envelope = encode_deltas_envelope(42, @cursor, [], nil, 9)
+
+      assert envelope_data(envelope)["final_seq"] == 9
+    end
+
+    test "carries a final number past what a JavaScript number holds exactly as its text" do
+      envelope = encode_deltas_envelope(42, @cursor, [], nil, 9_007_199_254_740_993)
+
+      assert envelope_data(envelope)["final_seq"] == "9007199254740993"
+    end
+
+    test "carries no final number in a frame that leaves the batch unfinished" do
+      envelope = encode_deltas_envelope(42, nil, [], nil, nil)
+
+      assert String.contains?(envelope, ~s["final_seq":null])
     end
 
     test "never carries the value of a server-only attribute" do
       row = Module14.new(email: "user@test.com", password_hash: "hashed_secret_v3")
 
-      envelope = encode_deltas_envelope(42, @cursor, [put_entity(row, %{})], nil)
+      envelope = encode_deltas_envelope(42, @cursor, [put_entity(row, %{})], nil, nil)
 
       assert String.contains?(envelope, ~s["email":"user@test.com"])
 
@@ -543,6 +599,78 @@ defmodule Hologram.Sync.FrameTest do
 
       assert String.contains?(envelope, ~s["reason":"model_hash"])
     end
+
+    # A client that already followed the change lets the resync pass.
+    test "names the tag of the identity a change of identity's resync is for" do
+      "event: sync_resync\nid: 42\ndata: " <> data =
+        encode_resync_envelope(42, :identity, "1.tag")
+
+      assert Jason.decode!(data) == %{
+               "identity_tag" => "1.tag",
+               "protocol_version" => 1,
+               "reason" => "identity"
+             }
+    end
+
+    test "names no tag when it has none" do
+      envelope = encode_resync_envelope(42, :identity, nil)
+
+      refute String.contains?(envelope, "identity_tag")
+    end
+  end
+
+  describe "encode_identity_envelope/4" do
+    test "wraps who the session is now in a sync_identity SSE event envelope" do
+      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+
+      assert "event: sync_identity\nid: 42\ndata: " <> data =
+               encode_identity_envelope(42, user_id, "1.tag", nil)
+
+      assert Jason.decode!(data) == %{
+               "actor_entity_id" => user_id,
+               "actor_user_id" => Auth.owner_key(user_id),
+               "identity_tag" => "1.tag",
+               "protocol_version" => 1
+             }
+    end
+
+    # The browser keys its store by the owner key, so an id past 2^53 or an integer and the same
+    # digits as a string stay different users.
+    test "names an integer user by its owner key, with no entity id" do
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, 7, "1.tag", nil)
+
+      assert %{"actor_entity_id" => nil, "actor_user_id" => "i7"} = Jason.decode!(data)
+    end
+
+    test "names nobody for a session with no user" do
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, nil, "1.tag", nil)
+
+      assert %{"actor_entity_id" => nil, "actor_user_id" => nil} = Jason.decode!(data)
+    end
+
+    # The tab holds the new user's row before its stream fills it, as a page's first render does.
+    test "carries the user's row the way a page carries it" do
+      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+      user_rows = %{put_entity: %{"MyApp.User" => [%{id: user_id, email: "a@example.com"}]}}
+
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, user_id, "1.tag", user_rows)
+
+      assert Jason.decode!(data)["user_row"] == %{
+               "put_entity" => %{"MyApp.User" => [%{"id" => user_id, "email" => "a@example.com"}]}
+             }
+    end
+
+    test "names no row when there's none to carry" do
+      "event: sync_identity\nid: 42\ndata: " <> data =
+        encode_identity_envelope(42, 7, "1.tag", nil)
+
+      payload = Jason.decode!(data)
+
+      refute Map.has_key?(payload, "user_row")
+    end
   end
 
   describe "encode_rules_envelope/3" do
@@ -563,11 +691,12 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
-  describe "encode_synced_envelope/3" do
+  describe "encode_synced_envelope/4" do
     test "wraps the completeness marker in a synced SSE event envelope" do
       payload = %{
         applied_seq: nil,
         cursor: nil,
+        final_seq: nil,
         model_hash: Model.hash(),
         protocol_version: 1,
         scope: :types,
@@ -576,7 +705,7 @@ defmodule Hologram.Sync.FrameTest do
 
       encoded = Jason.encode!(payload)
 
-      assert encode_synced_envelope(42, {:types, [Module2], nil}, nil) ==
+      assert encode_synced_envelope(42, {:types, [Module2], nil}, nil, nil) ==
                "event: synced\nid: 42\ndata: #{encoded}\n\n"
     end
 
@@ -584,6 +713,7 @@ defmodule Hologram.Sync.FrameTest do
       payload = %{
         applied_seq: nil,
         cursor: nil,
+        final_seq: nil,
         model_hash: Model.hash(),
         protocol_version: 1,
         scope: :types,
@@ -592,7 +722,7 @@ defmodule Hologram.Sync.FrameTest do
 
       encoded = Jason.encode!(payload)
 
-      assert encode_synced_envelope(42, {:types, [Module2, Module3], nil}, nil) ==
+      assert encode_synced_envelope(42, {:types, [Module2, Module3], nil}, nil, nil) ==
                "event: synced\nid: 42\ndata: #{encoded}\n\n"
     end
 
@@ -600,6 +730,7 @@ defmodule Hologram.Sync.FrameTest do
       payload = %{
         applied_seq: 7,
         cursor: nil,
+        final_seq: nil,
         model_hash: Model.hash(),
         protocol_version: 1,
         scope: :types,
@@ -608,25 +739,55 @@ defmodule Hologram.Sync.FrameTest do
 
       encoded = Jason.encode!(payload)
 
-      assert encode_synced_envelope(42, {:types, [Module2], 7}, nil) ==
+      assert encode_synced_envelope(42, {:types, [Module2], 7}, nil, nil) ==
                "event: synced\nid: 42\ndata: #{encoded}\n\n"
     end
 
     test "says which queries the client may now answer itself" do
-      payload = %{cursor: nil, model_hash: Model.hash(), protocol_version: 1, scope: :all}
+      payload = %{
+        cursor: nil,
+        final_seq: nil,
+        model_hash: Model.hash(),
+        protocol_version: 1,
+        scope: :all
+      }
+
       encoded = Jason.encode!(payload)
 
-      assert encode_synced_envelope(42, :all, nil) ==
+      assert encode_synced_envelope(42, :all, nil, nil) ==
                "event: synced\nid: 42\ndata: #{encoded}\n\n"
     end
 
     # The marker is the moment a place becomes a claim the client can honour, and for a client that
     # is filled and then left alone it is the only frame that will ever carry one.
+    test "carries how far the numbers the client's rows carry are final" do
+      types = encode_synced_envelope(42, {:types, [Module2], nil}, nil, 9)
+      all = encode_synced_envelope(42, :all, "Nzc4LjA", 9)
+
+      assert envelope_data(types)["final_seq"] == 9
+      assert envelope_data(all)["final_seq"] == 9
+    end
+
+    test "carries a final number past what a JavaScript number holds exactly as its text" do
+      types = encode_synced_envelope(42, {:types, [Module2], nil}, nil, 9_007_199_254_740_993)
+      all = encode_synced_envelope(42, :all, "Nzc4LjA", 9_007_199_254_740_993)
+
+      assert envelope_data(types)["final_seq"] == "9007199254740993"
+      assert envelope_data(all)["final_seq"] == "9007199254740993"
+    end
+
     test "hands over the place the client may come back from" do
-      payload = %{cursor: "Nzc4LjA", model_hash: Model.hash(), protocol_version: 1, scope: :all}
+      payload = %{
+        cursor: "Nzc4LjA",
+        final_seq: nil,
+        model_hash: Model.hash(),
+        protocol_version: 1,
+        scope: :all
+      }
+
       encoded = Jason.encode!(payload)
 
-      assert encode_synced_envelope(42, :all, "Nzc4LjA") ==
+      assert encode_synced_envelope(42, :all, "Nzc4LjA", nil) ==
                "event: synced\nid: 42\ndata: #{encoded}\n\n"
     end
   end
@@ -637,7 +798,7 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
-  describe "put_entity/2" do
+  describe "put_entity/3" do
     test "hands over the whole row, under the type the row itself names" do
       row = Module2.new(a: true, c: "first")
 
@@ -662,6 +823,16 @@ defmodule Hologram.Sync.FrameTest do
       row = Module2.new(a: true)
 
       assert put_entity(row, %{}).data == WireData.row(row)
+    end
+
+    test "marks the row as the client's own beside its verdicts" do
+      row = VerdictTask.new()
+
+      assert put_entity(row, %{"delete:abc" => true}, true).data ==
+               row
+               |> WireData.row()
+               |> Map.put(:"$verdicts", %{"delete:abc" => true})
+               |> Map.put(:"$own", true)
     end
   end
 

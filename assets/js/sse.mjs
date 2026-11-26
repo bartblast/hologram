@@ -6,6 +6,7 @@ import Config from "./config.mjs";
 import Deserializer from "./deserializer.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
+import IdentityTracker from "./identity_tracker.mjs";
 import LiveReload from "./live_reload.mjs";
 import Logger from "./logger.mjs";
 import Serializer from "./serializer.mjs";
@@ -58,6 +59,13 @@ export default class Sse {
   // Whether the page has been left: from pagehide until the browser brings the page back
   // from its back/forward cache, if it ever does.
   static isSuspended = false;
+
+  // The identity period the receipts this tab holds were issued for: the one of the page that
+  // brought them, or of the last handshake, whichever came later. A page mounted for a new identity
+  // holds its receipts before any handshake under it answers, and a page the identity changed under
+  // gets the new identity's from the handshake after. Once it has ended, the receipts were issued
+  // for an identity the tab has left, and the server is right to refuse them.
+  static receiptsPeriod = null;
 
   static reconnectAttempts = 0;
 
@@ -213,24 +221,32 @@ export default class Sse {
     const runId = $.runId;
     const isStale = () => runId !== $.runId;
 
-    // A tab with no identity to send under, waiting for one or refused one, holds its writes until
-    // a handshake brings it. One holding unsent writes may have to put off a reload over this
-    // answer, and one that already has needs the answer to decide it. For those, a handshake that
-    // never answers is given up on and tried again.
+    // A tab with no identity to send under, waiting for one or refused one, one that followed a
+    // change of user and dropped the previous user's, or one whose last handshake came with a
+    // cookie behind the identity it follows, holds its writes until a handshake brings it. One holding unsent writes may have to put off a reload over this answer, and one that
+    // already has needs the answer to decide it. One catching up with a change of user hears of
+    // it only from this answer. For those, a handshake that never answers is given up on and tried
+    // again.
     const controller = new AbortController();
 
     const presented = Hologram.dataLayer?.replicaToReplace();
 
     const deadline =
       presented ||
+      Hologram.dataLayer?.awaitsPair() ||
+      Hologram.dataLayer?.catchesUp() ||
+      Hologram.dataLayer?.waitsForCookie() ||
       Hologram.dataLayer?.holdsUnsentWrites() ||
       $.reloadDeferrals > 0
         ? setTimeout(() => controller.abort(), Config.mutationTimeoutMs)
         : null;
 
     try {
-      const preHandshakeReceiptCount =
-        App.subscriptionReceiptRegistry.entries.size;
+      const presentedReceipts = new Map(
+        App.subscriptionReceiptRegistry.entries,
+      );
+
+      const receiptsPeriod = $.#receiptsPeriod();
 
       const response = await fetch($.HANDSHAKE_PATH, {
         method: "POST",
@@ -248,14 +264,34 @@ export default class Sse {
       }
 
       const {
+        actorEntityId,
+        actorUserId,
         handshakeId,
         heartbeatIntervalMs,
+        identityTag,
         refreshedReceipts: serializedRefreshed,
         replica,
         replicaRefused,
+        sessionReplica,
       } = await response.json();
 
       if (isStale()) return;
+
+      // Before the receipts are judged: a tab the handshake moves to another user moves its
+      // identity period, so the previous user's receipts the server refused are dropped rather than
+      // taken for receipts that expired. A cookie behind the identity the tab follows opens no
+      // stream, records no period and changes no receipts: it isn't the session the tab is in, and
+      // the follow opens a new stream once the server says who is (see DataLayer.takeHandshake).
+      const opens =
+        Hologram.dataLayer?.takeHandshake({
+          actorEntityId,
+          actorUserId,
+          identityTag,
+          replica: sessionReplica,
+        }) ?? true;
+
+      // The follow can have opened a new stream already.
+      if (isStale() || !opens) return;
 
       const refreshed = Deserializer.deserialize(serializedRefreshed);
 
@@ -268,7 +304,9 @@ export default class Sse {
         presented?.id,
       );
 
-      if (preHandshakeReceiptCount > 0 && refreshed.data.length === 0) {
+      if (IdentityTracker.period !== receiptsPeriod) {
+        $.#dropRefusedReceipts(presentedReceipts, refreshed);
+      } else if (presentedReceipts.size > 0 && refreshed.data.length === 0) {
         // A write held for that identity exists only in this tab's memory, so it goes out before
         // the page does. A sender that failed says so in the check below.
         await sending?.catch(() => {});
@@ -288,6 +326,7 @@ export default class Sse {
         return;
       }
 
+      $.receiptsPeriod = IdentityTracker.period;
       $.reloadDeferrals = 0;
 
       App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
@@ -466,6 +505,10 @@ export default class Sse {
     clearTimeout($.reconnectTimer);
     $.reconnectTimer = null;
 
+    // So is a handshake still on its way: it was made with the session as it was, and answering
+    // last it would replace this stream with its own.
+    $.runId++;
+
     $.closeStream();
     $.eventSource = null;
     $.runId++;
@@ -538,6 +581,31 @@ export default class Sse {
     $.reloadDeferrals = 0;
 
     $.closeStream();
+  }
+
+  // Leaves any receipt added while the handshake was under way, which it didn't present - one
+  // that replaced a presented receipt under the same key too.
+  static #dropRefusedReceipts(presentedReceipts, refreshed) {
+    const refreshedKeys = new Set(
+      refreshed.data.map((triple) =>
+        Type.encodeMapKey(Type.tuple(triple.data.slice(0, 2))),
+      ),
+    );
+
+    for (const [key, receipt] of presentedReceipts) {
+      if (
+        !refreshedKeys.has(key) &&
+        App.subscriptionReceiptRegistry.entries.get(key) === receipt
+      ) {
+        App.subscriptionReceiptRegistry.entries.delete(key);
+      }
+    }
+  }
+
+  // The identity the receipts were issued for. Before any page or handshake has said, the
+  // document's.
+  static #receiptsPeriod() {
+    return $.receiptsPeriod ?? IdentityTracker.documentPeriod;
   }
 }
 

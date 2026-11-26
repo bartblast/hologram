@@ -647,7 +647,9 @@ defmodule Hologram.DB.DDLTest do
           "done" => %{type: "boolean", collation: nil, null: true},
           "created_at" => %{type: "timestamptz", collation: nil, null: false},
           "server_created_at" => %{type: "timestamptz", collation: nil, null: false},
+          "server_created_seq" => %{type: "int8", collation: nil, null: false},
           "server_updated_at" => %{type: "timestamptz", collation: nil, null: false},
+          "server_updated_seq" => %{type: "int8", collation: nil, null: false},
           "updated_at" => %{type: "timestamptz", collation: nil, null: false}
         },
         primary_key: %{columns: ["id"], constraint: "task_$pk"}
@@ -661,7 +663,9 @@ defmodule Hologram.DB.DDLTest do
           "name" text COLLATE "C" NOT NULL,
           "created_at" timestamptz NOT NULL,
           "server_created_at" timestamptz NOT NULL,
+          "server_created_seq" int8 NOT NULL,
           "server_updated_at" timestamptz NOT NULL,
+          "server_updated_seq" int8 NOT NULL,
           "updated_at" timestamptz NOT NULL,
           CONSTRAINT "task_$pk" PRIMARY KEY ("id")
         )\

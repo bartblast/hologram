@@ -10,6 +10,7 @@ import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Model from "./model.mjs";
 import Replica from "./replica.mjs";
+import Sse from "./sse.mjs";
 import Tabs from "./tabs.mjs";
 
 // The sync half of the realtime stream: what the client greets the server with, the five sync
@@ -21,6 +22,27 @@ export default class SyncStream {
   // realtime traffic and all, while a greeting naming no types is still served by a server of the
   // same model.
   static MAX_SYNCED_TYPES_LENGTH = 4000;
+
+  // Whether a page moved this tab to another user and no stream has served it since. The frames of
+  // the stream it had are the previous user's.
+  static awaitingIdentity = false;
+
+  // Whether a page moved this tab to another user and it holds no replica pair for them yet, which
+  // is what a write goes out under.
+  static awaitingPair = false;
+
+  // The identity tag this tab last followed, so the start-over the server sends for the same change
+  // isn't taken as another one.
+  static followedTag = null;
+
+  // Whether this tab's last greeting asked for sync, so the server may still be serving it a sync
+  // session - which a tab that stops leading has to close (see DataLayer.followIdentity).
+  static heldSync = false;
+
+  // Whether the last handshake was made under a cookie behind the identity this tab follows, which
+  // the stream would serve as the previous user (see DataLayer.takeHandshake). Writes wait for one
+  // that isn't: the server would refuse them as made for another user.
+  static laggingCookie = false;
 
   static renderScheduled = false;
 
@@ -79,8 +101,12 @@ export default class SyncStream {
     // served now would be written over a store and rows that may not stand at the place it
     // names, or are about to be cleared. It is greeted again once that is settled.
     if (pageModule === null || !Tabs.leader || Tabs.takingLead) {
+      $.heldSync = false;
+
       return {};
     }
+
+    $.heldSync = true;
 
     const pageModuleName = Interpreter.moduleExName(pageModule);
 
@@ -163,8 +189,41 @@ export default class SyncStream {
   // Each of the five hands its MEMORY work to receiveFrame and does its own STORING here,
   // which is what separates what a frame means from who received it.
   static listen(eventSource) {
+    // A new stream was opened under the session as it stands now.
+    $.awaitingIdentity = false;
+
+    // Sent to every stream of a session, so each tab hears it from its own, whichever tab leads.
+    eventSource.addEventListener("sync_identity", (event) => {
+      const frame = JSON.parse(event.data);
+
+      $.awaitingIdentity = false;
+
+      // Read before the follow, which takes a tab whose store stopped out of its group and opens
+      // that tab's new stream itself.
+      const inGroup = Tabs.name !== null;
+
+      const moved = Hologram.dataLayer?.followIdentity({
+        actorEntityId: frame.actor_entity_id,
+        actorUserId: frame.actor_user_id,
+        identityTag: frame.identity_tag,
+        userRow: frame.user_row,
+      });
+
+      // The event names no pair, and a tab in a group gets one from its move (see
+      // DataLayer.followIdentity). One in no group gets it from a new stream's handshake.
+      if (moved && !inGroup && Sse.isStarted) {
+        Sse.reconnect();
+      }
+
+      Batches.flush();
+    });
+
     eventSource.addEventListener("sync_deltas", (event) => {
       const frame = JSON.parse(event.data);
+
+      if ($.dropsFrame("sync_deltas", frame)) {
+        return;
+      }
 
       $.markServedBy(frame.model_hash);
       const written = $.receiveFrame("sync_deltas", frame);
@@ -180,6 +239,7 @@ export default class SyncStream {
         LocalDatabase.records(written),
         frame.cursor,
         LocalDatabase.takeStoredFactRemovals(),
+        LocalDatabase.finalSeq(),
       );
 
       $.tell("sync_deltas", frame, stored);
@@ -195,6 +255,10 @@ export default class SyncStream {
 
     eventSource.addEventListener("sync_resync", (event) => {
       const frame = JSON.parse(event.data);
+
+      if ($.dropsFrame("sync_resync", frame)) {
+        return;
+      }
 
       $.markServed();
 
@@ -226,6 +290,10 @@ export default class SyncStream {
     eventSource.addEventListener("synced", (event) => {
       const frame = JSON.parse(event.data);
 
+      if ($.dropsFrame("synced", frame)) {
+        return;
+      }
+
       $.markServedBy(frame.model_hash);
 
       const written = $.receiveFrame("synced", frame);
@@ -242,11 +310,54 @@ export default class SyncStream {
               LocalDatabase.records(written ?? []),
               frame.cursor || null,
               factRemovals,
+              LocalDatabase.finalSeq(),
             )
           : null;
 
       $.tell("synced", frame, stored);
     });
+  }
+
+  // Whether a frame belongs to a change this tab has already made, or to the user it just left. A
+  // start-over naming the tag this tab followed has nothing left to do. One naming no tag comes from
+  // a server that sends no word of whom it serves, so it's the last word this tab will get.
+  //
+  // And whether a tab that isn't leading its group, or is still settling where a lead starts from,
+  // heard a sync frame on its own stream: one that moved to another user's group can still be
+  // served the session its last greeting asked for, until its next one closes it (see
+  // DataLayer.followIdentity). What that session sends is the leader's to store and pass on.
+  static dropsFrame(event, frame) {
+    if (!Tabs.leader || Tabs.takingLead) {
+      return true;
+    }
+
+    if (
+      event === "sync_resync" &&
+      frame.reason === "identity" &&
+      (frame.identity_tag === null || frame.identity_tag === undefined)
+    ) {
+      // A tab still waiting for a pair goes on waiting: with none, a send could only be refused.
+      $.awaitingIdentity = false;
+
+      return false;
+    }
+
+    if ($.isFollowedStartOver(event, frame)) {
+      return true;
+    }
+
+    return $.awaitingIdentity;
+  }
+
+  // Whether a frame is the server's start-over for the change this tab has already followed.
+  static isFollowedStartOver(event, frame) {
+    return (
+      event === "sync_resync" &&
+      frame.reason === "identity" &&
+      frame.identity_tag !== null &&
+      frame.identity_tag !== undefined &&
+      frame.identity_tag === $.followedTag
+    );
   }
 
   // Records that this tab's stream has served it, and the first time, tells the group again what
@@ -279,6 +390,11 @@ export default class SyncStream {
         $.noteServedModel(frame.model_hash);
 
         const written = Deltas.apply(frame.deltas);
+
+        // How far the numbers are final once this frame's rows are in, which only its batch's last
+        // frame says: its numbers are split against the point the frames before it reached, so a
+        // number the frame itself makes final waits for it here, a moment.
+        LocalDatabase.raiseFinal(frame.final_seq);
 
         // What this client's own pending writes are worth against what just arrived: every batch
         // up to the number the frame names has been applied, so its writes on these rows are in
@@ -333,8 +449,7 @@ export default class SyncStream {
       //
       // Somebody else signing in is the exception, and the only one: those rows were another
       // person's and this person may not see them, so they go before anything can read them. Told
-      // apart by the reason the server itself spells for it - `durability.mjs` posts the same word
-      // for the page-load half of the same event, rather than the sentence it logs.
+      // apart by the reason the server itself spells for it.
       //
       // Nothing is repainted here on purpose: the refill's own frames schedule that, and the
       // marker ending the refill schedules one even when the refill is empty - which is what
@@ -351,6 +466,13 @@ export default class SyncStream {
           $.rowsChangedSinceRender = true;
         } else {
           LocalDatabase.beginRefill({hadPlace: $.syncCursor !== null});
+
+          // A refill keeps how far the numbers are final, since the rows below the point stay held
+          // until its markers say which go - unless the log they came from is gone, or the place
+          // naming it can't be read: a log claimed again numbers its saves from the start.
+          if (frame.reason === "retention" || frame.reason === "cursor") {
+            LocalDatabase.forgetFinal();
+          }
         }
 
         $.syncCursor = null;
@@ -390,6 +512,17 @@ export default class SyncStream {
         // What a frame relayed to this tab left, which only the tab storing that frame takes. Kept,
         // it could take out a pair told again since (see LocalDatabase.takeStoredFactRemovals).
         LocalDatabase.takeStoredFactRemovals();
+
+        // Ahead of the sweep, which goes by the rows rather than their numbers. A fill's marker
+        // carries its edge, which a type's rows reach once its marker arrives, and only that
+        // type's: the rows of a type still to come arrive in no number order, so one at or below
+        // the edge can still follow a higher one. The marker ending the fill makes it every
+        // type's.
+        if (frame.scope === "types") {
+          LocalDatabase.raiseTypeFinal(frame.types, frame.final_seq);
+        } else {
+          LocalDatabase.raiseFinal(frame.final_seq);
+        }
 
         if (frame.cursor) {
           $.syncCursor = frame.cursor;
@@ -546,9 +679,17 @@ export default class SyncStream {
 
   // Whether this tab has to hold its writes: the server would refuse them. That is a stop over the
   // model rather than the protocol, because the write endpoint compares only the model - under a
-  // protocol stop, writes still land.
+  // protocol stop, writes still land. Or the tab moved to another user and has no pair for them
+  // yet. Any pair it holds after the move ends the wait: the one the store keeps for the new user,
+  // the one the new user's group hands it, or a handshake's. All are the new user's, since the move
+  // dropped the previous user's. Or the session's cookie still names the previous user (see
+  // laggingCookie).
   static holdsWrites() {
-    return $.stopReason === "model_hash";
+    return (
+      $.stopReason === "model_hash" ||
+      ($.awaitingPair && Replica.id === null) ||
+      $.laggingCookie
+    );
   }
 }
 

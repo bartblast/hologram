@@ -104,9 +104,9 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     refute Map.has_key?(Client.store(client)[Tag], "stale")
   end
 
-  # Check 2 bounds a frame by its cursor's transaction id, so a cursor of another shape has to stop
-  # the run rather than switch the bound off.
-  test "a client fails on a cursor it can't read a transaction id from", %{
+  # Check 2 bounds a frame by its cursor's serial, so a cursor of another shape has to stop the run
+  # rather than switch the bound off.
+  test "a client fails on a cursor it can't read a serial from", %{
     users: [member | _users]
   } do
     client = start_client(member.id)
@@ -212,7 +212,7 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     Client.connect(client)
     assert Checks.await_converged(client, member.id, 5_000) == :ok
 
-    {:ok, tx, _seq, _policy_hash, _types_hash} =
+    {:ok, {seq, _tx, _at}, _log_id, _policy_hash, _types_hash} =
       client
       |> Client.cursor()
       |> Cursor.decode()
@@ -230,7 +230,7 @@ defmodule HologramSyncTests.Consistency.ClientTest do
 
     send(client, {:http, {request_id, :stream, chunk}})
 
-    assert %{cursor_tx: ^tx, id: "t"} =
+    assert %{cursor_seq: ^seq, id: "t"} =
              client
              |> Client.records()
              |> List.last()
@@ -386,6 +386,202 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     assert Client.failures(client) == []
   end
 
+  # The numbers come above anything the sequence gave, so no limit the server tells reaches them.
+  test "a client holds back a number above its final limit until a limit reaches it", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert await(fn -> Client.final_seq(client) != nil end)
+
+    request_id = request_id(client)
+    above = 1_000_000_000_000
+
+    send_frame(client, request_id, "sync_deltas", %{
+      cursor: nil,
+      deltas: %{
+        put_entity: %{
+          "HologramSyncTests.Entities.Tag" => [
+            %{id: "t", name: "t", server_created_seq: above, server_updated_seq: above}
+          ]
+        }
+      }
+    })
+
+    assert shown_numbers(client, "t") == {nil, nil}
+
+    send_frame(client, request_id, "sync_deltas", %{
+      cursor: nil,
+      deltas: %{
+        patch_entity: %{
+          "HologramSyncTests.Entities.Tag" => [
+            %{id: "t", name: "u", server_updated_seq: above + 1}
+          ]
+        }
+      },
+      final_seq: above
+    })
+
+    # The patch's number took the put's place beside the row, as a later save's does.
+    assert shown_numbers(client, "t") == {above, nil}
+    assert Client.final_seq(client) == above
+
+    send_frame(client, request_id, "sync_deltas", %{
+      cursor: nil,
+      deltas: %{},
+      final_seq: above + 1
+    })
+
+    assert shown_numbers(client, "t") == {above, above + 1}
+  end
+
+  # A fill's marker makes the fill's limit only its own type's: the rows of a type still to come
+  # arrive in no number order, so one at or below the limit can still follow.
+  test "a client mid-fill holds back a type's numbers until that type's marker", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert await(fn -> Client.final_seq(client) != nil end)
+
+    request_id = request_id(client)
+    kept = Client.final_seq(client)
+    above = 1_000_000_000_000
+
+    marker = fn type ->
+      %{cursor: nil, final_seq: above, scope: "types", types: [wire_type(type)]}
+    end
+
+    send_frame(client, request_id, "sync_resync", %{reason: "gap_too_large"})
+    send_frame(client, request_id, "synced", marker.(Space))
+
+    send_frame(client, request_id, "sync_deltas", %{
+      cursor: nil,
+      deltas: %{
+        put_entity: %{
+          wire_type(Tag) => [
+            %{id: "t", name: "t", server_created_seq: above, server_updated_seq: above}
+          ]
+        }
+      }
+    })
+
+    assert shown_numbers(client, "t") == {nil, nil}
+    assert last_view(client).finals[Space] == above
+    assert last_view(client).finals[Tag] == kept
+
+    send_frame(client, request_id, "synced", marker.(Tag))
+
+    assert shown_numbers(client, "t") == {above, above}
+    assert last_view(client).finals[Tag] == above
+
+    # The next fill takes the marker's limit, but not the numbers it filed.
+    send_frame(client, request_id, "sync_resync", %{reason: "gap_too_large"})
+    send_frame(client, request_id, "sync_deltas", %{cursor: nil, deltas: %{}})
+
+    assert shown_numbers(client, "t") == {above, above}
+    assert last_view(client).finals[Tag] == kept
+    assert last_view(client).proven[Tag] == above
+  end
+
+  # The numbers came from a log that's gone, so none of them orders anything against the new one's.
+  test "a client told its log is gone forgets the final limit and every number", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert await(fn -> Client.final_seq(client) != nil end)
+
+    # A limit below the fixture's tags leaves them unnumbered until it reaches them.
+    assert await(fn -> {nil, nil} not in shown_tags(client) end)
+
+    send_frame(client, request_id(client), "sync_resync", %{reason: "retention"})
+
+    assert Client.final_seq(client) == nil
+    forgotten = shown_tags(client)
+
+    assert Enum.uniq(forgotten) == [{nil, nil}]
+  end
+
+  # A reload starts from what the store wrote down, so the page comes back from its place and keeps
+  # its numbers and the final limit written with that place.
+  test "a client reloading comes back from its place with its numbers", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert await(fn -> Client.final_seq(client) != nil end)
+    assert await(fn -> {nil, nil} not in shown_tags(client) end)
+
+    Client.cut(client)
+
+    # The place and the limit written down with it, which a frame naming no place can have left
+    # below the one the page shows.
+    %{cursor: cursor, stored_final: stored_final} = :sys.get_state(client)
+    shown = last_view(client)
+
+    create!(Tag, name: "while away")
+    Client.reload(client)
+
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    cursors = connect_cursors(client)
+
+    assert List.last(cursors) == cursor
+    events = Client.events(client)
+
+    assert Enum.any?(
+             events,
+             &(&1.kind == :reload and &1.from == :store and &1.final_seq == stored_final)
+           )
+
+    # A number above the stored limit waits again after the reload, and one still waiting can be
+    # filed once a higher limit comes, so only rows numbered at or below it come back as shown.
+    kept =
+      for {id, {created_seq, updated_seq} = numbers} <- shown.rows[Tag],
+          Enum.all?([created_seq, updated_seq], &(&1 != nil and &1 <= stored_final)),
+          into: %{},
+          do: {id, numbers}
+
+    assert kept != %{}
+
+    after_reload = last_view(client)
+
+    assert Map.take(after_reload.rows[Tag], Map.keys(kept)) == kept
+    assert Client.failures(client) == []
+  end
+
+  # The browser refuses a store with no place and clears it, so the page fills from nothing and
+  # holds no final limit until the server names one.
+  test "a client reloading with no place written down fills from nothing", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+
+    Client.cut(client)
+    Client.put_cursor(client, nil)
+    Client.reload(client)
+
+    events = Client.events(client)
+
+    assert Enum.any?(events, &(&1.kind == :reload and &1.from == :nothing))
+    cursors = connect_cursors(client)
+
+    assert List.last(cursors) == nil
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert Client.failures(client) == []
+  end
+
   describe "Checks.diff/2" do
     test "names a missing row, an extra row, wrong fields and a wrong set" do
       expected = %{
@@ -454,6 +650,41 @@ defmodule HologramSyncTests.Consistency.ClientTest do
              |> Enum.map(&(&1[:cause] || &1.kind))
   end
 
+  defp request_id(client) do
+    client
+    |> Client.events()
+    |> Enum.filter(&(&1.kind == :connect))
+    |> List.last()
+    |> Map.fetch!(:request_id)
+  end
+
+  defp send_frame(client, request_id, event, data) do
+    send(
+      client,
+      {:http, {request_id, :stream, "event: #{event}\ndata: #{Jason.encode!(data)}\n\n"}}
+    )
+  end
+
+  defp shown_numbers(client, id) do
+    last_view(client).rows[Tag][id]
+  end
+
+  defp last_view(client) do
+    client
+    |> Client.views()
+    |> List.last()
+  end
+
+  # Every tag's numbers as the client holds them, read from its state: a client with no final limit
+  # keeps no view.
+  defp shown_tags(client) do
+    client
+    |> :sys.get_state()
+    |> Map.fetch!(:tables)
+    |> Map.fetch!("HologramSyncTests.Entities.Tag")
+    |> Enum.map(fn {_id, row} -> {row["server_created_seq"], row["server_updated_seq"]} end)
+  end
+
   defp connect_cursors(client) do
     for %{kind: :connect, cursor: cursor} <- Client.events(client), do: cursor
   end
@@ -480,22 +711,23 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     |> add_relationship(:tags, red.id)
     |> DB.update!()
 
-    # A transaction left open elsewhere would put the client's place below these writes, and the
-    # catch-up would then replay them and restate the tag's set.
-    edge = Oplog.current_xmax()
-    assert await(fn -> Oplog.current_xmin() >= edge end)
+    # A save left running elsewhere would hold the client's place below these writes, and the
+    # catch-up would then replay them and restate the tag's set. The newest committed entry, as a
+    # serial handed out to a save that rolled back is never read.
+    {%{seq: edge}, _run} = Oplog.last_entry_through(Oplog.last_serial())
+    assert await(fn -> read_seq() >= edge end)
 
     client = start_client(user.id)
 
     Client.connect(client)
     assert Checks.await_converged(client, user.id, 5_000) == :ok
 
-    {:ok, tx, _seq, _policy_hash, _types_hash} =
+    {:ok, {seq, _tx, _at}, _log_id, _policy_hash, _types_hash} =
       client
       |> Client.cursor()
       |> Cursor.decode()
 
-    assert tx >= edge
+    assert seq >= edge
 
     Client.cut(client)
     give_access.(other_board)

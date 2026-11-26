@@ -1377,6 +1377,223 @@ describe("Deltas", () => {
     });
   });
 
+  describe("apply() - numbers above the final point", () => {
+    const numbered = (created, updated, extra = {}) =>
+      Object.assign(
+        {
+          id: "t1",
+          server_created_seq: created,
+          server_updated_seq: updated,
+          title: "Draft copy",
+        },
+        extra,
+      );
+
+    it("holds a new row's numbers above the point back from the row", () => {
+      LocalDatabase.raiseFinal(10);
+
+      Deltas.apply({put_entity: {[TASK]: [numbered(12, 12)]}});
+
+      const row = LocalDatabase.baseRow(TASK, "t1");
+
+      assert.isNull(row.server_created_seq);
+      assert.isNull(row.server_updated_seq);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_created_seq: 12, server_updated_seq: 12},
+        own: false,
+      });
+    });
+
+    it("files numbers at or below the point as they came", () => {
+      LocalDatabase.raiseFinal(12);
+
+      Deltas.apply({put_entity: {[TASK]: [numbered(11, 12)]}});
+
+      const row = LocalDatabase.baseRow(TASK, "t1");
+
+      assert.equal(row.server_created_seq, 11);
+      assert.equal(row.server_updated_seq, 12);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("holds every number back while no point was told", () => {
+      Deltas.apply({put_entity: {[TASK]: [numbered(1, 1)]}});
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1").server_created_seq);
+      assert.isNotNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("keeps an updated row's previous number while a patch's waits", () => {
+      LocalDatabase.raiseFinal(10);
+
+      Deltas.apply({put_entity: {[TASK]: [numbered(5, 8)]}});
+
+      Deltas.apply({
+        patch_entity: {
+          [TASK]: [{id: "t1", server_updated_seq: 12, title: "Final copy"}],
+        },
+      });
+
+      const row = LocalDatabase.baseRow(TASK, "t1");
+
+      assert.equal(row.title, "Final copy");
+      assert.equal(row.server_created_seq, 5);
+      assert.equal(row.server_updated_seq, 8);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_updated_seq: 12},
+        own: false,
+      });
+    });
+
+    it("keeps a held row's previous number while a put's waits", () => {
+      LocalDatabase.raiseFinal(10);
+
+      Deltas.apply({put_entity: {[TASK]: [numbered(5, 8)]}});
+      Deltas.apply({put_entity: {[TASK]: [numbered(5, 15)]}});
+
+      const row = LocalDatabase.baseRow(TASK, "t1");
+
+      assert.equal(row.server_created_seq, 5);
+      assert.equal(row.server_updated_seq, 8);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_updated_seq: 15},
+        own: false,
+      });
+    });
+
+    // A delivery sent again from an older place can bring a final number after a newer one that
+    // waits.
+    it("keeps a waiting number over an older one that is final", () => {
+      LocalDatabase.raiseFinal(10);
+
+      Deltas.apply({put_entity: {[TASK]: [numbered(5, 12)]}});
+
+      Deltas.apply({
+        patch_entity: {[TASK]: [{id: "t1", server_updated_seq: 8}]},
+      });
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 8);
+
+      LocalDatabase.raiseFinal(12);
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 12);
+    });
+
+    it("keeps the own flag beside the row while its created number waits", () => {
+      LocalDatabase.raiseFinal(10);
+
+      Deltas.apply({put_entity: {[TASK]: [numbered(12, 12, {$own: true})]}});
+
+      assert.notProperty(LocalDatabase.baseRow(TASK, "t1"), "$own");
+      assert.isTrue(LocalDatabase.waitingNumbers(TASK, "t1").own);
+    });
+
+    it("keeps the own flag through a later put that doesn't carry it", () => {
+      LocalDatabase.raiseFinal(10);
+
+      Deltas.apply({put_entity: {[TASK]: [numbered(12, 12, {$own: true})]}});
+      Deltas.apply({put_entity: {[TASK]: [numbered(12, 14)]}});
+
+      assert.isTrue(LocalDatabase.waitingNumbers(TASK, "t1").own);
+    });
+
+    it("drops the own flag of a row whose created number is final", () => {
+      LocalDatabase.raiseFinal(12);
+
+      Deltas.apply({put_entity: {[TASK]: [numbered(11, 14, {$own: true})]}});
+
+      assert.notProperty(LocalDatabase.baseRow(TASK, "t1"), "$own");
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {server_updated_seq: 14},
+        own: false,
+      });
+    });
+
+    it("keeps a carried row's numbers above the point beside it as shown", () => {
+      LocalDatabase.raiseFinal(10);
+
+      Deltas.apply(
+        {put_entity: {[TASK]: [numbered(12, 14)]}},
+        {insertOnly: true},
+      );
+
+      const row = LocalDatabase.baseRow(TASK, "t1");
+
+      assert.isNull(row.server_created_seq);
+      assert.isNull(row.server_updated_seq);
+      assert.deepEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_created_seq: 12, server_updated_seq: 14},
+      });
+    });
+
+    it("files a carried row's numbers at or below the point as they came", () => {
+      LocalDatabase.raiseFinal(12);
+
+      Deltas.apply(
+        {put_entity: {[TASK]: [numbered(11, 12)]}},
+        {insertOnly: true},
+      );
+
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_created_seq, 11);
+      assert.equal(LocalDatabase.baseRow(TASK, "t1").server_updated_seq, 12);
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("keeps a carried number for a row it holds, writing nothing", () => {
+      LocalDatabase.raiseFinal(10);
+
+      Deltas.apply({put_entity: {[TASK]: [numbered(5, 8)]}});
+
+      const written = Deltas.apply(
+        {put_entity: {[TASK]: [numbered(5, 14, {title: "Final copy"})]}},
+        {insertOnly: true},
+      );
+
+      assert.deepEqual(written, new Set());
+
+      const row = LocalDatabase.baseRow(TASK, "t1");
+
+      assert.equal(row.title, "Draft copy");
+      assert.equal(row.server_updated_seq, 8);
+
+      assert.deepStrictEqual(LocalDatabase.waitingNumbers(TASK, "t1"), {
+        numbers: {},
+        own: false,
+        shown: {server_updated_seq: 14},
+      });
+    });
+
+    it("holds nothing for a patch naming a row it doesn't hold", () => {
+      LocalDatabase.raiseFinal(10);
+
+      Deltas.apply({
+        patch_entity: {[TASK]: [{id: "t1", server_updated_seq: 12}]},
+      });
+
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+
+    it("forgets a row's waiting numbers when the row goes", () => {
+      LocalDatabase.raiseFinal(10);
+
+      Deltas.apply({put_entity: {[TASK]: [numbered(12, 12)]}});
+      Deltas.apply({unsync_entity: {[TASK]: ["t1"]}});
+
+      LocalDatabase.raiseFinal(20);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1"));
+      assert.isNull(LocalDatabase.waitingNumbers(TASK, "t1"));
+    });
+  });
+
   describe("apply() - an op this build does not know", () => {
     it("raises rather than passing it over", () => {
       assert.throw(

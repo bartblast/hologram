@@ -1303,12 +1303,6 @@ defmodule Hologram.ServerTest do
       assert result.user_id == 123
     end
 
-    test "sets an atom identity" do
-      result = put_user_id(%Server{}, :admin)
-
-      assert result.user_id == :admin
-    end
-
     test "overwrites an existing user identity" do
       result = put_user_id(%Server{user_id: 123}, 456)
 
@@ -1321,17 +1315,33 @@ defmodule Hologram.ServerTest do
       assert result.user_id == nil
     end
 
-    test "raises Hologram.MisuseError when the identity is not a string, integer, or atom" do
+    test "raises Hologram.MisuseError when the identity is not a string or integer" do
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received %{}",
+                   "User ID must be a UTF-8 string or an integer, but received %{}",
                    fn ->
                      put_user_id(%Server{}, %{})
                    end
     end
 
+    test "raises Hologram.MisuseError when the identity is an atom" do
+      assert_error Hologram.MisuseError,
+                   "User ID must be a UTF-8 string or an integer, but received :admin",
+                   fn ->
+                     put_user_id(%Server{}, :admin)
+                   end
+    end
+
+    test "raises Hologram.MisuseError when the identity is a string that isn't UTF-8" do
+      assert_error Hologram.MisuseError,
+                   "User ID must be a UTF-8 string or an integer, but received <<255, 254>>",
+                   fn ->
+                     put_user_id(%Server{}, <<255, 254>>)
+                   end
+    end
+
     test "raises Hologram.MisuseError when the identity is false" do
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      put_user_id(%Server{}, false)
                    end
@@ -1339,7 +1349,7 @@ defmodule Hologram.ServerTest do
 
     test "raises Hologram.MisuseError when the identity is true" do
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received true",
+                   "User ID must be a UTF-8 string or an integer, but received true",
                    fn ->
                      put_user_id(%Server{}, true)
                    end

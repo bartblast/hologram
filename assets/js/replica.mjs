@@ -11,12 +11,17 @@
 // The offer is kept rather than dropped, because it is the recovery. A remembered statement stops
 // verifying when the session it was bound to is gone, or after the server's signing key is
 // rotated, and the server refuses such a batch outright - at which point the pair this page was
-// handed is exactly the fresh, valid one to switch to, and it is already here.
+// handed is exactly the fresh, valid one to switch to, and it is already here. Each handshake of the
+// stream offers one too, minted for the session as it stands (see DataLayer.takeHandshake).
 export default class Replica {
-  // The pair the current page offered, held whether or not it is the one in use.
+  // The pair last offered, by the page or a handshake, held whether or not it is the one in use.
   static fresh = null;
 
   static id = null;
+
+  // The user the pair in use was taken up for, once this document's restore has said (see
+  // Durability.restore). An owner can be null, for a visitor, so undefined is "not said yet".
+  static owner = undefined;
 
   static token = null;
 
@@ -54,9 +59,9 @@ export default class Replica {
     }
   }
 
-  // Switches to the pair the page offered, answering whether there was anywhere to switch TO. No
-  // when the offer is already what is in use, since a pair the server just refused cannot be
-  // recovered by presenting it again, and no when the page offered nothing at all.
+  // Switches to the pair last offered, answering whether there was anywhere to switch TO. No when
+  // the offer is already what is in use, since a pair the server just refused cannot be recovered
+  // by presenting it again, and no when nothing was offered.
   static refresh() {
     if (!Replica.fresh?.id || Replica.fresh.id === Replica.id) {
       return false;
@@ -114,6 +119,24 @@ export default class Replica {
     Replica.mintRefused = true;
   }
 
+  // A pair the server minted for this tab alone, taken up by a tab in no group, which counts its
+  // batches under it as under one it asked for (see DataLayer.takeHandshake).
+  static adoptOwn(replica) {
+    Replica.awaitingMint = false;
+    Replica.minted = true;
+    Replica.mintRefused = false;
+
+    Replica.adopt(replica);
+  }
+
+  // Forgets the pair this tab asked for, and any refusal of it, for a tab that followed a change of
+  // user: both were about the previous owner (see DataLayer.followIdentity).
+  static endMint() {
+    Replica.awaitingMint = false;
+    Replica.minted = false;
+    Replica.mintRefused = false;
+  }
+
   // Whether this tab has no pair it may send under, for now or for good.
   static withoutIdentity() {
     return Replica.awaitingMint || Replica.mintRefused;
@@ -125,6 +148,7 @@ export default class Replica {
     Replica.id = null;
     Replica.minted = false;
     Replica.mintRefused = false;
+    Replica.owner = undefined;
     Replica.token = null;
   }
 }

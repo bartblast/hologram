@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.MutationsTest do
   # async: false - each test truncates the shared tables.
   use HologramFeatureTests.TestCase, async: false
 
+  alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
@@ -10,6 +11,7 @@ defmodule HologramFeatureTests.MutationsTest do
   alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Runtime.Serializer
   alias HologramFeatureTests.Entities.Item
@@ -167,6 +169,26 @@ defmodule HologramFeatureTests.MutationsTest do
     |> visit(MutationsPage)
     |> click(button("Log in"))
     |> assert_text(css("#result"), "logged_in")
+    |> await_stream_of_session_user()
+  end
+
+  # The command's reply comes before the stream records the login, and a batch the stream still
+  # holds for the previous user is answered 409 ahead of any token check.
+  defp await_stream_of_session_user(session, attempts_left \\ 100) do
+    instance_id = script_result(session, "return globalThis.Hologram.instanceId;")
+    user_id = session_user().id
+
+    case SubscriptionRegistry.identity_of(instance_id) do
+      {_session_id, ^user_id} ->
+        session
+
+      _other when attempts_left > 0 ->
+        Process.sleep(50)
+        await_stream_of_session_user(session, attempts_left - 1)
+
+      other ->
+        raise "The stream never recorded the login, it holds #{inspect(other)}"
+    end
   end
 
   # What the page sends as its replica_id, and so what the record is keyed by.
@@ -217,6 +239,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
     script = """
     const payload = {
+      actor_user_id: #{Jason.encode!(session_owner())},
       instance_id: globalThis.Hologram.instanceId,
       replica_id: #{replica_id_js},
       replica_token: #{replica_token_js},
@@ -253,6 +276,15 @@ defmodule HologramFeatureTests.MutationsTest do
     Enum.map(rows, fn [actor_id, result, envelope] ->
       %{actor_id: Codec.decode(actor_id, :uuid), envelope: envelope, result: result}
     end)
+  end
+
+  # Whose batch this is, as the page of the session's user names it. A hand-built batch has to say
+  # so too, since the server refuses one made for anyone else.
+  defp session_owner do
+    case session_user() do
+      nil -> nil
+      user -> Auth.owner_key(user.id)
+    end
   end
 
   defp session_user do
@@ -699,7 +731,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
   feature "names the pin a variable's name forgot in a filter in the browser", %{session: session} do
     expected_msg =
-      "unknown attribute :search in HologramFeatureTests.Entities.Note - known attributes: :author_id, :body, :created_at, :id, :pinned, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned: ^search"
+      "unknown attribute :search in HologramFeatureTests.Entities.Note - known attributes: :author_id, :body, :created_at, :id, :pinned, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :updated_at - a value from the surrounding code is pinned: ^search"
 
     assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
       session
@@ -710,7 +742,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
   feature "names how to read a field of a quantifier's row in the browser", %{session: session} do
     expected_msg =
-      "unknown attribute :position in HologramFeatureTests.Entities.Channel - known attributes: :created_at, :id, :message_count, :name, :server_created_at, :server_updated_at, :updated_at - HologramFeatureTests.Entities.Message declares position, read as message.position"
+      "unknown attribute :position in HologramFeatureTests.Entities.Channel - known attributes: :created_at, :id, :message_count, :name, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :updated_at - HologramFeatureTests.Entities.Message declares position, read as message.position"
 
     assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
       session

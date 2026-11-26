@@ -50,7 +50,7 @@ defmodule Hologram.DBReadTest do
         |> PolicyModule6.new()
         |> DB.create!()
 
-      for session_user_id <- [String.replace(user.id, "-", ""), "abc", 7, :admin] do
+      for session_user_id <- [String.replace(user.id, "-", ""), "abc", 7] do
         ids =
           Context.with_actor(session_user_id, fn ->
             PolicyModule6
@@ -115,13 +115,13 @@ defmodule Hologram.DBReadTest do
           |> DB.read()
         end)
 
-      assert results == [entity]
+      assert unnumbered(results) == [entity]
     end
 
     test "reads raw with no session" do
       entity = create_policy_module_2_entity()
 
-      assert DB.read(PolicyModule2) == [entity]
+      assert unnumbered(DB.read(PolicyModule2)) == [entity]
     end
 
     test "counts only the rows the acting user may read" do
@@ -330,7 +330,7 @@ defmodule Hologram.DBReadTest do
     test "reads a policied row without an acting user" do
       entity = create_policy_module_2_entity()
 
-      assert DB.read(PolicyModule2, entity.id) == entity
+      assert unnumbered(DB.read(PolicyModule2, entity.id)) == entity
     end
 
     test "reads nil for a row the rules withhold from a signed-out session" do
@@ -345,7 +345,7 @@ defmodule Hologram.DBReadTest do
         |> PolicyModule6.new()
         |> DB.create!()
 
-      assert as_user(nil, fn -> DB.read(PolicyModule6, entity.id) end) == entity
+      assert unnumbered(as_user(nil, fn -> DB.read(PolicyModule6, entity.id) end)) == entity
     end
 
     test "reads nil for a row the acting user may not read" do
@@ -364,7 +364,7 @@ defmodule Hologram.DBReadTest do
     test "reads the row" do
       entity = create_module_2_entity(a: true, c: "some text")
 
-      assert DB.read(Module2, entity.id) == entity
+      assert unnumbered(DB.read(Module2, entity.id)) == entity
     end
 
     test "reads the row the acting user may read" do
@@ -373,7 +373,7 @@ defmodule Hologram.DBReadTest do
 
       Auth.grant_role(user, :member, entity)
 
-      assert as_user(user, fn -> DB.read(PolicyModule2, entity.id) end) == entity
+      assert unnumbered(as_user(user, fn -> DB.read(PolicyModule2, entity.id) end)) == entity
     end
 
     test "raises on a non-canonical id" do

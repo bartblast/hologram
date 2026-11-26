@@ -64,6 +64,16 @@ function currentBatch(verb) {
     );
   }
 
+  // The action was suspended across a change of user, so what it reads now is the new user's. A
+  // write built from that would go into the previous user's batch, and be sent as theirs. Counted
+  // rather than compared, since the previous user may be back by now, after the action read
+  // somebody else's rows.
+  if (batch.actorUserChanges !== LocalDatabase.actorUserChanges) {
+    Interpreter.raiseMisuseError(
+      `${verb} was called after the signed-in user changed while this action was suspended - writes made for the new user belong in a new action`,
+    );
+  }
+
   return batch;
 }
 
@@ -662,7 +672,9 @@ function storedEntity(entity, entityType, stamp) {
     [Type.atom("__meta__"), metadata],
     [Type.atom("created_at"), timestamp],
     [Type.atom("server_created_at"), Type.nil()],
+    [Type.atom("server_created_seq"), Type.nil()],
     [Type.atom("server_updated_at"), Type.nil()],
+    [Type.atom("server_updated_seq"), Type.nil()],
     [Type.atom("updated_at"), timestamp],
   ]) {
     stored.data[Type.encodeMapKey(key)] = [key, value];

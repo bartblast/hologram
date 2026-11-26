@@ -18,6 +18,7 @@ defmodule Hologram.Job.Runner do
   alias Hologram.DB.EntityOperations
   alias Hologram.Job
   alias Hologram.Job.RunLock
+  alias Hologram.Sync.FinalSeq
 
   # What the row of a run cut short says. Nothing recorded how far run/1 got, so it claims nothing
   # either way - and the run that knew is gone.
@@ -291,10 +292,21 @@ defmodule Hologram.Job.Runner do
 
       :ok = EntityOperations.update(job_type, id, changes)
 
-      {:claimed, Map.merge(job, changes)}
+      {:claimed, claimed_job(job, changes)}
     else
       :locked
     end
+  end
+
+  # The job run/1 is given holds its numbers the way a query reads them: the claim's update gave
+  # the row a new updated number, which is not final while the claim is uncommitted, and the
+  # created number reads nil while it is above the limit.
+  defp claimed_job(job, changes) do
+    created_seq = if job.server_created_seq <= FinalSeq.current(), do: job.server_created_seq
+
+    job
+    |> Map.merge(changes)
+    |> Map.merge(%{server_created_seq: created_seq, server_updated_seq: nil})
   end
 
   # A row with no due time is one no look lists either, since the look's range leaves it out.

@@ -4,6 +4,7 @@ import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
 import Batch from "../../assets/js/batch.mjs";
 import Batches from "../../assets/js/batches.mjs";
+import Client from "../../assets/js/client.mjs";
 import DataLayer from "../../assets/js/data_layer.mjs";
 import Deltas from "../../assets/js/deltas.mjs";
 import Durability from "../../assets/js/durability.mjs";
@@ -26,6 +27,15 @@ import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
+
+// Takes the sender wake-up a handshake's pair leaves for the stream's answer, which a later test
+// would otherwise take.
+const clearHandshakeWake = () => {
+  const flush = sinon.stub(Batches, "flush");
+
+  DataLayer.takeReplica(null);
+  flush.restore();
+};
 
 describe("DataLayer", () => {
   afterEach(() => {
@@ -419,6 +429,22 @@ describe("DataLayer", () => {
       });
 
       assert.isTrue(offering.calledBefore(opening));
+    });
+
+    // What the stream's handshake is held to (see takeHandshake).
+    it("follows the identity the document was rendered for", async () => {
+      const originalTag = IdentityTracker.tag;
+      Durability.mode = "memory";
+      IdentityTracker.tag = "3.tag-3";
+
+      try {
+        await DataLayer.boot(identity());
+
+        assert.equal(SyncStream.followedTag, "3.tag-3");
+      } finally {
+        IdentityTracker.tag = originalTag;
+        SyncStream.followedTag = null;
+      }
     });
 
     it("joins the group named for the database and the acting user", async () => {
@@ -1011,12 +1037,12 @@ describe("DataLayer", () => {
     it("files a user id no user entity can have beside no entity id", () => {
       DataLayer.ingestMountData({
         actorEntityId: null,
-        actorUserId: 7,
+        actorUserId: "i7",
         syncRows: {},
       });
 
       assert.isNull(LocalDatabase.actorEntityId);
-      assert.equal(LocalDatabase.actorUserId, 7);
+      assert.equal(LocalDatabase.actorUserId, "i7");
     });
 
     it("keeps the counts an earlier page carried", () => {
@@ -1093,17 +1119,16 @@ describe("DataLayer", () => {
       });
     });
 
-    // Two integer ids past 2^53 reach the browser as one number, so only the period tells them
-    // apart.
+    // A user who signed out and back in has one id, so only the period tells the two visits apart.
     it("drops the earlier counts when the identity period changed under the same id", () => {
-      LocalDatabase.actorUserId = 9007199254740992;
+      LocalDatabase.actorUserId = "u1";
       LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
       LocalDatabase.syncCountTypes = {"MyApp.Earlier/count/": ["MyApp.Task"]};
 
       IdentityTracker.period = "period-2";
 
       DataLayer.ingestMountData({
-        actorUserId: 9007199254740992,
+        actorUserId: "u1",
         syncRows: {},
       });
 
@@ -1177,6 +1202,1651 @@ describe("DataLayer", () => {
       assert.isNull(LocalDatabase.actorEntityId);
       assert.deepStrictEqual(LocalDatabase.syncCounts, {
         "MyApp.Held/count/": 9,
+      });
+    });
+  });
+
+  describe("holdsOtherUser()", () => {
+    afterEach(() => {
+      DataLayer.isStoreRestored = false;
+      LocalDatabase.actorUserId = null;
+    });
+
+    it("is true for another user once the store is read", () => {
+      DataLayer.isStoreRestored = true;
+      LocalDatabase.actorUserId = "u1";
+
+      assert.isTrue(DataLayer.holdsOtherUser("u2"));
+    });
+
+    it("is false for the user it holds", () => {
+      DataLayer.isStoreRestored = true;
+      LocalDatabase.actorUserId = "u1";
+
+      assert.isFalse(DataLayer.holdsOtherUser("u1"));
+    });
+
+    it("takes undefined and null as the same visitor", () => {
+      DataLayer.isStoreRestored = true;
+      LocalDatabase.actorUserId = undefined;
+
+      assert.isFalse(DataLayer.holdsOtherUser(null));
+    });
+
+    // The document's first mount is what says who it is for.
+    it("is false before the store is read", () => {
+      LocalDatabase.actorUserId = "u1";
+
+      assert.isFalse(DataLayer.holdsOtherUser("u2"));
+    });
+  });
+
+  describe("catchUpIdentity()", () => {
+    let reconnecting, timers, wasStarted;
+
+    // Runs a catch-up, then lets the stream's moment to tell the tab pass.
+    const catchUp = () => {
+      DataLayer.catchUpIdentity();
+      timers.tick(DataLayer.CATCH_UP_DELAY_MS);
+    };
+
+    beforeEach(() => {
+      timers = sinon.useFakeTimers({toFake: ["setTimeout", "clearTimeout"]});
+
+      wasStarted = Sse.isStarted;
+      Sse.isStarted = true;
+
+      reconnecting = sinon.stub(Sse, "reconnect");
+
+      // A follow to another user starts the tab over.
+      sinon.stub(Deltas, "apply");
+      sinon.stub(SyncStream, "scheduleRender");
+
+      IdentityTracker.init("1.tag-1");
+      IdentityTracker.observe("2.tag-2");
+
+      DataLayer.caughtUpTag = null;
+      LocalDatabase.reset();
+      LocalDatabase.actorUserId = "u1";
+      Replica.reset();
+      SyncStream.followedTag = "1.tag-1";
+    });
+
+    afterEach(() => {
+      clearTimeout(DataLayer.catchUpTimer);
+      DataLayer.catchUpTimer = null;
+
+      Sse.isStarted = wasStarted;
+
+      IdentityTracker.documentPeriod = null;
+      IdentityTracker.period = null;
+      IdentityTracker.periods = new Set();
+      IdentityTracker.tag = null;
+
+      DataLayer.caughtUpTag = null;
+      LocalDatabase.reset();
+      LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
+      LocalDatabase.identityEndedPeriod = null;
+      Replica.reset();
+      SyncStream.awaitingIdentity = false;
+      SyncStream.awaitingPair = false;
+      SyncStream.followedTag = null;
+      SyncStream.laggingCookie = false;
+      SyncStream.rowsChangedSinceRender = false;
+      SyncStream.syncCursor = null;
+    });
+
+    it("opens a new stream for an identity the tab doesn't follow", () => {
+      catchUp();
+
+      sinon.assert.calledOnce(reconnecting);
+    });
+
+    // The reply names only the tag: the handshake names who the session serves.
+    it("follows nothing itself", () => {
+      catchUp();
+
+      assert.equal(SyncStream.followedTag, "1.tag-1");
+      assert.equal(LocalDatabase.actorUserId, "u1");
+    });
+
+    it("gives the stream a moment to tell the tab of the identity", () => {
+      DataLayer.catchUpIdentity();
+      timers.tick(DataLayer.CATCH_UP_DELAY_MS - 1);
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    // The reply usually lands before the stream's word on the change, which a new stream would only
+    // repeat.
+    it("leaves the stream alone when it tells the tab of the identity meanwhile", () => {
+      DataLayer.catchUpIdentity();
+
+      DataLayer.followIdentity({
+        actorEntityId: "entity-2",
+        actorUserId: "u2",
+        identityTag: "2.tag-2",
+      });
+
+      timers.tick(DataLayer.CATCH_UP_DELAY_MS);
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    it("catches up with the identity of the latest reply once the moment is over", () => {
+      DataLayer.catchUpIdentity();
+      IdentityTracker.observe("3.tag-3");
+      DataLayer.catchUpIdentity();
+      timers.tick(DataLayer.CATCH_UP_DELAY_MS);
+
+      sinon.assert.calledOnce(reconnecting);
+      assert.equal(DataLayer.caughtUpTag, "3.tag-3");
+    });
+
+    it("leaves the stream alone for the identity the tab follows", () => {
+      SyncStream.followedTag = "2.tag-2";
+
+      catchUp();
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    it("opens no stream before the page has", () => {
+      Sse.isStarted = false;
+
+      catchUp();
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    it("opens no stream while no identity is known", () => {
+      IdentityTracker.tag = null;
+
+      catchUp();
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    // A follow of an identity it couldn't take for the latest, or a mount, has one coming.
+    it("opens no stream for a tab waiting to hear who it serves", () => {
+      SyncStream.awaitingIdentity = true;
+
+      catchUp();
+
+      sinon.assert.notCalled(reconnecting);
+    });
+
+    // A reply that lands while the handshake is on its way would throw that handshake away, and
+    // one that names no tag follows nothing.
+    it("opens one stream per identity", () => {
+      catchUp();
+      catchUp();
+
+      sinon.assert.calledOnce(reconnecting);
+    });
+
+    it("opens another stream for the next identity", () => {
+      catchUp();
+      IdentityTracker.observe("3.tag-3");
+      catchUp();
+
+      sinon.assert.calledTwice(reconnecting);
+    });
+
+    // A cookie set back brings an earlier tag back, stamp and all.
+    it("catches up with a tag again once the tab has followed another", () => {
+      catchUp();
+
+      DataLayer.followIdentity({
+        actorEntityId: "entity-3",
+        actorUserId: "u3",
+        identityTag: "3.tag-3",
+      });
+
+      IdentityTracker.tag = "2.tag-2";
+      catchUp();
+
+      sinon.assert.calledTwice(reconnecting);
+    });
+
+    // An older cookie set back while the handshake was on its way names the tag the tab follows,
+    // and a later reply can bring the newer one back.
+    it("catches up with a tag again once a handshake names the one the tab follows", () => {
+      catchUp();
+
+      IdentityTracker.tag = "1.tag-1";
+
+      DataLayer.takeHandshake({
+        actorEntityId: "entity-1",
+        actorUserId: "u1",
+        identityTag: "1.tag-1",
+        replica: null,
+      });
+
+      IdentityTracker.tag = "2.tag-2";
+      catchUp();
+
+      sinon.assert.calledTwice(reconnecting);
+    });
+
+    // Without a tag the handshake follows nothing, and a stream per reply would follow nothing too.
+    it("waits for a handshake that names a tag", () => {
+      catchUp();
+
+      DataLayer.takeHandshake({
+        actorEntityId: "entity-1",
+        actorUserId: "u1",
+        identityTag: null,
+        replica: null,
+      });
+
+      catchUp();
+
+      sinon.assert.calledOnce(reconnecting);
+    });
+
+    // Its handshake names the new user, and the tab follows it there.
+    it("is answered by the handshake's follow", () => {
+      catchUp();
+
+      DataLayer.takeHandshake({
+        actorEntityId: "entity-2",
+        actorUserId: "u2",
+        identityTag: "2.tag-2",
+        replica: {id: "replica-2", token: "token-2"},
+      });
+
+      catchUp();
+
+      sinon.assert.calledOnce(reconnecting);
+      assert.equal(LocalDatabase.actorUserId, "u2");
+      assert.equal(SyncStream.followedTag, "2.tag-2");
+      assert.deepStrictEqual(Replica.current(), {
+        id: "replica-2",
+        token: "token-2",
+      });
+
+      clearHandshakeWake();
+    });
+  });
+
+  describe("followIdentity()", () => {
+    const TASK = "MyApp.Task";
+
+    const pair = {id: "replica-2", token: "token-2"};
+
+    const sealed = (id) => {
+      Batches.open("tasks");
+      Batches.current().append({id, op: "delete", stamp: 1, type: TASK});
+
+      return Batches.close();
+    };
+
+    let originalTracker, persisting, rendering;
+
+    beforeEach(() => {
+      originalTracker = {
+        documentPeriod: IdentityTracker.documentPeriod,
+        period: IdentityTracker.period,
+        periods: IdentityTracker.periods,
+        tag: IdentityTracker.tag,
+      };
+
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {id: "uuid", title: "string"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+      Batches.reset();
+      Replica.reset();
+      LocalDatabase.reset();
+      IdentityTracker.init("1.tag-1");
+
+      LocalDatabase.identityEndedPeriod = null;
+      LocalDatabase.actorUserId = "u1";
+      LocalDatabase.actorEntityId = "entity-1";
+      LocalDatabase.putRow(TASK, {id: "t1", title: "the first user's"});
+
+      SyncStream.followedTag = null;
+      SyncStream.rowsChangedSinceRender = false;
+      SyncStream.syncCursor = "place-1";
+
+      Replica.adopt({id: "replica-1", token: "token-1"});
+
+      persisting = sinon.stub(Durability, "persistReplica");
+      rendering = sinon.stub(SyncStream, "scheduleRender");
+    });
+
+    afterEach(() => {
+      Object.assign(IdentityTracker, originalTracker);
+
+      Batches.reset();
+      Replica.reset();
+      LocalDatabase.reset();
+
+      LocalDatabase.identityEndedPeriod = null;
+      LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
+
+      SyncStream.awaitingIdentity = false;
+      SyncStream.awaitingPair = false;
+      SyncStream.followedTag = null;
+      SyncStream.laggingCookie = false;
+      SyncStream.rowsChangedSinceRender = false;
+      SyncStream.syncCursor = null;
+
+      Tabs.leader = true;
+      Tabs.name = null;
+      Tabs.takingLead = false;
+
+      delete globalThis.Hologram.sync;
+    });
+
+    const followToSecondUser = (fields = {}, options) =>
+      DataLayer.followIdentity(
+        {
+          actorEntityId: "entity-2",
+          actorUserId: "u2",
+          identityTag: "2.tag-2",
+          ...fields,
+        },
+        options,
+      );
+
+    // A tab in a group, for what a follow does before the move is under way.
+    const inGroup = (follow) => {
+      const originalMode = Durability.mode;
+
+      Durability.mode = "indexeddb";
+      Tabs.name = "hologram.1.model.u1";
+
+      sinon.stub(Tabs, "move").returns(new Promise(() => {}));
+
+      try {
+        follow();
+      } finally {
+        Durability.mode = originalMode;
+        Tabs.name = null;
+      }
+    };
+
+    // The server may have applied one whose answer never came, and only the pair it went under
+    // tells it so.
+    describe("and back, with batches no store holds", () => {
+      let originalMode;
+
+      const followBack = () =>
+        DataLayer.followIdentity({
+          actorEntityId: "entity-1",
+          actorUserId: "u1",
+          identityTag: "3.tag-3",
+        });
+
+      beforeEach(() => {
+        originalMode = Durability.mode;
+        Durability.mode = "memory";
+      });
+
+      afterEach(() => {
+        Durability.mode = originalMode;
+      });
+
+      it("sends them under the pair they went under", () => {
+        const batch = sealed("t1");
+
+        followToSecondUser();
+        Replica.adoptOwn({id: "replica-2", token: "token-2"});
+        followBack();
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.deepStrictEqual(Replica.current(), {
+          id: "replica-1",
+          token: "token-1",
+        });
+        assert.isFalse(SyncStream.holdsWrites());
+      });
+
+      // A number this tab spent under its group's pair would be recorded nowhere.
+      it("brings back a pair its group shared as shared", () => {
+        sealed("t1");
+
+        followToSecondUser();
+        Replica.adoptOwn({id: "replica-2", token: "token-2"});
+        followBack();
+
+        assert.equal(Replica.id, "replica-1");
+        assert.isFalse(Replica.minted);
+      });
+
+      it("brings back a pair minted for this tab as minted", () => {
+        Replica.adoptOwn({id: "replica-1", token: "token-1"});
+        sealed("t1");
+
+        followToSecondUser();
+        followBack();
+
+        assert.equal(Replica.id, "replica-1");
+        assert.isTrue(Replica.minted);
+      });
+
+      it("holds no pair for a user with none waiting", () => {
+        followToSecondUser();
+        followBack();
+
+        assert.isNull(Replica.id);
+      });
+
+      it("keeps the pair until its user returns", () => {
+        sealed("t1");
+
+        followToSecondUser();
+        DataLayer.followIdentity({actorUserId: "u3", identityTag: "3.tag-3"});
+        DataLayer.followIdentity({
+          actorEntityId: "entity-1",
+          actorUserId: "u1",
+          identityTag: "4.tag-4",
+        });
+
+        assert.equal(Replica.id, "replica-1");
+      });
+    });
+
+    describe("to another user", () => {
+      it("drops the previous user's rows", () => {
+        followToSecondUser();
+
+        assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+      });
+
+      it("answers for the new user", () => {
+        followToSecondUser();
+
+        assert.equal(LocalDatabase.actorUserId, "u2");
+        assert.equal(LocalDatabase.actorEntityId, "entity-2");
+      });
+
+      it("takes a sign-out as nobody", () => {
+        followToSecondUser({actorEntityId: undefined, actorUserId: null});
+
+        assert.isNull(LocalDatabase.actorUserId);
+        assert.isNull(LocalDatabase.actorEntityId);
+      });
+
+      it("gives up the place, which dated the previous user's rows", () => {
+        followToSecondUser();
+
+        assert.isNull(SyncStream.syncCursor);
+      });
+
+      it("has the next action compute its fields again and asks for a render", () => {
+        followToSecondUser();
+
+        assert.isTrue(SyncStream.rowsChangedSinceRender);
+        sinon.assert.calledOnce(rendering);
+      });
+
+      it("takes in the new user's own row", () => {
+        const applying = sinon.stub(Deltas, "apply");
+        const userRow = {put_entity: {"MyApp.User": [{id: "entity-2"}]}};
+
+        followToSecondUser({userRow});
+
+        sinon.assert.calledOnceWithExactly(applying, userRow, {
+          insertOnly: true,
+        });
+      });
+
+      it("lets the previous user's batches go", () => {
+        sealed("t2");
+
+        followToSecondUser();
+
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isFalse(Overlay.names(TASK, "t2"));
+      });
+
+      it("answers that it moved the tab", () => {
+        assert.isTrue(followToSecondUser());
+      });
+
+      // Asked for, or refused, the previous user.
+      it("forgets the pair this tab asked for", () => {
+        Replica.adoptOwn({id: "replica-1", token: "token-1"});
+        Replica.requestMint();
+        Replica.refuseMint();
+
+        followToSecondUser();
+
+        assert.isFalse(Replica.minted);
+        assert.isFalse(Replica.mintRefused);
+        assert.isFalse(Replica.awaitingMint);
+      });
+
+      // The store or the new user's group hands it the new user's pair once the move settles.
+      it("holds no pair in a group", () => {
+        Replica.fresh = {id: "replica-1", token: "token-1"};
+
+        inGroup(() => followToSecondUser());
+
+        assert.isNull(Replica.id);
+        assert.isNull(Replica.fresh);
+        assert.isTrue(SyncStream.holdsWrites());
+      });
+
+      // The stream's listener opens a new one, whose handshake hands the tab a pair of its own.
+      describe("in no group", () => {
+        let reconnecting, wasStarted;
+
+        beforeEach(() => {
+          wasStarted = Sse.isStarted;
+          Sse.isStarted = true;
+
+          reconnecting = sinon.stub(Sse, "reconnect");
+        });
+
+        afterEach(() => {
+          Sse.isStarted = wasStarted;
+        });
+
+        it("holds no pair", () => {
+          Replica.fresh = {id: "replica-1", token: "token-1"};
+
+          followToSecondUser();
+
+          assert.isNull(Replica.id);
+          assert.isNull(Replica.token);
+          assert.isNull(Replica.fresh);
+          assert.isTrue(SyncStream.holdsWrites());
+        });
+
+        // Left to the caller: a handshake's follow opens the stream it was made for.
+        it("opens no stream itself", () => {
+          followToSecondUser();
+
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        // The follow drops the pair the tab held, and the handshake that told it of the new user
+        // hands it the new one.
+        it("takes the pair of a handshake that tells it of the new user", () => {
+          DataLayer.takeHandshake({
+            actorEntityId: "entity-2",
+            actorUserId: "u2",
+            identityTag: "2.tag-2",
+            replica: pair,
+          });
+
+          assert.equal(LocalDatabase.actorUserId, "u2");
+          assert.deepStrictEqual(Replica.current(), pair);
+          assert.deepStrictEqual(Replica.fresh, pair);
+          assert.isFalse(SyncStream.holdsWrites());
+
+          clearHandshakeWake();
+        });
+      });
+
+      // The move settles a lead before the tab sends, and the lead reads the new user's pair from
+      // the store, where a pair taken up now would be written over it.
+      it("takes no pair from a handshake that moves it to the new user's group", () => {
+        const originalMode = Durability.mode;
+
+        Durability.mode = "indexeddb";
+        Tabs.name = "hologram.1.model.u1";
+
+        // A move whose lock was granted at once, before its lead settles: a tab still waiting for
+        // the lock is a follower, which takes no pair anyway.
+        sinon.stub(Tabs, "move").callsFake((name) => {
+          Tabs.name = name;
+          Tabs.leader = true;
+          Tabs.takingLead = true;
+
+          return new Promise(() => {});
+        });
+
+        try {
+          DataLayer.takeHandshake({
+            actorEntityId: "entity-2",
+            actorUserId: "u2",
+            identityTag: "2.tag-2",
+            replica: pair,
+          });
+
+          assert.isNull(Replica.id);
+          assert.deepStrictEqual(Replica.fresh, pair);
+          sinon.assert.notCalled(persisting);
+        } finally {
+          Durability.mode = originalMode;
+        }
+      });
+
+      it("goes on waiting for a pair", () => {
+        SyncStream.awaitingPair = true;
+
+        followToSecondUser();
+
+        assert.isTrue(SyncStream.awaitingPair);
+      });
+
+      // The previous user's pair would be sent under the new user's session, or written into
+      // their slot, and the page offered it for the previous user too.
+      it("holds no pair", () => {
+        Replica.fresh = {id: "replica-1", token: "token-1"};
+
+        followToSecondUser();
+
+        assert.isNull(Replica.id);
+        assert.isNull(Replica.token);
+        assert.isNull(Replica.fresh);
+      });
+
+      // With no pair a send could only be refused.
+      it("waits for a pair", () => {
+        followToSecondUser();
+
+        assert.isTrue(SyncStream.holdsWrites());
+      });
+
+      it("holds the pair slot for the new user", () => {
+        Replica.owner = "u1";
+
+        followToSecondUser();
+
+        assert.equal(Replica.owner, "u2");
+      });
+
+      it("stays in no group when the tab is in none", () => {
+        const moving = sinon.stub(Tabs, "move").resolves(null);
+
+        followToSecondUser();
+
+        sinon.assert.notCalled(moving);
+      });
+
+      // What the previous user's group shares is theirs: their store's claim, their pair, their
+      // queue.
+      describe("in a group", () => {
+        const resumed = {
+          batches: [{seq: 4, writes: []}],
+          cursor: "place-2",
+          readForeign: false,
+          seq: 5,
+        };
+
+        const visit = {};
+
+        let adopting,
+          dissolving,
+          flushing,
+          loading,
+          moving,
+          posting,
+          readying,
+          reconnecting,
+          restoring,
+          resumingFrom,
+          wasMode,
+          wasStarted;
+
+        beforeEach(() => {
+          wasMode = Durability.mode;
+          wasStarted = Sse.isStarted;
+
+          Durability.mode = "indexeddb";
+          Sse.isStarted = true;
+          Tabs.name = "hologram.1.model.u1";
+
+          adopting = sinon.stub(Batches, "adopt");
+          dissolving = sinon.stub(Tabs, "dissolve");
+          flushing = sinon.stub(Batches, "flush");
+          loading = sinon.stub(Durability, "load").resolves();
+          moving = sinon.stub(Tabs, "move").resolves(visit);
+          posting = sinon.stub(Tabs, "post");
+          readying = sinon.stub(Tabs, "ready");
+          reconnecting = sinon.stub(Sse, "reconnect");
+          restoring = sinon.stub(Durability, "restore").returns(resumed);
+          resumingFrom = sinon.stub(Batches, "resumeFrom");
+
+          sinon.stub(Tabs, "isVisit").callsFake((given) => given === visit);
+        });
+
+        afterEach(() => {
+          Durability.mode = wasMode;
+          Sse.isStarted = wasStarted;
+          Tabs.name = null;
+          SyncStream.heldSync = false;
+        });
+
+        const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+        it("moves the tab to the new user's group", async () => {
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.calledOnceWithExactly(
+            moving,
+            Durability.groupName("u2"),
+          );
+        });
+
+        // Joined first, read after, as a page load does.
+        it("takes up what the store holds for the new user", async () => {
+          Tabs.leader = false;
+
+          followToSecondUser();
+          await settle();
+
+          assert.isTrue(moving.calledBefore(loading));
+          sinon.assert.calledOnceWithExactly(restoring, false);
+          sinon.assert.calledOnceWithExactly(resumingFrom, 5);
+          sinon.assert.calledOnceWithExactly(adopting, resumed.batches);
+          sinon.assert.calledOnceWithExactly(readying, false);
+          sinon.assert.calledOnceWithExactly(posting, {kind: "joined"});
+          sinon.assert.calledOnce(flushing);
+
+          assert.equal(SyncStream.syncCursor, "place-2");
+        });
+
+        // A store of another user's gives no place, and the tab readies as one that read it.
+        it("takes up a store of another user's with no place", async () => {
+          Tabs.leader = false;
+          restoring.returns({...resumed, cursor: null, readForeign: true});
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.calledOnceWithExactly(readying, true);
+          assert.isNull(SyncStream.syncCursor);
+        });
+
+        // Only the current visit's read counts: a newer move loads again.
+        it("reads the store for the visit it moved to", async () => {
+          followToSecondUser();
+          await settle();
+
+          const isCurrent = loading.firstCall.args[0];
+
+          assert.isTrue(isCurrent());
+
+          Tabs.isVisit.callsFake(() => false);
+
+          assert.isFalse(isCurrent());
+        });
+
+        it("asks for sync again when it leads the new group", async () => {
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.calledOnce(reconnecting);
+        });
+
+        it("closes the sync session its stream held when it follows", async () => {
+          SyncStream.heldSync = true;
+          Tabs.leader = false;
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.calledOnce(reconnecting);
+        });
+
+        // A follow a handshake made: the stream that handshake opens replaces the one that held it.
+        it("leaves a sync session to the caller that says it's closed", async () => {
+          SyncStream.heldSync = true;
+          Tabs.leader = false;
+
+          followToSecondUser({}, {heldSync: false});
+          await settle();
+
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        // The lock came to it while it read, so it judges the store as the tab that leads, and the
+        // lead it takes at ready() opens its own stream.
+        it("takes up the store as the leader when handed the lead while it read", async () => {
+          Tabs.leader = false;
+
+          loading.callsFake(async () => {
+            Tabs.leader = true;
+          });
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.calledOnceWithExactly(restoring, true);
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        it("leaves the stream to a lead handed over while it read, though it held sync", async () => {
+          Tabs.leader = false;
+          SyncStream.heldSync = true;
+
+          loading.callsFake(async () => {
+            Tabs.leader = true;
+          });
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        it("keeps a stream that held no sync when it follows", async () => {
+          Tabs.leader = false;
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        // The page opens one after the mount, which greets as the tab now stands.
+        it("opens no stream before the page has", async () => {
+          Sse.isStarted = false;
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        it("stops when a newer move took the tab elsewhere while it joined", async () => {
+          moving.resolves(null);
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.notCalled(loading);
+          sinon.assert.notCalled(restoring);
+        });
+
+        it("takes up nothing when a newer move took the tab elsewhere while it read", async () => {
+          loading.callsFake(async () => {
+            Tabs.isVisit.callsFake(() => false);
+          });
+
+          followToSecondUser();
+          await settle();
+
+          sinon.assert.notCalled(restoring);
+          sinon.assert.notCalled(readying);
+          sinon.assert.notCalled(reconnecting);
+        });
+
+        describe("when the store already stopped", () => {
+          let disowning, leaving;
+
+          beforeEach(() => {
+            disowning = sinon.stub(Batches, "disown");
+            leaving = sinon.stub(Tabs, "leave");
+
+            Durability.mode = "memory";
+          });
+
+          // Joined, it could lead the new user's tabs from memory.
+          it("leaves its group and joins no other", async () => {
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.calledOnce(leaving);
+            sinon.assert.notCalled(moving);
+            sinon.assert.notCalled(loading);
+          });
+
+          // The ones it made since the store stopped were never stored.
+          it("keeps the batches it holds", async () => {
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.notCalled(disowning);
+          });
+
+          it("asks for sync as a replica of its own", async () => {
+            Tabs.leader = false;
+
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.calledOnce(reconnecting);
+          });
+
+          // It left its group, so the group's pair isn't its to send under: its reconnect's
+          // handshake hands it one of its own.
+          it("holds no pair until its own stream hands it one", async () => {
+            followToSecondUser();
+            await settle();
+
+            assert.isNull(Replica.id);
+            assert.isNull(Replica.fresh);
+            assert.isTrue(SyncStream.holdsWrites());
+          });
+        });
+
+        describe("when the store can't be read", () => {
+          let disowning, leaving;
+
+          beforeEach(() => {
+            disowning = sinon.stub(Batches, "disown");
+            leaving = sinon.stub(Tabs, "leave");
+
+            loading.callsFake(async () => {
+              Durability.mode = "memory";
+            });
+          });
+
+          // As at boot: with nothing stored, there is nothing to share.
+          it("leaves the group", async () => {
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.calledOnce(leaving);
+            sinon.assert.notCalled(restoring);
+          });
+
+          // They're in the store, where another tab sends them under its own pair.
+          it("lets go of the batches the store holds, though it leads", async () => {
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.calledOnce(disowning);
+            sinon.assert.notCalled(dissolving);
+          });
+
+          // A filing still out decides whether its batch is one the store holds.
+          it("lets go of them once its filings settle", async () => {
+            let filed;
+
+            sinon
+              .stub(Batches, "recorded")
+              .returns(new Promise((resolve) => (filed = resolve)));
+
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.notCalled(disowning);
+
+            filed();
+            await settle();
+
+            sinon.assert.calledOnce(disowning);
+          });
+
+          it("leaves them to a newer follow made while its filings settle", async () => {
+            let filed;
+
+            sinon
+              .stub(Batches, "recorded")
+              .returns(new Promise((resolve) => (filed = resolve)));
+
+            followToSecondUser();
+            await settle();
+
+            Tabs.isVisit.callsFake(() => false);
+            filed();
+            await settle();
+
+            sinon.assert.notCalled(disowning);
+          });
+
+          it("asks for sync as a replica of its own", async () => {
+            Tabs.leader = false;
+
+            followToSecondUser();
+            await settle();
+
+            sinon.assert.calledOnce(reconnecting);
+          });
+
+          it("holds no pair until its own stream hands it one", async () => {
+            followToSecondUser();
+            await settle();
+
+            assert.isNull(Replica.id);
+            assert.isNull(Replica.fresh);
+            assert.isTrue(SyncStream.holdsWrites());
+          });
+        });
+
+        it("stays in its group for the same user", async () => {
+          DataLayer.followIdentity({
+            actorEntityId: "entity-1",
+            actorUserId: "u1",
+            identityTag: "1.tag-1",
+          });
+
+          await settle();
+
+          sinon.assert.notCalled(moving);
+        });
+      });
+
+      it("moves to the new identity's period", () => {
+        const period = IdentityTracker.period;
+
+        followToSecondUser();
+
+        assert.equal(IdentityTracker.tag, "2.tag-2");
+        assert.notEqual(IdentityTracker.period, period);
+      });
+
+      // Counts are filed under the period, and the new user's has only just begun.
+      it("doesn't count the new user's period as ended", () => {
+        followToSecondUser();
+
+        assert.isNull(LocalDatabase.identityEndedPeriod);
+      });
+
+      // A login command's reply can have moved the period before the stream said so.
+      it("doesn't end a period a response already moved to", () => {
+        IdentityTracker.observe("2.tag-2");
+
+        followToSecondUser();
+
+        assert.isNull(LocalDatabase.identityEndedPeriod);
+      });
+
+      // With no tag the period can't move, and it held the previous user's numbers.
+      it("counts the period as ended when the server tags nothing", () => {
+        followToSecondUser({identityTag: undefined});
+
+        assert.equal(LocalDatabase.identityEndedPeriod, IdentityTracker.period);
+      });
+
+      describe("named by an event no newer than what the tab knows", () => {
+        let reconnecting, settling;
+
+        beforeEach(() => {
+          IdentityTracker.init("5.tag");
+          LocalDatabase.actorUserId = "u1";
+          settling = sinon.stub(Client, "settleIdentity").resolves();
+          reconnecting = sinon.stub(Sse, "reconnect");
+        });
+
+        afterEach(() => {
+          settling.restore();
+          reconnecting.restore();
+          SyncStream.awaitingIdentity = false;
+        });
+
+        const followBehind = () =>
+          DataLayer.followIdentity({
+            actorEntityId: "entity-2",
+            actorUserId: "u2",
+            identityTag: "4.other",
+          });
+
+        it("stays with the user it holds", () => {
+          followBehind();
+
+          assert.equal(LocalDatabase.actorUserId, "u1");
+          assert.equal(IdentityTracker.tag, "5.tag");
+        });
+
+        // The settle opens the stream, so the caller mustn't open another.
+        it("answers that it didn't move the tab", () => {
+          assert.isFalse(followBehind());
+        });
+
+        // The stream's server side has moved to that identity all the same.
+        it("takes nothing more from this stream", () => {
+          followBehind();
+
+          assert.isTrue(SyncStream.awaitingIdentity);
+        });
+
+        it("opens a new stream once the server has said who is signed in", async () => {
+          followBehind();
+
+          sinon.assert.calledOnce(settling);
+          sinon.assert.notCalled(reconnecting);
+
+          await settling.firstCall.returnValue;
+          await Promise.resolve();
+
+          sinon.assert.calledOnce(reconnecting);
+        });
+      });
+
+      it("remembers the tag it followed", () => {
+        followToSecondUser();
+
+        assert.equal(SyncStream.followedTag, "2.tag-2");
+      });
+
+      it("treats a visitor named undefined as a visitor", () => {
+        LocalDatabase.actorUserId = undefined;
+
+        DataLayer.followIdentity({actorUserId: null, identityTag: "2.tag-2"});
+
+        assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+      });
+    });
+
+    describe("to the same user", () => {
+      const followToSameUser = (fields = {}) =>
+        DataLayer.followIdentity({
+          actorEntityId: "entity-1",
+          actorUserId: "u1",
+          identityTag: "1.tag-1",
+          ...fields,
+        });
+
+      it("keeps the rows and the place", () => {
+        followToSameUser();
+
+        assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+        assert.equal(SyncStream.syncCursor, "place-1");
+        sinon.assert.notCalled(rendering);
+      });
+
+      it("keeps the pair", () => {
+        followToSameUser();
+
+        assert.equal(Replica.id, "replica-1");
+        sinon.assert.notCalled(persisting);
+      });
+
+      // A new session of the same user, like a login again in another tab.
+      it("keeps the rows, the place and the pair under a new session of that user", () => {
+        followToSameUser({identityTag: "2.tag-2"});
+
+        assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+        assert.equal(SyncStream.syncCursor, "place-1");
+        assert.equal(Replica.id, "replica-1");
+        assert.equal(SyncStream.followedTag, "2.tag-2");
+        sinon.assert.notCalled(rendering);
+      });
+
+      it("answers that it didn't move the tab", () => {
+        assert.isFalse(followToSameUser());
+      });
+    });
+
+    describe("from a page's mount data", () => {
+      let reconnecting;
+
+      const mount = (actorUserId) =>
+        DataLayer.ingestMountData({
+          actorEntityId: "entity-2",
+          actorUserId,
+          identityPeriod: IdentityTracker.period,
+          syncRows: {},
+        });
+
+      beforeEach(() => {
+        DataLayer.isStoreRestored = true;
+        Sse.isStarted = true;
+        reconnecting = sinon.stub(Sse, "reconnect");
+      });
+
+      afterEach(() => {
+        // Run while the stub is in place, so a test that mounted leaves no stream to replace.
+        DataLayer.reconnectIfFollowed();
+
+        DataLayer.isStoreRestored = false;
+        Sse.isStarted = false;
+      });
+
+      it("follows a user the page was rendered for", () => {
+        mount("u2");
+
+        assert.equal(LocalDatabase.actorUserId, "u2");
+        assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+      });
+
+      it("drops the frames of the stream it had", () => {
+        mount("u2");
+
+        assert.isTrue(SyncStream.awaitingIdentity);
+      });
+
+      // Its response carries no pair.
+      it("holds writes until it has a pair", () => {
+        mount("u2");
+
+        assert.isTrue(SyncStream.holdsWrites());
+      });
+
+      // The handshake presents the page's receipts, which the mount has yet to take in.
+      it("opens a new stream only once the mount is done", () => {
+        mount("u2");
+
+        sinon.assert.notCalled(reconnecting);
+
+        DataLayer.restore();
+
+        sinon.assert.calledOnce(reconnecting);
+      });
+
+      it("opens one new stream per follow", () => {
+        mount("u2");
+
+        DataLayer.restore();
+        DataLayer.restore();
+
+        sinon.assert.calledOnce(reconnecting);
+      });
+
+      it("opens none before the stream has started", () => {
+        Sse.isStarted = false;
+
+        mount("u2");
+        DataLayer.restore();
+
+        sinon.assert.notCalled(reconnecting);
+      });
+
+      // A mount that raises doesn't reach the store's restore.
+      it("replaces the stream when asked after a mount that raised", () => {
+        mount("u2");
+
+        DataLayer.reconnectIfFollowed();
+
+        sinon.assert.calledOnce(reconnecting);
+      });
+
+      // The response's tag was observed already, and the new user's period has only just begun.
+      it("doesn't count the new user's period as ended", () => {
+        IdentityTracker.observe("2.tag-2");
+
+        mount("u2");
+
+        assert.isNull(LocalDatabase.identityEndedPeriod);
+      });
+
+      it("does nothing for the user it already holds", () => {
+        mount("u1");
+        DataLayer.restore();
+
+        assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+        assert.isFalse(SyncStream.awaitingIdentity);
+        sinon.assert.notCalled(reconnecting);
+      });
+
+      // Every signed-in page load starts with no actor, and following that would drop what the
+      // page carried.
+      it("only sets the ids on the document's first mount", () => {
+        DataLayer.isStoreRestored = false;
+
+        mount("u2");
+
+        assert.equal(LocalDatabase.actorUserId, "u2");
+        assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+        assert.isFalse(SyncStream.awaitingIdentity);
+      });
+    });
+  });
+
+  describe("takeHandshake()", () => {
+    const pair = {id: "replica-2", token: "token-2"};
+
+    const answer = (fields = {}) => ({
+      actorEntityId: "entity-1",
+      actorUserId: "u1",
+      identityTag: "1.tag-1",
+      replica: pair,
+      ...fields,
+    });
+
+    let originalLeader, originalName, originalTakingLead, originalTracker;
+    let persisting, posting;
+
+    beforeEach(() => {
+      originalLeader = Tabs.leader;
+      originalName = Tabs.name;
+      originalTakingLead = Tabs.takingLead;
+
+      originalTracker = {
+        documentPeriod: IdentityTracker.documentPeriod,
+        period: IdentityTracker.period,
+        periods: IdentityTracker.periods,
+        tag: IdentityTracker.tag,
+      };
+
+      Replica.reset();
+      IdentityTracker.init("1.tag-1");
+
+      LocalDatabase.actorUserId = "u1";
+      Replica.owner = "u1";
+      SyncStream.followedTag = "1.tag-1";
+
+      Tabs.leader = true;
+      Tabs.name = null;
+      Tabs.takingLead = false;
+
+      persisting = sinon.stub(Durability, "persistReplica");
+      posting = sinon.stub(Tabs, "postState");
+    });
+
+    afterEach(() => {
+      // What the handshake left for the stream's answer to act on, which a later test would take.
+      sinon.stub(Batches, "flush");
+      DataLayer.takeReplica(null);
+
+      Object.assign(IdentityTracker, originalTracker);
+
+      Replica.reset();
+
+      LocalDatabase.actorUserId = null;
+      SyncStream.awaitingIdentity = false;
+      SyncStream.awaitingPair = false;
+      SyncStream.followedTag = null;
+      SyncStream.laggingCookie = false;
+
+      Tabs.leader = originalLeader;
+      Tabs.name = originalName;
+      Tabs.takingLead = originalTakingLead;
+    });
+
+    it("opens the stream for the identity the tab follows", () => {
+      const following = sinon.stub(DataLayer, "followIdentity");
+
+      assert.isTrue(DataLayer.takeHandshake(answer()));
+      assert.isFalse(SyncStream.laggingCookie);
+      sinon.assert.notCalled(following);
+    });
+
+    it("isn't held to an identity by a server that names none", () => {
+      SyncStream.laggingCookie = true;
+
+      assert.isTrue(DataLayer.takeHandshake(answer({identityTag: undefined})));
+      assert.isFalse(SyncStream.laggingCookie);
+      assert.deepStrictEqual(Replica.current(), pair);
+    });
+
+    // A login made outside Hologram announces nothing, and a stream opened after the announcement
+    // never hears it. The stream about to open replaces the one that held any sync session.
+    it("follows an identity the tab missed", () => {
+      const following = sinon
+        .stub(DataLayer, "followIdentity")
+        .callsFake(({identityTag}) => {
+          SyncStream.followedTag = identityTag;
+        });
+
+      const opens = DataLayer.takeHandshake(
+        answer({
+          actorEntityId: "entity-2",
+          actorUserId: "u2",
+          identityTag: "2.tag-2",
+        }),
+      );
+
+      assert.isTrue(opens);
+      assert.isFalse(SyncStream.laggingCookie);
+
+      sinon.assert.calledOnceWithExactly(
+        following,
+        {actorEntityId: "entity-2", actorUserId: "u2", identityTag: "2.tag-2"},
+        {heldSync: false},
+      );
+    });
+
+    describe("on a cookie behind the identity the tab follows", () => {
+      let reconnecting, settling;
+
+      beforeEach(() => {
+        IdentityTracker.init("2.tag-2");
+        SyncStream.followedTag = "2.tag-2";
+
+        reconnecting = sinon.stub(Sse, "reconnect");
+        settling = sinon.stub(Client, "settleIdentity").resolves();
+      });
+
+      const takeBehind = () =>
+        DataLayer.takeHandshake(
+          answer({actorUserId: "u0", identityTag: "1.tag-1"}),
+        );
+
+      it("opens no stream", () => {
+        assert.isFalse(takeBehind());
+      });
+
+      it("holds writes, which the server would take for the previous user's", () => {
+        takeBehind();
+
+        assert.isTrue(SyncStream.laggingCookie);
+        assert.isTrue(SyncStream.holdsWrites());
+      });
+
+      it("opens a new stream once the server has said who is signed in", async () => {
+        takeBehind();
+
+        sinon.assert.calledOnce(settling);
+
+        await settling.firstCall.returnValue;
+        await Promise.resolve();
+
+        sinon.assert.calledOnce(reconnecting);
+      });
+
+      // A page mounted while the question was out, say, and its stream serves the session as it
+      // stands.
+      it("opens none once another stream was opened in the meantime", async () => {
+        takeBehind();
+
+        Sse.runId += 1;
+
+        await settling.firstCall.returnValue;
+        await Promise.resolve();
+
+        sinon.assert.notCalled(reconnecting);
+      });
+
+      it("keeps the user it follows", () => {
+        takeBehind();
+
+        assert.equal(LocalDatabase.actorUserId, "u1");
+        assert.equal(SyncStream.followedTag, "2.tag-2");
+      });
+
+      // Minted for the previous user.
+      it("takes no pair from it", () => {
+        takeBehind();
+
+        assert.isNull(Replica.id);
+        assert.isNull(Replica.fresh);
+      });
+
+      it("lets writes go once a handshake catches up", () => {
+        takeBehind();
+
+        DataLayer.takeHandshake(answer({identityTag: "2.tag-2"}));
+
+        assert.isFalse(SyncStream.laggingCookie);
+        assert.isFalse(SyncStream.holdsWrites());
+      });
+    });
+
+    // A page response came back for the next user while the handshake was on its way, and the tab
+    // hasn't followed that user yet. The stream would serve the previous one.
+    describe("on a cookie of the identity the tab follows, behind the latest response", () => {
+      let reconnecting, settling;
+
+      beforeEach(() => {
+        IdentityTracker.observe("2.tag-2");
+
+        reconnecting = sinon.stub(Sse, "reconnect");
+        settling = sinon.stub(Client, "settleIdentity").resolves();
+      });
+
+      it("opens no stream, and holds writes", () => {
+        assert.isFalse(DataLayer.takeHandshake(answer()));
+        assert.isTrue(SyncStream.laggingCookie);
+      });
+
+      it("opens a new stream once the server has said who is signed in", async () => {
+        DataLayer.takeHandshake(answer());
+
+        sinon.assert.calledOnce(settling);
+
+        await settling.firstCall.returnValue;
+        await Promise.resolve();
+
+        sinon.assert.calledOnce(reconnecting);
+      });
+    });
+
+    describe("the pair it hands", () => {
+      it("is kept as the fresh one", () => {
+        Replica.adopt({id: "replica-1", token: "token-1"});
+
+        DataLayer.takeHandshake(answer());
+
+        assert.deepStrictEqual(Replica.fresh, pair);
+        assert.deepStrictEqual(Replica.current(), {
+          id: "replica-1",
+          token: "token-1",
+        });
+      });
+
+      it("is taken up by a tab in no group that holds none", () => {
+        DataLayer.takeHandshake(answer());
+
+        assert.deepStrictEqual(Replica.current(), pair);
+        sinon.assert.notCalled(persisting);
+        sinon.assert.notCalled(posting);
+      });
+
+      it("ends a wait for a pair", () => {
+        SyncStream.awaitingPair = true;
+
+        DataLayer.takeHandshake(answer());
+
+        assert.isFalse(SyncStream.holdsWrites());
+      });
+
+      // The writes held for a pair have one now, and nothing else wakes the sender.
+      it("wakes the sender once the handshake is taken", () => {
+        const sending = Promise.resolve();
+        const flush = sinon.stub(Batches, "flush").returns(sending);
+
+        try {
+          SyncStream.awaitingPair = true;
+
+          DataLayer.takeHandshake(answer());
+
+          assert.strictEqual(DataLayer.takeReplica(null), sending);
+          sinon.assert.calledOnce(flush);
+
+          assert.isNull(DataLayer.takeReplica(null));
+          sinon.assert.calledOnce(flush);
+        } finally {
+          flush.restore();
+        }
+      });
+
+      it("wakes the sender of a leader that writes it down", () => {
+        const flush = sinon.stub(Batches, "flush");
+
+        try {
+          Tabs.name = "hologram.1.model.u1";
+
+          DataLayer.takeHandshake(answer());
+          DataLayer.takeReplica(null);
+
+          sinon.assert.calledOnce(flush);
+        } finally {
+          flush.restore();
+        }
+      });
+
+      // The writes held over the lagging cookie have nothing else to wake them, and the tab keeps
+      // its pair.
+      it("wakes the sender once a handshake ends a hold over a lagging cookie", () => {
+        const flush = sinon.stub(Batches, "flush");
+
+        try {
+          Replica.adopt({id: "replica-1", token: "token-1"});
+          SyncStream.laggingCookie = true;
+
+          DataLayer.takeHandshake(answer());
+          DataLayer.takeReplica(null);
+
+          sinon.assert.calledOnce(flush);
+
+          DataLayer.takeReplica(null);
+
+          sinon.assert.calledOnce(flush);
+        } finally {
+          flush.restore();
+        }
+      });
+
+      it("leaves the sender alone when the tab keeps the pair it holds", () => {
+        const flush = sinon.stub(Batches, "flush");
+
+        try {
+          Replica.adopt({id: "replica-1", token: "token-1"});
+
+          DataLayer.takeHandshake(answer());
+          DataLayer.takeReplica(null);
+
+          sinon.assert.notCalled(flush);
+        } finally {
+          flush.restore();
+        }
+      });
+
+      // Minted for this tab alone, so its batches are numbered under it as under one it asked for.
+      it("counts as the tab's own in a tab in no group that holds none", () => {
+        Replica.requestMint();
+
+        DataLayer.takeHandshake(answer());
+
+        assert.isTrue(Replica.minted);
+        assert.isFalse(Replica.withoutIdentity());
+      });
+
+      describe("in a group", () => {
+        beforeEach(() => {
+          Tabs.name = "hologram.1.model.u1";
+        });
+
+        it("is written down and handed to the group by a leader that holds none", () => {
+          DataLayer.takeHandshake(answer());
+
+          assert.deepStrictEqual(Replica.current(), pair);
+          sinon.assert.calledOnceWithExactly(persisting, pair);
+          sinon.assert.calledOnce(posting);
+        });
+
+        // A leader sends only under a pair it has written down.
+        it("isn't taken up by a leader whose store slot is another user's", () => {
+          Replica.owner = "u0";
+
+          DataLayer.takeHandshake(answer());
+
+          assert.isNull(Replica.id);
+          sinon.assert.notCalled(persisting);
+          sinon.assert.notCalled(posting);
+        });
+
+        // It takes the group's: two pairs in one group would number one queue twice.
+        it("is left alone by a follower", () => {
+          Tabs.leader = false;
+
+          DataLayer.takeHandshake(answer());
+
+          assert.isNull(Replica.id);
+          assert.deepStrictEqual(Replica.fresh, pair);
+          sinon.assert.notCalled(persisting);
+        });
+
+        // It reads the store's pair, and its next handshake comes once it has settled.
+        it("is left alone by a lead still being settled", () => {
+          Tabs.takingLead = true;
+
+          DataLayer.takeHandshake(answer());
+
+          assert.isNull(Replica.id);
+          sinon.assert.notCalled(persisting);
+        });
       });
     });
   });
@@ -1397,6 +3067,84 @@ describe("DataLayer", () => {
         DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
 
         assert.deepStrictEqual(DataLayer.pageCounts(), []);
+      });
+
+      // A Back before the first mount restores them while nothing has read the store yet.
+      describe("once the store is read", () => {
+        const restoreWith = (resumed) => {
+          sinon.stub(Durability, "restore").returns(resumed);
+          sinon.stub(Batches, "adopt");
+          sinon.stub(Batches, "flush");
+          sinon.stub(Batches, "resumeFrom");
+          sinon.stub(Tabs, "post");
+          sinon.stub(Tabs, "ready");
+
+          DataLayer.restore();
+        };
+
+        afterEach(() => {
+          SyncStream.syncCursor = null;
+        });
+
+        it("files them when the store held no place", () => {
+          DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+          restoreWith({batches: [], cursor: null, seq: 0});
+
+          assert.deepStrictEqual(LocalDatabase.syncCounts, {[key]: 42});
+        });
+
+        it("files them where there is no store to read", () => {
+          DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+          restoreWith(null);
+
+          assert.deepStrictEqual(LocalDatabase.syncCounts, {[key]: 42});
+        });
+
+        // A place says a fill finished, so a saved number is only older.
+        it("files nothing when the store held a place", () => {
+          DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+          restoreWith({batches: [], cursor: "Nzc4LjA", seq: 0});
+
+          assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+        });
+
+        it("files nothing in a period that ended with somebody else", () => {
+          const originalPeriod = IdentityTracker.period;
+
+          DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+          IdentityTracker.period = "period-1";
+          LocalDatabase.identityEndedPeriod = "period-1";
+
+          try {
+            restoreWith({batches: [], cursor: null, seq: 0});
+
+            assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+          } finally {
+            IdentityTracker.period = originalPeriod;
+            LocalDatabase.identityEndedPeriod = null;
+          }
+        });
+
+        // Filing trims to the cap, and a page's own counts are kept past it.
+        it("leaves the page's own counts alone when none wait", () => {
+          const trimming = sinon.spy(LocalDatabase, "restoreCountEntries");
+
+          restoreWith({batches: [], cursor: null, seq: 0});
+
+          sinon.assert.notCalled(trimming);
+        });
+
+        it("holds them no longer", () => {
+          DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+          restoreWith({batches: [], cursor: "Nzc4LjA", seq: 0});
+
+          assert.deepStrictEqual(DataLayer.pageCounts(), []);
+        });
       });
     });
 
@@ -1714,6 +3462,8 @@ describe("DataLayer", () => {
     let adopting, flushing, posting, readying, resuming;
 
     beforeEach(() => {
+      DataLayer.isStoreRestored = false;
+
       adopting = sinon.stub(Batches, "adopt");
       flushing = sinon.stub(Batches, "flush");
       resuming = sinon.stub(Batches, "resumeFrom");
@@ -1722,6 +3472,7 @@ describe("DataLayer", () => {
     });
 
     afterEach(() => {
+      DataLayer.isStoreRestored = false;
       SyncStream.syncCursor = null;
       Tabs.leader = true;
     });
@@ -1770,6 +3521,18 @@ describe("DataLayer", () => {
       sinon.assert.notCalled(flushing);
 
       assert.isNull(SyncStream.syncCursor);
+    });
+
+    // A tab that moved to another user's group takes up what it read for that group itself.
+    it("reads no store on a visit after the first", () => {
+      const restoring = sinon
+        .stub(Durability, "restore")
+        .returns({batches: [], cursor: null, seq: 0});
+
+      DataLayer.restore();
+      DataLayer.restore();
+
+      sinon.assert.calledOnce(restoring);
     });
   });
 
@@ -2079,6 +3842,14 @@ describe("DataLayer", () => {
 
     it("answers nothing otherwise", () => {
       Replica.adopt({id: "replica-held", token: "token-held"});
+
+      assert.isNull(DataLayer.replicaToReplace());
+    });
+
+    // A tab that followed a change of user holds no pair. Shown as one, it would be refused for
+    // good, and the tab would wait for its own pair forever.
+    it("answers nothing while the tab asking holds no pair", () => {
+      Replica.requestMint();
 
       assert.isNull(DataLayer.replicaToReplace());
     });

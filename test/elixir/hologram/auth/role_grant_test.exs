@@ -277,7 +277,9 @@ defmodule Hologram.Auth.RoleGrantTest do
                entity_type: nil,
                role: nil,
                server_created_at: nil,
+               server_created_seq: nil,
                server_updated_at: nil,
+               server_updated_seq: nil,
                updated_at: nil,
                user: %NotIncluded{relationship: :user},
                user_id: nil
@@ -321,7 +323,9 @@ defmodule Hologram.Auth.RoleGrantTest do
              {:created_at, :datetime, []},
              {:id, :uuid, []},
              {:server_created_at, :datetime, []},
+             {:server_created_seq, :integer, []},
              {:server_updated_at, :datetime, []},
+             {:server_updated_seq, :integer, []},
              {:updated_at, :datetime, []}
            ]
   end

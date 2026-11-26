@@ -441,22 +441,21 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Blocks until the server has read the operations log past its newest change, which it can only
-  once no transaction older than that change is still running on the database server.
+  Blocks until the server has read the operations log through its newest change, which it can only
+  once every Hologram save holding a lower serial has ended.
 
   For a test that leans on what the server tells a browser or a client about the rows the test
   wrote before it connected: called after those writes and before the first visit or connect.
 
-  The server reads the log only up to the oldest transaction still running, and PostgreSQL counts
-  transactions per server, so one open anywhere on it holds the reading back - in another
-  database, like another test run's, as much as in this one. Such a test then fails in one of two
-  ways.
+  The server's read edge stays below a Hologram save that holds a serial until that save ends, so a
+  save left open on the app's database, like one a test holds, holds the edge back. Such a test
+  then fails in one of two ways.
 
-  The place a session starts from is the oldest transaction still running when it starts, so it
-  can be below the test's changes. Below the log's oldest change it reads as one from before the
-  log, and a returning client is sent everything again instead of being caught up (#1763). Above
-  it, the changes after the place are replayed from the rows as they stand, so a row the test took
-  away since is told as gone.
+  The place a session starts from is the dispatcher's read edge when it starts, so it can be below
+  the test's changes. Below the log's oldest change it reads as one from before the log, and a
+  returning client is sent everything again instead of being caught up (#1763). Above it, the
+  changes after the place are replayed from the rows as they stand, so a row the test took away
+  since is told as gone.
 
   A change the server hasn't read yet goes out live with whatever the test writes next: a row's
   create read together with its update is sent as the whole row, not as a patch.
@@ -468,15 +467,15 @@ defmodule HologramFeatureTests.Helpers do
   @spec await_log_settled() :: :ok
   def await_log_settled do
     statement = """
-    SELECT "tx"
+    SELECT "seq"
     FROM "#{Mapper.system_schema()}"."oplog"
-    ORDER BY "tx" DESC
+    ORDER BY "seq" DESC
     LIMIT 1
     """
 
     case Connection.query(statement, []) do
-      {:ok, %{rows: [[newest_tx]]}} ->
-        do_await_log_settled(newest_tx, current_time())
+      {:ok, %{rows: [[newest_seq]]}} ->
+        do_await_log_settled(newest_seq, current_time())
 
       {:ok, %{rows: []}} ->
         raise ArgumentError,
@@ -489,7 +488,7 @@ defmodule HologramFeatureTests.Helpers do
   """
   @spec await_memory_mode(Wallaby.Session.t()) :: Wallaby.Session.t()
   def await_memory_mode(session) do
-    await_script_result(session, "return globalThis.Hologram.durability.mode() === 'memory';")
+    await_script(session, "return globalThis.Hologram.durability.mode() === 'memory';")
   end
 
   @doc """
@@ -515,6 +514,27 @@ defmodule HologramFeatureTests.Helpers do
     else
       Process.sleep(50)
       await_page_mount(session, page_module, attempts_left - 1)
+    end
+  end
+
+  @doc """
+  Blocks until the given JavaScript returns true, then returns the `session`. For a value a page
+  sets at a time the test can't wait for in any other way.
+  """
+  @spec await_script(Wallaby.Session.t(), String.t(), integer | nil) :: Wallaby.Session.t()
+  def await_script(session, script, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      script_result(session, script) == true ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError, "Timed out waiting for #{script} to answer true"
+
+      true ->
+        Process.sleep(50)
+        await_script(session, script, start_time)
     end
   end
 
@@ -661,7 +681,7 @@ defmodule HologramFeatureTests.Helpers do
 
     Browser.execute_script(session, script)
 
-    await_script_result(session, "return globalThis.__hologramStoreBlock.readWaiting === true;")
+    await_script(session, "return globalThis.__hologramStoreBlock.readWaiting === true;")
   end
 
   @doc """
@@ -728,7 +748,7 @@ defmodule HologramFeatureTests.Helpers do
 
     Browser.execute_script(session, script)
 
-    await_script_result(session, "return globalThis.__hologramStoreBlock?.active === true;")
+    await_script(session, "return globalThis.__hologramStoreBlock?.active === true;")
   end
 
   @doc """
@@ -1111,7 +1131,7 @@ defmodule HologramFeatureTests.Helpers do
 
     session
     |> Browser.focus_window(await_new_tab(session, known))
-    |> await_script_result(
+    |> await_script(
       # The tab starts on about:blank, whose document is complete too.
       "return location.pathname === #{Jason.encode!(path)} && document.readyState === 'complete';"
     )
@@ -1284,7 +1304,7 @@ defmodule HologramFeatureTests.Helpers do
 
   @doc """
   Simulates a network blip by killing the SSE process attached to the given
-  `instance_id`.
+  `instance_id`, waiting for one when there's none yet.
 
   After this call the client's `EventSource` fires `onerror` and the
   JS-driven reconnect cycle begins: backoff, then POST handshake (the
@@ -1296,8 +1316,7 @@ defmodule HologramFeatureTests.Helpers do
   """
   @spec simulate_sse_disconnect(String.t()) :: :ok
   def simulate_sse_disconnect(instance_id) do
-    [{^instance_id, entry}] = :ets.lookup(SubscriptionRegistry.ets_table_name(), instance_id)
-    sse_pid = entry.sse_pid
+    sse_pid = await_live_sse_pid(instance_id, current_time())
 
     # Killing the SSE process makes Ranch log an expected `:killed` request-process
     # exit at :error level. That line is emitted asynchronously by the connection
@@ -1472,15 +1491,27 @@ defmodule HologramFeatureTests.Helpers do
   cookie. Use it to give a connection a same-session sibling.
   """
   def visit_as_sibling(session, origin, page_module, params \\ []) do
+    session
+    |> visit("/external")
+    |> share_session_cookie(origin)
+    |> visit(page_module, params)
+  end
+
+  @doc """
+  Copies `origin`'s signed `phoenix_session` cookie into `session`, which must
+  already be on the domain.
+
+  Wallaby sessions have isolated cookie jars, so a cookie one tab's response sets
+  never reaches its siblings the way it does across a browser's tabs. Use it to
+  carry such a cookie over, for example after a re-auth in one tab.
+  """
+  def share_session_cookie(session, origin) do
     %{"value" => session_cookie} =
       origin
       |> cookies()
       |> Enum.find(&(&1["name"] == "phoenix_session"))
 
-    session
-    |> visit("/external")
-    |> Browser.set_cookie("phoenix_session", session_cookie)
-    |> visit(page_module, params)
+    Browser.set_cookie(session, "phoenix_session", session_cookie)
   end
 
   @doc """
@@ -1715,22 +1746,6 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
-  defp await_script_result(session, script, start_time \\ nil) do
-    start_time = start_time || current_time()
-
-    cond do
-      script_result(session, script) ->
-        session
-
-      timed_out?(start_time) ->
-        raise Wallaby.ExpectationNotMetError, "Timed out waiting for #{script} to answer true"
-
-      true ->
-        Process.sleep(50)
-        await_script_result(session, script, start_time)
-    end
-  end
-
   defp bound?(entry, channel, cid) do
     Enum.any?(entry.bindings, fn {{ch, c}, _user_id} ->
       ch == channel and (is_nil(cid) or c == cid)
@@ -1743,6 +1758,29 @@ defmodule HologramFeatureTests.Helpers do
     Path.join(Reflection.bundles_dir(), Path.basename(bundle_url))
   end
 
+  # The registry drops a stream's entry only once it handles the stream's :DOWN, so the entry can
+  # name a stream that already ended, or be gone until the browser reconnects.
+  defp await_live_sse_pid(instance_id, start_time) do
+    sse_pid =
+      case :ets.lookup(SubscriptionRegistry.ets_table_name(), instance_id) do
+        [{^instance_id, entry}] -> entry.sse_pid
+        [] -> nil
+      end
+
+    cond do
+      sse_pid && Process.alive?(sse_pid) ->
+        sse_pid
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for a live connection for instance #{inspect(instance_id)}"
+
+      true ->
+        :timer.sleep(100)
+        await_live_sse_pid(instance_id, start_time)
+    end
+  end
+
   defp connection?(instance_id) do
     :ets.member(SubscriptionRegistry.ets_table_name(), instance_id)
   end
@@ -1753,22 +1791,24 @@ defmodule HologramFeatureTests.Helpers do
 
   # The newest change is read once, by the caller: read again on every round, the wait would chase
   # whatever is written meanwhile. The edge is nil until the server's first read.
-  defp do_await_log_settled(newest_tx, start_time) do
+  # The edge is the place of the last entry the server read up to, which moves past an entry only
+  # once every save holding a lower serial has ended.
+  defp do_await_log_settled(newest_seq, start_time) do
     read_edge = ReadEdge.get(ReadEdge)
 
     cond do
-      is_integer(read_edge) and read_edge > newest_tx ->
+      match?({{seq, _tx, _inserted_at}, _log_id} when seq >= newest_seq, read_edge) ->
         :ok
 
       timed_out?(start_time) ->
         raise Wallaby.ExpectationNotMetError,
-              "Timed out waiting for the server to read the operations log past transaction " <>
-                "#{newest_tx}, it has read up to #{inspect(read_edge)} - an older transaction " <>
-                "is still running on the database server, or the server's reads are failing"
+              "Timed out waiting for the server to read the operations log through entry " <>
+                "#{newest_seq}, it has read up to #{inspect(read_edge)} - a Hologram save " <>
+                "holding a lower serial is still open, or the server's reads are failing"
 
       true ->
         :timer.sleep(50)
-        do_await_log_settled(newest_tx, start_time)
+        do_await_log_settled(newest_seq, start_time)
     end
   end
 

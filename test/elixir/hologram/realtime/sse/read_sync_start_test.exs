@@ -7,6 +7,7 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
 
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.Oplog
   alias Hologram.Entity.Model
   alias Hologram.Policy
   alias Hologram.Sync.Cursor
@@ -38,18 +39,18 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
   # The hash a place filled by this build names its types by.
   defp types_hash, do: Cursor.types_hash(@synced_types, false, Model.hash())
 
-  defp seed(tx) do
+  defp seed do
     statement = """
-    INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash")
-    VALUES ('del_entity', 'Hologram.Test.Fixtures.Entity.Module2', $1, $2, $3)
-    RETURNING "tx", "seq"
+    INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "model_hash")
+    VALUES ('del_entity', 'Hologram.Test.Fixtures.Entity.Module2', $1, $2)
+    RETURNING "seq", "tx", "inserted_at"
     """
 
-    params = [Codec.encode(@entity_id, :uuid), tx, Model.hash()]
+    params = [Codec.encode(@entity_id, :uuid), Model.hash()]
 
-    {:ok, %Postgrex.Result{rows: [[tx, seq]]}} = Connection.query(statement, params)
+    {:ok, %Postgrex.Result{rows: [[seq, tx, inserted_at]]}} = Connection.query(statement, params)
 
-    {tx, seq}
+    Oplog.place(%{inserted_at: inserted_at, seq: seq, tx: tx})
   end
 
   # Starting a sync reads the data model after the handshake found it released, and a live reload
@@ -60,38 +61,51 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
   describe "sync_session_opts/5" do
     defp gap_reader(cursor) do
       start = %{cursor: cursor, rules: nil, types_hash: types_hash()}
-      connection = %{applied_seq: nil, fill_place: {200, 0}, replica_id: nil}
+      connection = %{applied_seq: nil, replica_id: nil}
 
       sync_session_opts(nil, MyApp.Page, @policy_hash, start, connection)[:read_gap]
     end
 
     test "hands the session a gap reader that reads past a place filled under the same rules and types" do
-      {tx, seq} = seed(200)
+      place = seed()
 
-      assert {:ok, [], _edge} = gap_reader(Cursor.encode(tx, seq, @policy_hash, types_hash())).()
+      assert {:ok, []} =
+               gap_reader(Cursor.encode(place, Oplog.log_id(), @policy_hash, types_hash())).()
     end
 
     test "hands the session a gap reader that refuses a place filled with other types" do
-      {tx, seq} = seed(200)
+      place = seed()
 
-      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([], false, Model.hash()))
+      cursor =
+        Cursor.encode(
+          place,
+          Oplog.log_id(),
+          @policy_hash,
+          Cursor.types_hash([], false, Model.hash())
+        )
 
       assert gap_reader(cursor).() == {:full_resync, :synced_types}
     end
 
     test "hands the session a gap reader that refuses a place filled under another model" do
-      {tx, seq} = seed(200)
+      place = seed()
 
       cursor =
-        Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash(@synced_types, false, "0ld"))
+        Cursor.encode(
+          place,
+          Oplog.log_id(),
+          @policy_hash,
+          Cursor.types_hash(@synced_types, false, "0ld")
+        )
 
       assert gap_reader(cursor).() == {:full_resync, :synced_types}
     end
 
     test "hands the session a gap reader that refuses a place judged under other rules" do
-      {tx, seq} = seed(200)
+      place = seed()
 
-      cursor = Cursor.encode(tx, seq, "fedcba9876543210fedcba9876543210", types_hash())
+      cursor =
+        Cursor.encode(place, Oplog.log_id(), "fedcba9876543210fedcba9876543210", types_hash())
 
       assert gap_reader(cursor).() == {:full_resync, :policy_hash}
     end
@@ -121,11 +135,11 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     test "waits for the compile when a hold began before a returning client's catch-up" do
       on_exit(&Model.release/0)
 
-      {tx, seq} = seed(200)
-      seed(201)
+      place = seed()
+      seed()
 
       # Named before the hold, which refuses the model hash a place names.
-      cursor = Cursor.encode(tx, seq, @policy_hash, types_hash())
+      cursor = Cursor.encode(place, Oplog.log_id(), @policy_hash, types_hash())
 
       Model.hold()
 
@@ -154,10 +168,10 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
 
     # The session reads the gap for itself, so what travels on is where it reads from.
     test "hands on where a returning client resumes from" do
-      {tx, seq} = seed(200)
-      seed(201)
+      place = seed()
+      seed()
 
-      cursor = Cursor.encode(tx, seq, @policy_hash, types_hash())
+      cursor = Cursor.encode(place, Oplog.log_id(), @policy_hash, types_hash())
 
       assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
                {:ok,
@@ -174,9 +188,10 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     # A client that has to be sent everything again resumes from nowhere - a cursor handed on would
     # have the session replay a gap for a client being told to drop its store.
     test "hands on no place to resume from for a client sent everything again" do
-      {tx, seq} = seed(200)
+      place = seed()
 
-      cursor = Cursor.encode(tx, seq, "fedcba9876543210fedcba9876543210", types_hash())
+      cursor =
+        Cursor.encode(place, Oplog.log_id(), "fedcba9876543210fedcba9876543210", types_hash())
 
       assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
                {:ok,
@@ -193,10 +208,15 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     # A migration can change rows at rest with nothing in the log to say so, and a tab built against
     # an older model keeps the rows it holds across the deploy.
     test "sends everything again to a client filled under another model" do
-      {tx, seq} = seed(200)
+      place = seed()
 
       cursor =
-        Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash(@synced_types, false, "0ld"))
+        Cursor.encode(
+          place,
+          Oplog.log_id(),
+          @policy_hash,
+          Cursor.types_hash(@synced_types, false, "0ld")
+        )
 
       assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
                {:ok,
@@ -231,10 +251,10 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     end
 
     test "names the types an old client is served, not the build's, in the place it resumes from" do
-      {tx, seq} = seed(200)
+      place = seed()
 
       # Filled with the build's own types, which the old client isn't served.
-      cursor = Cursor.encode(tx, seq, @policy_hash, types_hash())
+      cursor = Cursor.encode(place, Oplog.log_id(), @policy_hash, types_hash())
 
       serving = %{lens: :a_lens, model_hash: Model.hash(), types: []}
 
@@ -245,9 +265,15 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     # A deploy that starts syncing a type moves no row of it, so only the place's own record of the
     # types says the client was filled without it.
     test "sends everything again to a client filled with other types" do
-      {tx, seq} = seed(200)
+      place = seed()
 
-      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([], false, Model.hash()))
+      cursor =
+        Cursor.encode(
+          place,
+          Oplog.log_id(),
+          @policy_hash,
+          Cursor.types_hash([], false, Model.hash())
+        )
 
       assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
                {:ok,

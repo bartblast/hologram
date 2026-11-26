@@ -26,7 +26,15 @@ defmodule Hologram.Entity.Validator do
   # Erlang timer can hold, since a limit past that would crash the worker when the first run starts.
   @max_job_timeout_ms 4_294_967_295
 
-  @reserved_names [:created_at, :id, :server_created_at, :server_updated_at, :updated_at]
+  @reserved_names [
+    :created_at,
+    :id,
+    :server_created_at,
+    :server_created_seq,
+    :server_updated_at,
+    :server_updated_seq,
+    :updated_at
+  ]
 
   # The two operations that may name the role they cover
   @role_operations [:grant_role, :revoke_role]
@@ -964,7 +972,7 @@ defmodule Hologram.Entity.Validator do
       |> declared_fields()
       |> Enum.map(fn {field_name, _declaration} -> field_name end)
 
-    ["created_at", "id", "server_created_at", "server_updated_at", "updated_at"] ++ declared_names
+    Enum.map(@reserved_names, &Atom.to_string/1) ++ declared_names
   end
 
   # The first target that appears earlier in the list, nil when every target appears once.

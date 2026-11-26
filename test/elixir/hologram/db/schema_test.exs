@@ -1363,7 +1363,9 @@ defmodule Hologram.DB.SchemaTest do
                      "id" => %{type: "uuid", collation: nil, null: false},
                      "created_at" => %{type: "timestamptz", collation: nil, null: false},
                      "server_created_at" => %{type: "timestamptz", collation: nil, null: false},
+                     "server_created_seq" => %{type: "int8", collation: nil, null: false},
                      "server_updated_at" => %{type: "timestamptz", collation: nil, null: false},
+                     "server_updated_seq" => %{type: "int8", collation: nil, null: false},
                      "updated_at" => %{type: "timestamptz", collation: nil, null: false},
                      "$revisions" => %{type: "jsonb", collation: nil, null: false}
                    },
@@ -1411,7 +1413,9 @@ defmodule Hologram.DB.SchemaTest do
                "c_$search" => %{type: "text", collation: "C", null: true},
                "created_at" => %{type: "timestamptz", collation: nil, null: false},
                "server_created_at" => %{type: "timestamptz", collation: nil, null: false},
+               "server_created_seq" => %{type: "int8", collation: nil, null: false},
                "server_updated_at" => %{type: "timestamptz", collation: nil, null: false},
+               "server_updated_seq" => %{type: "int8", collation: nil, null: false},
                "updated_at" => %{type: "timestamptz", collation: nil, null: false},
                "$revisions" => %{type: "jsonb", collation: nil, null: false}
              }

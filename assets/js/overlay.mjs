@@ -190,6 +190,10 @@ export default class Overlay {
     Overlay.remove(batch);
   }
 
+  static push(batch) {
+    Overlay.#batches.push(batch);
+  }
+
   // For a numbered batch taken up from elsewhere, which can arrive after a higher one: a row folds
   // through the batches in this order, and the late one can hold the create the other updates.
   //
@@ -206,12 +210,17 @@ export default class Overlay {
     Overlay.#batches.splice(index, 0, batch);
   }
 
-  static push(batch) {
-    Overlay.#batches.push(batch);
-  }
-
   static remove(batch) {
     Overlay.#batches = Overlay.#batches.filter((held) => held !== batch);
+  }
+
+  // Answers the batches it took out.
+  static removeWhere(predicate) {
+    const removed = Overlay.#batches.filter(predicate);
+
+    Overlay.#batches = Overlay.#batches.filter((held) => !predicate(held));
+
+    return removed;
   }
 
   // Deliberately NOT called by LocalDatabase.reset(): a resync replaces what the server said, and
@@ -250,11 +259,15 @@ export default class Overlay {
     // own frame went out when it was first made, to whoever could see it then), and promoting
     // would file this client's guess of it with no frame ever coming to correct it, since the
     // server wrote nothing. So the answer's row is filed as the row, whole - its sort keys are
-    // computed by #promoteWrite, which re-files whatever the base holds under the id next.
+    // computed by #promoteWrite, which re-files whatever the base holds under the id next. Its
+    // numbers are the server's, held back as a frame's are until they are final.
     if (base === null && write.op === "create" && "id" in kept) {
       LocalDatabase.putRow(
         write.type,
-        Model.readIntegers(write.type, {...kept}),
+        Model.readIntegers(
+          write.type,
+          LocalDatabase.holdNumbers(write.type, kept),
+        ),
       );
 
       return;
@@ -367,7 +380,9 @@ export default class Overlay {
       {
         created_at: timestamp,
         server_created_at: null,
+        server_created_seq: null,
         server_updated_at: null,
+        server_updated_seq: null,
         updated_at: timestamp,
         $revisions: revisions,
       },

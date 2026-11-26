@@ -11,10 +11,20 @@ import Utils from "./utils.mjs";
 //
 // A period is an id of its own rather than the tag, so that an identity that changes and then
 // changes back still ends what came before the first change. That state can hold what the
-// identity in between put in it, and a response that left the server before a change can arrive
-// after it, carrying the old tag.
+// identity in between put in it.
+//
+// Responses and the stream can arrive in any order, and a response can name an identity the
+// session has left. A tag starts with a stamp that goes up with every change, which tells them
+// apart: a response no newer than what the tab knows doesn't move the tab, and the client asks
+// the server who is signed in (see Client.settleIdentity).
 export default class IdentityTracker {
   static HEADER = "hologram-identity-tag";
+
+  // The period of a response naming an identity that isn't known to be the current one. No period
+  // this document started, so what the response describes reads as stale.
+  static SUPERSEDED = "superseded";
+
+  static #NO_SESSION_PREFIX = "none.";
 
   // The period the document was loaded in, which its own page data was produced in.
   static documentPeriod = null;
@@ -38,6 +48,19 @@ export default class IdentityTracker {
     $.periods = new Set([$.period]);
   }
 
+  // Whether the tag names another identity than the current one, and isn't newer than it. Two tags
+  // with one stamp come from changes made at the same moment, so neither can be taken for the
+  // later one.
+  static isBehind(tag) {
+    return (
+      tag !== null &&
+      tag !== undefined &&
+      $.tag !== null &&
+      tag !== $.tag &&
+      $.#stampOf(tag) <= $.#stampOf($.tag)
+    );
+  }
+
   // Whether the given period is the one that lasts now.
   static isCurrent(period) {
     return period !== null && period !== undefined && period === $.period;
@@ -46,6 +69,16 @@ export default class IdentityTracker {
   // Whether the given period is one this document started, lasting or ended.
   static isOwnPeriod(period) {
     return $.periods.has(period);
+  }
+
+  // Whether the tag names another identity than the current one, from before it. The tag of a
+  // request with no session has no stamp and is from no time: its cookie was cleared.
+  static isOlder(tag) {
+    return (
+      $.isBehind(tag) &&
+      !tag.startsWith($.#NO_SESSION_PREFIX) &&
+      $.#stampOf(tag) < $.#stampOf($.tag)
+    );
   }
 
   // Whether the given tag names the identity the latest response was made for.
@@ -66,8 +99,12 @@ export default class IdentityTracker {
     return $.period;
   }
 
+  // Takes in the tag a response carried, unless it can't be told to be the latest word on the
+  // identity, and answers the period the response belongs to.
   static observeResponse(response) {
-    return $.observe(response.headers.get($.HEADER));
+    const tag = response.headers.get($.HEADER);
+
+    return $.isBehind(tag) ? $.SUPERSEDED : $.observe(tag);
   }
 
   // The tag to stamp state with that was produced in the given period: the identity's while the
@@ -75,6 +112,10 @@ export default class IdentityTracker {
   // put in it. State stamped with no tag is never restored into another document.
   static tagFor(period) {
     return $.isCurrent(period) ? $.tag : null;
+  }
+
+  static #stampOf(tag) {
+    return Number.parseInt(tag, 10) || 0;
   }
 }
 

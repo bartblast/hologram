@@ -8,13 +8,18 @@
 // so the array folded over the base rows here is the array posted to the endpoint - there is one
 // spelling of a write in the system, and no step that could translate it wrongly.
 export default class Batch {
-  // Who was signed in on the page that sealed this batch, and nothing at all for a visitor.
+  // Who was signed in when the action opened this batch, and nothing at all for a visitor.
   //
   // A batch outlives the page that made it, so what is kept of one has to say whose work it is:
   // the server applies a batch under the user of the session that SENDS it, so a batch taken up
   // by a page somebody else has since signed in on would be written in their name. Alice's note
   // would become Bob's.
   actorUserId = null;
+
+  // How many times the signed-in user had changed when the action opened this batch (see
+  // LocalDatabase.actorUserChanges). Not part of `record()`: only the action that opened the batch
+  // asks.
+  actorUserChanges = 0;
 
   // Whether the store holds this batch: null while the filing is in flight, true once it is stored
   // and for a batch read back from it, false when it never got there. A batch the store doesn't
@@ -59,6 +64,11 @@ export default class Batch {
   // once refused. There is no "confirmed": a confirmed batch is promoted into the base rows and
   // dropped, so nothing is left to hold a state.
   state = "open";
+
+  // Whether a refusal of it switched pairs since the last backoff retry. Every handshake hands the
+  // tab a new pair (see DataLayer.takeHandshake), so without it a refusal no pair cures would
+  // switch and resend with no pause for as long as the server refuses (see Batches.flush).
+  switchedPair = false;
 
   // The cid of the component whose action opened it, so what the server says about these writes
   // can be delivered where they were made.
