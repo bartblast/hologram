@@ -102,16 +102,6 @@ defmodule Hologram.DB.ConfigTest do
 
     # The server name still goes out in the handshake: no server_name_indication: :disable,
     # which would drop it along with the host name check.
-    test "checks the certificate against the system's CAs, not the host name, under the verify_ca mode" do
-      opts = postgrex_opts(Keyword.put(@resolved, :ssl, mode: :verify_ca))
-      system_cacerts = :public_key.cacerts_get()
-
-      assert [verify: :verify_peer, verify_fun: {verify_fun, nil}, cacerts: ^system_cacerts] =
-               opts[:ssl]
-
-      assert verify_fun.(:cert, {:bad_cert, :hostname_check_failed}, nil) == {:valid, nil}
-    end
-
     test "checks the certificate against the given CA under the verify_ca mode" do
       ssl = [ca_cert_path: "/certs/ca.pem", mode: :verify_ca]
       opts = postgrex_opts(Keyword.put(@resolved, :ssl, ssl))
@@ -124,7 +114,8 @@ defmodule Hologram.DB.ConfigTest do
 
     # The clauses of the fun the ssl application wraps a one-argument verify_fun in.
     test "keeps the ssl application's handling of every other certificate event under the verify_ca mode" do
-      opts = postgrex_opts(Keyword.put(@resolved, :ssl, mode: :verify_ca))
+      ssl = [ca_cert_path: "/certs/ca.pem", mode: :verify_ca]
+      opts = postgrex_opts(Keyword.put(@resolved, :ssl, ssl))
       {verify_fun, state} = opts[:ssl][:verify_fun]
 
       assert verify_fun.(:cert, {:bad_cert, :unknown_ca}, state) ==
@@ -138,7 +129,8 @@ defmodule Hologram.DB.ConfigTest do
     # The ssl application's default verify_fun renames an expired trust anchor's failure, so that
     # it looks for a cross-signed root in its place.
     test "fails an expired self-signed certificate as an expired root under the verify_ca mode" do
-      opts = postgrex_opts(Keyword.put(@resolved, :ssl, mode: :verify_ca))
+      ssl = [ca_cert_path: "/certs/ca.pem", mode: :verify_ca]
+      opts = postgrex_opts(Keyword.put(@resolved, :ssl, ssl))
       {verify_fun, state} = opts[:ssl][:verify_fun]
 
       root = :public_key.pkix_test_root_cert(~c"Test Root", [])
@@ -366,9 +358,13 @@ defmodule Hologram.DB.ConfigTest do
     end
 
     test "keeps the given ssl mode" do
-      for mode <- [:require, :verify_ca, :verify_full] do
+      for mode <- [:require, :verify_full] do
         assert resolve!([ssl: [mode: mode]], :dev)[:ssl] == [mode: mode]
       end
+
+      ssl = [ca_cert_path: "/certs/ca.pem", mode: :verify_ca]
+
+      assert resolve!([ssl: ssl], :dev)[:ssl] == ssl
     end
 
     test "sorts the ssl list by entry" do
@@ -390,7 +386,13 @@ defmodule Hologram.DB.ConfigTest do
     # The test bootstrap writes the resolved options back into the config, which is resolved
     # again from there.
     test "accepts its own resolved ssl" do
-      ssl = [cert_path: "/certs/client.pem", key_path: "/certs/client.key", mode: :verify_ca]
+      ssl = [
+        ca_cert_path: "/certs/ca.pem",
+        cert_path: "/certs/client.pem",
+        key_path: "/certs/client.key",
+        mode: :verify_ca
+      ]
+
       resolved = resolve!([ssl: ssl], :dev)
 
       assert resolve!(resolved, :dev) == resolved
@@ -403,13 +405,14 @@ defmodule Hologram.DB.ConfigTest do
     end
 
     test "reads the url's sslmode" do
-      for {sslmode, mode} <- [
-            {"require", :require},
-            {"verify-ca", :verify_ca},
-            {"verify-full", :verify_full}
-          ] do
+      for {sslmode, mode} <- [{"require", :require}, {"verify-full", :verify_full}] do
         assert resolve_url!("sslmode=#{sslmode}")[:ssl] == [mode: mode]
       end
+
+      assert resolve_url!("sslmode=verify-ca&sslrootcert=/certs/ca.pem")[:ssl] == [
+               ca_cert_path: "/certs/ca.pem",
+               mode: :verify_ca
+             ]
     end
 
     test "turns ssl off on the url's sslmode=disable" do
@@ -717,6 +720,24 @@ defmodule Hologram.DB.ConfigTest do
       end
     end
 
+    # The system's CAs would vouch for any host a public CA issued a certificate to, and mode
+    # :verify_ca doesn't check the host name.
+    test "raises on the verify_ca mode without a CA" do
+      expected_msg =
+        "mode :verify_ca in config :hologram, :database needs ssl entry :ca_cert_path or url parameter sslrootcert, the file of the CA to trust - without a host name check, trusting the system's CAs takes mode :verify_full"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        resolve!([ssl: [mode: :verify_ca]], :dev)
+      end
+    end
+
+    test "raises on the url's sslmode=verify-ca without a CA" do
+      assert_url_error(
+        "sslmode=verify-ca",
+        "sslmode=verify-ca in config :hologram, :database needs url parameter sslrootcert or ssl entry :ca_cert_path, the file of the CA to trust - without a host name check, trusting the system's CAs takes sslmode=verify-full"
+      )
+    end
+
     test "raises on a client certificate without its key" do
       expected_msg =
         "ssl entry :cert_path in config :hologram, :database needs :key_path, the key of the client certificate"
@@ -760,7 +781,6 @@ defmodule Hologram.DB.ConfigTest do
         "ssl in config :hologram, :database checks the server's certificate against the system's CAs, which failed to load (:enoent) - set ssl entry :ca_cert_path to the CA to trust"
 
       assert_error ArgumentError, expected_msg, fn -> resolve_ssl.(true) end
-      assert_error ArgumentError, expected_msg, fn -> resolve_ssl.(mode: :verify_ca) end
 
       assert resolve_ssl.(ca_cert_path: "/certs/ca.pem") == [
                ca_cert_path: "/certs/ca.pem",

@@ -175,8 +175,8 @@ defmodule Hologram.DB.Config do
       host name it was issued for
     * `:verify_full` - also checks the host name
 
-  The checking modes trust the CA in :ca_cert_path, or the system's CAs without it - Postgrex
-  adds no CAs to a list. Raises ArgumentError when the system's CAs fail to load. :cert_path and
+  :verify_ca trusts the CA in :ca_cert_path, which resolve!/2 requires for it, and :verify_full
+  that CA or the system's CAs without it - Postgrex adds no CAs to a list. Raises ArgumentError when the system's CAs fail to load. :cert_path and
   :key_path give the client certificate and its key. The server name goes out in the handshake
   under every mode.
   """
@@ -208,7 +208,8 @@ defmodule Hologram.DB.Config do
 
     * `:mode` - `:require`, `:verify_ca` or `:verify_full` (the default), see postgrex_opts/1
     * `:ca_cert_path` - the file of the CA to trust instead of the system's, for the modes
-      that check the certificate
+      that check the certificate. `:verify_ca` needs it, since the system's CAs vouch for
+      whatever host they issued a certificate to
     * `:cert_path` and `:key_path` - the files of a client certificate and its key, set
       together
 
@@ -230,8 +231,9 @@ defmodule Hologram.DB.Config do
 
   The resulting list is checked like the key: :cert_path and :key_path need each other, and
   :ca_cert_path (`sslrootcert` too, unlike in libpq, where it implies `verify-ca`) needs
-  `:verify_ca` or `:verify_full`. A checking mode without :ca_cert_path raises when the system's
-  CAs fail to load. A `sslrootcert`, `sslcert` or `sslkey` while ssl ends up off raises, since it
+  `:verify_ca` or `:verify_full`, while `:verify_ca` needs :ca_cert_path (`sslrootcert` to a file),
+  as in libpq, where `verify-ca` never trusts the system's CAs. `:verify_full` without
+  :ca_cert_path raises when the system's CAs fail to load. A `sslrootcert`, `sslcert` or `sslkey` while ssl ends up off raises, since it
   would be ignored. Any other parameter raises ArgumentError naming it, `ssl` and `pool_size`
   included, and so does a repeated one or a malformed percent-encoding. No message holds the
   url, which carries the password.
@@ -481,13 +483,7 @@ defmodule Hologram.DB.Config do
       # As in libpq: the system's CAs vouch for whatever host they issued a certificate to, so
       # trusting them takes the host name check.
       {:ok, :system} when mode != :verify_full ->
-        needed_mode = if url_mode?, do: "sslmode=verify-full", else: "mode :verify_full"
-
-        unchecked =
-          if mode == :require, do: "the server's certificate", else: "the server's host name"
-
-        raise ArgumentError,
-              "url parameter sslrootcert=system in config :hologram, :database needs #{needed_mode} - #{mode_source} doesn't check #{unchecked}"
+        raise_system_ca_without_verify_full!(mode, mode_source, url_mode?)
 
       {:ok, _path} when mode == :require ->
         ca_source =
@@ -503,9 +499,34 @@ defmodule Hologram.DB.Config do
         raise ArgumentError,
               "#{ca_source} in config :hologram, :database needs #{needed_modes} - #{mode_source} doesn't check the server's certificate"
 
+      :error when mode == :verify_ca ->
+        raise_verify_ca_without_ca!(mode_source, url_mode?)
+
       _no_conflict ->
         :ok
     end
+  end
+
+  defp raise_system_ca_without_verify_full!(mode, mode_source, url_mode?) do
+    needed_mode = if url_mode?, do: "sslmode=verify-full", else: "mode :verify_full"
+
+    unchecked =
+      if mode == :require, do: "the server's certificate", else: "the server's host name"
+
+    raise ArgumentError,
+          "url parameter sslrootcert=system in config :hologram, :database needs #{needed_mode} - #{mode_source} doesn't check #{unchecked}"
+  end
+
+  # Without a host name check, the system's CAs would vouch for any host a public CA issued a
+  # certificate to - see validate_ca_cert_mode!/2's sslrootcert=system clause.
+  defp raise_verify_ca_without_ca!(mode_source, url_mode?) do
+    {ca_entry, full_mode} =
+      if url_mode?,
+        do: {"url parameter sslrootcert or ssl entry :ca_cert_path", "sslmode=verify-full"},
+        else: {"ssl entry :ca_cert_path or url parameter sslrootcert", "mode :verify_full"}
+
+    raise ArgumentError,
+          "#{mode_source} in config :hologram, :database needs #{ca_entry}, the file of the CA to trust - without a host name check, trusting the system's CAs takes #{full_mode}"
   end
 
   defp validate_client_cert!(ssl, url_ssl) do
