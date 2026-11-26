@@ -181,6 +181,176 @@ describe("Utils", () => {
   // IMPORTANT!
   // Each test in this describe block has a related Elixir test in test/elixir/hologram/entity_test.exs (describe "generate_id/0")
   // Always update both together.
+  describe("entityId()", () => {
+    it("returns 22 base62 characters holding the bits of a version 7 UUID", () => {
+      const id = Utils.entityId();
+
+      assert.match(id, /^[0-9A-Za-z]{22}$/);
+
+      assert.match(
+        Utils.entityIdToUuid(id),
+        /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    });
+
+    it("returns a different id on each call", () => {
+      assert.notEqual(Utils.entityId(), Utils.entityId());
+    });
+
+    it("embeds the number of milliseconds since the Unix epoch in the leading bits", () => {
+      const unixMsBefore = Date.now();
+      const id = Utils.entityId();
+      const unixMsAfter = Date.now();
+
+      const embeddedUnixMs = parseInt(
+        Utils.entityIdToUuid(id).replaceAll("-", "").slice(0, 12),
+        16,
+      );
+
+      assert.isAtLeast(embeddedUnixMs, unixMsBefore);
+      assert.isAtMost(embeddedUnixMs, unixMsAfter);
+    });
+
+    it("returns ids that sort as strings in the order they were made, across milliseconds", () => {
+      const ids = Array.from({length: 3}, () => {
+        const id = Utils.entityId();
+        const until = Date.now() + 2;
+
+        while (Date.now() < until) {
+          // Waits 2 milliseconds, as the server's twin sleeps.
+        }
+
+        return id;
+      });
+
+      assert.deepEqual([...ids].sort(), ids);
+    });
+
+    // The server has no twin for these: its ids are ordered only across milliseconds.
+    // The generator is shared with uuidv7(), so each test waits for the real clock to pass the
+    // frozen millisecond, and the uuidv7() tests after it start from the real time.
+    describe("with the clock frozen", () => {
+      let nowMs;
+      let timers;
+
+      afterEach(() => {
+        timers.restore();
+
+        while (Date.now() <= nowMs) {
+          // Waits a few milliseconds.
+        }
+      });
+
+      it("returns ids that sort as strings in the order of the calls within one millisecond", () => {
+        nowMs = Date.now() + 5;
+        timers = sinon.useFakeTimers(nowMs);
+
+        const ids = Array.from({length: 100}, () => Utils.entityId());
+
+        assert.isTrue(
+          ids.every((id, index) => index === 0 || ids[index - 1] < id),
+        );
+      });
+
+      it("shares its order with uuidv7()", () => {
+        nowMs = Date.now() + 5;
+        timers = sinon.useFakeTimers(nowMs);
+
+        const first = Utils.entityIdToUuid(Utils.entityId());
+        const second = Utils.uuidv7();
+        const third = Utils.entityIdToUuid(Utils.entityId());
+
+        assert.isTrue(first < second);
+        assert.isTrue(second < third);
+      });
+    });
+  });
+
+  // IMPORTANT!
+  // Each test in this describe block has a related Elixir test in test/elixir/hologram/entity_test.exs (describe "id_to_uuid/1")
+  // Always update both together.
+  describe("entityIdToUuid()", () => {
+    it("returns the 36-character spelling of the same number", () => {
+      assert.equal(
+        Utils.entityIdToUuid("02y9GOZb4QYpMlaccFSmK2"),
+        "0192f3a0-7b1e-7c2d-9a4b-1f2e3d4c5b6a",
+      );
+    });
+
+    it("converts the smallest and the largest id", () => {
+      assert.equal(
+        Utils.entityIdToUuid("0000000000000000000000"),
+        "00000000-0000-0000-0000-000000000000",
+      );
+
+      assert.equal(
+        Utils.entityIdToUuid("7n42DGM5Tflk9n8mt7Fhc7"),
+        "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      );
+    });
+  });
+
+  describe("entityIdFromBytes()", () => {
+    it("returns the entity id spelling of the bytes' number", () => {
+      const bytes = Uint8Array.from(
+        "0192f3a07b1e7c2d9a4b1f2e3d4c5b6a".match(/../g),
+        (byte) => parseInt(byte, 16),
+      );
+
+      assert.equal(Utils.entityIdFromBytes(bytes), "02y9GOZb4QYpMlaccFSmK2");
+    });
+
+    it("converts the smallest and the largest number", () => {
+      assert.equal(
+        Utils.entityIdFromBytes(new Uint8Array(16)),
+        "0000000000000000000000",
+      );
+
+      assert.equal(
+        Utils.entityIdFromBytes(new Uint8Array(16).fill(255)),
+        "7n42DGM5Tflk9n8mt7Fhc7",
+      );
+    });
+
+    it("is undone by entityIdToUuid()", () => {
+      const id = Utils.entityId();
+      const hex = Utils.entityIdToUuid(id).replaceAll("-", "");
+      const bytes = Uint8Array.from(hex.match(/../g), (byte) =>
+        parseInt(byte, 16),
+      );
+
+      assert.equal(Utils.entityIdFromBytes(bytes), id);
+    });
+  });
+
+  describe("isEntityId()", () => {
+    it("accepts 22 base62 characters up to the largest 128-bit number", () => {
+      for (const value of [
+        "0000000000000000000000",
+        "02wLIRxqmq3AUo6vl2OW37",
+        "7n42DGM5Tflk9n8mt7Fhc7",
+      ]) {
+        assert.isTrue(Utils.isEntityId(value), value);
+      }
+    });
+
+    it("refuses anything else", () => {
+      for (const value of [
+        "02wLIRxqmq3AUo6vl2OW3",
+        "02wLIRxqmq3AUo6vl2OW377",
+        "02wLIRxqmq3AUo6vl2OW3-",
+        "02wLIRxqmq3AUo6vl2OW37\n",
+        "7n42DGM5Tflk9n8mt7Fhc8",
+        "zzzzzzzzzzzzzzzzzzzzzz",
+        "018f0000-0000-7000-8000-000000000001",
+        7,
+        null,
+      ]) {
+        assert.isFalse(Utils.isEntityId(value), String(value));
+      }
+    });
+  });
+
   describe("uuidv7()", () => {
     it("returns a version 7 UUID string", () => {
       assert.match(

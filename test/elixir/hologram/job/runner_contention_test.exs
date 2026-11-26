@@ -43,7 +43,7 @@ defmodule Hologram.Job.RunnerContentionTest do
       {:ok, session} = Postgrex.start_link(scratch_opts)
 
       Postgrex.transaction(session, fn connection ->
-        Postgrex.query!(connection, statement, [Codec.encode(id, :uuid)])
+        Postgrex.query!(connection, statement, [Codec.encode(id, :id)])
 
         send(test_pid, :holding)
 

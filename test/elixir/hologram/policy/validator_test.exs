@@ -317,7 +317,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture127 do
         use Hologram.Entity
 
-        attribute :author_id, :uuid
+        attribute :author_id, :id
 
         allow :read, when: author_id == user_id()
       end
@@ -334,7 +334,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture128 do
         use Hologram.Entity
 
-        attribute :author_id, :uuid
+        attribute :author_id, :id
         attribute :shared, :boolean
 
         allow :update, as: :edit, when: shared == true or author_id == user_id()
@@ -352,7 +352,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture129 do
         use Hologram.Entity
 
-        attribute :author_id, :uuid
+        attribute :author_id, :id
 
         relationship :children, [Hologram.Policy.ValidatorTest.InlinePolicyFixture129],
           inverse: parent
@@ -401,7 +401,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture132 do
         use Hologram.Entity
 
-        attribute :author_id, :uuid
+        attribute :author_id, :id
         attribute :title, :string
 
         allow :update, only: [:title], when: author_id == user_id()
@@ -419,7 +419,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule InlinePolicyFixture130 do
         use Hologram.Entity
 
-        attribute :author_id, :uuid
+        attribute :author_id, :id
 
         allow :read, when: author_id == user_id()
       end
@@ -450,7 +450,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture8 - user_id() requires a uuid attribute - attribute :title in Hologram.Policy.ValidatorTest.InlinePolicyFixture8 has type :string"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture8 - user_id() requires an id attribute - attribute :title in Hologram.Policy.ValidatorTest.InlinePolicyFixture8 has type :string"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture8], [])
@@ -2268,11 +2268,11 @@ defmodule Hologram.Policy.ValidatorTest do
 
         relationship :parent, Module1
 
-        allow :read, when: parent_id >= "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+        allow :read, when: parent_id >= "02wSyz8E9khZO82QLJOgGt"
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture6 - operator :>= requires an orderable attribute - attribute :parent_id in Hologram.Policy.ValidatorTest.InlinePolicyFixture6 has type :uuid, and boolean and uuid attributes have no order to compare by"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture6 - operator :>= requires an orderable attribute - attribute :parent_id in Hologram.Policy.ValidatorTest.InlinePolicyFixture6 has type :id, and boolean, id and uuid attributes have no order to compare by"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture6], [])
@@ -3108,7 +3108,7 @@ defmodule Hologram.Policy.ValidatorTest do
       defmodule TakenActorLimitedEntity do
         use Hologram.Entity
 
-        attribute :author_id, :uuid
+        attribute :author_id, :id
         attribute :title, :string
 
         policy TakenActorLimitedPolicy

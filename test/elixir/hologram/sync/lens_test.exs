@@ -444,8 +444,8 @@ defmodule Hologram.Sync.LensTest do
   # inverse `followers`, and a to-one `parent` with its inverse `replies`.
   @entity_types [Module30, Module34, Module39, RoleGrant]
 
-  @id_1 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e01"
-  @id_2 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e02"
+  @id_1 "02y1zRviSAYGVwSyzxs4pt"
+  @id_2 "02y1zRviSAYGVwSyzxs4pu"
 
   defp resolved!(ops, model \\ @model) do
     ops

@@ -74,8 +74,8 @@ defmodule Hologram.MutationTest do
 
     {:ok, %Postgrex.Result{rows: [[count]]}} =
       Connection.query(statement, [
-        Codec.encode(source_id, :uuid),
-        Codec.encode(target_id, :uuid)
+        Codec.encode(source_id, :id),
+        Codec.encode(target_id, :id)
       ])
 
     count
@@ -169,8 +169,8 @@ defmodule Hologram.MutationTest do
 
     Enum.map(rows, fn [type, entity_id, actor_id, mutation_ref] ->
       %{
-        actor_id: Codec.decode(actor_id, :uuid),
-        entity_id: Codec.decode(entity_id, :uuid),
+        actor_id: Codec.decode(actor_id, :id),
+        entity_id: Codec.decode(entity_id, :id),
         mutation_ref: mutation_ref,
         type: type
       }
@@ -616,7 +616,7 @@ defmodule Hologram.MutationTest do
         Connection.query(
           ~s|UPDATE "hologram_data"."#{Mapper.table_name(MutationModule1)}" | <>
             ~s|SET "server_updated_at" = $1 WHERE "id" = $2|,
-          [Codec.encode(planted_at, :datetime), Codec.encode(row.id, :uuid)]
+          [Codec.encode(planted_at, :datetime), Codec.encode(row.id, :id)]
         )
 
       write =
@@ -1743,6 +1743,32 @@ defmodule Hologram.MutationTest do
       assert kept == %{"0" => %{"$withheld" => true}}
     end
 
+    # Any entity can have columns named like a grant's, and the grant id derivation raises on ids
+    # that aren't entity ids.
+    test "answers a recorded row shaped like a grant whose ids aren't entity ids as recorded" do
+      %{batch: batch, holder: holder} = answered_repeat()
+
+      entry = %{
+        "id" => Entity.generate_id(),
+        "entity_id" => "0190a8e2-7c4d-7a3b-8f1e-2d5c6b7a8e9f",
+        "entity_type" => "Membership",
+        "role" => "member",
+        "user_id" => holder.id
+      }
+
+      {:ok, %Postgrex.Result{num_rows: 1}} =
+        Connection.query(
+          ~s|UPDATE "#{Mapper.system_schema()}"."mutation" | <>
+            ~s|SET "result" = jsonb_set("result", '{kept,0}', $3) | <>
+            ~s|WHERE "replica_id" = $1 AND "seq" = $2|,
+          [batch["replica_id"], batch["seq"], entry]
+        )
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} = run(batch, server(holder.id))
+
+      assert kept == %{"0" => entry}
+    end
+
     test "withholds a resent stale revocation's row its user may no longer read" do
       member = create_user("resend-revoker@example.com")
       user = create_user("resend-regranted@example.com")
@@ -2630,14 +2656,14 @@ defmodule Hologram.MutationTest do
     test "refuses a create whose id is text but no entity id" do
       write = create_write(MutationModule7, "NOT-AN-ID", %{"title" => "x"})
 
-      assert run(envelope([write]), server()) == rejected(0, %{id: [{:type, :uuid}]})
+      assert run(envelope([write]), server()) == rejected(0, %{id: [{:type, :id}]})
     end
 
     test "refuses an edge whose target is text but no entity id" do
       source = create_source()
       write = edge_write("add_relationship", Module16, source.id, "secrets", "nope")
 
-      assert run(envelope([write]), server()) == rejected(0, %{secrets: [{:type, :uuid}]})
+      assert run(envelope([write]), server()) == rejected(0, %{secrets: [{:type, :id}]})
     end
 
     test "keeps a refused batch holding a NUL, with the NUL spelled as U+FFFD" do
@@ -2726,13 +2752,42 @@ defmodule Hologram.MutationTest do
     end
 
     # A grant naming the session's own user id beside a create would pass as the creator's grant if
-    # the id were compared as sent, and then fail its validation, since no user entity has that id.
+    # the id were compared as sent. A user id no user entity can have derives no grant id, so the
+    # batch is refused before any gate.
     test "refuses a creator's grant naming a user id no user entity can have" do
       entity_id = Entity.generate_id()
 
       writes = [
         create_write(MutationModule5, entity_id, %{}),
         grant_write("abc", %MutationModule5{id: entity_id}, :maintainer)
+      ]
+
+      assert run(envelope(writes), server("abc")) ==
+               {:invalid, "write 1: a role grant's id is derived from the grant it names"}
+
+      assert EntityOperations.get(MutationModule5, entity_id) == nil
+    end
+
+    # Revoking one's own role passes the gate, so naming the session's own id would get past it if
+    # the id were compared as sent. A user id no user entity can have derives no grant id, so the
+    # batch is refused before the gate.
+    test "refuses a revocation naming a user id no user entity can have as its own" do
+      resource = create_shared()
+
+      write = revocation_write("abc", resource, :member)
+
+      assert run(envelope([write]), server("abc")) ==
+               {:invalid, "write 0: a role grant's id is derived from the grant it names"}
+    end
+
+    # A grant naming an entity id passes the envelope, so a session whose user id no user entity can
+    # have meets the gate, which reads it as nobody signed in.
+    test "refuses a creator's grant under a session user id no user entity can have" do
+      entity_id = Entity.generate_id()
+
+      writes = [
+        create_write(MutationModule5, entity_id, %{}),
+        grant_write(Entity.generate_id(), %MutationModule5{id: entity_id}, :maintainer)
       ]
 
       message = "a role is granted only by a signed-in user - nobody is signed in"
@@ -2743,12 +2798,10 @@ defmodule Hologram.MutationTest do
       assert EntityOperations.get(MutationModule5, entity_id) == nil
     end
 
-    # Revoking one's own role passes the gate, and the id the revocation names is compared with the
-    # session's as the data layer stores a user, so naming the session's own id gets nothing past it.
-    test "refuses a revocation naming a user id no user entity can have as its own" do
+    test "refuses a revocation under a session user id no user entity can have" do
       resource = create_shared()
 
-      write = revocation_write("abc", resource, :member)
+      write = revocation_write(Entity.generate_id(), resource, :member)
 
       message = "a role is revoked only by a signed-in user - nobody is signed in"
 

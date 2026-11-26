@@ -21,10 +21,10 @@ defmodule Hologram.Sync.PotTest do
   @tags {Task, :tags, Tag}
   @follows {Module30, :follows, Module30}
 
-  @id_1 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e01"
-  @id_2 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e02"
-  @id_3 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e03"
-  @id_4 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e04"
+  @id_1 "02y1zRviSAYGVwSyzxs4pt"
+  @id_2 "02y1zRviSAYGVwSyzxs4pu"
+  @id_3 "02y1zRviSAYGVwSyzxs4pv"
+  @id_4 "02y1zRviSAYGVwSyzxs4pw"
 
   defp edge(op, type, entity_id, relationship, target_id) do
     %{

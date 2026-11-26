@@ -102,7 +102,7 @@ defmodule Hologram.ControllerMutationTest do
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id])
 
-    Enum.map(rows, fn [actor_id] -> Codec.decode(actor_id, :uuid) end)
+    Enum.map(rows, fn [actor_id] -> Codec.decode(actor_id, :id) end)
   end
 
   # Names the session's user unless the batch says otherwise, as a tab serving that user does.

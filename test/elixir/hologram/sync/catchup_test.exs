@@ -10,7 +10,7 @@ defmodule Hologram.Sync.CatchupTest do
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
 
-  @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
+  @entity_id "02y1zRviSAYGVwSyzxs4q7"
   @policy_hash "0123456789abcdef0123456789abcdef"
   @types_hash "00112233445566778899aabbccddeeff"
   @other_log_id "ffeeddccbbaa99887766554433221100"
@@ -35,7 +35,7 @@ defmodule Hologram.Sync.CatchupTest do
     RETURNING "seq", "tx", "inserted_at"
     """
 
-    params = [Codec.encode(@entity_id, :uuid), Model.hash(), count]
+    params = [Codec.encode(@entity_id, :id), Model.hash(), count]
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, params)
 
@@ -68,7 +68,7 @@ defmodule Hologram.Sync.CatchupTest do
     RETURNING "seq", "tx", "inserted_at"
     """
 
-    params = [Codec.encode(@entity_id, :uuid), tx, model_hash]
+    params = [Codec.encode(@entity_id, :id), tx, model_hash]
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, params)
 

@@ -121,10 +121,11 @@ defmodule Hologram.Migration.Value.SQLTest do
                {"$1::uuid", [Codec.encode(@uuid, :uuid)]}
     end
 
-    test "encodes a reference as a uuid" do
+    test "encodes a reference as its id" do
+      id = "02wLIRxqmq3AUo6vl2OW36"
       type = {:reference, MyApp.User}
 
-      assert rendered({:value, @uuid, type}, type) == {"$1::uuid", [Codec.encode(@uuid, :uuid)]}
+      assert rendered({:value, id, type}, type) == {"$1::uuid", [Codec.encode(id, :id)]}
     end
 
     test "casts an enum value to its schema-qualified type" do

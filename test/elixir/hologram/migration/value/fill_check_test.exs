@@ -58,7 +58,7 @@ defmodule Hologram.Migration.Value.FillCheckTest do
             {:ok, _result} = Connection.query("SET LOCAL search_path TO public, pg_temp")
 
             create_filled_ids!()
-            keep_filled_ids!(["018f0000-0000-7000-8000-000000000000"])
+            keep_filled_ids!(["02wLIRxqmq3AUo6vl2OW36"])
 
             {:ok, %{rows: kept}} = Connection.query(~s|SELECT count(*) FROM pg_temp."$fill_ids"|)
 
@@ -174,7 +174,7 @@ defmodule Hologram.Migration.Value.FillCheckTest do
         result =
           Connection.transaction(fn ->
             create_filled_ids!()
-            keep_filled_ids!([kept_id])
+            keep_filled_ids!(["02wLIRxqmq3AUo6vl2OW37"])
 
             on_page = &send(self(), {:page, &1})
 

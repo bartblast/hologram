@@ -359,8 +359,8 @@ defmodule Hologram.DB do
   raw. A by-id read carries no claim, so a trusted one is
   `type |> filter(id: ^id) |> one() |> trust() |> DB.read()`.
 
-  Raises Hologram.MisuseError when the id is not a canonical entity id (a lowercase
-  8-4-4-4-12 UUID string), or when the first argument is not an entity type module.
+  Raises Hologram.MisuseError when the id is not an entity id (a string of 22 base62
+  characters), or when the first argument is not an entity type module.
   """
   @spec read(module, Entity.id()) :: Entity.t() | nil
   def read(entity_type, id) do
@@ -420,10 +420,12 @@ defmodule Hologram.DB do
   {:error, %Hologram.SQLError{}} carrying the server's condition name as its code and the server's
   message.
 
-  A uuid column or uuid array comes back as canonical id strings, the spelling every entity
-  carries, and an id string given for a uuid parameter or uuid array parameter is encoded for the
-  driver - a 16-byte binary passes through either way. The conversion goes by the types PostgreSQL
-  reports for the statement, so a text column holding a uuid-shaped string stays as it is. Other
+  A uuid column or uuid array comes back in the 36-character lowercase 8-4-4-4-12 form, since
+  PostgreSQL can't tell an entity id from another system's UUID - Hologram.Entity.uuid_to_id/1
+  gives the entity id spelling, to compare with an entity's id. A uuid parameter or uuid array
+  parameter takes either spelling, an entity id or the 36-character form, and a 16-byte binary
+  passes through. The conversion goes by the types PostgreSQL reports for the statement, so a text
+  column holding a uuid-shaped string stays as it is. Other
   types arrive as the driver decodes them: `int8` as an integer, `float8` as a float, `text` as a
   string, `boolean`, `date` as a Date, `time` as a Time, `timestamptz` as a DateTime, an enum as
   its label string and `jsonb` as a map.
@@ -748,9 +750,11 @@ defmodule Hologram.DB do
   that are wrong look the same through. So a failed try opens one connection of its own to learn
   which: a server that refuses or cannot be reached - a host name that does not resolve included -
   or one still starting up or shutting down, is waited for. Any other error - a wrong password, a
-  database that does not exist, a connection limit - raises, failing the boot as it did before the
-  wait. In dev, a database that does not exist raises naming mix holo.db.reset, which creates it.
-  An error the query itself answers with raises the same way, unless it is one of those.
+  database that does not exist, a connection limit, a TLS handshake refused over a certificate -
+  the client's included - or over the TLS options - raises, failing the boot as it did before the
+  wait. A TLS handshake that times out or is closed is waited for. In dev, a database that does not
+  exist raises naming mix holo.db.reset, which creates it. An error the query itself answers with
+  raises the same way, unless it is one of those.
 
   It runs inside the start of the database's supervisor, so a restart of that supervisor while the
   database is away - rare, since the pool waits rather than failing - holds the unit above it, and
@@ -980,21 +984,17 @@ defmodule Hologram.DB do
       |> Application.get_env(:database, [])
       |> Config.resolve!(Hologram.env())
 
-    # The driver boundary - resolved config uses the component-named keys, Postgrex expects
-    # its own option names. Given opts win, so that tests can inject overrides (e.g. an
+    # The driver boundary - Config.postgrex_opts/1 turns the resolved config into Postgrex's
+    # options, ssl included. Given opts win, so that tests can inject overrides (e.g. an
     # ownership pool).
     postgrex_opts =
       Keyword.merge(
-        [
-          after_connect: {__MODULE__, :apply_session_settings, []},
-          database: resolved_opts[:database],
-          hostname: resolved_opts[:host],
-          name: @pool_name,
-          password: resolved_opts[:password],
-          pool_size: resolved_opts[:pool_size],
-          port: resolved_opts[:port],
-          username: resolved_opts[:user]
-        ],
+        Config.postgrex_opts(resolved_opts) ++
+          [
+            after_connect: {__MODULE__, :apply_session_settings, []},
+            name: @pool_name,
+            pool_size: resolved_opts[:pool_size]
+          ],
         opts
       )
 
@@ -1106,8 +1106,8 @@ defmodule Hologram.DB do
 
         nil
 
-      {:error, %DBConnection.ConnectionError{} = error} ->
-        error
+      {:error, %DBConnection.ConnectionError{message: message} = error} ->
+        if tls_misconfiguration?(message), do: raise(error), else: error
 
       {:error, %Postgrex.Error{postgres: %{code: code}} = error}
       when code in @unavailable_error_codes ->
@@ -1119,6 +1119,18 @@ defmodule Hologram.DB do
       {:error, error} ->
         raise error
     end
+  end
+
+  # A TLS handshake the server or the client refused - an alert, like a certificate no CA given
+  # trusts or a host name it doesn't cover - or TLS options the client refused, like a CA file
+  # that doesn't exist. Either fails the same way on every try. A handshake that timed out or was
+  # closed is a server that is away. Under TLS 1.3 the connect returns before the server checks
+  # the client's certificate, so the server's refusal of it comes as an alert on the first read,
+  # as "ssl recv (idle): ...", not on the connect. Postgrex gives the reason only inside the
+  # message, as "ssl <action>: <formatted reason> - <inspected reason>", so the match is on that.
+  defp tls_misconfiguration?(message) do
+    String.starts_with?(message, "ssl ") and
+      String.contains?(message, [" - {:tls_alert, ", " - {:options, "])
   end
 
   # In dev the reset creates the database along with Hologram's tables, so the error names it.

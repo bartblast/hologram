@@ -137,9 +137,10 @@ describe("Elixir_Hologram_Query_Stage", () => {
             check_in: "date",
             check_out: "date",
             created_at: "datetime",
+            external_ref: "uuid",
             guests: "integer",
             held_at: "datetime",
-            id: "uuid",
+            id: "id",
             level: "enum",
             name: "string",
             note: "string",
@@ -162,7 +163,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         // A type declaring inverses of both kinds, read off MyApp.Message's reference field and,
         // for LABEL below, off its to-many - the stages only refuse writing or pathing through them.
         [CHANNEL]: {
-          attributes: {id: "uuid", name: "string"},
+          attributes: {id: "id", name: "string"},
           enumValues: {},
           inverses: {
             messages: {
@@ -186,7 +187,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         // A stored to-many declaring its order, the twin of the Elixir suite's
         // DeclaredStoredOrderFixture.
         [BINDER]: {
-          attributes: {id: "uuid"},
+          attributes: {id: "id"},
           enumValues: {},
           relationships: {
             labels: {sort: [["name", "desc"]], toMany: true, type: LABEL},
@@ -195,7 +196,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         },
         // An inverse set declaring a list order, a direction in it.
         [BOARD]: {
-          attributes: {id: "uuid"},
+          attributes: {id: "id"},
           enumValues: {},
           inverses: {
             messages: {
@@ -220,7 +221,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             bio: "string",
             count: "integer",
             created_at: "datetime",
-            id: "uuid",
+            id: "id",
             priority: "integer",
             updated_at: "datetime",
           },
@@ -230,7 +231,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
           serverOnly: [],
         },
         [LABEL]: {
-          attributes: {id: "uuid", name: "string"},
+          attributes: {id: "id", name: "string"},
           enumValues: {},
           inverses: {
             messages: {
@@ -246,7 +247,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         },
         // The stored side of CHANNEL's messages, so a path can reach the inverse on a later hop.
         [MESSAGE]: {
-          attributes: {body: "string", id: "uuid", position: "integer"},
+          attributes: {body: "string", id: "id", position: "integer"},
           enumValues: {},
           relationships: {channel: {toMany: false, type: CHANNEL}},
           serverOnly: [],
@@ -257,7 +258,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [ROOM]: {
           attributes: {
             created_at: "datetime",
-            id: "uuid",
+            id: "id",
             name: "string",
             updated_at: "datetime",
           },
@@ -301,7 +302,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
           attributes: {
             body: "string",
             created_at: "datetime",
-            id: "uuid",
+            id: "id",
             position: "integer",
             updated_at: "datetime",
           },
@@ -333,7 +334,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         },
         // The single inverse's side, so including CHANNEL's topic has a type to build a term for.
         [TOPIC]: {
-          attributes: {id: "uuid", title: "string"},
+          attributes: {id: "id", title: "string"},
           enumValues: {},
           relationships: {channel: {toMany: false, type: CHANNEL}},
           serverOnly: [],
@@ -344,7 +345,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
           attributes: {
             any: "boolean",
             floor: "enum",
-            id: "uuid",
+            id: "id",
             tier: "enum",
           },
           enumValues: {
@@ -355,20 +356,20 @@ describe("Elixir_Hologram_Query_Stage", () => {
           serverOnly: [],
         },
         [GADGET]: {
-          attributes: {id: "uuid", priority: "enum"},
+          attributes: {id: "id", priority: "enum"},
           enumValues: {priority: ["low", "medium", "high"]},
           relationships: {},
           serverOnly: [],
         },
         // An enum declaring a module as a value, beside a plain atom.
         [ORDER]: {
-          attributes: {id: "uuid", state: "enum"},
+          attributes: {id: "id", state: "enum"},
           enumValues: {state: ["open", "Status.Done"]},
           relationships: {},
           serverOnly: [],
         },
         [PROJECT]: {
-          attributes: {id: "uuid", name: "string"},
+          attributes: {id: "id", name: "string"},
           operations: [
             "archive",
             "create",
@@ -391,7 +392,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             created_at: "datetime",
             done: "boolean",
             due_on: "date",
-            id: "uuid",
+            id: "id",
             position: "integer",
             starts_at: "time",
             status: "enum",
@@ -404,7 +405,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         // A counter the client is never shown, which reads back as the sentinel rather than as a
         // number it happens not to have.
         [VAULT]: {
-          attributes: {balance: "integer", id: "uuid"},
+          attributes: {balance: "integer", id: "id"},
           enumValues: {},
           relationships: {},
           serverOnly: ["balance"],
@@ -416,7 +417,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             active: "boolean",
             email: "string",
             ends_on: "date",
-            id: "uuid",
+            id: "id",
             level: "enum",
             logins: "integer",
             starts_on: "date",
@@ -1608,13 +1609,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("filters by the reference field of a to-one relationship", () => {
       const query = filter(
         Type.alias(PROJECT),
-        predicates([
-          ["owner_id", Type.bitstring("018f0000-0000-7000-8000-000000000001")],
-        ]),
+        predicates([["owner_id", Type.bitstring("02wLIRxqmq3AUo6vl2OW37")]]),
       );
 
       assert.deepStrictEqual(query.filter, [
-        ["owner_id", "==", "018f0000-0000-7000-8000-000000000001"],
+        ["owner_id", "==", "02wLIRxqmq3AUo6vl2OW37"],
       ]);
     });
 
@@ -2027,7 +2026,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assertBoxedError(
         () => filter(booking, pathPredicates(["owner", "active"], value)),
         "Hologram.MisuseError",
-        "operator :> requires an orderable attribute - attribute owner.active in MyApp.Booking has type :boolean, and boolean and uuid attributes have no order to compare by",
+        "operator :> requires an orderable attribute - attribute owner.active in MyApp.Booking has type :boolean, and boolean, id and uuid attributes have no order to compare by",
       );
     });
 
@@ -2050,7 +2049,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assertBoxedError(
         () => filter(booking, predicates([["owner_id", operand]])),
         "Hologram.MisuseError",
-        "operator :== compares attribute :owner_id with attribute assignee.email in MyApp.Booking, which have different types (:uuid and :string) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)",
+        "operator :== compares attribute :owner_id with attribute assignee.email in MyApp.Booking, which have different types (:id and :string) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)",
       );
     });
 
@@ -2120,7 +2119,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assertBoxedError(
         () => filter(task, predicates([["id", value]])),
         "Hologram.MisuseError",
-        "operator :< requires an orderable attribute - attribute :id in MyApp.Task has type :uuid, and boolean and uuid attributes have no order to compare by",
+        "operator :< requires an orderable attribute - attribute :id in MyApp.Task has type :id, and boolean, id and uuid attributes have no order to compare by",
       );
     });
 
@@ -2170,7 +2169,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assertBoxedError(
         () => filter(booking, predicates([["assignee_id", value]])),
         "Hologram.MisuseError",
-        "operator :< requires an orderable attribute - attribute :assignee_id in MyApp.Booking has type :uuid, and boolean and uuid attributes have no order to compare by",
+        "operator :< requires an orderable attribute - attribute :assignee_id in MyApp.Booking has type :id, and boolean, id and uuid attributes have no order to compare by",
       );
     });
 
@@ -2180,7 +2179,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assertBoxedError(
         () => filter(booking, predicates([["guests", value]])),
         "Hologram.MisuseError",
-        "unknown attribute :x in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
+        "unknown attribute :x in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :external_ref, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
       );
     });
 
@@ -3513,6 +3512,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
   });
 
   describe("filter/2 - value types", () => {
+    const ID_VALUES =
+      'an entity id, 22 base62 characters like "02wLIRxqmq3AUo6vl2OW37"';
+
     const UUID_VALUES =
       'a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001"';
 
@@ -3637,32 +3639,46 @@ describe("Elixir_Hologram_Query_Stage", () => {
         '"09:00" is not a value of attribute :starts_at in MyApp.Task - the attribute has type :time, which takes an ISO Time',
       ],
       [
-        "a value that isn't a uuid for a reference field",
+        "a value that isn't an id for a reference field",
         BOOKING,
         "owner_id",
         Type.integer(5),
-        `5 is not a value of attribute :owner_id in MyApp.Booking - the attribute has type :uuid, which takes ${UUID_VALUES}`,
+        `5 is not a value of attribute :owner_id in MyApp.Booking - the attribute has type :id, which takes ${ID_VALUES}`,
+      ],
+      [
+        "the 36-character form of an entity id",
+        TASK,
+        "id",
+        Type.bitstring("018f0000-0000-7000-8000-000000000001"),
+        `"018f0000-0000-7000-8000-000000000001" is not a value of attribute :id in MyApp.Task - the attribute has type :id, which takes ${ID_VALUES}`,
+      ],
+      [
+        "an id followed by a newline",
+        TASK,
+        "id",
+        Type.bitstring("02wLIRxqmq3AUo6vl2OW37\n"),
+        `"02wLIRxqmq3AUo6vl2OW37\\n" is not a value of attribute :id in MyApp.Task - the attribute has type :id, which takes ${ID_VALUES}`,
+      ],
+      [
+        "an id past the largest 128-bit number",
+        TASK,
+        "id",
+        Type.bitstring("7n42DGM5Tflk9n8mt7Fhc8"),
+        `"7n42DGM5Tflk9n8mt7Fhc8" is not a value of attribute :id in MyApp.Task - the attribute has type :id, which takes ${ID_VALUES}`,
       ],
       [
         "an uppercase uuid",
-        TASK,
-        "id",
+        BOOKING,
+        "external_ref",
         Type.bitstring("018F0000-0000-7000-8000-000000000001"),
-        `"018F0000-0000-7000-8000-000000000001" is not a value of attribute :id in MyApp.Task - the attribute has type :uuid, which takes ${UUID_VALUES}`,
-      ],
-      [
-        "a uuid followed by a newline",
-        TASK,
-        "id",
-        Type.bitstring("018f0000-0000-7000-8000-000000000001\n"),
-        `"018f0000-0000-7000-8000-000000000001\\n" is not a value of attribute :id in MyApp.Task - the attribute has type :uuid, which takes ${UUID_VALUES}`,
+        `"018F0000-0000-7000-8000-000000000001" is not a value of attribute :external_ref in MyApp.Booking - the attribute has type :uuid, which takes ${UUID_VALUES}`,
       ],
       [
         "a uuid without hyphens",
-        TASK,
-        "id",
+        BOOKING,
+        "external_ref",
         Type.bitstring("018f0000000070008000000000000001"),
-        `"018f0000000070008000000000000001" is not a value of attribute :id in MyApp.Task - the attribute has type :uuid, which takes ${UUID_VALUES}`,
+        `"018f0000000070008000000000000001" is not a value of attribute :external_ref in MyApp.Booking - the attribute has type :uuid, which takes ${UUID_VALUES}`,
       ],
       [
         "an undeclared value for an enum attribute",
@@ -3834,7 +3850,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             hints(["operand", 0, search, fix]),
           ),
         "Hologram.MisuseError",
-        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
+        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :external_ref, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
       );
     });
 
@@ -3847,7 +3863,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             hints(["key", 0, search, fix]),
           ),
         "Hologram.MisuseError",
-        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
+        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :external_ref, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
       );
     });
 
@@ -3910,7 +3926,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             hints(["operand", 0, search, fix]),
           ),
         "Hologram.MisuseError",
-        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
+        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :external_ref, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
       );
     });
 
@@ -3994,7 +4010,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             filterHints,
           ),
         "Hologram.MisuseError",
-        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
+        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :external_ref, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
       );
     });
 
@@ -4024,7 +4040,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             ),
           ),
         "Hologram.MisuseError",
-        "unknown attribute :term in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - a value from the surrounding code is pinned: ^term",
+        "unknown attribute :term in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :external_ref, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - a value from the surrounding code is pinned: ^term",
       );
     });
 
@@ -4042,7 +4058,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             hints(["operand", 0, operand, fix]),
           ),
         "Hologram.MisuseError",
-        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
+        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :external_ref, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
       );
     });
 
@@ -4174,7 +4190,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             ),
           ),
         "Hologram.MisuseError",
-        "unknown attribute :limit in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - a value from the surrounding code is pinned, on the right side: guests > ^limit",
+        "unknown attribute :limit in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :external_ref, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - a value from the surrounding code is pinned, on the right side: guests > ^limit",
       );
     });
 
@@ -4465,7 +4481,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             ]),
           ),
         "Hologram.MisuseError",
-        "operator :> requires an orderable attribute - attribute :channel_id in MyApp.Message has type :uuid, and boolean and uuid attributes have no order to compare by",
+        "operator :> requires an orderable attribute - attribute :channel_id in MyApp.Message has type :id, and boolean, id and uuid attributes have no order to compare by",
       );
     });
 
@@ -4507,7 +4523,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             hints(["key", 0, search, fix]),
           ),
         "Hologram.MisuseError",
-        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
+        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :external_ref, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
       );
     });
 
@@ -4520,7 +4536,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             hints(["operand", 0, search, null]),
           ),
         "Hologram.MisuseError",
-        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
+        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :external_ref, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
       );
     });
 
@@ -4548,7 +4564,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             hints(["key", 0, search, fix]),
           ),
         "Hologram.MisuseError",
-        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
+        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :external_ref, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
       );
     });
 
@@ -5357,7 +5373,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("outer"), Type.integer(1), Type.atom(name)]);
 
       const valueOf = (key) =>
-        key === "owner_id" ? "018f0000-0000-7000-8000-000000000001" : "x";
+        key === "owner_id" ? "02wLIRxqmq3AUo6vl2OW37" : "x";
 
       const nested = (keys) =>
         Type.list([
@@ -5385,11 +5401,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
       assert.deepStrictEqual(first.filter[0].filter, [
         [{name: "name", outer: 1}, "==", "x"],
-        [
-          {name: "owner_id", outer: 1},
-          "==",
-          "018f0000-0000-7000-8000-000000000001",
-        ],
+        [{name: "owner_id", outer: 1}, "==", "02wLIRxqmq3AUo6vl2OW37"],
       ]);
     });
 
@@ -5517,12 +5529,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
                   "or",
                   disjunction(
                     [["name", Type.bitstring("Site")]],
-                    [
-                      [
-                        "id",
-                        Type.bitstring("018f0000-0000-7000-8000-000000000001"),
-                      ],
-                    ],
+                    [["id", Type.bitstring("02wLIRxqmq3AUo6vl2OW37")]],
                   ),
                 ],
               ]),

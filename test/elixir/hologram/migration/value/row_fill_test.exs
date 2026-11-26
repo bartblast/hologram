@@ -4,9 +4,9 @@ defmodule Hologram.Migration.Value.RowFillTest do
   import Hologram.Migration.Value.RowFill
 
   @filled [
-    {"row-1", "018f0000-0000-7000-8000-000000000001", "encoded"},
-    {"row-2", "018f0000-0000-7000-8000-00000000dead", "encoded"},
-    {"row-3", "018f0000-0000-7000-8000-000000000003", "encoded"}
+    {"row-1", "02wLIRxqmq3AUo6vl2OW37", "encoded"},
+    {"row-2", "02wLIRxqmq3AUo6vl2OksX", "encoded"},
+    {"row-3", "02wLIRxqmq3AUo6vl2OW39", "encoded"}
   ]
 
   describe "missing_target/3" do
@@ -15,7 +15,7 @@ defmodule Hologram.Migration.Value.RowFillTest do
         ~s|Key (owner_id)=(018f0000-0000-7000-8000-00000000dead) is not present in table "user".|
 
       assert missing_target(detail, @filled, MyApp.User) ==
-               "writes 018f0000-0000-7000-8000-00000000dead on row row-2, which no MyApp.User " <>
+               "writes 02wLIRxqmq3AUo6vl2OksX on row row-2, which no MyApp.User " <>
                  "holds - change the fn or add that row"
     end
 

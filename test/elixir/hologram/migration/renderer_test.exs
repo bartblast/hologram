@@ -1390,10 +1390,10 @@ defmodule Hologram.Migration.RendererTest do
         }
       end
 
-      uuid = "018f0000-0000-7000-8000-000000000000"
+      id = "02wLIRxqmq3AUo6vl2OW36"
 
       assert %{transactional: [%{op: :alter_column, fill: <<_id::128>>, fill_source: :backfill}]} =
-               render([tighten.(uuid)], pre_model)
+               render([tighten.(id)], pre_model)
 
       computed = tighten.(%Value{term: {:name, [:creator_id]}})
 
@@ -3199,6 +3199,29 @@ defmodule Hologram.Migration.RendererTest do
       assert alter_column.column == "estimate"
       assert alter_column.before.type == "int8"
       assert alter_column.after.type == "float8"
+    end
+
+    # An id and a uuid are the same 128-bit number in one uuid column, spelled apart only in
+    # the entity struct.
+    test "renders no statement for an attribute changed between :uuid and :id" do
+      for {from_type, to_type} <- [{:uuid, :id}, {:id, :uuid}] do
+        pre = model(%{MyApp.Task => %{attributes: [{:ref, from_type, []}]}})
+
+        ops = [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :ref,
+            changes: [type: to_type],
+            line: 3
+          }
+        ]
+
+        result = render(ops, pre)
+
+        assert result.transactional == []
+        assert result.tail == []
+      end
     end
 
     test "applies a type change after the backfill of the attribute added above it" do

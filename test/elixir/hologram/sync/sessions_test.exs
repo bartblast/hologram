@@ -5,7 +5,7 @@ defmodule Hologram.Sync.SessionsTest do
 
   import Hologram.Sync.Sessions
 
-  @user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
+  @user_id "02y1zRviSAYGVwSyzxs4q7"
 
   setup do
     wait_for_process_cleanup(registry())
@@ -64,7 +64,7 @@ defmodule Hologram.Sync.SessionsTest do
     end
 
     test "lists a user id in another spelling as an anonymous user" do
-      session = start_session(String.upcase(@user_id))
+      session = start_session(Hologram.Entity.id_to_uuid(@user_id))
 
       assert list() == [{session, nil}]
     end

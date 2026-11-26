@@ -1365,7 +1365,7 @@ defmodule Hologram.Migration.Value do
   end
 
   defp resolved_backfill(value, _op, :relationship, _member, _model) do
-    {:constant, normalize_constant(value, :uuid)}
+    {:constant, normalize_constant(value, :id)}
   end
 
   defp resolved_backfill(value, _op, :attribute, {_name, type, _opts}, _model) do

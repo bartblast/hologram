@@ -50,7 +50,7 @@ defmodule Hologram.DBReadTest do
         |> PolicyModule6.new()
         |> DB.create!()
 
-      for session_user_id <- [String.replace(user.id, "-", ""), "abc", 7] do
+      for session_user_id <- [Entity.id_to_uuid(user.id), "abc", 7] do
         ids =
           Context.with_actor(session_user_id, fn ->
             PolicyModule6
@@ -380,7 +380,7 @@ defmodule Hologram.DBReadTest do
       user = create_user("db_read_by_id_invalid_id@example.com")
 
       expected_msg =
-        ~s(invalid id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings)
+        ~s(invalid id "nope" - entity ids are strings of 22 base62 characters)
 
       assert_error MisuseError, expected_msg, fn -> DB.read(PolicyModule2, "nope") end
 

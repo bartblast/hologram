@@ -17,10 +17,10 @@ defmodule Hologram.Mutation.EnvelopeTest do
   alias Hologram.Test.Fixtures.Job.Module3, as: JobModule3
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
 
-  @granter_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
-  @id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
-  @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
-  @user_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e12"
+  @granter_id "02y1zRviSAYGVwSyzxs4q9"
+  @id "02y1zRviSAYGVwSyzxs4q7"
+  @target_id "02y1zRviSAYGVwSyzxs4q8"
+  @user_id "02y1zRviSAYGVwSyzxs4qA"
 
   defp edge(op, entity_type, relationship, opts \\ []) do
     %{
@@ -479,7 +479,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     test "answers an id that is text but no entity id as a refused value" do
       entry = create(Module2, %{"c" => "x"}, id: "nope")
 
-      assert {:refused, %Envelope{writes: []}, 0, %{id: [{:type, :uuid}]}} = parse(raw([entry]))
+      assert {:refused, %Envelope{writes: []}, 0, %{id: [{:type, :id}]}} = parse(raw([entry]))
     end
 
     test "refuses an id that isn't text as a bad request" do
@@ -849,7 +849,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
     test "answers a target id that is text but no entity id as a refused value" do
       entry = edge("add_relationship", Module16, "secrets", target_id: "nope")
 
-      assert {:refused, %Envelope{writes: []}, 0, %{secrets: [{:type, :uuid}]}} =
+      assert {:refused, %Envelope{writes: []}, 0, %{secrets: [{:type, :id}]}} =
                parse(raw([entry]))
     end
 
@@ -859,7 +859,7 @@ defmodule Hologram.Mutation.EnvelopeTest do
       good = same_call(edge("add_relationship", Module16, "secrets"))
       bad = same_call(edge("add_relationship", Module16, "secrets", target_id: "nope"))
 
-      assert {:refused, %Envelope{}, 1, %{secrets: [{:type, :uuid}]}} =
+      assert {:refused, %Envelope{}, 1, %{secrets: [{:type, :id}]}} =
                parse(raw([other, lead, good, bad]))
     end
 
@@ -1011,6 +1011,27 @@ defmodule Hologram.Mutation.EnvelopeTest do
     # its own v7 for the store would send.
     test "refuses a role grant whose id is not derived from it" do
       entry = create(RoleGrant, grant_data(), id: @id)
+
+      assert parse(raw([entry])) ==
+               {:error, "write 0: a role grant's id is derived from the grant it names"}
+    end
+
+    # A grant id is derived from the ids a grant names, and an id in the 36-character form - or
+    # one that isn't an id at all - derives none, so the write is refused rather than raising.
+    test "refuses a role grant naming a user id that isn't an entity id" do
+      for user_id <- ["0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f", "not an id!"] do
+        entry = create(RoleGrant, grant_data(%{"user_id" => user_id}), id: @id)
+
+        assert parse(raw([entry])) ==
+                 {:error, "write 0: a role grant's id is derived from the grant it names"}
+      end
+    end
+
+    test "refuses a role grant naming an entity id that isn't an entity id" do
+      entry =
+        create(RoleGrant, grant_data(%{"entity_id" => "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"}),
+          id: @id
+        )
 
       assert parse(raw([entry])) ==
                {:error, "write 0: a role grant's id is derived from the grant it names"}

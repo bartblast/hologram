@@ -352,7 +352,7 @@ defmodule Hologram.QueryTest do
     test "prints the literal that rebuilds the term" do
       term =
         Module3
-        |> filter(c_id: "018f0000-0000-7000-8000-000000000001")
+        |> filter(c_id: "02wLIRxqmq3AUo6vl2OW37")
         |> narrowed_include(:a, &filter(&1, a: true))
         |> take(5)
         |> one()

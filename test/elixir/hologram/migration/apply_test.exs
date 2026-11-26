@@ -140,5 +140,48 @@ defmodule Hologram.Migration.ApplyTest do
         assert applied_migration_rows() == rows
       end)
     end
+
+    # An id and a uuid are both stored as a uuid column, so the change rewrites no row - the
+    # value a row holds reads back as the same 128-bit number.
+    test "keeps the values of an attribute changed from :uuid to :id", %{scratch: scratch} do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :ref,
+            type: :uuid,
+            opts: [],
+            line: 4
+          }
+        ])
+
+      change =
+        migration("20260813142237", [
+          %{op: :change_attribute, entity: MyApp.Task, name: :ref, changes: [type: :id], line: 3}
+        ])
+
+      first_model = Model.fold(Model.empty(), create.ops)
+      full_model = Model.fold(first_model, change.ops)
+
+      insert_statement = """
+      INSERT INTO "hologram_data"."my_app_task" ("id", "ref", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+      VALUES (gen_random_uuid(), '0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f', now(), now(), 0, now(), 0, now(), '{}')
+      """
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        {:ok, _result} = Connection.query(insert_statement)
+
+        assert run([create, change], full_model, @next_context) == :ok
+
+        {:ok, %{rows: rows}} =
+          Connection.query(~s|SELECT "ref"::text FROM "hologram_data"."my_app_task"|)
+
+        assert rows == [["0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"]]
+      end)
+    end
   end
 end

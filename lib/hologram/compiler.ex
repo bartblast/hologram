@@ -5571,9 +5571,10 @@ defmodule Hologram.Compiler do
   end
 
   # What a client needs to read its own rows, and to build one: a value's type is not recoverable
-  # from the value itself - a date, an enum and a uuid all arrive as strings - so reading one back
-  # means knowing the attribute it belongs to, which is what this says. Building one means knowing
-  # what the declaration fills in for an attribute nobody set, which is what the defaults say.
+  # from the value itself - a date, an enum, an id and a uuid all arrive as strings - so reading
+  # one back means knowing the attribute it belongs to, which is what this says. Building one means
+  # knowing what the declaration fills in for an attribute nobody set, which is what the defaults
+  # say.
   #
   # It rides with the bundle rather than with the entity modules, for two reasons. A module says
   # this through functions nothing calls statically, so nothing keeps them: the caller names them
@@ -6263,7 +6264,7 @@ defmodule Hologram.Compiler do
 
     case declaration do
       {_name, type, _opts} when is_atom(type) -> type
-      _other -> :uuid
+      _other -> :id
     end
   end
 

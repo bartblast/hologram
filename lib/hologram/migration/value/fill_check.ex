@@ -8,6 +8,7 @@ defmodule Hologram.Migration.Value.FillCheck do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Migration.Value.Check
   alias Hologram.Migration.Value.SQL
@@ -130,14 +131,14 @@ defmodule Hologram.Migration.Value.FillCheck do
   end
 
   @doc """
-  Keeps the given ids, as text, among the rows a fill of NULLs wrote, and returns :ok.
+  Keeps the given ids among the rows a fill of NULLs wrote, and returns :ok.
   """
   @spec keep_filled_ids!(list(String.t())) :: :ok
   def keep_filled_ids!(ids) do
     {:ok, _result} =
       Connection.query(
-        ~s|INSERT INTO #{@filled_ids} SELECT unnest($1::text[])::uuid|,
-        [ids]
+        ~s|INSERT INTO #{@filled_ids} SELECT unnest($1::uuid[])|,
+        [Enum.map(ids, &Codec.encode(&1, :id))]
       )
 
     :ok
@@ -201,8 +202,11 @@ defmodule Hologram.Migration.Value.FillCheck do
   defp raise_missing!(op, error) do
     id =
       case Regex.run(~r/\)=\(([^)]+)\)/, error[:detail] || "") do
-        [_detail, id] -> id
-        nil -> "an id"
+        [_detail, id] ->
+          if Validator.attribute_value_valid?(id, :uuid), do: Entity.uuid_to_id(id), else: id
+
+        nil ->
+          "an id"
       end
 
     raise ~s(the backfill of column "#{op.column}" on table "#{op.table}" writes #{id}, which ) <>

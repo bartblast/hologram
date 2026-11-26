@@ -128,7 +128,7 @@ defmodule Hologram.DB.SetLock do
       "SELECT 1 FROM #{Mapper.quote_identifier(Mapper.data_schema())}." <>
         "#{Mapper.quote_identifier(table)} WHERE \"id\" = $1 FOR KEY SHARE"
 
-    run!(statement, [Codec.encode(id, :uuid)])
+    run!(statement, [Codec.encode(id, :id)])
   end
 
   defp lock!(function, owner_type, owner_id) do

@@ -260,7 +260,7 @@ defmodule Hologram.Migration.Renderer do
 
   defp filled_type(%{op: kind}, _next_model)
        when kind in [:add_relationship, :change_relationship] do
-    :uuid
+    :id
   end
 
   defp filled_type(op, next_model) do

@@ -114,6 +114,8 @@ defmodule Hologram.Migration.Value.CheckTest do
   alias Hologram.Migration.Value
   alias Hologram.Test.Fixtures.Migration.Module2
 
+  @id "02wLIRxqmq3AUo6vl2OW36"
+
   @uuid "018f0000-0000-7000-8000-000000000000"
 
   @model %{
@@ -352,7 +354,7 @@ defmodule Hologram.Migration.Value.CheckTest do
     end
 
     test "takes one on a change turning an optional relationship required" do
-      assert check(change(:change_relationship, :owner, optional: false, backfill: @uuid)) == :ok
+      assert check(change(:change_relationship, :owner, optional: false, backfill: @id)) == :ok
     end
 
     test "refuses one beside a type change" do
@@ -368,7 +370,7 @@ defmodule Hologram.Migration.Value.CheckTest do
                :ok
 
       op =
-        change(:change_relationship, :owner, type: MyApp.User, optional: false, backfill: @uuid)
+        change(:change_relationship, :owner, type: MyApp.User, optional: false, backfill: @id)
 
       assert check(op) == :ok
     end
@@ -450,8 +452,11 @@ defmodule Hologram.Migration.Value.CheckTest do
   end
 
   describe "validate_ops!/2, a constant on a relationship" do
-    test "takes a uuid" do
-      assert check(add_relationship(MyApp.User, optional: true, backfill: @uuid)) == :ok
+    test "takes an id" do
+      op = add_relationship(MyApp.User, optional: true, backfill: @id)
+
+      assert check(op) == :ok
+      assert [%{backfill: {:constant, @id}}] = Value.fills([op], @model)
     end
 
     test "refuses anything else" do
@@ -460,11 +465,10 @@ defmodule Hologram.Migration.Value.CheckTest do
                  "id of a MyApp.User"
     end
 
-    test "takes an uppercase uuid, which the fill stores in lowercase" do
-      op = add_relationship(MyApp.User, optional: true, backfill: String.upcase(@uuid))
-
-      assert check(op) == :ok
-      assert [%{backfill: {:constant, @uuid}}] = Value.fills([op], @model)
+    test "refuses a uuid" do
+      assert refusal(add_relationship(MyApp.User, optional: true, backfill: @uuid)) ==
+               ~s|the backfill of :link on MyApp.Task (line 7) holds "#{@uuid}", which isn't | <>
+                 "the id of a MyApp.User"
     end
   end
 

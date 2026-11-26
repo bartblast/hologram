@@ -15,8 +15,8 @@ defmodule Hologram.Sync.DispatcherTest do
   alias Hologram.Sync.ReadEdge
   alias Hologram.Test.Fixtures.Entity.Module2
 
-  @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
-  @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e1a"
+  @entity_id "02y1zRviSAYGVwSyzxs4q7"
+  @target_id "02y1zRviSAYGVwSyzxs4qI"
 
   # For the tests that only have to see a timer re-arm itself, or a later round find what the first
   # one couldn't.
@@ -82,7 +82,7 @@ defmodule Hologram.Sync.DispatcherTest do
     """
 
     {:ok, %Postgrex.Result{rows: [[seq, tx, inserted_at]]}} =
-      Connection.query(statement, [Codec.encode(entity_id, :uuid), tx, seq])
+      Connection.query(statement, [Codec.encode(entity_id, :id), tx, seq])
 
     Oplog.place(%{inserted_at: inserted_at, seq: seq, tx: tx})
   end

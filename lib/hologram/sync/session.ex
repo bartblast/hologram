@@ -596,7 +596,7 @@ defmodule Hologram.Sync.Session do
   # deleted, never patched, so a deleted one is all that takes one away. Asked of the log about the
   # gap's grant deletes alone, without reading their payloads back, so it costs what those few
   # effects cost whatever the size of the gap. A delete records the row as decoded from its columns,
-  # so a grant names its user in the one spelling a uuid decodes to, which
+  # so a grant names its user in the one spelling an id decodes to, which
   # `Hologram.Auth.canonical_id/1` gives too.
   defp grant_lost?(_gap, nil), do: false
 

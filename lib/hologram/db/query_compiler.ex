@@ -1878,6 +1878,7 @@ defmodule Hologram.DB.QueryCompiler do
   defp scalar_sql_type(:datetime), do: "timestamptz"
   defp scalar_sql_type(:enum), do: "text"
   defp scalar_sql_type(:float), do: "float8"
+  defp scalar_sql_type(:id), do: "uuid"
   defp scalar_sql_type(:integer), do: "int8"
   defp scalar_sql_type(:string), do: "text"
   defp scalar_sql_type(:time), do: "time"

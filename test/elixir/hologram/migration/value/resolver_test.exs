@@ -19,6 +19,8 @@ defmodule Hologram.Migration.Value.ResolverTest do
   alias Hologram.Migration.Value
   alias Hologram.Test.Fixtures.Migration.Module2
 
+  @id "02wLIRxqmq3AUo6vl2OW36"
+
   @uuid "018f0000-0000-7000-8000-000000000000"
 
   @model %{
@@ -180,7 +182,12 @@ defmodule Hologram.Migration.Value.ResolverTest do
     end
 
     test "reads an id" do
-      assert %{type: :uuid} = resolved({:name, [:id]}, attribute_target(:uuid))
+      assert %{type: :id} = resolved({:name, [:id]}, attribute_target(:id))
+    end
+
+    test "refuses an id into a uuid attribute" do
+      assert refusal({:name, [:id]}, attribute_target(:uuid)) ==
+               "gives a value of type :id where a value of type :uuid goes"
     end
 
     for name <- [:created_at, :server_created_at, :server_updated_at, :updated_at] do
@@ -384,8 +391,13 @@ defmodule Hologram.Migration.Value.ResolverTest do
       assert refusal({:name, [:state]}, attribute_target(:string)) =~ "gives the enum :state"
     end
 
-    test "reads a reference into a uuid attribute" do
-      assert %{type: :uuid} = resolved({:name, [:owner_id]}, attribute_target(:uuid))
+    test "reads a reference into an id attribute" do
+      assert %{type: :id} = resolved({:name, [:owner_id]}, attribute_target(:id))
+    end
+
+    test "refuses a reference into a uuid attribute" do
+      assert refusal({:name, [:owner_id]}, attribute_target(:uuid)) ==
+               "gives a reference to MyApp.User where a value of type :uuid goes"
     end
 
     test "refuses a reference to another type" do
@@ -400,7 +412,7 @@ defmodule Hologram.Migration.Value.ResolverTest do
 
     test "refuses the row's id into a reference to another type" do
       assert refusal({:name, [:id]}, relationship_target(MyApp.User)) ==
-               "gives a value of type :uuid where a reference to MyApp.User goes"
+               "gives a value of type :id where a reference to MyApp.User goes"
     end
 
     test "refuses a uuid attribute into a reference" do
@@ -592,15 +604,21 @@ defmodule Hologram.Migration.Value.ResolverTest do
                "holds :archived, which isn't the enum :state of MyApp.Trip"
     end
 
-    test "lowercases a uuid" do
-      upcased = String.upcase(@uuid)
-      term = {:coalesce, [{:name, [:owner_id]}, {:value, upcased}]}
+    test "takes an id as a reference value" do
+      term = {:coalesce, [{:name, [:owner_id]}, {:value, @id}]}
 
-      assert %{term: {:coalesce, [_owner_id, {:value, @uuid, {:reference, MyApp.User}}]}} =
+      assert %{term: {:coalesce, [_owner_id, {:value, @id, {:reference, MyApp.User}}]}} =
                resolved(term, relationship_target(MyApp.User))
     end
 
-    test "refuses a reference value that is no uuid" do
+    test "refuses a uuid as a reference value" do
+      term = {:coalesce, [{:name, [:owner_id]}, {:value, @uuid}]}
+
+      assert refusal(term, relationship_target(MyApp.User)) ==
+               ~s(holds "#{@uuid}", which isn't a reference to MyApp.User)
+    end
+
+    test "refuses a reference value that is no id" do
       term = {:coalesce, [{:name, [:owner_id]}, {:value, "nope"}]}
 
       assert refusal(term, relationship_target(MyApp.User)) ==
@@ -823,7 +841,7 @@ defmodule Hologram.Migration.Value.ResolverTest do
     test "accepts arguments naming fields and relationships" do
       value = %Value{args: [:destination, :owner_id, :parent, :tags, :id], term: {:name, [:id]}}
 
-      assert %{type: :uuid} = resolve_on(MyApp.Trip, value, :uuid)
+      assert %{type: :id} = resolve_on(MyApp.Trip, value, :id)
     end
 
     test "refuses an argument the row doesn't have" do

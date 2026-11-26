@@ -55,10 +55,10 @@ defmodule Hologram.DB.EntityOperationsContentionTest do
     statement = ~s|SELECT "target_id" FROM #{qualified_join_table()} WHERE "source_id" = $1|
 
     {:ok, %Postgrex.Result{rows: rows}} =
-      route(scratch, fn -> Connection.query(statement, [Codec.encode(source.id, :uuid)]) end)
+      route(scratch, fn -> Connection.query(statement, [Codec.encode(source.id, :id)]) end)
 
     rows
-    |> Enum.map(fn [target_id] -> Codec.decode(target_id, :uuid) end)
+    |> Enum.map(fn [target_id] -> Codec.decode(target_id, :id) end)
     |> Enum.sort()
   end
 
@@ -84,7 +84,7 @@ defmodule Hologram.DB.EntityOperationsContentionTest do
     {:ok, %Postgrex.Result{rows: rows}} = route(scratch, fn -> Connection.query(statement) end)
 
     Enum.map(rows, fn [op, entity_id, data] ->
-      {op, Codec.decode(entity_id, :uuid), data["target_id"]}
+      {op, Codec.decode(entity_id, :id), data["target_id"]}
     end)
   end
 
@@ -100,7 +100,7 @@ defmodule Hologram.DB.EntityOperationsContentionTest do
 
     {:ok, %Postgrex.Result{rows: rows}} =
       route(scratch, fn ->
-        Connection.query(statement, [op, Codec.encode(entity.id, :uuid)])
+        Connection.query(statement, [op, Codec.encode(entity.id, :id)])
       end)
 
     List.flatten(rows)
@@ -244,7 +244,7 @@ defmodule Hologram.DB.EntityOperationsContentionTest do
         ~s|SELECT 1 FROM #{qualified_join_table()} WHERE "source_id" = $1 FOR UPDATE|
 
       {:ok, %Postgrex.Result{num_rows: 1}} =
-        Connection.query(statement, [Codec.encode(source.id, :uuid)])
+        Connection.query(statement, [Codec.encode(source.id, :id)])
     end
 
     holder = start_holder(scratch_opts, lock_edge, fn -> :ok end, self())

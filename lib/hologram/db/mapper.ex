@@ -416,7 +416,7 @@ defmodule Hologram.DB.Mapper do
 
         %{
           name: column_name,
-          type: :uuid,
+          type: :id,
           sql_type: "uuid",
           collation: nil,
           enum_values: nil,
@@ -642,7 +642,7 @@ defmodule Hologram.DB.Mapper do
   defp id_column do
     %{
       name: "id",
-      type: :uuid,
+      type: :id,
       sql_type: "uuid",
       collation: nil,
       enum_values: nil,
@@ -764,7 +764,7 @@ defmodule Hologram.DB.Mapper do
 
     %{
       attributes: [
-        {:entity_id, :uuid, [optional: true]},
+        {:entity_id, :id, [optional: true]},
         {:entity_type, :enum, [optional: true, values: entity_type_values]},
         {:role, :enum, [values: role_values]}
       ],
@@ -863,6 +863,8 @@ defmodule Hologram.DB.Mapper do
     do: fit_identifier(segments, [Atom.to_string(name)], "$enum")
 
   defp sql_type(:float, _segments, _name), do: "float8"
+
+  defp sql_type(:id, _segments, _name), do: "uuid"
 
   defp sql_type(:integer, _segments, _name), do: "int8"
 

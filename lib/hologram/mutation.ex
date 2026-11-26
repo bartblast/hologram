@@ -32,6 +32,7 @@ defmodule Hologram.Mutation do
   alias Hologram.DB.Writer
   alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.Entity.Validator
   alias Hologram.Mutation.Envelope
   alias Hologram.Mutation.Record
   alias Hologram.Mutation.Ref
@@ -456,7 +457,9 @@ defmodule Hologram.Mutation do
   defp current_answer(result, _writes, _actor_id), do: result
 
   # A grant row is told by its own columns, whose derivation is its id. The record keeps no writes
-  # of a confirmed batch, and the ones a resend carries are whatever its sender chose.
+  # of a confirmed batch, and the ones a resend carries are whatever its sender chose. Any entity
+  # can have columns named like a grant's, and the derivation raises on ids that aren't entity
+  # ids, so those are checked first, the way the envelope checks a grant write's.
   defp current_kept(
          %{
            "id" => id,
@@ -469,7 +472,9 @@ defmodule Hologram.Mutation do
        )
        when is_binary(entity_id) and is_binary(entity_type) and is_binary(role) and
               is_binary(user_id) do
-    if RoleGrant.derive_id_from_labels(user_id, entity_type, entity_id, role) == id do
+    if Validator.attribute_value_valid?(user_id, :id) and
+         Validator.attribute_value_valid?(entity_id, :id) and
+         RoleGrant.derive_id_from_labels(user_id, entity_type, entity_id, role) == id do
       readable_grant(id, actor_id) || %{"$withheld" => true}
     else
       entry
@@ -491,7 +496,7 @@ defmodule Hologram.Mutation do
     references =
       entity_type.__relationships__()
       |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
-      |> Map.new(fn {name, _type, _opts} -> {String.to_existing_atom("#{name}_id"), :uuid} end)
+      |> Map.new(fn {name, _type, _opts} -> {String.to_existing_atom("#{name}_id"), :id} end)
 
     Map.merge(attributes, references)
   end

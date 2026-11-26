@@ -113,9 +113,9 @@ defmodule Hologram.Query.Words do
   Returns the value that appears most often among the given ones, skipping nil, or nil when none
   is left. A tie goes to the smallest value. Values group and order as `Ordering.compare/3` compares
   them, which is how the database's `GROUP BY` and `ORDER BY` treat them, an enum by the given
-  ranks.
+  ranks and an id or uuid by its characters given `:characters`.
   """
-  @spec most_common(list(any), %{atom => non_neg_integer} | nil) :: any
+  @spec most_common(list(any), %{atom => non_neg_integer} | :characters | nil) :: any
   def most_common(values, ranks \\ nil) do
     non_nil = Enum.reject(values, &is_nil/1)
 

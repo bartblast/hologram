@@ -180,13 +180,13 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
     {:ok, %{rows: id_rows}} =
       Connection.query(~s|SELECT "id" FROM "hologram_data"."my_app_trip" ORDER BY "id"|)
 
-    ids = Enum.map(id_rows, fn [id] -> Codec.decode(id, :uuid) end)
+    ids = Enum.map(id_rows, fn [id] -> Codec.decode(id, :id) end)
 
-    assert Enum.map(rows, fn [id, _value] -> Codec.decode(id, :uuid) end) == ids
+    assert Enum.map(rows, fn [id, _value] -> Codec.decode(id, :id) end) == ids
 
     from_sql =
       Map.new(rows, fn [id, value] ->
-        {Codec.decode(id, :uuid), decode(value, resolved.type)}
+        {Codec.decode(id, :id), decode(value, resolved.type)}
       end)
 
     reads = Evaluator.reads(resolved.term)
@@ -210,13 +210,11 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
 
   defp decode(value, {:enum, _owner, _name, _values}), do: Codec.decode(value, :enum)
 
-  defp decode(value, {:reference, _target}), do: Codec.decode(value, :uuid)
+  defp decode(value, {:reference, _target}), do: Codec.decode(value, :id)
 
   defp decode(value, type), do: Codec.decode(value, type)
 
-  defp insert(table, fields) do
-    id = Entity.generate_id()
-
+  defp insert(table, fields, id \\ Entity.generate_id()) do
     names = [
       "id",
       "created_at",
@@ -242,7 +240,7 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
     """
 
     {:ok, _result} =
-      Connection.query(statement, [Codec.encode(id, :uuid) | Enum.map(custom, &fields[&1])])
+      Connection.query(statement, [Codec.encode(id, :id) | Enum.map(custom, &fields[&1])])
 
     id
   end
@@ -296,7 +294,7 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
       Connection.query(
         ~s|INSERT INTO "hologram_data"."my_app_trip_#{relationship}_$join" | <>
           ~s|("source_id", "target_id") VALUES ($1, $2)|,
-        [uuid(source_id), uuid(target_id)]
+        [stored(source_id), stored(target_id)]
       )
   end
 
@@ -336,7 +334,7 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
             fields
         end
 
-      insert("my_app_tag", Map.put(with_key, "trip_id", uuid(trip)))
+      insert("my_app_tag", Map.put(with_key, "trip_id", stored(trip)))
     end
 
     trip
@@ -355,7 +353,9 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
       run([%{version: "20260813091522", path: "app/migrations/x.ex", ops: @ops}], model, @context)
   end
 
-  defp uuid(id), do: Codec.encode(id, :uuid)
+  defp stored(id), do: Codec.encode(id, :id)
+
+  defp uuid(value), do: Codec.encode(value, :uuid)
 
   describe "row-own words" do
     test "split and at, on every edge of the text", %{scratch: scratch} do
@@ -486,9 +486,12 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
         named = insert("my_app_user", %{"name" => "Ana"})
         unnamed = insert("my_app_user", %{"name" => nil})
 
-        root = insert("my_app_trip", %{"owner_id" => uuid(named), "first" => "root"})
-        child = insert("my_app_trip", %{"parent_id" => uuid(root), "owner_id" => uuid(unnamed)})
-        insert("my_app_trip", %{"parent_id" => uuid(child)})
+        root = insert("my_app_trip", %{"owner_id" => stored(named), "first" => "root"})
+
+        child =
+          insert("my_app_trip", %{"parent_id" => stored(root), "owner_id" => stored(unnamed)})
+
+        insert("my_app_trip", %{"parent_id" => stored(child)})
         insert("my_app_trip", %{"seats" => 1})
 
         assert_same({:name, [:owner, :name]}, attribute_target(:string))
@@ -532,9 +535,9 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
         prepare()
 
         root = insert("my_app_trip", %{"seats" => 1})
-        child = insert("my_app_trip", %{"parent_id" => uuid(root)})
-        insert("my_app_trip", %{"parent_id" => uuid(root)})
-        insert("my_app_trip", %{"parent_id" => uuid(child)})
+        child = insert("my_app_trip", %{"parent_id" => stored(root)})
+        insert("my_app_trip", %{"parent_id" => stored(root)})
+        insert("my_app_trip", %{"parent_id" => stored(child)})
 
         assert_same(
           {:count, {:referencing, MyApp.Trip, :parent}},
@@ -627,8 +630,8 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
 
         empty = insert_trip_with_tags([])
         some = insert_trip_with_tags([%{"label" => "a"}, %{"label" => "b"}])
-        insert("my_app_trip", %{"parent_id" => uuid(some)})
-        insert("my_app_trip", %{"parent_id" => uuid(empty)})
+        insert("my_app_trip", %{"parent_id" => stored(some)})
+        insert("my_app_trip", %{"parent_id" => stored(empty)})
 
         assert_same({:count, {:relationship, [:tags]}}, attribute_target(:integer))
         assert_same({:count, {:relationship, [:parent, :tags]}}, attribute_target(:integer))
@@ -754,8 +757,8 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
         ])
 
         insert_trip_with_tags([
-          %{"guide_id" => uuid(first_user)},
-          %{"guide_id" => uuid(second_user)}
+          %{"guide_id" => stored(first_user)},
+          %{"guide_id" => stored(second_user)}
         ])
 
         assert_same(most_common(:code), attribute_target(:integer))
@@ -769,6 +772,31 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
           most_common(:guide_id),
           %{kind: :relationship, line: 9, name: :value, type: MyApp.User}
         )
+      end)
+    end
+
+    test "most_common of references breaks a tie by the id's characters", %{scratch: scratch} do
+      route(scratch, fn ->
+        prepare()
+
+        # Ignoring case, as text orders, the lowercase d comes first; by its characters, the way
+        # the id column orders, the uppercase X does.
+        lowercase_user = insert("my_app_user", %{"name" => "a"}, "0354NCV0ddAUXPO63b3CsD")
+        uppercase_user = insert("my_app_user", %{"name" => "b"}, "0354NCV0XRqiltKuUt0vh8")
+
+        trip =
+          insert_trip_with_tags([
+            %{"guide_id" => stored(lowercase_user)},
+            %{"guide_id" => stored(uppercase_user)}
+          ])
+
+        common =
+          assert_same(
+            most_common(:guide_id),
+            %{kind: :relationship, line: 9, name: :value, type: MyApp.User}
+          )
+
+        assert common[trip] == uppercase_user
       end)
     end
   end

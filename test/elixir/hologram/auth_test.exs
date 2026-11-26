@@ -103,9 +103,9 @@ defmodule Hologram.AuthTest do
   defp grant_id(user_id) do
     select_sql = ~s|SELECT "id" FROM "hologram_data"."hologram_role_grant" WHERE "user_id" = $1|
 
-    {:ok, %{rows: [[id]]}} = Connection.query(select_sql, [Codec.encode(user_id, :uuid)])
+    {:ok, %{rows: [[id]]}} = Connection.query(select_sql, [Codec.encode(user_id, :id)])
 
-    Codec.decode(id, :uuid)
+    Codec.decode(id, :id)
   end
 
   defp grant_rows(user_id) do
@@ -113,13 +113,13 @@ defmodule Hologram.AuthTest do
       ~s|SELECT "entity_type", "entity_id", "role", "granted_by_id", "created_at" | <>
         ~s|FROM "hologram_data"."hologram_role_grant" WHERE "user_id" = $1|
 
-    {:ok, %{rows: rows}} = Connection.query(select_sql, [Codec.encode(user_id, :uuid)])
+    {:ok, %{rows: rows}} = Connection.query(select_sql, [Codec.encode(user_id, :id)])
 
     Enum.map(rows, fn [entity_type, entity_id, role, granted_by_id, created_at] ->
       %{
         created_at: created_at,
-        granted_by_id: granted_by_id && Codec.decode(granted_by_id, :uuid),
-        entity_id: entity_id && Codec.decode(entity_id, :uuid),
+        granted_by_id: granted_by_id && Codec.decode(granted_by_id, :id),
+        entity_id: entity_id && Codec.decode(entity_id, :id),
         entity_type: entity_type,
         role: role
       }
@@ -154,7 +154,7 @@ defmodule Hologram.AuthTest do
 
     {:ok, %{rows: rows}} = Connection.query(select_sql)
 
-    Enum.map(rows, fn [type, entity_id] -> {type, Codec.decode(entity_id, :uuid)} end)
+    Enum.map(rows, fn [type, entity_id] -> {type, Codec.decode(entity_id, :id)} end)
   end
 
   # The row apply_revocation_write/2 is handed - read back from the store by id, the way the applier
@@ -574,11 +574,11 @@ defmodule Hologram.AuthTest do
     end
 
     test "denies an operation when no rule matches" do
-      refute can?("018f4571-a1b2-7c3d-8e4f-000000000001", :read, %Module1{public: false})
+      refute can?("02wSyz8E9khZO7aC2RayBN", :read, %Module1{public: false})
     end
 
     test "denies a framework operation the entity type declares no rule for" do
-      refute can?("018f4571-a1b2-7c3d-8e4f-000000000001", :create, %Module1{public: true})
+      refute can?("02wSyz8E9khZO7aC2RayBN", :create, %Module1{public: true})
     end
 
     test "answers a name by the lines carrying it" do
@@ -683,7 +683,7 @@ defmodule Hologram.AuthTest do
     end
 
     test "answers a field through the field-limited lines covering it" do
-      user_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
+      user_id = "02wSyz8E9khZO7aC2RayBN"
       channel = %Module38{archived: false, name: "general"}
 
       assert can?(user_id, {:update, :topic}, channel)
@@ -692,8 +692,8 @@ defmodule Hologram.AuthTest do
     end
 
     test "answers a field through the lines covering the whole row" do
-      owner_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
-      other_id = "018f4571-a1b2-7c3d-8e4f-000000000002"
+      owner_id = "02wSyz8E9khZO7aC2RayBN"
+      other_id = "02wSyz8E9khZO7aC2RayBO"
       channel = %Module38{archived: true, name: "general", owner_id: owner_id}
 
       assert can?(owner_id, {:update, :archived}, channel)
@@ -703,8 +703,8 @@ defmodule Hologram.AuthTest do
     # The except line holds on an open channel and grants what it covers, but leaves :archived out,
     # so only the line covering the whole row can grant that.
     test "answers a field an except line leaves out through the other lines" do
-      owner_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
-      other_id = "018f4571-a1b2-7c3d-8e4f-000000000002"
+      owner_id = "02wSyz8E9khZO7aC2RayBN"
+      other_id = "02wSyz8E9khZO7aC2RayBO"
       channel = %Module38{archived: true, name: "open", owner_id: owner_id}
 
       assert can?(other_id, {:update, :sent_count}, channel)
@@ -715,7 +715,7 @@ defmodule Hologram.AuthTest do
     # No line that holds here covers both :topic and :name, so the list is granted only by two
     # lines together.
     test "answers a list of fields when some holding line covers each" do
-      user_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
+      user_id = "02wSyz8E9khZO7aC2RayBN"
       channel = %Module38{archived: false, name: "general", owner_id: user_id}
 
       assert can?(user_id, {:update, [:topic, :name]}, channel)
@@ -727,7 +727,7 @@ defmodule Hologram.AuthTest do
         "unknown field :owner_id in {:update, :owner_id} for Hologram.Test.Fixtures.Policy.Module38 - the fields an update sets are :archived, :name, :owner, :parent, :sent_count, :tags, :topic"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, :owner_id}, %Module38{})
+        can?("02wSyz8E9khZO7aC2RayBN", {:update, :owner_id}, %Module38{})
       end
     end
 
@@ -736,7 +736,7 @@ defmodule Hologram.AuthTest do
         "unknown field 1 in {:update, [1, :topic]} for Hologram.Test.Fixtures.Policy.Module38 - the fields an update sets are :archived, :name, :owner, :parent, :sent_count, :tags, :topic"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, [1, :topic]}, %Module38{})
+        can?("02wSyz8E9khZO7aC2RayBN", {:update, [1, :topic]}, %Module38{})
       end
     end
 
@@ -745,7 +745,7 @@ defmodule Hologram.AuthTest do
         "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, "topic"}, %Module38{})
+        can?("02wSyz8E9khZO7aC2RayBN", {:update, "topic"}, %Module38{})
       end
     end
 
@@ -754,7 +754,7 @@ defmodule Hologram.AuthTest do
         "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, [:topic | :name]}, %Module38{})
+        can?("02wSyz8E9khZO7aC2RayBN", {:update, [:topic | :name]}, %Module38{})
       end
     end
 
@@ -763,15 +763,15 @@ defmodule Hologram.AuthTest do
         "unknown operation {:update, []} for Hologram.Test.Fixtures.Policy.Module38 - {:update, fields} names at least one field"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, []}, %Module38{})
+        can?("02wSyz8E9khZO7aC2RayBN", {:update, []}, %Module38{})
       end
     end
 
     test "matches a rule referencing the acting user" do
-      entity = %Module1{author_id: "018f4571-a1b2-7c3d-8e4f-000000000002"}
+      entity = %Module1{author_id: "02wSyz8E9khZO7aC2RayBO"}
 
-      assert can?("018f4571-a1b2-7c3d-8e4f-000000000002", :archive, entity)
-      refute can?("018f4571-a1b2-7c3d-8e4f-000000000003", :archive, entity)
+      assert can?("02wSyz8E9khZO7aC2RayBO", :archive, entity)
+      refute can?("02wSyz8E9khZO7aC2RayBP", :archive, entity)
     end
 
     # A session's user id may be any string, integer or atom, and one that names no user entity is
@@ -783,15 +783,15 @@ defmodule Hologram.AuthTest do
       unowned = %ReadersModule5{owner_id: nil}
 
       for user_id <- [
-            "018F4571-A1B2-7C3D-8E4F-000000000001",
-            "018f4571a1b27c3d8e4f000000000001",
-            "018f4571-a1b2-7c3d-8e4f-000000000001\n",
+            "018f4571-a1b2-7c3d-8e4f-000000000001",
+            "02wSyz8E9khZO7aC2RayBN\n",
+            "7n42DGM5Tflk9n8mt7Fhc8",
             "user_id_1",
             7,
             false,
             :admin
           ] do
-        assert can?("018f4571-a1b2-7c3d-8e4f-000000000001", :read, unowned)
+        assert can?("02wSyz8E9khZO7aC2RayBN", :read, unowned)
         refute can?(user_id, :read, unowned)
         assert can?(user_id, :read, %Module1{public: true})
       end
@@ -1079,7 +1079,7 @@ defmodule Hologram.AuthTest do
         "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:grant_role, "viewer"}, %Module1{
+        can?("02wSyz8E9khZO7aC2RayBN", {:grant_role, "viewer"}, %Module1{
           public: true
         })
       end
@@ -1090,7 +1090,7 @@ defmodule Hologram.AuthTest do
         "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:delete, [:public]}, %Module1{
+        can?("02wSyz8E9khZO7aC2RayBN", {:delete, [:public]}, %Module1{
           public: true
         })
       end
@@ -1101,7 +1101,7 @@ defmodule Hologram.AuthTest do
         "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:grant_role, :editor, :extra}, %Module1{
+        can?("02wSyz8E9khZO7aC2RayBN", {:grant_role, :editor, :extra}, %Module1{
           public: true
         })
       end
@@ -1112,7 +1112,7 @@ defmodule Hologram.AuthTest do
         "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", "read", %Module1{public: true})
+        can?("02wSyz8E9khZO7aC2RayBN", "read", %Module1{public: true})
       end
     end
 
@@ -1121,7 +1121,7 @@ defmodule Hologram.AuthTest do
         "unknown operation :transfer for Hologram.Test.Fixtures.Policy.Module1 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry the names :archive and :publish"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", :transfer, %Module1{public: true})
+        can?("02wSyz8E9khZO7aC2RayBN", :transfer, %Module1{public: true})
       end
     end
 
@@ -1130,7 +1130,7 @@ defmodule Hologram.AuthTest do
         "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:publish, :editor}, %Module1{public: true})
+        can?("02wSyz8E9khZO7aC2RayBN", {:publish, :editor}, %Module1{public: true})
       end
     end
 
@@ -1139,7 +1139,7 @@ defmodule Hologram.AuthTest do
         "unknown role :editr in {:grant_role, :editr} for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:grant_role, :editr}, %Module1{public: true})
+        can?("02wSyz8E9khZO7aC2RayBN", {:grant_role, :editr}, %Module1{public: true})
       end
     end
   end
@@ -1341,7 +1341,16 @@ defmodule Hologram.AuthTest do
     test "returns nil for any other value" do
       id = Entity.generate_id()
 
-      for value <- [String.upcase(id), String.replace(id, "-", ""), id <> "\n", "", 7, false, nil] do
+      for value <- [
+            Entity.id_to_uuid(id),
+            String.slice(id, 0, 21),
+            id <> "\n",
+            "7n42DGM5Tflk9n8mt7Fhc8",
+            "",
+            7,
+            false,
+            nil
+          ] do
         assert canonical_id(value) == nil
       end
     end
@@ -1363,21 +1372,20 @@ defmodule Hologram.AuthTest do
       assert owner_key(7) == "i7"
       assert owner_key("abc") == "sabc"
 
-      assert owner_key("0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f") == "u02x9QDX4pOzriCIlt0xKjn"
+      assert owner_key("02x9QDX4pOzriCIlt0xKjn") == "u02x9QDX4pOzriCIlt0xKjn"
     end
 
-    test "writes an entity id at a fixed width" do
-      assert owner_key("00000000-0000-7000-8000-000000000001") == "u000000002dwHTRTFRxWLTN"
+    test "keeps an entity id's leading zeros" do
+      assert owner_key("000000002dwHTRTFRxWLTN") == "u000000002dwHTRTFRxWLTN"
     end
 
-    test "keeps a uuid spelling Hologram doesn't generate as a plain string" do
-      assert owner_key("0190C4E2-7C1F-7B3A-9D4E-1A2B3C4D5E6F") ==
-               "s0190C4E2-7C1F-7B3A-9D4E-1A2B3C4D5E6F"
+    test "keeps the 36-character UUID form as a plain string" do
+      assert owner_key("0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f") ==
+               "s0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
     end
 
-    test "keeps an entity id and the same text as a string apart" do
-      assert owner_key("0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f") !=
-               owner_key("02x9QDX4pOzriCIlt0xKjn")
+    test "keeps an id past the largest 128-bit number as a plain string" do
+      assert owner_key("7n42DGM5Tflk9n8mt7Fhc8") == "s7n42DGM5Tflk9n8mt7Fhc8"
     end
 
     test "keeps an integer and the same digits as a string apart" do
@@ -1398,7 +1406,7 @@ defmodule Hologram.AuthTest do
       }
 
       assert can_from?(user.id, :read, entity, [grant])
-      refute can_from?(String.upcase(user.id), :read, entity, [grant])
+      refute can_from?(Entity.id_to_uuid(user.id), :read, entity, [grant])
       refute can_from?(7, :read, %ReadersModule5{owner_id: nil}, [])
     end
 
@@ -2447,7 +2455,7 @@ defmodule Hologram.AuthTest do
         Connection.query(
           ~s|UPDATE "hologram_data"."#{table}" SET "updated_at" = "updated_at" - interval '1 hour' | <>
             ~s|WHERE "id" = $1|,
-          [Codec.encode(task.id, :uuid)]
+          [Codec.encode(task.id, :id)]
         )
 
       [task: EntityOperations.get(ChangedTask, task.id)]
@@ -2523,7 +2531,7 @@ defmodule Hologram.AuthTest do
       statement =
         ~s|SELECT xmax <> '0' FROM "hologram_data"."test_fixtures_policy_module58" WHERE id = $1|
 
-      params = [Codec.encode(project.id, :uuid)]
+      params = [Codec.encode(project.id, :id)]
 
       assert {:ok, %Postgrex.Result{rows: [[false]]}} = Connection.query(statement, params)
 
@@ -2680,14 +2688,14 @@ defmodule Hologram.AuthTest do
 
     test "raises on an id that is not a canonical entity id" do
       expected_msg =
-        "invalid user id \"nope\" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+        "invalid user id \"nope\" - entity ids are strings of 22 base62 characters"
 
       assert_error MisuseError, expected_msg, fn -> grant_role("nope", Role.Module1) end
     end
 
     test "raises on a map with no id as the user it is" do
       expected_msg =
-        "invalid user id %{} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+        "invalid user id %{} - entity ids are strings of 22 base62 characters"
 
       assert_error MisuseError, expected_msg, fn -> grant_role(%{}, Role.Module1) end
     end
@@ -2697,7 +2705,7 @@ defmodule Hologram.AuthTest do
       user_id = user.id <> "\n"
 
       expected_msg =
-        "invalid user id #{inspect(user_id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+        "invalid user id #{inspect(user_id)} - entity ids are strings of 22 base62 characters"
 
       assert_error MisuseError, expected_msg, fn -> grant_role(user_id, Role.Module1) end
     end
@@ -2801,7 +2809,7 @@ defmodule Hologram.AuthTest do
       user = create_user("trust_grant_12@example.com")
       resource = create_resource()
 
-      assert Context.with_actor("00000000-0000-4000-8000-000000000042", fn ->
+      assert Context.with_actor("000000001VgEh72lXvTXlK", fn ->
                grant_role(user, :owner, resource, trust: true)
              end) == :ok
 
@@ -2811,7 +2819,7 @@ defmodule Hologram.AuthTest do
     test "grants a global role with a trust claim from a session whose user has no row" do
       user = create_user("trust_grant_15@example.com")
 
-      assert Context.with_actor("00000000-0000-4000-8000-000000000042", fn ->
+      assert Context.with_actor("000000001VgEh72lXvTXlK", fn ->
                grant_role(user, Role.Module1, :global, trust: true)
              end) == :ok
 
@@ -3199,7 +3207,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_15@example.com")
 
       expected_msg =
-        "invalid entity id \"nope\" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+        "invalid entity id \"nope\" - entity ids are strings of 22 base62 characters"
 
       assert_error MisuseError, expected_msg, fn ->
         grant_role(user, :owner, %Module1{id: "nope"})
@@ -3985,7 +3993,7 @@ defmodule Hologram.AuthTest do
       user_id = user.id <> "\n"
 
       expected_msg =
-        "invalid user id #{inspect(user_id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+        "invalid user id #{inspect(user_id)} - entity ids are strings of 22 base62 characters"
 
       assert_error MisuseError, expected_msg, fn -> revoke_role(user_id, :owner, resource) end
     end
@@ -4270,7 +4278,7 @@ defmodule Hologram.AuthTest do
     defmodule VerdictReport do
       use Hologram.Entity
 
-      attribute :owner_id, :uuid, optional: true
+      attribute :owner_id, :id, optional: true
       attribute :reviewed, :boolean, server_only: true
 
       allow :read, when: reviewed == true or owner_id == user_id()
@@ -4301,7 +4309,7 @@ defmodule Hologram.AuthTest do
     test "answers a user id in a spelling Hologram doesn't generate as a visitor's" do
       user_id = Entity.generate_id()
 
-      for other_spelling <- [String.upcase(user_id), 7, false] do
+      for other_spelling <- [Entity.id_to_uuid(user_id), 7, false] do
         assert verdicts(other_spelling, %VerdictBoard{}) == verdicts(nil, %VerdictBoard{})
       end
     end

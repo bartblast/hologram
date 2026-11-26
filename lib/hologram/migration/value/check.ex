@@ -788,9 +788,7 @@ defmodule Hologram.Migration.Value.Check do
          _model,
          _bounds
        ) do
-    normalized = Value.normalize_constant(value, :uuid)
-
-    if not Validator.attribute_value_valid?(normalized, :uuid) do
+    if not Validator.attribute_value_valid?(value, :id) do
       refuse!(op, "holds #{printed(value)}, which isn't the id of a #{inspect(target)}")
     end
 

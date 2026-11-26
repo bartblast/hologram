@@ -5,7 +5,7 @@ defmodule HologramFeatureTests.Jobs.UpdateMemo do
   alias HologramFeatureTests.Entities.Memo
 
   # A plain id rather than a relationship, so other tests can truncate the memo table alone.
-  attribute :memo_id, :uuid
+  attribute :memo_id, :id
 
   allow :create
   allow :read, when: actor_id == user_id()

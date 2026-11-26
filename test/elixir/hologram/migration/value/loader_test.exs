@@ -105,7 +105,7 @@ defmodule Hologram.Migration.Value.LoaderTest do
     """
 
     {:ok, _result} =
-      Connection.query(statement, [Codec.encode(id, :uuid) | Enum.map(custom, &fields[&1])])
+      Connection.query(statement, [Codec.encode(id, :id) | Enum.map(custom, &fields[&1])])
 
     id
   end
@@ -114,7 +114,7 @@ defmodule Hologram.Migration.Value.LoaderTest do
     {:ok, _result} =
       Connection.query(
         ~s|INSERT INTO "hologram_data"."#{table}" ("source_id", "target_id") VALUES ($1, $2)|,
-        [Codec.encode(source_id, :uuid), Codec.encode(target_id, :uuid)]
+        [Codec.encode(source_id, :id), Codec.encode(target_id, :id)]
       )
   end
 
@@ -158,7 +158,7 @@ defmodule Hologram.Migration.Value.LoaderTest do
     Postgrex.query!(writer, ~s(DELETE FROM "hologram_data"."#{join_table}"), [])
 
     Postgrex.query!(writer, ~s(DELETE FROM "hologram_data"."my_app_tag" WHERE "id" = $1), [
-      uuid(tag)
+      stored(tag)
     ])
 
     task =
@@ -175,7 +175,7 @@ defmodule Hologram.Migration.Value.LoaderTest do
     Task.await(task)
   end
 
-  defp uuid(id), do: Codec.encode(id, :uuid)
+  defp stored(id), do: Codec.encode(id, :id)
 
   describe "load/4, the rows pointing at this one" do
     test "holds them under the type and the to-one, none included", %{scratch: scratch} do
@@ -185,10 +185,10 @@ defmodule Hologram.Migration.Value.LoaderTest do
         childless = insert("my_app_trip", %{"title" => "childless"})
 
         child_a =
-          insert("my_app_trip", %{"parent_id" => Codec.encode(parent, :uuid), "title" => "a"})
+          insert("my_app_trip", %{"parent_id" => Codec.encode(parent, :id), "title" => "a"})
 
         child_b =
-          insert("my_app_trip", %{"parent_id" => Codec.encode(parent, :uuid), "title" => "b"})
+          insert("my_app_trip", %{"parent_id" => Codec.encode(parent, :id), "title" => "b"})
 
         reads = %{{MyApp.Trip, :parent} => %{}}
 
@@ -295,7 +295,7 @@ defmodule Hologram.Migration.Value.LoaderTest do
       route(scratch, fn ->
         mapping = prepare()
         user = insert("my_app_user", %{"name" => "Ana"})
-        id = insert("my_app_trip", %{"owner_id" => uuid(user)})
+        id = insert("my_app_trip", %{"owner_id" => stored(user)})
 
         assert [row] = load(%{owner: %{}}, MyApp.Trip, [id], mapping)
 
@@ -318,8 +318,8 @@ defmodule Hologram.Migration.Value.LoaderTest do
       route(scratch, fn ->
         mapping = prepare()
         user = insert("my_app_user", %{"name" => "Ana"})
-        parent = insert("my_app_trip", %{"owner_id" => uuid(user)})
-        id = insert("my_app_trip", %{"parent_id" => uuid(parent)})
+        parent = insert("my_app_trip", %{"owner_id" => stored(user)})
+        id = insert("my_app_trip", %{"parent_id" => stored(parent)})
 
         assert [row] = load(%{parent: %{owner: %{}}}, MyApp.Trip, [id], mapping)
 
@@ -361,7 +361,7 @@ defmodule Hologram.Migration.Value.LoaderTest do
         mapping = prepare()
         tag = insert("my_app_tag", %{"name" => "a"})
         parent = insert("my_app_trip", %{"title" => "p"})
-        id = insert("my_app_trip", %{"parent_id" => uuid(parent)})
+        id = insert("my_app_trip", %{"parent_id" => stored(parent)})
         join_table = hd(mapping[MyApp.Trip].join_tables).name
 
         insert_edge(join_table, parent, tag)
@@ -398,8 +398,8 @@ defmodule Hologram.Migration.Value.LoaderTest do
       route(scratch, fn ->
         mapping = prepare()
         user = insert("my_app_user", %{"name" => "Ana"})
-        first = insert("my_app_trip", %{"owner_id" => uuid(user)})
-        second = insert("my_app_trip", %{"owner_id" => uuid(user)})
+        first = insert("my_app_trip", %{"owner_id" => stored(user)})
+        second = insert("my_app_trip", %{"owner_id" => stored(user)})
 
         assert [%{owner: %{name: "Ana"}}, %{owner: %{name: "Ana"}}] =
                  load(%{owner: %{}}, MyApp.Trip, [first, second], mapping)

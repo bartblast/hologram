@@ -1432,7 +1432,7 @@ defmodule Hologram.Realtime.SSETest do
                "actor_entity_id" => nil,
                "actor_user_id" => "i8",
                "identity_tag" => "1.tag",
-               "protocol_version" => 1
+               "protocol_version" => 2
              }
     end
 
@@ -1453,7 +1453,7 @@ defmodule Hologram.Realtime.SSETest do
     # A raise would end the stream, and the tab would never hear of the change. This suite stands
     # up no query cache, so the read of a user's row raises.
     test "tells the client without the user's row when reading it fails" do
-      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+      user_id = "3rrX7lDxWDEFgiyP0LHGP9"
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
       send(self(), {:identity_changed, "session-1", user_id, "1.tag"})
 
@@ -1482,7 +1482,7 @@ defmodule Hologram.Realtime.SSETest do
     test "tells the client without the user's row while the data model is held" do
       on_exit(&Model.release/0)
 
-      user_id = "7f1d8f3e-5b4a-4c2d-9e8f-0a1b2c3d4e5f"
+      user_id = "3rrX7lDxWDEFgiyP0LHGP9"
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
       Model.hold()
       send(self(), {:identity_changed, "session-1", user_id, "1.tag"})

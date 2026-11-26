@@ -245,25 +245,25 @@ defmodule Hologram.Migration.GeneratorTest do
 
     for {label, current_extra, freeing_lines, edits} <- [
           {"a deleted to-one, answered from a value", %{}, [delete],
-           [{fill, "add_attribute :place_id, :uuid, backfill: backup_id"}]},
+           [{fill, "add_attribute :place_id, :id, backfill: backup_id"}]},
           {"a deleted to-one, answered from it renamed", %{}, [delete],
            [
              {"#{delete}\n    # RESOLVE",
               "rename_relationship :place, :old_place\n    # RESOLVE"},
              {fill,
-              "add_attribute :place_id, :uuid, backfill: old_place.id\n" <>
+              "add_attribute :place_id, :id, backfill: old_place.id\n" <>
                 "    delete_relationship :old_place"}
            ]},
           {"a to-one turning to-many, answered from a value",
            %{relationships: [{:place, [MyApp.Place], [optional: true]}]}, [to_many],
-           [{fill, "add_attribute :place_id, :uuid, backfill: backup_id"}]},
+           [{fill, "add_attribute :place_id, :id, backfill: backup_id"}]},
           {"a to-one turning to-many, answered from it renamed",
            %{relationships: [{:place, [MyApp.Place], [optional: true]}]}, [to_many],
            [
              {"#{to_many}\n    # RESOLVE",
               "rename_relationship :place, :old_place\n    # RESOLVE"},
              {fill,
-              "add_attribute :place_id, :uuid, backfill: old_place.id\n" <>
+              "add_attribute :place_id, :id, backfill: old_place.id\n" <>
                 "    change_relationship :old_place, type: [MyApp.Place]\n" <>
                 "    rename_relationship :old_place, :place"}
            ]},
@@ -273,7 +273,7 @@ defmodule Hologram.Migration.GeneratorTest do
              {"resolve! :relationships, deleted: [:place], added: [:venue]",
               "delete_relationship :place\n" <>
                 "    add_relationship :venue, MyApp.Place, optional: true"},
-             {fill, "add_attribute :place_id, :uuid, backfill: backup_id"}
+             {fill, "add_attribute :place_id, :id, backfill: backup_id"}
            ]},
           {"a to-one an answer deletes, answered from it renamed",
            %{relationships: [{:venue, MyApp.Place, [optional: true]}]}, [],
@@ -282,7 +282,7 @@ defmodule Hologram.Migration.GeneratorTest do
               "rename_relationship :place, :old_place\n" <>
                 "    add_relationship :venue, MyApp.Place, optional: true"},
              {fill,
-              "add_attribute :place_id, :uuid, backfill: old_place.id\n" <>
+              "add_attribute :place_id, :id, backfill: old_place.id\n" <>
                 "    delete_relationship :old_place"}
            ]}
         ] do
@@ -298,7 +298,7 @@ defmodule Hologram.Migration.GeneratorTest do
 
              create_entity MyApp.Task do
                add_relationship :place, MyApp.Place, optional: true
-               add_attribute :backup_id, :uuid, default: "00000000-0000-0000-0000-000000000001"
+               add_attribute :backup_id, :id, default: "0000000000000000000001"
              end
              """}
           ])
@@ -317,8 +317,8 @@ defmodule Hologram.Migration.GeneratorTest do
               task
               | attributes:
                   Enum.sort([
-                    {:backup_id, :uuid, [default: "00000000-0000-0000-0000-000000000001"]},
-                    {:place_id, :uuid, []} | task.attributes
+                    {:backup_id, :id, [default: "0000000000000000000001"]},
+                    {:place_id, :id, []} | task.attributes
                   ])
             }
           })
@@ -446,7 +446,7 @@ defmodule Hologram.Migration.GeneratorTest do
         |> File.read!()
         |> String.replace(
           ~r/^( *)resolve! :fill, attributes: \[:b\]$/m,
-          "\\1change_relationship :b, optional: false, backfill: ^\"01900000-0000-7000-8000-000000000000\""
+          "\\1change_relationship :b, optional: false, backfill: ^\"02wndAAHBC95f4Al8rNFlA\""
         )
 
       refute answered =~ ~r/^ *resolve!/m
@@ -510,7 +510,7 @@ defmodule Hologram.Migration.GeneratorTest do
           |> File.read!()
           |> String.replace(
             ~r/^( *)resolve! :fill, attributes: \[:(b|place)\]$/m,
-            "\\1change_relationship :\\2, optional: false, backfill: ^\"01900000-0000-7000-8000-000000000000\""
+            "\\1change_relationship :\\2, optional: false, backfill: ^\"02wndAAHBC95f4Al8rNFlA\""
           )
 
         refute answered =~ ~r/^ *resolve!/m
@@ -578,7 +578,7 @@ defmodule Hologram.Migration.GeneratorTest do
         )
         |> String.replace(
           ~r/^( *)resolve! :fill, attributes: \[:(b|place)\]$/m,
-          "\\1change_relationship :\\2, optional: false, backfill: ^\"01900000-0000-7000-8000-000000000000\""
+          "\\1change_relationship :\\2, optional: false, backfill: ^\"02wndAAHBC95f4Al8rNFlA\""
         )
 
       refute answered =~ ~r/^ *resolve!/m

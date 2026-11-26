@@ -12,6 +12,7 @@ defmodule HologramSyncTests.Consistency.Model do
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
+  alias Hologram.Entity
   alias Hologram.Query
   alias HologramSyncTests.Entities.Board
   alias HologramSyncTests.Entities.Card
@@ -107,15 +108,21 @@ defmodule HologramSyncTests.Consistency.Model do
         {type, rows}
       end)
 
-    %{rows: pairs} =
+    # DB.sql reads a uuid column in the UUID spelling, and the rows hold entity ids.
+    %{rows: pair_rows} =
       DB.sql!(~s(SELECT "source_id", "target_id" FROM "hologram_data"."#{tags_table()}"))
+
+    pairs =
+      MapSet.new(pair_rows, fn [source_id, target_id] ->
+        {Entity.uuid_to_id(source_id), Entity.uuid_to_id(target_id)}
+      end)
 
     grants =
       for %{entity_type: Board, role: :viewer} = grant <- read_all(RoleGrant),
           into: MapSet.new(),
           do: {grant.user_id, grant.entity_id || :all}
 
-    %{grants: grants, pairs: MapSet.new(pairs, &List.to_tuple/1), rows: rows, seqs: seqs()}
+    %{grants: grants, pairs: pairs, rows: rows, seqs: seqs()}
   end
 
   @doc """
@@ -199,7 +206,8 @@ defmodule HologramSyncTests.Consistency.Model do
   end
 
   # Read as stored: a read through the rules hides a number above the final limit, and the checks
-  # judge what a client was shown against the numbers as they are.
+  # judge what a client was shown against the numbers as they are. The ids come back in the UUID
+  # spelling and are keyed by the entity id spelling the rows use.
   defp seqs do
     Map.new(@types, fn type ->
       %{rows: rows} =
@@ -209,7 +217,9 @@ defmodule HologramSyncTests.Consistency.Model do
         )
 
       {type,
-       Map.new(rows, fn [id, created_seq, updated_seq] -> {id, {created_seq, updated_seq}} end)}
+       Map.new(rows, fn [id, created_seq, updated_seq] ->
+         {Entity.uuid_to_id(id), {created_seq, updated_seq}}
+       end)}
     end)
   end
 

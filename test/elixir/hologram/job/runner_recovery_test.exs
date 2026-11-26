@@ -331,7 +331,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
 
         Postgrex.transaction(session, fn connection ->
           Postgrex.query!(connection, ~s|UPDATE #{table} SET "status" = 'done' WHERE "id" = $1|, [
-            Codec.encode(job.id, :uuid)
+            Codec.encode(job.id, :id)
           ])
 
           send(test_pid, :recording)
@@ -379,7 +379,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
 
         Postgrex.transaction(session, fn connection ->
           Postgrex.query!(connection, ~s|SELECT 1 FROM #{table} WHERE "id" = $1 FOR KEY SHARE|, [
-            Codec.encode(job.id, :uuid)
+            Codec.encode(job.id, :id)
           ])
 
           send(test_pid, :referencing)

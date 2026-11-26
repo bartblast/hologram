@@ -127,7 +127,7 @@ describe("SyncStream", () => {
           [TASK]: {
             attributes: {
               created_at: "datetime",
-              id: "uuid",
+              id: "id",
               title: "string",
               updated_at: "datetime",
             },
@@ -1002,7 +1002,7 @@ describe("SyncStream", () => {
       SyncStream.served = true;
 
       globalThis.Hologram.sync = {
-        model: {"MyApp.Doc": {attributes: {id: "uuid"}, policy: {}}},
+        model: {"MyApp.Doc": {attributes: {id: "id"}, policy: {}}},
         policyHash: "0123456789abcdef",
         protocolVersion: 1,
       };
@@ -1012,7 +1012,7 @@ describe("SyncStream", () => {
         protocol_version: 1,
         rules: {
           "MyApp.Doc": {
-            attributes: {id: "uuid"},
+            attributes: {id: "id"},
             constraints: {},
             defaults: {},
             policy: {},
@@ -1140,7 +1140,7 @@ describe("SyncStream", () => {
         model: {
           [TASK]: {
             attributes: {
-              id: "uuid",
+              id: "id",
               server_created_seq: "integer",
               server_updated_seq: "integer",
               title: "string",
@@ -1949,7 +1949,7 @@ describe("SyncStream", () => {
       globalThis.Hologram.sync = {
         model: {
           [TASK]: {
-            attributes: {id: "uuid", title: "string"},
+            attributes: {id: "id", title: "string"},
             relationships: {},
             serverOnly: [],
           },
@@ -2187,7 +2187,7 @@ describe("SyncStream", () => {
       globalThis.Hologram.sync = {
         model: {
           [DOC]: {
-            attributes: {archived: "boolean", id: "uuid"},
+            attributes: {archived: "boolean", id: "id"},
             derived: {},
             inverses: {},
             operations: [],
@@ -2456,7 +2456,7 @@ describe("SyncStream", () => {
     const TASK = "MyApp.Task";
 
     const attributes = {
-      id: "uuid",
+      id: "id",
       server_created_seq: "integer",
       server_updated_seq: "integer",
       title: "string",

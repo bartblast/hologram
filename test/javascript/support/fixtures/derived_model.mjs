@@ -11,7 +11,7 @@ export default {
   "MyApp.Author": {
     attributes: {
       created_at: "datetime",
-      id: "uuid",
+      id: "id",
       updated_at: "datetime",
     },
     derived: {},
@@ -23,7 +23,7 @@ export default {
   "MyApp.Channel": {
     attributes: {
       created_at: "datetime",
-      id: "uuid",
+      id: "id",
       name: "string",
       updated_at: "datetime",
     },
@@ -131,7 +131,7 @@ export default {
   "MyApp.Member": {
     attributes: {
       created_at: "datetime",
-      id: "uuid",
+      id: "id",
       nickname: "string",
       score: "integer",
       updated_at: "datetime",
@@ -309,7 +309,7 @@ export default {
     attributes: {
       body: "string",
       created_at: "datetime",
-      id: "uuid",
+      id: "id",
       position: "integer",
       updated_at: "datetime",
     },
@@ -376,7 +376,7 @@ export default {
   "MyApp.Note": {
     attributes: {
       created_at: "datetime",
-      id: "uuid",
+      id: "id",
       public: "boolean",
       updated_at: "datetime",
     },
@@ -400,7 +400,7 @@ export default {
   "MyApp.Player": {
     attributes: {
       created_at: "datetime",
-      id: "uuid",
+      id: "id",
       kind: "enum",
       score: "integer",
       updated_at: "datetime",
@@ -480,7 +480,7 @@ export default {
   "MyApp.Post": {
     attributes: {
       created_at: "datetime",
-      id: "uuid",
+      id: "id",
       pinned: "boolean",
       updated_at: "datetime",
     },
@@ -525,7 +525,7 @@ export default {
   "MyApp.Room": {
     attributes: {
       created_at: "datetime",
-      id: "uuid",
+      id: "id",
       last_read_at: "datetime",
       name: "string",
       updated_at: "datetime",
@@ -771,7 +771,7 @@ export default {
       b: "integer",
       c: "string",
       created_at: "datetime",
-      id: "uuid",
+      id: "id",
       updated_at: "datetime",
     },
     derived: {},
@@ -783,7 +783,7 @@ export default {
   "MyApp.Team": {
     attributes: {
       created_at: "datetime",
-      id: "uuid",
+      id: "id",
       name: "string",
       updated_at: "datetime",
     },

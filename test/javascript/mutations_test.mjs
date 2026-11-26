@@ -21,7 +21,7 @@ describe("Mutations", () => {
       writes: [
         {
           data: {title: "alpha"},
-          id: "018f0000-0000-7000-8000-000000000001",
+          id: "02wLIRxqmq3AUo6vl2OW37",
           op: "create",
           stamp: 1_798_246_400_125_952,
           type: "MyApp.Task",

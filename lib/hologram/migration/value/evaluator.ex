@@ -5,10 +5,11 @@ defmodule Hologram.Migration.Value.Evaluator do
   #
   # A row is a map holding its attributes by name, `:id`, `:created_at`, `:updated_at`,
   # `:server_created_at`, `:server_updated_at` and each to-one's reference as `:<relationship>_id`,
-  # in their native values: decoded, enums as atoms, uuids as lowercase canonical strings. For each
-  # read `reads/1` names it also holds the related data: under a to-one's name the related row, in
-  # the same shape and nil when the reference is nil, and under a stored to-many's name a list of
-  # rows, and under `{type, relationship}` the rows of that type whose to-one points at this row.
+  # in their native values: decoded, enums as atoms, ids and references as entity ids, uuids as
+  # lowercase canonical strings. For each read `reads/1` names it also holds the related data:
+  # under a to-one's name the related row, in the same shape and nil when the reference is nil,
+  # and under a stored to-many's name a list of rows, and under `{type, relationship}` the rows of
+  # that type whose to-one points at this row.
   # Hologram.Migration.Value.Loader builds rows in this shape.
 
   alias Hologram.Migration.Value
@@ -107,6 +108,8 @@ defmodule Hologram.Migration.Value.Evaluator do
   end
 
   defp rank_map(nil), do: nil
+
+  defp rank_map(:characters), do: :characters
 
   defp rank_map(values) do
     values

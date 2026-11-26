@@ -8,7 +8,7 @@ import StringOrder from "./string_order.mjs";
 
 // The kernel the client answers its own queries with: the locked operator set evaluated over
 // the rows as the wire spells them - plain values, dates and datetimes and times and enums and
-// uuids as strings.
+// ids and uuids as strings.
 //
 // A filter is a list of clauses that all hold. A clause is a triple array - [name, operator,
 // operand] - a disjunction, {or: alternatives}, holding when one of its alternatives does, each

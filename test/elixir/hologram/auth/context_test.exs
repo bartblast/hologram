@@ -58,7 +58,7 @@ defmodule Hologram.Auth.ContextTest do
     end
 
     test "returns the actor's id when it is a user entity's id" do
-      user_id = "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
+      user_id = "02x9QDX4pOzriCIlt0xKjn"
 
       assert with_actor(user_id, fn -> actor_entity_id() end) == user_id
     end

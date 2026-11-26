@@ -48,13 +48,14 @@ defmodule Hologram.Entity.Validator do
 
   # What a column that is not a string takes of a compound key's index entry, in bytes: its
   # width rounded up to 8, which covers the padding between it and a fixed-width column ahead
-  # of it. A to-one's reference is a uuid.
+  # of it. A to-one's reference is an id.
   @unique_key_column_bytes %{
     boolean: 8,
     date: 8,
     datetime: 8,
     enum: 8,
     float: 8,
+    id: 16,
     integer: 8,
     reference: 16,
     time: 8,
@@ -93,11 +94,15 @@ defmodule Hologram.Entity.Validator do
     :datetime,
     :enum,
     :float,
+    :id,
     :integer,
     :string,
     :time,
     :uuid
   ]
+
+  # 2^128 - 1 in base62, the largest id.
+  @max_id "7n42DGM5Tflk9n8mt7Fhc7"
 
   @valid_relationship_opts [:inverse, :optional, :sort, :unique]
 
@@ -203,10 +208,19 @@ defmodule Hologram.Entity.Validator do
 
   def attribute_value_valid?(_value, :time, _opts), do: false
 
-  # Only the canonical lowercase 8-4-4-4-12 form is valid - the framework
-  # generates and stores ids in that spelling, and the client tier compares ids
-  # as strings, so any alternative spelling would match on one tier only. The
-  # pattern ends in \z, not $, which also matches before a final newline.
+  # An id is the 128-bit number written in 22 base62 digits, 0-9, A-Z and a-z in ASCII order, zero
+  # padded - so ids compare as strings the way their numbers do. The largest 22-digit text that
+  # fits in 128 bits is 2^128 - 1, and at a fixed width the string comparison is the range check.
+  # The pattern ends in \z, not $, which also matches before a final newline.
+  def attribute_value_valid?(value, :id, _opts) when is_binary(value) do
+    String.match?(value, ~r/\A[0-9A-Za-z]{22}\z/) and value <= @max_id
+  end
+
+  def attribute_value_valid?(_value, :id, _opts), do: false
+
+  # Only the canonical lowercase 8-4-4-4-12 form is valid - a uuid is read back from its column in
+  # that spelling, and the client tier compares uuids as strings, so any alternative spelling would
+  # match on one tier only. The pattern ends in \z, not $, which also matches before a final newline.
   def attribute_value_valid?(value, :uuid, _opts) when is_binary(value) do
     String.match?(value, ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/)
   end
@@ -331,7 +345,7 @@ defmodule Hologram.Entity.Validator do
   Constraint options are checked only on type-valid values - a type violation suppresses the attribute's constraint checks.
   A non-optional attribute must be present regardless of its declared default - defaults are not applied here.
   An absent or nil optional attribute is valid.
-  To-one reference fields (`<name>_id`) validate alongside attributes: a non-optional reference must be present and non-nil (:required), and a present value must be a canonical entity id ({:type, :uuid}).
+  To-one reference fields (`<name>_id`) validate alongside attributes: a non-optional reference must be present and non-nil (:required), and a present value must be an entity id ({:type, :id}).
   """
   @spec validate(module, %{atom => any}) :: :ok | {:error, list({atom, atom | {atom, any}})}
   def validate(entity_type, data) do
@@ -400,7 +414,7 @@ defmodule Hologram.Entity.Validator do
   Validates the given partial changes map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} in the validate/2 shape and reason vocabulary.
   Only present pairs are validated - absence is legal in a partial map. A nil value for a non-optional attribute reports :required - a nil value for an optional attribute is valid (clearing).
-  To-one reference field pairs (`<name>_id`) follow the same rules: nil is valid only for an optional relationship, and a present value must be a canonical entity id.
+  To-one reference field pairs (`<name>_id`) follow the same rules: nil is valid only for an optional relationship, and a present value must be an entity id ({:type, :id}).
   """
   @spec validate_changes(module, %{atom => any}) ::
           :ok | {:error, list({atom, atom | {atom, any}})}
@@ -1140,7 +1154,7 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp reference_change_errors(field, value, _optional?) do
-    if attribute_value_valid?(value, :uuid), do: [], else: [{field, {:type, :uuid}}]
+    if attribute_value_valid?(value, :id), do: [], else: [{field, {:type, :id}}]
   end
 
   defp reference_data_errors(data, {field, optional?}) do
@@ -1149,7 +1163,7 @@ defmodule Hologram.Entity.Validator do
         if optional?, do: [], else: [{field, :required}]
 
       {:ok, value} ->
-        if attribute_value_valid?(value, :uuid), do: [], else: [{field, {:type, :uuid}}]
+        if attribute_value_valid?(value, :id), do: [], else: [{field, {:type, :id}}]
 
       :error ->
         if optional?, do: [], else: [{field, :required}]

@@ -153,9 +153,12 @@ defmodule Hologram.Migration.Value.EvaluatorTest do
       uuid = "0B9E3C5A-4C8F-4A1E-9F3D-2B6A7C8D9E0F"
       stored = String.downcase(uuid)
 
-      for type <- [:uuid, {:reference, MyApp.User}] do
-        assert evaluate({:function, String, :upcase, [:id], type}, %{id: stored}) == stored
-      end
+      assert evaluate({:function, String, :upcase, [:id], :uuid}, %{id: stored}) == stored
+
+      id = "02wLIRxqmq3AUo6vl2OW36"
+
+      assert evaluate({:function, String, :trim, [:id], {:reference, MyApp.User}}, %{id: id}) ==
+               id
 
       assert evaluate({:function, Kernel, :abs, [:n], :float}, %{n: -2}) === 2.0
 
