@@ -5,12 +5,11 @@ defmodule Hologram.Entity.ServerOnly do
   # server holds and never hands to the client. Sibling of NotIncluded, and the pair tells the
   # reader WHY a value is absent: NotIncluded means "you didn't ask for it", fixable by including
   # the relationship in the query, while ServerOnly means "you can't have it, it lives on the
-  # server", fixable only by remodeling. The attribute name rides along so that a misuse error
-  # inspecting the sentinel names the attribute that is hidden.
+  # server", fixable only by remodeling. The internal __meta__ map names the attribute, as
+  # %{field: name}, so that a misuse error inspecting the placeholder names the attribute that
+  # is hidden.
 
-  @enforce_keys [:attribute]
+  defstruct __meta__: %{}
 
-  defstruct [:attribute]
-
-  @type t :: %__MODULE__{attribute: atom}
+  @type t :: %__MODULE__{__meta__: map}
 end

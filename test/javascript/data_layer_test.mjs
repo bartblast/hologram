@@ -3652,7 +3652,10 @@ describe("DataLayer", () => {
         field(DataLayer.sessionUser(), "password_hash"),
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Entity.ServerOnly")],
-          [Type.atom("attribute"), Type.atom("password_hash")],
+          [
+            Type.atom("__meta__"),
+            Type.map([[Type.atom("field"), Type.atom("password_hash")]]),
+          ],
         ]),
       );
     });

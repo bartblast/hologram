@@ -644,7 +644,10 @@ describe("Model", () => {
         field(boxed, "internal_notes"),
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Entity.ServerOnly")],
-          [Type.atom("attribute"), Type.atom("internal_notes")],
+          [
+            Type.atom("__meta__"),
+            Type.map([[Type.atom("field"), Type.atom("internal_notes")]]),
+          ],
         ]),
       );
     });
@@ -655,7 +658,10 @@ describe("Model", () => {
       const notIncluded = (name) =>
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Entity.NotIncluded")],
-          [Type.atom("relationship"), Type.atom(name)],
+          [
+            Type.atom("__meta__"),
+            Type.map([[Type.atom("field"), Type.atom(name)]]),
+          ],
         ]);
 
       assert.deepEqual(field(boxed, "project"), notIncluded("project"));
@@ -1641,7 +1647,7 @@ describe("Model", () => {
   describe("notIncluded()", () => {
     // Equal to what boxing leaves in place of a relationship nobody asked for - the same sentinel
     // from both directions, so a struct built here reads like one built from a row.
-    it("builds the sentinel naming the relationship nobody asked for", () => {
+    it("builds the sentinel naming the field nobody asked for", () => {
       assert.deepEqual(
         Model.notIncluded("tags"),
         field(Model.box(TASK, row()), "tags"),

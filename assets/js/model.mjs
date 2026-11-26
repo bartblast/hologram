@@ -305,12 +305,16 @@ export default class Model {
     return entry;
   }
 
-  // What a relationship nobody asked for holds, naming itself - a read of one reports which
-  // relationship was not included rather than answering nil, which is a different fact.
+  // What a field nobody asked for holds, naming the field in its internal __meta__ map - a read
+  // of one reports which field was not included rather than answering nil, which is a different
+  // fact.
   static notIncluded(name) {
     return Type.map([
       [Type.atom("__struct__"), Type.alias("Hologram.Entity.NotIncluded")],
-      [Type.atom("relationship"), Type.atom(name)],
+      [
+        Type.atom("__meta__"),
+        Type.map([[Type.atom("field"), Type.atom(name)]]),
+      ],
     ]);
   }
 
@@ -717,13 +721,16 @@ export default class Model {
   }
 
   // A value the client may not have is not a value it is missing: the model says the attribute
-  // exists and is not for this client, which is what the sentinel says in its place - and it
-  // names the attribute, so a read of one reports which.
+  // exists and is not for this client, which is what the placeholder says in its place - and its
+  // internal __meta__ map names the attribute, so a read of one reports which.
   static #boxAttribute(entry, name, attributeType, row) {
     if (entry.serverOnly.has(name)) {
       return Type.map([
         [Type.atom("__struct__"), Type.alias("Hologram.Entity.ServerOnly")],
-        [Type.atom("attribute"), Type.atom(name)],
+        [
+          Type.atom("__meta__"),
+          Type.map([[Type.atom("field"), Type.atom(name)]]),
+        ],
       ]);
     }
 

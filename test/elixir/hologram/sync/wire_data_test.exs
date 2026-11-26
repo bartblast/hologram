@@ -65,7 +65,10 @@ defmodule Hologram.Sync.WireDataTest do
     end
 
     test "leaves out a value the client may not have" do
-      changes = %{email: "user@test.com", password_hash: %ServerOnly{attribute: :password_hash}}
+      changes = %{
+        email: "user@test.com",
+        password_hash: %ServerOnly{__meta__: %{field: :password_hash}}
+      }
 
       assert patch(Module14, changes) == %{email: "user@test.com"}
     end
@@ -134,7 +137,7 @@ defmodule Hologram.Sync.WireDataTest do
           created_at: @created_at,
           email: "user@test.com",
           id: @entity_id,
-          password_hash: %ServerOnly{attribute: :password_hash},
+          password_hash: %ServerOnly{__meta__: %{field: :password_hash}},
           updated_at: @updated_at
         })
 
@@ -178,7 +181,7 @@ defmodule Hologram.Sync.WireDataTest do
     test "keeps the reference field of a relationship it left out" do
       entity =
         struct(Module3, %{
-          b: %NotIncluded{relationship: :b},
+          b: %NotIncluded{__meta__: %{field: :b}},
           b_id: @target_id,
           created_at: @created_at,
           id: @entity_id,

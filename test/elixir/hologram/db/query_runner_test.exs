@@ -858,9 +858,9 @@ defmodule Hologram.DB.QueryRunnerTest do
       term = Stage.normalize(Module3)
 
       assert [%Module3{} = entity] = run(term, @mapping)
-      assert entity.a == %NotIncluded{relationship: :a}
-      assert entity.b == %NotIncluded{relationship: :b}
-      assert entity.c == %NotIncluded{relationship: :c}
+      assert entity.a == %NotIncluded{__meta__: %{field: :a}}
+      assert entity.b == %NotIncluded{__meta__: %{field: :b}}
+      assert entity.c == %NotIncluded{__meta__: %{field: :c}}
     end
 
     test "filters and orders a to-many include whose target names columns like the join table" do
@@ -1462,7 +1462,7 @@ defmodule Hologram.DB.QueryRunnerTest do
         |> derived_query_results(:authored_messages)
 
       assert message.author.id == author.id
-      assert message.channel == %NotIncluded{relationship: :channel}
+      assert message.channel == %NotIncluded{__meta__: %{field: :channel}}
     end
 
     test "includes the rows of the branch an if chooses, and none for nil" do

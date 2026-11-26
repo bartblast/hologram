@@ -896,7 +896,7 @@ defmodule Hologram.Entity do
     attribute_names = server_only_attribute_names(entity.__struct__)
 
     Enum.reduce(attribute_names, entity, fn name, stripped ->
-      %{stripped | name => %ServerOnly{attribute: name}}
+      %{stripped | name => %ServerOnly{__meta__: %{field: name}}}
     end)
   end
 
@@ -966,25 +966,25 @@ defmodule Hologram.Entity do
       |> Module.get_attribute(:__relationships__)
       |> Enum.flat_map(fn
         {name, [_target], _opts} ->
-          [{name, %NotIncluded{relationship: name}}]
+          [{name, %NotIncluded{__meta__: %{field: name}}}]
 
         {name, _target, _opts} ->
           # Compile-time atom creation - the reference field atoms are being defined here.
           # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-          [{:"#{name}_id", nil}, {name, %NotIncluded{relationship: name}}]
+          [{:"#{name}_id", nil}, {name, %NotIncluded{__meta__: %{field: name}}}]
       end)
 
     # An inverse stores no reference, so it holds the one field its rows are embedded in.
     inverse_fields =
       module
       |> Module.get_attribute(:__inverse_relationships__)
-      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{relationship: name}} end)
+      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{__meta__: %{field: name}}} end)
 
     # A derived field holds nothing until a query includes it.
     derived_fields =
       module
       |> Module.get_attribute(:__derived__)
-      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{relationship: name}} end)
+      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{__meta__: %{field: name}}} end)
 
     Enum.sort(
       system_attribute_fields ++
