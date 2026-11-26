@@ -487,7 +487,7 @@ defmodule Hologram.Entity.Derived.Validator do
 
   defp value_of_type?(value, {:float, _opts}), do: is_number(value)
 
-  defp value_of_type?(value, {:id, _opts}), do: is_binary(value)
+  defp value_of_type?(value, {:id, _opts}), do: EntityValidator.attribute_value_valid?(value, :id)
 
   defp value_of_type?(value, {:integer, _opts}), do: is_integer(value)
 
