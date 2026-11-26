@@ -3,9 +3,15 @@ defmodule Hologram.Entity.ServerOnly do
   The value of an attribute declared `server_only: true` where the real value isn't available,
   because the server never sends it to the browser.
 
-  A server-only attribute holds `%ServerOnly{}` in the browser and in every template, including
-  a template rendered on the server, since the HTML it renders goes to the browser. Server code,
-  like `init/3`, a command or a job, gets the real value when it reads through `DB`.
+  Hologram removes server-only values from everything it sends to the browser, on its own. That
+  covers the HTML the server renders, page and component state, props, context, and every row the
+  data layer syncs: wherever such a value would leave the server, Hologram puts `%ServerOnly{}` in
+  its place. So in the browser, and in any template, even one rendered on the server, a
+  server-only attribute holds `%ServerOnly{}`.
+
+  Your server code works with the real value. An entity that `init/3`, a command or a job reads
+  through `DB` holds it, and you don't need to remove it yourself before putting the entity in
+  state or passing it as a prop.
 
   Browser code can't write a server-only attribute. Set it in a command or a job.
 

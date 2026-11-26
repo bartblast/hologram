@@ -503,9 +503,9 @@ defmodule Hologram.Entity do
   @doc """
   Returns `true` when the given entity field value is the `Hologram.Entity.ServerOnly`
   placeholder, and `false` for anything else.
-  A server-only attribute holds the placeholder in the browser and in every template, including a
-  template rendered on the server, so this returns `true` there. An entity server code reads
-  through `DB` holds the real value, so this returns `false` there.
+  Returns `true` in the browser and in any template, since Hologram removes server-only values
+  from everything it sends to the browser. Returns `false` on an entity your server code reads
+  through `DB`, which holds the real value.
   Works on the server and in the browser, and is imported into pages and components.
   """
   @spec server_only?(any) :: boolean
