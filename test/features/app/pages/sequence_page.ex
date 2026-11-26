@@ -4,17 +4,28 @@ defmodule HologramFeatureTests.SequencePage do
 
   alias HologramFeatureTests.Entities.Notice
 
-  route "/sequence"
+  route "/sequence/:carried"
+
+  # :notices to carry the notices on the page, :none to carry none.
+  param :carried, :atom
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  # Read through a derived field, so the page carries the notices as its render read them, numbers
+  # and all. The reads in init carry none, so with :none the browser has only its store to go by.
+  derived :notices, [Notice], fn carried ->
+    if carried == :notices, do: notices_query(), else: []
+  end
+
   state :marker, :integer
+  state :updated, :string
   state :view, :string
 
-  # The server renders the view too, so the page carries the notices as its render read them.
+  # The server renders the view too.
   def init(_params, component, _server) do
     component
     |> put_state(:marker, 0)
+    |> put_state(:updated, updated())
     |> put_state(:view, view(0))
   end
 
@@ -24,9 +35,13 @@ defmodule HologramFeatureTests.SequencePage do
       <button $click="write_mine"> Write mine </button>
       <button $click="mark_read"> Mark read </button>
       <button $click="show_view"> Show view </button>
+      <button $click="show_updated"> Show updated </button>
     </p>
     <p>
       View: <strong id="view"><code>{@view}</code></strong>
+    </p>
+    <p>
+      Updated: <strong id="updated"><code>{@updated}</code></strong>
     </p>
     """
   end
@@ -50,6 +65,10 @@ defmodule HologramFeatureTests.SequencePage do
 
   def action(:show_view, _params, component) do
     put_state(component, :view, view(component.state.marker))
+  end
+
+  def action(:show_updated, _params, component) do
+    put_state(component, :updated, updated())
   end
 
   # Five reads: the notices by their created number, ascending and descending, the newest one with
@@ -85,6 +104,20 @@ defmodule HologramFeatureTests.SequencePage do
 
     "#{titles(ascending)} | #{titles(descending)} | #{newest_title} | #{titles(unread)} | " <>
       titles(by_title)
+  end
+
+  # The notices that hold an updated number, by it. A notice whose number isn't final or the browser
+  # lost reads nil there, which the filter leaves out.
+  defp updated do
+    Notice
+    |> filter(server_updated_seq != nil)
+    |> sort(server_updated_seq)
+    |> DB.read()
+    |> titles()
+  end
+
+  defp notices_query do
+    sort(Notice, title)
   end
 
   defp newest do

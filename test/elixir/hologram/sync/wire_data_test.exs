@@ -313,6 +313,30 @@ defmodule Hologram.Sync.WireDataTest do
       assert wire.c == "text"
     end
 
+    test "writes the sequence numbers the read hid beside the row's data" do
+      entity = %{
+        module_2()
+        | __meta__: %Metadata{waiting: %{server_created_seq: 5, server_updated_seq: 8}}
+      }
+
+      assert row(entity)[:"$waiting"] == %{server_created_seq: 5, server_updated_seq: 8}
+    end
+
+    test "writes a hidden sequence number past what a JavaScript number holds as its decimal text" do
+      entity = %{
+        module_2()
+        | __meta__: %Metadata{waiting: %{server_updated_seq: 9_007_199_254_740_993}}
+      }
+
+      assert row(entity)[:"$waiting"] == %{server_updated_seq: "9007199254740993"}
+    end
+
+    test "leaves out the hidden numbers when the read hid none" do
+      wire = row(module_2())
+
+      refute Map.has_key?(wire, :"$waiting")
+    end
+
     test "leaves a server-only attribute out of the revisions" do
       entity =
         struct(Module14, %{

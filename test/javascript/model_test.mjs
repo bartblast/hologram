@@ -287,6 +287,7 @@ describe("Model", () => {
             ]),
           ],
           [Type.atom("stamp"), Type.nil()],
+          [Type.atom("waiting"), Type.map([])],
         ]),
       );
     });
@@ -303,6 +304,7 @@ describe("Model", () => {
           [Type.atom("relationship_ops"), Type.map([])],
           [Type.atom("revisions"), Type.map([])],
           [Type.atom("stamp"), Type.nil()],
+          [Type.atom("waiting"), Type.map([])],
         ]),
       );
     });
@@ -1505,7 +1507,7 @@ describe("Model", () => {
       );
     });
 
-    // Hologram.Entity.Metadata declares five fields, and a struct short of one answers a read of
+    // Hologram.Entity.Metadata declares six fields, and a struct short of one answers a read of
     // it with a KeyError where the server's struct answers nil.
     it("carries every field the entity metadata struct declares", () => {
       const metadata = Model.emptyMetadata();
@@ -1521,6 +1523,7 @@ describe("Model", () => {
           "relationship_ops",
           "revisions",
           "stamp",
+          "waiting",
         ],
       );
     });

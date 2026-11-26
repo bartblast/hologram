@@ -327,7 +327,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   defp filled_duplicate_key_msg do
     ~s(cannot make column "b" on table "test_fixtures_entity_module2" required - ) <>
       ~s{filling its NULLs with the default would make 1 key repeat over ("b", "c") - } <>
-      "fix the data, keep the attribute optional: true, or drop the unique declaration"
+      "fix the data, keep the attribute optional: true, or drop the unique declaration before " <>
+      "making it required"
   end
 
   # Module2's mapping with two optional string columns "y" and "z", and a key over them.
@@ -1894,6 +1895,40 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       end
     end
 
+    # A relationship declares no default, so it isn't offered one.
+    test "raises when making a to-one column required while rows hold NULL" do
+      column = %{
+        name: "z_id",
+        type: :uuid,
+        sql_type: "uuid",
+        collation: nil,
+        enum_values: nil,
+        default: nil,
+        null: true,
+        references: "test_fixtures_entity_module2",
+        fk_constraint: "test_fixtures_entity_module2_z_id_$fk",
+        source: {:relationship, :z}
+      }
+
+      optional_context =
+        update_in(reconcile_context([Module2]), [:mapping, Module2, :columns], fn columns ->
+          [column | columns]
+        end)
+
+      reconcile(optional_context)
+      insert_module2_row("NULL", "'abc'")
+
+      context = update_mapping_column(optional_context, Module2, "z_id", &%{&1 | null: false})
+
+      expected_msg =
+        ~s(cannot make column "z_id" on table "test_fixtures_entity_module2" required - ) <>
+          "found 1 row with NULL - keep the relationship optional: true, or fix the data"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
     test "raises when adding a required column to a table with rows" do
       reconcile(reconcile_context([Module2]))
       insert_module2_row("NULL", "'abc'")
@@ -2004,6 +2039,88 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       end
     end
 
+    # A relationship declares no default, so it isn't offered one.
+    test "raises when adding a required to-one column to a table with rows" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_row("NULL", "'abc'")
+
+      new_column = %{
+        name: "z_id",
+        type: :uuid,
+        sql_type: "uuid",
+        collation: nil,
+        enum_values: nil,
+        default: nil,
+        null: false,
+        references: "test_fixtures_entity_module2",
+        fk_constraint: "test_fixtures_entity_module2_z_id_$fk",
+        source: {:relationship, :z}
+      }
+
+      context =
+        update_in(reconcile_context([Module2]), [:mapping, Module2, :columns], fn columns ->
+          [new_column | columns]
+        end)
+
+      expected_msg =
+        ~s(cannot add required column "z_id" to table "test_fixtures_entity_module2" - ) <>
+          "1 existing row would have no value - " <>
+          "make the relationship optional: true, or clear the rows"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    # A unique attribute can't declare a default, so it isn't offered one.
+    test "raises when adding a required unique column to a table with rows" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_row("NULL", "'abc'")
+
+      expected_msg =
+        ~s(cannot add required column "z" to table "test_fixtures_entity_module2" - ) <>
+          "1 existing row would have no value - " <>
+          "make the attribute optional: true, or clear the rows"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(unique_column_context(false))
+      end
+    end
+
+    test "raises when making a unique column required while rows hold NULL" do
+      reconcile(unique_column_context(true))
+      insert_module2_row("NULL", "'abc'")
+
+      expected_msg =
+        ~s(cannot make column "z" on table "test_fixtures_entity_module2" required - ) <>
+          "found 1 row with NULL - keep the attribute optional: true, or fix the data"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(unique_column_context(false))
+      end
+    end
+
+    # No member declares a join table's column, so only the rows can give way.
+    test "raises when adding a join table's column back to a table with rows" do
+      context = reconcile_context([Module1, Module2, Module3])
+      reconcile(context)
+      insert_module3_link()
+
+      {:ok, _result} =
+        Connection.query(
+          ~s(ALTER TABLE "hologram_data".#{Mapper.quote_identifier(@module3_join_table)} DROP COLUMN "source_id" CASCADE)
+        )
+
+      expected_msg =
+        ~s(cannot add required column "source_id" to table "#{@module3_join_table}" - ) <>
+          "1 existing row would have no value - clear the rows"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    # The default fills nothing beside the type change, so it isn't offered.
     test "raises for a combined type change and tightening with NULLs despite a default" do
       reconcile(reconcile_context([Module2]))
       insert_module2_row("NULL", "'abc'")
@@ -2019,8 +2136,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       expected_msg =
         ~s(cannot make column "b" on table "test_fixtures_entity_module2" required - ) <>
-          "found 1 row with NULL - " <>
-          "declare default: <value>, keep the attribute optional: true, or fix the data"
+          "found 1 row with NULL - keep the attribute optional: true, or fix the data"
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)

@@ -1174,6 +1174,7 @@ export default class Model {
       [Type.atom("relationship_ops"), Type.map([])],
       [Type.atom("revisions"), revisions],
       [Type.atom("stamp"), Type.nil()],
+      [Type.atom("waiting"), Type.map([])],
     ]);
   }
 

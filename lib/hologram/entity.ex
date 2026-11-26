@@ -719,7 +719,8 @@ defmodule Hologram.Entity do
   # One row read twice - at the root and as another row's embed, or by two queries of one render -
   # arrives as two copies whose includes differ. The kept copy keeps its values and takes every
   # relationship it did not include from the other one, so whichever copy is met first, the row
-  # carries what either included.
+  # carries what either included. Two statements can read different versions of the row, so the
+  # kept copy keeps its own metadata too - the revisions and the hidden numbers of its own values.
   @doc false
   @spec merge_copies(struct, struct) :: struct
   def merge_copies(%entity_type{} = kept, copy) do
@@ -968,6 +969,13 @@ defmodule Hologram.Entity do
   end
 
   def strip_server_only_deep(term), do: term
+
+  @doc """
+  Returns the attributes every entity type has beside the ones it declares, in the shape
+  `__attributes__/0` returns.
+  """
+  @spec system_attributes() :: list({atom, atom, keyword})
+  def system_attributes, do: @system_attributes
 
   # Everything the entity DECLARES, sorted by name. The framework's own __meta__ field is added
   # by the caller rather than here, so that its struct is expanded in the entity's module.

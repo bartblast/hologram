@@ -20,7 +20,9 @@ defmodule Hologram.Sync.WireData do
   #
   # The row's per-column revisions travel beside its data, as `$revisions` - a name no attribute
   # can have, since a declared name never carries the seam, so a client reads them apart from the
-  # values without either being able to shadow the other.
+  # values without either being able to shadow the other. The sequence numbers a render hid,
+  # because they weren't final under its limit, travel the same way, as `$waiting`, and only when
+  # it hid any: the browser holds each back until it is final there.
   #
   # Server-only attributes are dropped by what the MODEL DECLARES, never by finding a sentinel in
   # the row: a row read through the trusted tier holds the real value, and one written moments ago
@@ -72,7 +74,13 @@ defmodule Hologram.Sync.WireData do
   # them for the same reason its value is: a client is told nothing about a column it may not have,
   # its having moved included.
   defp encode_field({:__meta__, metadata}, model) do
-    [{:"$revisions", Map.drop(metadata.revisions, MapSet.to_list(model.server_only))}]
+    revisions = {:"$revisions", Map.drop(metadata.revisions, MapSet.to_list(model.server_only))}
+
+    if metadata.waiting == %{} do
+      [revisions]
+    else
+      [revisions, {:"$waiting", encode_waiting(metadata.waiting, model)}]
+    end
   end
 
   defp encode_field({_name, %NotIncluded{}}, _model), do: []
@@ -85,6 +93,13 @@ defmodule Hologram.Sync.WireData do
       Map.has_key?(model.relationships, name) -> relationship_field(name, value)
       true -> [{name, Codec.encode_wire(value, Map.get(model.attribute_types, name, :uuid))}]
     end
+  end
+
+  # Spelled the way the numbers themselves are, so one past 2^53 travels as a string.
+  defp encode_waiting(waiting, model) do
+    Map.new(waiting, fn {name, number} ->
+      {name, Codec.encode_wire(number, Map.fetch!(model.attribute_types, name))}
+    end)
   end
 
   # An inverse of a to-one adds nothing beside its rows, whose reference fields already say which

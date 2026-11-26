@@ -28,8 +28,10 @@ defmodule Hologram.Migration do
   Ops are declarations, recorded where they are written: aliases in an op resolve at that
   line, and an op inside an `if`, a comprehension or other module-body code is recorded
   regardless of it, and cannot read the module body's variables. Op arguments may call the
-  module's own functions and read its attributes, an attribute read giving the value it holds
-  at the op's line.
+  module's own functions and guards, though not its other macros, and may read its
+  attributes, an attribute read giving the value it holds at the op's line. In `backfill:`
+  such a call or read is pinned, like `^my_fun()` or `^@x`, since a bare name there is a
+  field of the row.
 
   A migration's functions and ops may call only its own functions and the standard
   library's functions that compute on the values they are given - most of Kernel, String,
@@ -54,17 +56,114 @@ defmodule Hologram.Migration do
   designation elsewhere. Requiring the line rather than deleting the grants silently keeps
   the destruction in the file, where a reviewer sees it.
 
-  An op's options are the ones its declaration takes, with one addition: `add_attribute`
-  accepts `backfill:`, the value the rows that predate the column receive. It is a
-  one-time transition value rather than a declaration, so it never enters the model and
+  An op's options are the ones its declaration takes, with one addition: `backfill:`, what
+  the rows that predate the change receive. `add_attribute` and `add_relationship` (to-one)
+  take it, and so do `change_attribute` and `change_relationship` (to-one) turning an
+  optional member required with no type change, which fill only the rows holding nil. It is
+  a one-time transition value rather than a declaration, so it never enters the model and
   never needs repeating in a later file - once applied, the column reads as though it had
   always been declared that way.
 
+  A backfill is a constant, or an expression computed from each row:
+
+      add_attribute :tier, :string, backfill: "standard"
+      add_attribute :tier, :string, backfill: ^@default_tier
+      add_attribute :city, :string, backfill: destination |> split(", ") |> at(0)
+      add_attribute :title, :string, backfill: "Trip to " <> destination
+      add_attribute :name, :string, backfill: coalesce(nickname, first_name <> " " <> last_name)
+      add_attribute :tag_count, :integer, backfill: count(tags)
+      add_attribute :main_tag, :string, backfill: tags |> most_common(name)
+      add_attribute :currency, :string, backfill: trip.currency
+
+  A bare name is a field of the row, and a dot chain reads through to-one relationships,
+  giving nil when a reference is nil. Anything from the surrounding Elixir code is pinned
+  with `^`, an attribute or a sigil included. The words are:
+
+    * `a <> b` joins strings, giving nil when any of them is nil. In a `fn`, a body whose
+      outermost part is `<>` is Elixir, which raises on nil, so write it as `query(a <> b)`
+    * `split(text, separator)` splits as `String.split/2`, with a non-empty string separator,
+      giving nil for nil, and is read through `at`, since a list can't be stored
+    * `at(split(...), n)` picks a part, with `n` from 0 up to 1_000_000, giving nil past the end
+    * `coalesce(a, b, ...)` gives the first value that isn't nil
+    * `count(set)` counts the rows of a to-many relationship, giving 0 for none
+    * `most_common(set, attribute)` gives the attribute's most frequent value among the
+      set's rows, skipping nil, a tie going to the smallest in `sort` order, and nil when no
+      row holds a value. It doesn't take a `:float` attribute: `0.0` and `-0.0` count as one
+      value, so which of them it gives isn't defined
+
+  A `fn` has one clause, and names the row's fields and relationships it reads as its arguments,
+  each a bare name written once, with no pattern or guard. Its body is a query
+  when its outermost part is one of these words other than `<>`, when it's only a field or a path,
+  or when it's wrapped in `query(...)`, and then it runs as one `UPDATE`:
+
+      add_attribute :city, :string, backfill: fn destination ->
+        destination |> split(", ") |> at(0)
+      end
+      add_attribute :label, :string, backfill: fn title, city ->
+        query(title <> " in " <> city)
+      end
+      add_attribute :stop_count, :integer, backfill: fn id ->
+        Offgrid.Stop |> filter(trip_id == ^id) |> count()
+      end
+      add_attribute :currency, :string, backfill: fn id ->
+        Offgrid.Stop |> filter(trip_id == ^id) |> most_common(currency)
+      end
+
+  Inside a query, a module attribute is pinned (`^@x`). When the outermost call is to a function the
+  file imports or the module defines, the body is Elixir and the call is that function rather than
+  a word of the same name. A word inside a query stays the word, whatever the file imports above
+  the op. An import below the op that takes a word's name is refused, unless the body is wrapped in
+  `query(...)`, which always marks a query, since a module can't define `query/1` beside a body
+  using it.
+
+  Any other body is Elixir, and runs row by row:
+
+      add_attribute :slug, :string, backfill: fn title ->
+        title |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
+      end
+
+  A field holding nil is handled in the body, since the `fn` has no other clause:
+
+      add_attribute :slug, :string, backfill: fn title ->
+        case title do
+          nil -> "untitled"
+          title -> String.downcase(title)
+        end
+      end
+
+  Its arguments are the row's own fields, and the body is pure: the standard library's value
+  functions and the migration's own functions. A module attribute is plain `@x` there, read where
+  the op is written. It can't call a query word, so an operator beside one, like
+  `coalesce(a, b) <> "!"`, needs `query(...)` around the whole body.
+
+  Where this departs from an entity's derived field: a query reaches the rows pointing at this one
+  by `Type |> filter(<ref>_id == ^id)`, since a migration's history records no declared inverse,
+  and it takes only the words above, with no `if` and no comparison outside that filter.
+
+  A to-one relationship takes the id of a row of its target, as a constant or an expression:
+
+      add_relationship :owner, Offgrid.User, backfill: ^@admin_id
+      add_relationship :owner, Offgrid.User, backfill: coalesce(creator_id, ^@admin_id)
+      add_relationship :owner, Offgrid.User, backfill: trip.owner_id
+
+  Here `creator` is a to-one relationship to `Offgrid.User`. An id is a reference to a type only
+  through a relationship to it, so a `:uuid` attribute holding one doesn't fit.
+
+  An id no row of the target holds is refused, naming the id and the type. Adding a required
+  to-one to a type that already exists needs a `backfill:` or `optional: true`, since a
+  relationship takes no `default:`.
+
+  Every backfill reads the rows as the ops above it left them, so deleting a field it reads
+  goes below it. Types are strict: the expression's type must be the member's. A required
+  member an expression leaves nil refuses with the count of rows, the filled values are
+  checked against the member's declared rules, and a `default:` never fills what a backfill
+  left nil. A fill leaves `updated_at`, `server_updated_at` and the rows' revisions alone.
+
   A backfill must carry a value. `backfill: nil` is refused, because nil is the absence a
   backfill exists to fill. Adding a required attribute to a table that already holds rows
-  needs one of these: a `backfill:`, a `default:` on the declaration, or making the
-  attribute optional. Without any of them the apply refuses, naming the table and how many
-  rows would have been left without a value.
+  needs one of these: a `backfill:`, a `default:` on the declaration (not for a unique
+  attribute, which can't declare one), or making the attribute optional. Without any of them
+  the apply refuses, naming the table and how many rows would have been left without a value.
 
   A key declared with `unique` is a member of its entity type like any other: `add_unique`
   and `delete_unique` take the key's fields in declared order. A key follows a rename of a
@@ -73,7 +172,10 @@ defmodule Hologram.Migration do
 
   alias Hologram.Migration.CallCheck
   alias Hologram.Migration.FieldAccess
+  alias Hologram.Migration.FieldAccess.Definitions
   alias Hologram.Migration.Loader
+  alias Hologram.Migration.Value
+  alias Hologram.Query.Expression
 
   # A migration module's file name is its version - 14 UTC timestamp digits, nothing else.
   @file_name_regex ~r/^\d{14}\.ex$/
@@ -81,6 +183,17 @@ defmodule Hologram.Migration do
   @ops_attribute :__hologram_migration_ops__
 
   @snapshots_attribute :__hologram_migration_snapshots__
+
+  @fn_backfills_attribute :__hologram_migration_fn_backfills__
+
+  @op_imports_attribute :__hologram_migration_op_imports__
+
+  @op_run_calls_attribute :__hologram_migration_op_run_calls__
+
+  # The module, name and arguments of each function an Elixir backfill fn runs as, so a backfill
+  # can name no other function (see Value.validate_ops!/4). Hologram sets it once the module body
+  # is done, and refuses a body that sets it or makes it accumulate.
+  @backfill_functions_attribute :__hologram_migration_backfill_functions__
 
   @locals_without_parens [
     add_attribute: 2,
@@ -137,6 +250,10 @@ defmodule Hologram.Migration do
     # registration in the quote would run.
     Module.register_attribute(__CALLER__.module, @ops_attribute, accumulate: true)
     Module.register_attribute(__CALLER__.module, @snapshots_attribute, accumulate: true)
+    Module.register_attribute(__CALLER__.module, @fn_backfills_attribute, accumulate: true)
+    Module.register_attribute(__CALLER__.module, @op_imports_attribute, accumulate: true)
+    Module.register_attribute(__CALLER__.module, @op_run_calls_attribute, accumulate: true)
+    Definitions.register_guards(__CALLER__.module)
 
     quote do
       import Hologram.Migration,
@@ -199,17 +316,31 @@ defmodule Hologram.Migration do
   @doc false
   defmacro __before_compile__(env) do
     validate_snapshots_taken!(env)
+    validate_op_imports!(env)
+    validate_no_op_macros!(env)
+    validate_backfill_functions_unset!(env)
 
-    ops =
+    {settled_ops, backfills} =
       env.module
       |> Module.get_attribute(@ops_attribute)
       |> Enum.reverse()
-      |> FieldAccess.rewrite()
+      |> settle_fn_backfills(env)
+
+    {signatures, functions} =
+      backfills
+      |> Enum.reverse()
+      |> Enum.unzip()
+
+    Module.put_attribute(env.module, @backfill_functions_attribute, signatures)
+
+    ops = FieldAccess.rewrite(settled_ops, env)
 
     version = Path.basename(env.file, ".ex")
     path = Path.relative_to_cwd(env.file)
 
     quote do
+      unquote_splicing(functions)
+
       @doc false
       def __hologram_migration__ do
         %{version: unquote(version), path: unquote(path), ops: List.flatten(unquote(ops))}
@@ -227,6 +358,9 @@ defmodule Hologram.Migration do
 
     migration = env.module.__hologram_migration__()
 
+    backfill_functions = Module.get_attribute(env.module, @backfill_functions_attribute)
+
+    Value.validate_ops!(migration.ops, migration.path, env.module, backfill_functions)
     Loader.verify_rename_order!(migration.ops, migration.path)
     Loader.validate_resolved!([migration], build_env())
   end
@@ -464,20 +598,193 @@ defmodule Hologram.Migration do
     end
   end
 
+  # The side of a fn that didn't run read its attributes into snapshots nothing reads, which the
+  # compiler would warn about.
+  defp drop_snapshots(quoted, module) do
+    snapshots =
+      module
+      |> Module.get_attribute(@snapshots_attribute)
+      |> MapSet.new(fn {snapshot, _name, _line} -> snapshot end)
+
+    Macro.prewalk(quoted, fn
+      {:@, _meta, [{name, _name_meta, nil}]} = node ->
+        if MapSet.member?(snapshots, name), do: Module.delete_attribute(module, name)
+
+        node
+
+      node ->
+        node
+    end)
+  end
+
   # Aliases are expanded where the op is written: the op's code is placed in a function
   # defined at the end of the module, where an alias the module defines later would
   # otherwise change what an earlier op names. The expansion runs as though inside that
   # function, so naming an entity type is a runtime reference, as it would be written there,
   # rather than a compile-time dependency that recompiles the migration whenever the entity
-  # module changes.
+  # module changes. A quote's code is data, so an alias in it stays as written, and carries what
+  # it names where the op is written, as a quote there would mark it (see
+  # Value.map_reduce_quote/5).
   defp expand_aliases(quoted, caller) do
-    function_env = %{caller | function: {:__hologram_migration__, 0}}
+    expand_code_aliases(quoted, %{caller | function: {:__hologram_migration__, 0}}, true)
+  end
 
-    Macro.prewalk(quoted, fn
-      {:__aliases__, _meta, _segments} = alias_ast -> Macro.expand(alias_ast, function_env)
-      node -> node
+  # One headed by an attribute is left to the compiler: the head reads a snapshot that isn't set
+  # while the op expands.
+  defp expand_code_aliases(
+         {:__aliases__, _meta, [{:@, _attribute_meta, _args} | _rest]} = ast,
+         _env,
+         _splicing
+       ),
+       do: ast
+
+  # Every alias in the op names what it names where the op is written, so one the op's own code
+  # declares would apply too late, where Elixir runs the code.
+  defp expand_code_aliases({form, _meta, args} = node, env, splicing)
+       when form in [:alias, :require] and is_list(args) do
+    refuse_alias_declaration!(node, env)
+
+    expand_call_aliases(node, env, splicing)
+  end
+
+  defp expand_code_aliases({:__aliases__, _meta, _segments} = alias_ast, env, _splicing) do
+    Macro.expand(alias_ast, env)
+  end
+
+  defp expand_code_aliases({form, _meta, _args} = node, env, splicing)
+       when form in [:quote, :|>] or is_tuple(form) do
+    expand_code = fn code, nil, runs, code_splicing ->
+      {expand_quote_code(code, env, runs, code_splicing), nil}
+    end
+
+    # A pipe on a pipe's right side is the stages after its left side, which can quote it.
+    with ^node <- Value.regroup_pipe(node, env),
+         :error <- Value.map_reduce_quote(node, env, splicing, nil, expand_code) do
+      expand_call_aliases(node, env, splicing)
+    else
+      {:ok, node, nil} -> mark_aliases(node, env)
+      regrouped -> expand_code_aliases(regrouped, env, splicing)
+    end
+  end
+
+  defp expand_code_aliases({_form, _meta, _args} = node, env, splicing) do
+    expand_call_aliases(node, env, splicing)
+  end
+
+  defp expand_code_aliases({left, right}, env, splicing) do
+    {expand_code_aliases(left, env, splicing), expand_code_aliases(right, env, splicing)}
+  end
+
+  defp expand_code_aliases(list, env, splicing) when is_list(list) do
+    Enum.map(list, &expand_code_aliases(&1, env, splicing))
+  end
+
+  defp expand_code_aliases(other, _env, _splicing), do: other
+
+  defp expand_call_aliases({form, meta, args}, env, splicing) do
+    {expand_code_aliases(form, env, splicing), meta, expand_code_aliases(args, env, splicing)}
+  end
+
+  # Code only the compiler can tell runs gets its aliases marked, which holds whether it's code
+  # or data, and an alias it declares refused, since it may run.
+  defp expand_quote_code(code, env, true, splicing), do: expand_code_aliases(code, env, splicing)
+
+  defp expand_quote_code(code, env, :unknown, _splicing) do
+    Macro.prewalk(code, &refuse_alias_declaration!(&1, env))
+
+    mark_aliases(code, env)
+  end
+
+  # A require's options that aren't written out may hold as:.
+  defp refuse_alias_declaration!({form, _meta, args} = node, env)
+       when form in [:alias, :require] and is_list(args) do
+    declares? =
+      case {form, args} do
+        {:alias, _args} -> true
+        {:require, [_module, opts]} -> not Keyword.keyword?(opts) or Keyword.has_key?(opts, :as)
+        {:require, _args} -> false
+      end
+
+    if declares? do
+      Expression.compile_error!(
+        "an op can't declare an alias inside its code - put the #{form} at the top of the module",
+        node,
+        env
+      )
+    end
+
+    node
+  end
+
+  defp refuse_alias_declaration!(node, _env), do: node
+
+  # Marks each alias in the given code with what it names in the given environment, as a quote
+  # marks the aliases it holds: false when no alias of the environment applies. One marked
+  # already, like by a quote of a macro writing the op, keeps its mark.
+  defp mark_aliases(code, env) do
+    Macro.prewalk(code, fn
+      {:__aliases__, meta, [head | _rest] = segments} = alias_ast
+      when is_atom(head) and head != Elixir ->
+        mark =
+          cond do
+            Keyword.has_key?(meta, :alias) -> meta[:alias]
+            Macro.Env.fetch_alias(env, head) == :error -> false
+            true -> Macro.expand(alias_ast, env)
+          end
+
+        {:__aliases__, Keyword.put(meta, :alias, mark), segments}
+
+      node ->
+        node
     end)
   end
+
+  # One function per backfill, so its clause never lands apart from itself. The name is built from
+  # a per-module counter, bounded by the source.
+  # sobelow_skip ["DOS.BinToAtom"]
+  defp hoist_fn_backfill(reading, index, body, env, functions) do
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    name = :"__backfill_#{index}__"
+
+    if Module.defines?(env.module, {name, length(reading.args)}) do
+      raise Hologram.CompileError,
+        message:
+          "#{name}/#{length(reading.args)} is the name a backfill fn runs under - rename the " <>
+            "function",
+        file: env.file,
+        line: reading.env.line
+    end
+
+    definition = FieldAccess.define(:def, env, {name, [], reading.arg_asts}, do: body)
+
+    function =
+      quote do
+        @doc false
+        unquote(definition)
+      end
+
+    signature = {env.module, name, reading.args}
+
+    {Value.function_value(reading, env.module, name), [{signature, function} | functions]}
+  end
+
+  # Options written as a list in place. Ones from a variable or a call are evaluated with the
+  # op, and validate_ops!/4 checks a computed value they hold.
+  defp imports_at(code, caller) do
+    code
+    |> Value.local_calls(caller)
+    |> Map.new(&{&1, Macro.Env.lookup_import(caller, &1)})
+  end
+
+  defp lower_backfill(opts, caller) when is_list(opts) do
+    Enum.map(opts, fn
+      {:backfill, {:fn, _meta, _clauses} = value} -> {:backfill, read_fn_backfill(value, caller)}
+      {:backfill, value} -> {:backfill, Value.lower(value, caller)}
+      other -> other
+    end)
+  end
+
+  defp lower_backfill(opts, _caller), do: opts
 
   # Role ops with module args are global - pattern-specific, so it must precede the
   # generic role clauses below (a module arg would otherwise build an entity-role op).
@@ -506,7 +813,7 @@ defmodule Hologram.Migration do
         entity: unquote(entity_type),
         name: unquote(name),
         type: unquote(type),
-        opts: unquote(opts),
+        opts: unquote(lower_backfill(opts, %{caller | line: line})),
         line: unquote(line)
       }
     end
@@ -544,7 +851,7 @@ defmodule Hologram.Migration do
         entity: unquote(entity_type),
         name: unquote(name),
         type: unquote(type),
-        opts: unquote(opts),
+        opts: unquote(lower_backfill(opts, %{caller | line: line})),
         line: unquote(line)
       }
     end
@@ -589,7 +896,7 @@ defmodule Hologram.Migration do
         op: :change_attribute,
         entity: unquote(entity_type),
         name: unquote(name),
-        changes: unquote(changes),
+        changes: unquote(lower_backfill(changes, %{caller | line: line})),
         line: unquote(line)
       }
     end
@@ -603,7 +910,7 @@ defmodule Hologram.Migration do
         op: :change_relationship,
         entity: unquote(entity_type),
         name: unquote(name),
-        changes: unquote(changes),
+        changes: unquote(lower_backfill(changes, %{caller | line: line})),
         line: unquote(line)
       }
     end
@@ -796,13 +1103,54 @@ defmodule Hologram.Migration do
     caller.module != nil and caller.function == nil
   end
 
+  # Whether a fn is a query can hang on a function defined below the op, which only
+  # __before_compile__ can see, so the op holds a placeholder until then. The query reading and the
+  # body ride in it, so their attributes and aliases are read where the op is written, like any
+  # op's, even though an Elixir body is emitted at the end of the module.
+  defp read_fn_backfill(ast, caller) do
+    reading = Value.read_fn(ast, caller)
+    index = length(Module.get_attribute(caller.module, @fn_backfills_attribute))
+
+    Module.put_attribute(caller.module, @fn_backfills_attribute, {index, reading})
+
+    {:__hologram_fn_backfill__, [], [index, Value.fn_value(reading), reading.body]}
+  end
+
+  # The function an op is compiled into splices in the code an unquote outside a quote returns, so
+  # quoted code in what it returns runs there, and an attribute it reads gets the value the module
+  # body assigned last. Where whether the function splices is up to its other unquotes, which
+  # another op can add, the unquote is refused too, even where on its own it would be a piped
+  # quote's own.
+  defp refuse_spliced_unquote!(form, meta, caller) do
+    raise Hologram.CompileError,
+      message:
+        "an op can't #{form} where the function it's compiled into may splice the code in, " <>
+          "like outside a quote, in a body piped into one or in a quote's separate options " <>
+          "(line #{statement_line(meta, caller)}) - write @x for a value of the file, or put " <>
+          "a quote's body in its parentheses"
+  end
+
   # An op is stored in the migration module's body, and the module's __hologram_migration__/0
   # returns the stored ops (see validate_placement!/1). What the op leaves in the body are the
-  # snapshots of the attributes it reads (see snapshot_attribute_reads/3).
+  # snapshots of the attributes it reads (see snapshot_attribute_reads/4).
   defp register(quoted, caller) do
-    {quoted, snapshots} = snapshot_attribute_reads(quoted, caller.module, [])
+    {quoted, snapshots} = snapshot_attribute_reads(quoted, caller, true, [])
 
     Module.put_attribute(caller.module, @ops_attribute, expand_aliases(quoted, caller))
+
+    code = without_fn_bodies(quoted)
+
+    Module.put_attribute(
+      caller.module,
+      @op_imports_attribute,
+      {imports_at(code, caller), caller.line}
+    )
+
+    Module.put_attribute(
+      caller.module,
+      @op_run_calls_attribute,
+      {Value.may_run_calls(code, caller), caller.line}
+    )
 
     case Enum.reverse(snapshots) do
       [] -> nil
@@ -810,14 +1158,72 @@ defmodule Hologram.Migration do
     end
   end
 
+  # Returns the ops with each fn settled, and the functions the Elixir ones run as, each with
+  # the module, name and arguments a backfill names it by.
+  defp settle_fn_backfills(ops, env) do
+    readings =
+      env.module
+      |> Module.get_attribute(@fn_backfills_attribute)
+      |> Map.new()
+
+    Macro.prewalk(ops, [], fn
+      {:__hologram_fn_backfill__, _meta, [index, value, body]}, functions ->
+        reading = Map.fetch!(readings, index)
+
+        case Value.choose_fn!(reading, env) do
+          :query ->
+            drop_snapshots(body, env.module)
+
+            {value, functions}
+
+          :elixir ->
+            drop_snapshots(value, env.module)
+
+            hoist_fn_backfill(reading, index, body, env, functions)
+        end
+
+      node, functions ->
+        {node, functions}
+    end)
+  end
+
   # An attribute an op reads is read where the op is written: the op's code is placed in a
   # function defined at the end of the module, where @name would read the value the body
   # assigned last. Each read becomes a read of a snapshot attribute of its own, set at the
   # op's line by an assignment the op leaves in the body. Snapshots are numbered per module,
   # so a recompile names them alike, and carry the attribute's name, which an error about
-  # the value then shows. A quote is left alone - its @name is code, not a read.
-  defp snapshot_attribute_reads({:quote, _meta, _args} = node, _module, snapshots) do
-    {node, snapshots}
+  # the value then shows. A quote's code is data, so only what it runs is snapshot, and the
+  # splicing says whether the function splices in an unquote there (see
+  # Value.map_reduce_quote/5), which is refused (see refuse_spliced_unquote!/3).
+  defp snapshot_attribute_reads(ast, caller, splicing, snapshots)
+
+  defp snapshot_attribute_reads({form, meta, [_value]}, caller, splicing, _snapshots)
+       when form in [:unquote, :unquote_splicing] and splicing != false do
+    refuse_spliced_unquote!(form, meta, caller)
+  end
+
+  defp snapshot_attribute_reads(
+         {{:., _dot_meta, [_receiver, :unquote]}, meta, [_value]},
+         caller,
+         splicing,
+         _snapshots
+       )
+       when splicing != false do
+    refuse_spliced_unquote!(:unquote, meta, caller)
+  end
+
+  defp snapshot_attribute_reads({form, _meta, _args} = node, caller, splicing, snapshots)
+       when form in [:quote, :|>] or is_tuple(form) do
+    snapshot_code = &snapshot_quote_code(&1, caller, &2, &3, &4)
+
+    # A pipe on a pipe's right side is the stages after its left side, which can quote it.
+    with ^node <- Value.regroup_pipe(node, caller),
+         :error <- Value.map_reduce_quote(node, caller, splicing, snapshots, snapshot_code) do
+      snapshot_call_attribute_reads(node, caller, splicing, snapshots)
+    else
+      {:ok, node, all_snapshots} -> {node, all_snapshots}
+      regrouped -> snapshot_attribute_reads(regrouped, caller, splicing, snapshots)
+    end
   end
 
   # The atom is built at compile time from an attribute name the migration's source spells and a
@@ -825,39 +1231,70 @@ defmodule Hologram.Migration do
   # sobelow_skip ["DOS.BinToAtom"]
   defp snapshot_attribute_reads(
          {:@, meta, [{name, _name_meta, context}]} = read,
-         module,
+         caller,
+         _splicing,
          snapshots
        )
        when is_atom(name) and (is_atom(context) or context == []) do
-    taken = Module.get_attribute(module, @snapshots_attribute)
+    taken = Module.get_attribute(caller.module, @snapshots_attribute)
 
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     snapshot = :"__hologram_migration_#{name}_#{length(taken)}__"
 
-    Module.put_attribute(module, @snapshots_attribute, {snapshot, name, meta[:line]})
+    Module.put_attribute(caller.module, @snapshots_attribute, {snapshot, name, meta[:line]})
 
     assignment = {:@, meta, [{snapshot, meta, [read]}]}
 
     {{:@, meta, [{snapshot, meta, nil}]}, [assignment | snapshots]}
   end
 
-  defp snapshot_attribute_reads({form, meta, args}, module, snapshots) do
-    {[form, args], all_snapshots} = snapshot_attribute_reads([form, args], module, snapshots)
-
-    {{form, meta, args}, all_snapshots}
+  defp snapshot_attribute_reads({_form, _meta, _args} = node, caller, splicing, snapshots) do
+    snapshot_call_attribute_reads(node, caller, splicing, snapshots)
   end
 
-  defp snapshot_attribute_reads({left, right}, module, snapshots) do
-    {[left, right], all_snapshots} = snapshot_attribute_reads([left, right], module, snapshots)
+  defp snapshot_attribute_reads({left, right}, caller, splicing, snapshots) do
+    {[left, right], all_snapshots} =
+      snapshot_attribute_reads([left, right], caller, splicing, snapshots)
 
     {{left, right}, all_snapshots}
   end
 
-  defp snapshot_attribute_reads(list, module, snapshots) when is_list(list) do
-    Enum.map_reduce(list, snapshots, &snapshot_attribute_reads(&1, module, &2))
+  defp snapshot_attribute_reads(list, caller, splicing, snapshots) when is_list(list) do
+    Enum.map_reduce(list, snapshots, &snapshot_attribute_reads(&1, caller, splicing, &2))
   end
 
-  defp snapshot_attribute_reads(other, _module, snapshots), do: {other, snapshots}
+  defp snapshot_attribute_reads(other, _caller, _splicing, snapshots), do: {other, snapshots}
+
+  defp snapshot_call_attribute_reads({form, meta, args}, caller, splicing, snapshots) do
+    {[form, args], all_snapshots} =
+      snapshot_attribute_reads([form, args], caller, splicing, snapshots)
+
+    {{form, meta, args}, all_snapshots}
+  end
+
+  # Whether a quote unquotes its body can be up to options only the compiler reads, and then an
+  # attribute the body unquotes may or may not be read, so it's refused.
+  defp snapshot_quote_code(code, caller, snapshots, true, splicing) do
+    snapshot_attribute_reads(code, caller, splicing, snapshots)
+  end
+
+  defp snapshot_quote_code(code, caller, snapshots, :unknown, splicing) do
+    case snapshot_attribute_reads(code, caller, splicing, []) do
+      {_code, []} ->
+        {code, snapshots}
+
+      {_code, unknown} ->
+        {:@, meta,
+         [{_snapshot, _snapshot_meta, [{:@, _read_meta, [{name, _name_meta, _context}]}]}]} =
+          List.last(unknown)
+
+        raise Hologram.CompileError,
+          message:
+            "an op can't unquote @#{name} in a quote whose options only the compiler can read, " <>
+              "like an attribute (line #{statement_line(meta, caller)}) - write the options out, or " <>
+              "don't unquote the attribute"
+    end
+  end
 
   defp statement_line(meta, caller) do
     Keyword.get(meta, :line, caller.line)
@@ -934,6 +1371,59 @@ defmodule Hologram.Migration do
     end
   end
 
+  # An op's code is placed in a function defined at the end of the module, so a macro of the
+  # module it calls expands there, and an attribute the macro returns reads the value the body
+  # assigned last. A macro defined below the op counts too, so the calls are judged only here.
+  defp validate_no_op_macros!(env) do
+    env.module
+    |> Module.get_attribute(@op_run_calls_attribute)
+    |> Enum.each(fn {calls, line} ->
+      case Value.own_macro(calls, env.module) do
+        nil ->
+          :ok
+
+        {name, arity} ->
+          raise Hologram.CompileError,
+            message:
+              "a migration op can't call the migration's macro #{name}/#{arity} - make it a " <>
+                "defp, or a defguardp in a guard",
+            file: env.file,
+            line: line
+      end
+    end)
+  end
+
+  # The list of backfill functions is Hologram's to set: one the body set, or made to accumulate,
+  # could let a backfill run a function no fn generated.
+  defp validate_backfill_functions_unset!(env) do
+    unless Module.get_attribute(env.module, @backfill_functions_attribute) == nil do
+      raise Hologram.CompileError,
+        message:
+          "@#{@backfill_functions_attribute} is the attribute Hologram lists the functions " <>
+            "backfill fns run as in - rename the attribute",
+        file: env.file,
+        line: env.line
+    end
+  end
+
+  # An op's code is placed in a function defined at the end of the module, under the imports in
+  # force there, so a call an import changes after the op would run another function than the one
+  # written, and could store another value.
+  defp validate_op_imports!(env) do
+    for {imports, line} <- Module.get_attribute(env.module, @op_imports_attribute),
+        {{name, arity} = call, at_op} <- imports,
+        Macro.Env.lookup_import(env, call) != at_op do
+      raise Hologram.CompileError,
+        message:
+          "a migration op calls #{name}/#{arity}, which an import changes between the op and " <>
+            "the end of the module - put the import at the top of the module",
+        file: env.file,
+        line: line
+    end
+
+    :ok
+  end
+
   # Checked before anything else an op macro does, so an op in the wrong place is told so
   # first, whatever else is wrong with it. Anywhere but a migration module's body - a function,
   # a module nested in a migration or one that only imports the vocabulary, a script - the op
@@ -973,5 +1463,17 @@ defmodule Hologram.Migration do
             "op would record nil for it - ops are recorded wherever they are written, so " <>
             "write them outside if, case and the like:\n" <> lines
     end
+  end
+
+  # A fn's body is judged on its own once it's known to be Elixir - inside query(...) its calls are
+  # words, whatever the file imports.
+  defp without_fn_bodies(quoted) do
+    Macro.prewalk(quoted, fn
+      {:__hologram_fn_backfill__, meta, [index, value, _body]} ->
+        {:__hologram_fn_backfill__, meta, [index, value, nil]}
+
+      node ->
+        node
+    end)
   end
 end
