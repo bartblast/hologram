@@ -293,6 +293,34 @@ defmodule Hologram.Migration.ValueTest do
 
       assert Value.regroup_pipe(pipe, env) == pipe
     end
+
+    test "passes the left side on to the stage Kernel's pipe is given alone" do
+      for {code, regrouped} <- [
+            {"a |> Kernel.|>(b())", "a |> b()"},
+            {"a |> Kernel.|>(Kernel.|>(b()))", "a |> b()"},
+            {"a |> Kernel.|>(b() |> c())", "a |> b() |> c()"},
+            {"Kernel.|>(a, Kernel.|>(b()))", "Kernel.|>(a, b())"}
+          ] do
+        result =
+          code
+          |> Code.string_to_quoted!(columns: false)
+          |> Value.regroup_pipe(__ENV__)
+          |> Macro.to_string()
+
+        assert result == regrouped
+      end
+    end
+
+    test "leaves a stage given to another module's pipe, or under a pipe that isn't Kernel's" do
+      other_pipe = Code.string_to_quoted!("a |> Other.|>(b())")
+
+      assert Value.regroup_pipe(other_pipe, __ENV__) == other_pipe
+
+      kernel_pipe = Code.string_to_quoted!("a |> Kernel.|>(b())")
+      env = %{__ENV__ | functions: [], macros: []}
+
+      assert Value.regroup_pipe(kernel_pipe, env) == kernel_pipe
+    end
   end
 
   describe "resolve!/4" do

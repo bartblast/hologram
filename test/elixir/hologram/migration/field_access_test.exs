@@ -121,6 +121,11 @@ defmodule Hologram.Migration.FieldAccessTest do
 
       assert rewritten("row.a |> Kernel.|>(f())") == ":erlang.map_get(:a, row) |> f()"
 
+      assert rewritten("[] |> Kernel.|>(quote(do: row.title))") ==
+               "[]\n|> quote do\n  row.title\nend"
+
+      assert rewritten("[do: row.title] |> Kernel.|>(quote)") == "[do: row.title] |> quote"
+
       assert rewritten("row.a.b |> Other.|>(put_in(1))") ==
                ":erlang.map_get(:b, :erlang.map_get(:a, row)) |> Other.|>(put_in(1))"
     end
@@ -152,6 +157,8 @@ defmodule Hologram.Migration.FieldAccessTest do
     test "keeps a quote's code as data and rewrites the code it runs" do
       assert unchanged?("quote(do: x.y)")
       assert unchanged?("[do: x.y] |> quote()")
+      assert unchanged?("[do: x.y] |> quote")
+      assert unchanged?("Kernel.|>([do: x.y], quote)")
       assert unchanged?("quote(@opts, do: unquote(x))")
 
       assert rewritten("quote(do: unquote(x.y))") ==

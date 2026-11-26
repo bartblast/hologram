@@ -310,8 +310,9 @@ defmodule Hologram.Migration.Value do
   @doc """
   Returns the given pipe with a pipe on its right side moved to its left, as Kernel's pipe reads
   it: `a |> (b |> c)` becomes `(a |> b) |> c`, so that the left side goes into the right side's
-  first stage, and any pipe still on the right is moved the same way. Returns a node that isn't
-  Kernel's pipe, or has no pipe on its right, as is.
+  first stage, and any pipe still on the right is moved the same way. Kernel's pipe given only a
+  stage on the right side passes the left side on to that stage: `a |> Kernel.|>(b)` becomes
+  `a |> b`. Returns a node that isn't Kernel's pipe, or has neither on its right, as is.
   """
   @spec regroup_pipe(Macro.t(), Macro.Env.t()) :: Macro.t()
   def regroup_pipe({form, meta, [left, {:|>, _right_meta, [middle, last]}]} = node, env) do
@@ -319,6 +320,15 @@ defmodule Hologram.Migration.Value do
     # pipe, which can name another import, decides nothing.
     if kernel_pipe?(node, env),
       do: regroup_pipe({form, meta, [{form, meta, [left, middle]}, last]}, env),
+      else: node
+  end
+
+  def regroup_pipe(
+        {form, meta, [left, {{:., _dot_meta, [receiver, :|>]}, _call_meta, [stage]}]} = node,
+        env
+      ) do
+    if kernel_pipe?(node, env) and FieldAccess.kernel?(receiver, env),
+      do: regroup_pipe({form, meta, [left, stage]}, env),
       else: node
   end
 

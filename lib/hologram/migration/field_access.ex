@@ -63,8 +63,9 @@ defmodule Hologram.Migration.FieldAccess do
   def rewrite({:quote, _meta, args} = node, env, splicing) when is_list(args),
     do: rewrite_quote(node, env, splicing)
 
+  # A quote a pipe goes into can be bare, with no parentheses.
   def rewrite({:|>, meta, [_left, {:quote, _quote_meta, args}]} = node, env, splicing)
-      when is_list(args) do
+      when is_list(args) or is_atom(args) do
     if own_macro?(env, meta, :|>, 2), do: node, else: rewrite_quote(node, env, splicing)
   end
 
@@ -73,7 +74,7 @@ defmodule Hologram.Migration.FieldAccess do
         env,
         splicing
       )
-      when is_list(args),
+      when is_list(args) or is_atom(args),
       do: rewrite_quote(node, env, splicing)
 
   # A field of an unquote fragment's value is decided once the value is unquoted.
@@ -304,20 +305,14 @@ defmodule Hologram.Migration.FieldAccess do
     do: {rewrite(form, env, splicing), meta, rewrite(args, env, splicing)}
 
   # A pipe on the right side is the stages after the left side, the first of which takes it. So is
-  # Kernel's pipe given only a stage, which passes the left side on to it.
+  # Kernel's pipe given only a stage, which passes the left side on to it. Either is rewritten as
+  # regrouped, which can be a pipe into a quote.
   defp rewrite_kernel_pipe({form, meta, [left, right]} = pipe, env, splicing) do
-    case {kernel_pipe_stage(right, env), Value.regroup_pipe(pipe, env)} do
-      {{:ok, stage}, _pipe} -> rewrite_kernel_pipe({form, meta, [left, stage]}, env, splicing)
-      {:error, ^pipe} -> {form, meta, rewrite_pipe(left, right, env, splicing)}
-      {:error, regrouped} -> rewrite(regrouped, env, splicing)
+    case Value.regroup_pipe(pipe, env) do
+      ^pipe -> {form, meta, rewrite_pipe(left, right, env, splicing)}
+      regrouped -> rewrite(regrouped, env, splicing)
     end
   end
-
-  defp kernel_pipe_stage({{:., _dot_meta, [receiver, :|>]}, _meta, [stage]}, env) do
-    if kernel?(receiver, env), do: {:ok, stage}, else: :error
-  end
-
-  defp kernel_pipe_stage(_right, _env), do: :error
 
   # The left side and the call a pipe passes it to, which takes no parentheses when it takes
   # nothing else.

@@ -462,7 +462,10 @@ defmodule Hologram.MigrationTest do
             "quote(bind_quoted: [x: [unquote: false, do: unquote(@o)] |> quote()], do: x)",
             # A pipe on the right side is the stages after the left side, the first a quote.
             "[do: @o] |> (quote() |> inspect())",
-            "Kernel.|>([do: @o], quote() |> inspect())"
+            "Kernel.|>([do: @o], quote() |> inspect())",
+            # So is Kernel's pipe given only a stage.
+            "[do: @o] |> Kernel.|>(quote())",
+            "[unquote: false] |> Kernel.|>(quote(do: unquote(@o)))"
           ] do
         module =
           compile_migration("20260813091522", """
@@ -687,17 +690,21 @@ defmodule Hologram.MigrationTest do
     end
 
     test "keeps an alias a quote takes from a pipe on a pipe's right side" do
-      body = """
-      change_entity MyApp.Task do
-        add_attribute :first, :string,
-          default: [do: (alias String, as: Lib)] |> (quote() |> Macro.to_string())
+      for default <- [
+            "[do: (alias String, as: Lib)] |> (quote() |> Macro.to_string())",
+            "Macro.to_string([do: (alias String, as: Lib)] |> Kernel.|>(quote()))"
+          ] do
+        body = """
+        change_entity MyApp.Task do
+          add_attribute :first, :string, default: #{default}
+        end
+        """
+
+        module = compile_migration("20260813091522", body)
+
+        assert [%{op: :add_attribute, opts: opts}] = module.__hologram_migration__().ops
+        assert opts[:default] == "alias String, as: Lib"
       end
-      """
-
-      module = compile_migration("20260813091522", body)
-
-      assert [%{op: :add_attribute, opts: opts}] = module.__hologram_migration__().ops
-      assert opts[:default] == "alias String, as: Lib"
     end
 
     test "keeps an alias in a do that a quote with separate options ignores" do
