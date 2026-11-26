@@ -18,6 +18,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Query
   alias Hologram.Sync.Carry
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module26, as: Channel
   alias Hologram.Test.Fixtures.Entity.Module28, as: Message
   alias Hologram.Test.Fixtures.Entity.Module29, as: Label
@@ -51,6 +52,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module58, as: ChangedProject
   alias Hologram.Test.Fixtures.Policy.Module59, as: ChangedTask
+  alias Hologram.Test.Fixtures.Policy.Module64, as: PolicyCodedLabel
   alias Hologram.Test.Fixtures.Policy.Module8
   alias Hologram.Test.Fixtures.Policy.Module9, as: SelfParent
   alias Hologram.Test.Fixtures.Policy.Readers.Module18, as: ReadersModule18
@@ -1145,6 +1147,10 @@ defmodule Hologram.AuthTest do
   # A template, a derived field and the props it passes hold a row with its server-only attributes
   # replaced by the placeholder, which a rule reading them is answered past.
   describe "can?/3 on a row holding server-only placeholders" do
+    defmodule NoEntity do
+      defstruct [:id, :token]
+    end
+
     test "judges a stored row by its stored server-only values" do
       steward_id = Entity.generate_id()
 
@@ -1174,6 +1180,36 @@ defmodule Hologram.AuthTest do
         |> Entity.strip_server_only()
 
       refute can?(nil, :read, row)
+    end
+
+    # The row's only update line covers one field, so a field of an update and an update changing it
+    # are both judged by that line's rule.
+    test "judges an update by the stored server-only values its field's line reads" do
+      row = create_stripped(PolicyCodedLabel, code: "kestrel", label: "a")
+
+      assert can?(nil, {:update, :label}, row)
+      assert can?(nil, :update, row, label: "b")
+    end
+
+    # A failed statement aborts the test's transaction, so any read after it raises.
+    test "reads no stored row when no rule of the operation reads a server-only attribute" do
+      row = create_stripped(Module15, token: "tok_1")
+
+      assert {:error, %Postgrex.Error{}} = Postgrex.query(DB.pool_name(), "SELECT no_column", [])
+
+      assert can?(nil, :read, row)
+    end
+
+    test "raises on a struct that is no entity as it does without a placeholder" do
+      placeholder = %Entity.ServerOnly{__meta__: %{field: :token}}
+
+      assert_raise UndefinedFunctionError, ~r/__policies__/, fn ->
+        can?(nil, :read, %NoEntity{id: Entity.generate_id(), token: "tok_1"})
+      end
+
+      assert_raise UndefinedFunctionError, ~r/__policies__/, fn ->
+        can?(nil, :read, %NoEntity{id: Entity.generate_id(), token: placeholder})
+      end
     end
 
     defp create_stripped(entity_type, values) do

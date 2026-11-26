@@ -3241,11 +3241,6 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
-  # IMPORTANT!
-  # Keep client-side Renderer "escaping" and server-side Renderer "escaping" unit tests consistent.
-  #
-  # Note: the behaviour is different on client-side vs server-side
-  # because client-side escaping is delegated to Snabbdom
   describe "server-only values" do
     @token_placeholder "%Hologram.Entity.ServerOnly{__meta__: %{field: :token}}"
 
@@ -3353,6 +3348,11 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  # IMPORTANT!
+  # Keep client-side Renderer "escaping" and server-side Renderer "escaping" unit tests consistent.
+  #
+  # Note: the behaviour is different on client-side vs server-side
+  # because client-side escaping is delegated to Snabbdom
   describe "escaping" do
     test "text inside non-raw-text elements" do
       # <div>abc < xyz</div>

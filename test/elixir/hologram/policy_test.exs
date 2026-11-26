@@ -19,6 +19,7 @@ defmodule Hologram.PolicyTest do
       locked_set_links: 1,
       new_row_chains: 1,
       operation_key: 1,
+      operation_reads_server_only?: 2,
       operation_reads: 2,
       operation_rules: 2,
       operations: 1,
@@ -737,6 +738,52 @@ defmodule Hologram.PolicyTest do
       assert field_rules(policy, :topic) == [limited, whole]
       assert field_rules(policy, :name) == [whole]
       assert field_rules(%{}, :name) == []
+    end
+  end
+
+  describe "operation_reads_server_only?/2" do
+    defmodule ServerOnlyReadsFixture1 do
+      use Hologram.Entity
+
+      attribute :code, :string, server_only: true
+      attribute :label, :string
+      attribute :note, :string
+
+      allow :read
+      allow :delete, when: code == "x" or label == "x"
+      allow :update, only: [:label], when: code == "x"
+      allow :update, only: [:note]
+    end
+
+    defmodule ServerOnlyReadsFixture2 do
+      use Hologram.Entity
+
+      attribute :code, :string, server_only: true
+
+      allow :read
+      allow :update, when: new(code) == "x"
+    end
+
+    test "holds for an operation a rule of which reads a server-only attribute" do
+      assert operation_reads_server_only?(ServerOnlyReadsFixture1, :delete)
+    end
+
+    test "doesn't hold for an operation no rule of which reads one" do
+      refute operation_reads_server_only?(ServerOnlyReadsFixture1, :read)
+    end
+
+    test "counts every update line's rules for an update, whole or of a field" do
+      assert operation_reads_server_only?(ServerOnlyReadsFixture1, :update)
+      assert operation_reads_server_only?(ServerOnlyReadsFixture1, {:update, :note})
+      assert operation_reads_server_only?(ServerOnlyReadsFixture1, {:update, [:note]})
+    end
+
+    test "counts a clause reading the row after the change" do
+      assert operation_reads_server_only?(ServerOnlyReadsFixture2, :update)
+    end
+
+    test "doesn't hold for an operation the policy holds no rules for" do
+      refute operation_reads_server_only?(ServerOnlyReadsFixture1, :archive)
     end
   end
 

@@ -127,7 +127,7 @@ defmodule Hologram.Auth do
   @spec can?(struct | Server.identity_id() | nil, atom | {atom, atom | list(atom)}, struct) ::
           boolean
   def can?(user_or_id, operation, entity) do
-    evaluate(user_or_id, operation, with_stored_server_only(entity), :stored)
+    evaluate(user_or_id, operation, with_stored_server_only(entity, operation), :stored)
   end
 
   # The same evaluation with the grants taken from the given source rather than read plainly from
@@ -170,7 +170,7 @@ defmodule Hologram.Auth do
         ) ::
           boolean
   def can?(user_or_id, operation, %entity_type{} = row, values) do
-    row = with_stored_server_only(row)
+    row = with_stored_server_only(row, operation)
 
     validate_change_row!(row)
     validate_change_values!(entity_type, values)
@@ -1372,32 +1372,37 @@ defmodule Hologram.Auth do
   # placeholder - a template, a derived field and the props it passes hold the row stripped (see
   # Hologram.Entity.ServerOnly), while a rule reading such an attribute is the server's to judge on
   # the row as stored, as the browser's verdict on it is. Read raw by id, the way a delegation
-  # reads its target. Only those attributes are put back, so a field the caller changed is judged
-  # as given, and a row with no stored copy, a new struct, keeps its placeholders. The attributes
-  # holding one are found before the type is asked for its server-only ones, so a struct that is
-  # no entity reaches the operation's validation as it did.
-  defp with_stored_server_only(%entity_type{} = row) do
+  # reads its target, and only when a rule of the asked operation reads a server-only attribute -
+  # for an update, any update line's (see Policy.operation_reads_server_only?/2) - so a template
+  # asking about each row it lists reads none for a type whose rules read none. Only those
+  # attributes are put back, so a field the caller changed is judged as given, and a row with no
+  # stored copy, a new struct, keeps its placeholders. A struct that is no entity reaches the
+  # operation's validation as it did.
+  defp with_stored_server_only(%entity_type{} = row, operation) do
     placeholder_names =
       for {name, value} <- Map.from_struct(row), Entity.server_only?(value), do: name
 
-    case placeholder_names do
-      [] ->
-        row
-
-      placeholder_names ->
-        names =
-          entity_type
-          |> Entity.server_only_attribute_names()
-          |> Enum.filter(&(&1 in placeholder_names))
-
-        case names != [] and row.id != nil and EntityOperations.get(entity_type, row.id) do
-          %^entity_type{} = stored -> Map.merge(row, Map.take(stored, names))
-          _no_stored_copy -> row
-        end
+    if placeholder_names != [] and Reflection.entity?(entity_type) and row.id != nil do
+      put_stored_server_only(row, placeholder_names, operation)
+    else
+      row
     end
   end
 
-  defp with_stored_server_only(entity), do: entity
+  defp with_stored_server_only(entity, _operation), do: entity
+
+  defp put_stored_server_only(%entity_type{} = row, placeholder_names, operation) do
+    names =
+      entity_type
+      |> Entity.server_only_attribute_names()
+      |> Enum.filter(&(&1 in placeholder_names))
+
+    case names != [] and Policy.operation_reads_server_only?(entity_type, operation) and
+           EntityOperations.get(entity_type, row.id) do
+      %^entity_type{} = stored -> Map.merge(row, Map.take(stored, names))
+      _no_stored_copy -> row
+    end
+  end
 
   # A keyword list holding a __struct__ key becomes a struct once it's a map, so it's judged as one.
   defp validate_change_values!(entity_type, values) do
