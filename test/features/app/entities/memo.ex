@@ -10,5 +10,5 @@ defmodule HologramFeatureTests.Entities.Memo do
   relationship :author, User, optional: true
 
   allow :read, when: author_id == user_id() or shared == true
-  allow :update, as: :pin, only: [:pinned], when: pinned == false or author_id == user_id()
+  allow :update, as: :pin, only: [pinned], when: pinned == false or author_id == user_id()
 end

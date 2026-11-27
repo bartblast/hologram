@@ -14,7 +14,7 @@ defmodule HologramFeatureTests.Entities.Leg do
 
   allow :update,
     as: :rename,
-    only: [:name],
+    only: [name],
     to: {:editor, stop.trip},
     when: stop.trip.archived == false
 end

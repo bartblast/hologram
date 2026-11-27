@@ -7,7 +7,7 @@ defmodule HologramFeatureTests.Entities.Reaction do
   attribute :emoji, :string
   attribute :reactor, :string
 
-  unique [:reactor, :emoji]
+  unique [reactor, emoji]
 
   allow :create
   allow :read

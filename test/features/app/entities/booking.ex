@@ -12,5 +12,5 @@ defmodule HologramFeatureTests.Entities.Booking do
 
   # Only ever asked through can? - confirming is a change to its own field, so the line grants
   # setting that field and nothing else.
-  allow :update, as: :confirm, only: [:confirmed], when: guests <= capacity
+  allow :update, as: :confirm, only: [confirmed], when: guests <= capacity
 end
