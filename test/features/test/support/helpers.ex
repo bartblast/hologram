@@ -766,6 +766,19 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Returns the configured ChromeDriver capabilities with the browser's back/forward cache turned
+  off. It is for a session where Back or Forward must load a new document, since Chrome no longer
+  lets an `unload` listener keep a page out of the cache.
+  """
+  @spec capabilities_without_back_forward_cache() :: map
+  def capabilities_without_back_forward_cache do
+    :wallaby
+    |> Application.fetch_env!(:chromedriver)
+    |> Keyword.fetch!(:capabilities)
+    |> update_in([:chromeOptions, :args], &["--disable-back-forward-cache" | &1])
+  end
+
+  @doc """
   Returns whether the chunk bundle with the given digest defines the given
   function (see `bundle_defines?/2`).
   """
@@ -960,15 +973,6 @@ defmodule HologramFeatureTests.Helpers do
     url = %{Endpoint.struct_url() | port: port, scheme: "http"}
 
     URI.to_string(url)
-  end
-
-  @doc """
-  Keeps the browser from putting the document the `session` shows into its back/forward cache,
-  so that coming back to it with Back or Forward loads a new document. Adds an `unload` listener,
-  which makes a page ineligible for Chrome's back/forward cache.
-  """
-  def keep_out_of_back_forward_cache(session) do
-    Browser.execute_script(session, "window.addEventListener('unload', () => {});")
   end
 
   @doc """

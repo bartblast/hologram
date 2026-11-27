@@ -289,9 +289,11 @@ defmodule HologramFeatureTests.NavigationTest do
     end
 
     # The page is left through a client-side navigation first, which stores its snapshot in OPFS,
-    # and then by a full page load, which stores a newer one in session storage. The new document
-    # Back loads restores the newer one. The script checks that the older one is in OPFS, and the
-    # mark makes the test fail if the browser brings the page back from its back/forward cache.
+    # and then by a full page load, which stores a newer one in session storage. The test's session
+    # runs Chrome with the back/forward cache turned off, so Back loads a new document, which
+    # restores the newer one. The script checks that the older one is in OPFS, and the mark makes
+    # the test fail if the browser still brings the page back from its back/forward cache.
+    @sessions [[capabilities: capabilities_without_back_forward_cache()]]
     feature "back from a page outside the app restores the state the page was last left in", %{
       session: session
     } do
@@ -307,7 +309,6 @@ defmodule HologramFeatureTests.NavigationTest do
       |> click(button("Put page 1 result B"))
       |> assert_text("Page 1 result B")
       |> assert_script_result(@stored_in_opfs_script, true)
-      |> keep_out_of_back_forward_cache()
       |> mark_document()
       |> click(link("External link"))
       |> assert_text("External Page")
