@@ -1141,7 +1141,8 @@ defmodule Hologram.Entity.Validator do
     raise Hologram.CompileError,
       file: file,
       line: line,
-      message: "invalid unique #{inspect(fields)} in #{inspect(module)} - #{reason}"
+      message:
+        "invalid unique #{QueryExpression.source_names(fields)} in #{inspect(module)} - #{reason}"
   end
 
   defp raise_sort_misplaced!(module, name) do
@@ -1287,7 +1288,7 @@ defmodule Hologram.Entity.Validator do
     do: "#{inspect(field)} is a derived field, which has no column"
 
   defp unique_field_refusal(_module, field, {:reference, referenced}) do
-    "#{inspect(field)} is the reference field of relationship #{inspect(referenced)} - name the relationship, #{inspect(referenced)}"
+    "#{inspect(field)} is the reference field of relationship #{inspect(referenced)} - name the relationship, #{referenced}"
   end
 
   defp unique_field_refusal(module, field, :unknown),
@@ -2368,7 +2369,7 @@ defmodule Hologram.Entity.Validator do
       raise_invalid_unique!(
         module,
         fields,
-        "unique #{inspect(repeated)} already covers these fields",
+        "unique #{QueryExpression.source_names(repeated)} already covers these fields",
         location
       )
     end

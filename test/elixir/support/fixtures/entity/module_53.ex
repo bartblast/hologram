@@ -18,12 +18,12 @@ defmodule Hologram.Test.Fixtures.Entity.Module53 do
 
   relationship :owner, Module1, optional: true
 
-  unique [:a, :b]
-  unique [:b, :d]
-  unique [:c, :kind, :owner]
-  unique [:d, :e, :f]
-  unique [:flag, :held_at, :kind, :owner]
-  unique [:kind, :slug]
+  unique [a, b]
+  unique [b, d]
+  unique [c, kind, owner]
+  unique [d, e, f]
+  unique [flag, held_at, kind, owner]
+  unique [kind, slug]
 
   allow :create
   allow :read

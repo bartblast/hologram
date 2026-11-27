@@ -27,8 +27,9 @@ defmodule Hologram.Migration do
 
   Ops are declarations, recorded where they are written: aliases in an op resolve at that
   line, and an op inside an `if`, a comprehension or other module-body code is recorded
-  regardless of it, and cannot read the module body's variables. Op arguments may call the
-  module's own functions and guards, though not its other macros, and may read its
+  regardless of it, and cannot read the module body's variables - a field is named by its atom,
+  like `delete_attribute :status`, and a bare name where an op takes one is refused. Op arguments
+  may call the module's own functions and guards, though not its other macros, and may read its
   attributes, an attribute read giving the value it holds at the op's line. In `backfill:`
   such a call or read is pinned, like `^my_fun()` or `^@x`, since a bare name there is a
   field of the row.
@@ -179,6 +180,25 @@ defmodule Hologram.Migration do
 
   # A migration module's file name is its version - 14 UTC timestamp digits, nothing else.
   @file_name_regex ~r/^\d{14}\.ex$/
+
+  # The arguments of each member op that name a field, by position, and the ops whose first
+  # argument is a list of field names.
+  @field_name_positions %{
+    add_attribute: [0],
+    add_enum_value: [0],
+    add_relationship: [0],
+    change_attribute: [0],
+    change_relationship: [0],
+    delete_attribute: [0],
+    delete_enum_value: [0],
+    delete_relationship: [0],
+    rename_attribute: [0, 1],
+    rename_enum_value: [0],
+    rename_relationship: [0, 1],
+    reorder_enum_values: [0]
+  }
+
+  @field_list_ops [:add_unique, :delete_unique]
 
   @ops_attribute :__hologram_migration_ops__
 
@@ -395,7 +415,11 @@ defmodule Hologram.Migration do
 
     block
     |> block_statements()
-    |> Enum.map(&member_op(&1, entity_type, __CALLER__))
+    |> Enum.map(
+      &(&1
+        |> refuse_bare_field_names!(__CALLER__)
+        |> member_op(entity_type, __CALLER__))
+    )
     |> register(__CALLER__)
   end
 
@@ -450,7 +474,11 @@ defmodule Hologram.Migration do
     member_ops =
       block
       |> block_statements()
-      |> Enum.map(&member_op(&1, entity_type, __CALLER__))
+      |> Enum.map(
+        &(&1
+          |> refuse_bare_field_names!(__CALLER__)
+          |> member_op(entity_type, __CALLER__))
+      )
 
     register([create_op | member_ops], __CALLER__)
   end
@@ -1097,6 +1125,47 @@ defmodule Hologram.Migration do
       message:
         "invalid statement in a migration entity block starting at line #{caller.line} - " <>
           "entity blocks contain only member ops"
+  end
+
+  # An op can't read the module body's variables, so a bare name where it takes a field name is
+  # always the field's atom written without its colon - refused with the atom, rather than left to
+  # Elixir's undefined variable error. Located at the bare name.
+  defp refuse_bare_field_names!({op, _meta, args} = statement, caller) when is_list(args) do
+    names =
+      cond do
+        op in @field_list_ops and match?([fields] when is_list(fields), args) ->
+          hd(args)
+
+        Map.has_key?(@field_name_positions, op) ->
+          @field_name_positions
+          |> Map.fetch!(op)
+          |> Enum.flat_map(&Enum.slice(args, &1, 1))
+
+        true ->
+          []
+      end
+
+    Enum.each(names, fn
+      {name, meta, context} when is_atom(name) and is_atom(context) ->
+        if not special_form_name?(name) do
+          raise Hologram.CompileError,
+            message: "#{op} names a field with an atom, got: #{name} - write #{inspect(name)}",
+            file: caller.file,
+            line: statement_line(meta, caller)
+        end
+
+      _name ->
+        :ok
+    end)
+
+    statement
+  end
+
+  defp refuse_bare_field_names!(statement, _caller), do: statement
+
+  defp special_form_name?(name) do
+    name_string = Atom.to_string(name)
+    String.starts_with?(name_string, "__") and String.ends_with?(name_string, "__")
   end
 
   defp module_body?(caller) do

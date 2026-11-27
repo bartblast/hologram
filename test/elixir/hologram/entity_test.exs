@@ -432,8 +432,8 @@ defmodule Hologram.EntityTest do
       defmodule InlineEntityFixture174 do
         use Hologram.Entity
 
-        unique [:workspace, :slug]
-        unique [:position, :workspace]
+        unique [workspace, slug]
+        unique [position, workspace]
 
         attribute :position, :integer
         attribute :slug, :string
