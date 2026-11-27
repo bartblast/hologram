@@ -275,6 +275,21 @@ defmodule Hologram.Query.Expression do
 
   def name!(ast, names, env), do: name_error!(ast, names, env)
 
+  @doc false
+  # The given names as source code writes them in a list: a field name bare, as an entity type
+  # writes it, and anything no bare name spells - a module, a quoted atom, a string, nil - as
+  # inspect/1 spells it. A value that is no proper list is spelled by inspect/1 whole.
+  @spec source_names(any) :: String.t()
+  def source_names(names) when is_list(names) do
+    if List.improper?(names) do
+      inspect(names)
+    else
+      "[" <> Enum.map_join(names, ", ", &source_name/1) <> "]"
+    end
+  end
+
+  def source_names(value), do: inspect(value)
+
   @doc """
   Returns whether the given node is `new()` of a name or a path, with any names dotted after it.
   """
@@ -1993,6 +2008,12 @@ defmodule Hologram.Query.Expression do
       true -> operand_error!(description, ast, env)
     end
   end
+
+  defp source_name(name) when is_atom(name) and name not in [nil, true, false] do
+    if Macro.classify_atom(name) == :identifier, do: Atom.to_string(name), else: inspect(name)
+  end
+
+  defp source_name(value), do: inspect(value)
 
   # Whether a variable of the surrounding code is bound under the bare name, looked up the way
   # Macro.Env.has_var?/2 keys it - by the counter a macro's hygiene gave it, or else by its context.

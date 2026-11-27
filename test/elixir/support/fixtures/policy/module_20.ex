@@ -14,7 +14,7 @@ defmodule Hologram.Test.Fixtures.Policy.Module20 do
 
   allow :update,
     as: :archive,
-    only: [:subject],
+    only: [subject],
     when: none(card <- shelf.cards, card.flagged == true)
 
   allow :read

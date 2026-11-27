@@ -6,6 +6,7 @@ defmodule Hologram.Entity.Validator do
   alias Hologram.Entity
   alias Hologram.MisuseError
   alias Hologram.Policy
+  alias Hologram.Query.Expression, as: QueryExpression
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
@@ -1959,7 +1960,7 @@ defmodule Hologram.Entity.Validator do
     with [key] <- Enum.filter([:only, :except], &Keyword.has_key?(spec, &1)),
          fields = Keyword.fetch!(spec, key),
          true <- field_list?(fields) do
-      ", #{key}: #{inspect(fields)}"
+      ", #{key}: #{QueryExpression.source_names(fields)}"
     else
       _other -> ""
     end
@@ -2067,7 +2068,7 @@ defmodule Hologram.Entity.Validator do
     if not field_list?(fields) do
       raise Hologram.CompileError,
         message:
-          "invalid #{key} option #{inspect(fields)} for #{line} in #{inspect(module)} - the #{key} option must be a non-empty list of field names"
+          "invalid #{key} option #{QueryExpression.source_names(fields)} for #{line} in #{inspect(module)} - the #{key} option must be a non-empty list of field names"
     end
 
     :ok

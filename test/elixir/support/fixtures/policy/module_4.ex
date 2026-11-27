@@ -6,5 +6,5 @@ defmodule Hologram.Test.Fixtures.Policy.Module4 do
 
   relationship :parent, Module2, optional: true
 
-  allow :update, as: :archive, only: [:parent], via: {:archive, parent}
+  allow :update, as: :archive, only: [parent], via: {:archive, parent}
 end

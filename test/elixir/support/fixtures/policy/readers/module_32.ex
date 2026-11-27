@@ -19,7 +19,7 @@ defmodule Hologram.Test.Fixtures.Policy.Readers.Module32 do
   allow :delete, via: {:update, workshop}, when: none(peg <- pegs, peg.loose == true)
 
   allow :update,
-    only: [:label],
+    only: [label],
     to: {:editor, bench.workshop},
     when: none(peg <- pegs, peg.loose == true)
 end

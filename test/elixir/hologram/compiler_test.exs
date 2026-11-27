@@ -3053,7 +3053,7 @@ defmodule Hologram.CompilerTest do
 
       allow :update,
         as: :archive,
-        only: [:name],
+        only: [name],
         when:
           none(
             member <- members,
@@ -3062,7 +3062,7 @@ defmodule Hologram.CompilerTest do
 
       allow :update,
         as: :publish,
-        only: [:name],
+        only: [name],
         when:
           any(
             member <- members,
@@ -3072,7 +3072,7 @@ defmodule Hologram.CompilerTest do
 
       allow :update,
         as: :close,
-        only: [:name],
+        only: [name],
         when:
           any(
             member <- members,
@@ -3083,7 +3083,7 @@ defmodule Hologram.CompilerTest do
 
       allow :update,
         as: :share,
-        only: [:name],
+        only: [name],
         when: any(member <- members, none(label <- member.labels, label.name == "x"))
     end
 
@@ -3134,7 +3134,7 @@ defmodule Hologram.CompilerTest do
       relationship :labels, [Hologram.CompilerTest.BakedLabel]
 
       allow :read
-      allow :update, except: [:name], when: none(labels)
+      allow :update, except: [name], when: none(labels)
     end
 
     defmodule BakedSecretBoard do

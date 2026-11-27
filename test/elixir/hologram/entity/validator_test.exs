@@ -1002,8 +1002,8 @@ defmodule Hologram.Entity.ValidatorTest do
         attribute :name, :string
         attribute :topic, :string
 
-        allow :update, only: [:topic]
-        allow :update, except: [:topic]
+        allow :update, only: [topic]
+        allow :update, except: [topic]
       end
 
       assert LimitedLineFixture.__policies__() == [
@@ -1022,7 +1022,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
           attribute :topic, :string
 
-          allow :update, only: [:topic], except: [:topic]
+          allow :update, only: [topic], except: [topic]
         end
       end
     end
@@ -1037,7 +1037,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
           attribute :topic, :string
 
-          allow :read, only: [:topic]
+          allow :read, only: [topic]
         end
       end
     end
@@ -1070,13 +1070,13 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "names a field-limited line with its fields in a refusal" do
       expected_msg =
-        "invalid to option nil for allow :update, as: :retitle, except: [:owner] in Hologram.Entity.ValidatorTest.LimitedNilToFixture - omit the option instead"
+        "invalid to option nil for allow :update, as: :retitle, except: [owner] in Hologram.Entity.ValidatorTest.LimitedNilToFixture - omit the option instead"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule LimitedNilToFixture do
           use Hologram.Entity
 
-          allow :update, as: :retitle, except: [:owner], to: nil
+          allow :update, as: :retitle, except: [owner], to: nil
         end
       end
     end
@@ -1102,7 +1102,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule StringFieldFixture do
           use Hologram.Entity
 
-          allow :update, only: ["topic"]
+          allow :update, only: ^["topic"]
         end
       end
     end
@@ -1115,7 +1115,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule ImproperFieldsFixture do
           use Hologram.Entity
 
-          allow :update, only: [:topic | :tail]
+          allow :update, only: ^[:topic | :tail]
         end
       end
     end
@@ -1128,7 +1128,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule ImproperFieldsNilViaFixture do
           use Hologram.Entity
 
-          allow :update, via: nil, only: [:topic | :tail]
+          allow :update, via: nil, only: ^[:topic | :tail]
         end
       end
     end

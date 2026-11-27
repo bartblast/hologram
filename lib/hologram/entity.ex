@@ -218,10 +218,12 @@ defmodule Hologram.Entity do
       its other options allow. Several lines of one operation may share a name, and `can?` is true
       when any of them holds. A name can't be a framework operation, and one name can't label lines
       of two operations (`allow :grant_role` and `allow {:grant_role, role}` are one operation).
-    * `only:` / `except:` - on an update line, the fields it covers: `only: [:topic]` covers the
-      listed fields, `except: [:project]` every field but the listed ones, fields added to the
+    * `only:` / `except:` - on an update line, the fields it covers: `only: [topic]` covers the
+      listed fields, `except: [project]` every field but the listed ones, fields added to the
       entity type later included. A field is an attribute or a relationship, a to-one by its
-      relationship name (`:project`, not `:project_id`). An update passes when every field it
+      relationship name (`project`, not `project_id`), written as a bare name - an atom never names
+      a field on an allow line. A list from the surrounding code is pinned (`only: ^fields`), and so
+      is a field name (`only: [title, ^field]`). An update passes when every field it
       changes is covered by some update line that holds - a line without either option covers
       every field. `can?(user, :update, row)` and `via: {:update, relationship}` count only the
       lines without either. A line covering a relationship lets its holders point the row at any

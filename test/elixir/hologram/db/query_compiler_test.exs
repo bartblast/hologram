@@ -4625,7 +4625,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       relationship :cards, [Hologram.Test.Fixtures.Policy.Readers.Module16]
 
       allow :read
-      allow :update, except: [:name], when: none(cards)
+      allow :update, except: [name], when: none(cards)
     end
 
     # The title and the cards are covered by the one line, so their verdicts share a key, which the

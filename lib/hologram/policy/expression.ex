@@ -5,9 +5,9 @@ defmodule Hologram.Policy.Expression do
   # stores. Every key on the line is an option - as: the name the line answers can? and via: by,
   # only: and except: the fields an update line covers, to: who holds the operation, via: the
   # relationship it is delegated through and, written as a tuple, the operation it asks there,
-  # when: the condition - so no attribute name is taken by the line. Names, fields, roles and
-  # operations are atoms, relationships are bare names or paths, the condition is an expression,
-  # and anything from the surrounding code is pinned with ^.
+  # when: the condition - so no attribute name is taken by the line. Names, roles and operations
+  # are atoms, fields are bare names, relationships are bare names or paths, the condition is an
+  # expression, and anything from the surrounding code is pinned with ^.
   #
   # It runs at expansion and judges the spelling only. Whether a role, a relationship or an
   # attribute is declared stays with the declaration and the whole-model validation, which judge
@@ -24,7 +24,8 @@ defmodule Hologram.Policy.Expression do
   the keyword list `Hologram.Entity.__put_policy__/4` takes.
 
   `as:` keeps a name atom, and a bare name is refused with the atom it means. `only:` and `except:`
-  keep a list of field name atoms, a bare name in it refused the same way. `to:` keeps role
+  lower a list of bare field names to their atoms (`[status, assignee]` to
+  `[:status, :assignee]`), a pinned element of the list to the expression. `to:` keeps role
   names and role modules, lowers a `{role, relationship}` tuple's bare name to an
   atom (`{:editor, project}` to `{:editor, :project}`) and a path to the list of its names
   (`{:owner, trip.user}` to `{:owner, [:trip, :user]}`), and keeps a `{role, entity type}` tuple,
@@ -34,7 +35,7 @@ defmodule Hologram.Policy.Expression do
   lowers through `Hologram.Query.Expression.condition/3`. A pinned `as:`, `except:`, `only:`, `to:`, `via:` or `when:` value, a pinned
   element of a `to:` list, a pinned role or scope of a grant reference and a pinned operation or
   relationship of a delegation lower to the expression.
-  `__MODULE__` names a module wherever a module goes. A nil `to:` or `via:` value and a list
+  `__MODULE__` names a module wherever a module goes. A nil `only:`, `except:`, `to:` or `via:` value and a list
   element that is not a keyword entry pass through for the declaration to refuse. A `when:`
   condition with names a refusal can hint at (see `Hologram.Query.Expression.condition_hints/2`)
   adds a `__name_hints__:` entry holding the hints, which the entity type keeps beside the line.
@@ -45,7 +46,10 @@ defmodule Hologram.Policy.Expression do
   grant reference with the scope first or a relationship written as an atom, on a role written as
   a bare name, on a delegation written as an atom, on a delegation with the relationship first or
   with an operation that is not an atom, on a pinned bare name no variable of the surrounding code
-  holds where `via:` names a relationship (naming the bare spelling), on what
+  holds where `via:` names a relationship or `only:` and `except:` name a field (naming the bare
+  spelling), on an atom or `__MODULE__` in an `only:` or `except:` list (naming the bare spelling of
+  an atom), on an `only:` or `except:` value that is neither a list written in place nor pinned
+  (naming the brackets a lone field lacks, or the pin a variable lacks), on what
   `Hologram.Query.Expression.condition/3` refuses in a `when:`, and on anything else.
   """
   @spec spec(Macro.t(), Macro.t(), Macro.Env.t()) :: Macro.t()
@@ -421,28 +425,63 @@ defmodule Hologram.Policy.Expression do
     )
   end
 
-  # A field is named by its atom, as a name is - a bare name in the list is the atom written without
-  # its colon. A pinned list is the surrounding code's, and anything else passes through for the
-  # declaration to refuse.
+  # A field is a bare name, as it is everywhere an entity type names one, lowering to its atom - a
+  # pinned element or a pinned list is the surrounding code's. The list is written in place, a lone
+  # name refused with the brackets it lacks, and nil passes through for the declaration to refuse.
   defp field_names!(fields, key, env) when is_list(fields) do
+    names = field_names(key)
+
     Enum.map(fields, fn
-      {name, _meta, _context} = ast when is_atom(name) ->
-        if bare_name?(ast) do
-          QueryExpression.compile_error!(
-            "#{key} names a field with an atom, got: #{name} - write #{inspect(name)}",
-            ast,
-            env
-          )
-        else
-          unpinned(ast)
-        end
+      {:__MODULE__, _meta, context} = ast when is_atom(context) ->
+        QueryExpression.compile_error!(
+          "#{key} names a field with a bare name, or with a pinned expression when the name comes from the surrounding code, got: __MODULE__",
+          ast,
+          env
+        )
 
       field ->
-        field
+        QueryExpression.name!(field, names, env)
     end)
   end
 
-  defp field_names!(fields, _key, _env), do: unpinned(fields)
+  defp field_names!(nil, _key, _env), do: nil
+
+  defp field_names!({:^, _meta, [expr]} = ast, key, env) do
+    if bare_name?(expr) and not QueryExpression.pin_holds_value?(ast, env) do
+      QueryExpression.compile_error!(
+        "#{Macro.to_string(ast)} pins #{Macro.to_string(expr)}, which no variable holds here - #{key} names fields with bare names in a list, like #{key}: [#{Macro.to_string(expr)}]",
+        ast,
+        env
+      )
+    end
+
+    expr
+  end
+
+  defp field_names!(fields, key, env) do
+    hint =
+      cond do
+        bare_name?(fields) and QueryExpression.pin_holds_value?({:^, [], [fields]}, env) ->
+          " - write ^#{Macro.to_string(fields)}"
+
+        bare_name?(fields) ->
+          " - write [#{Macro.to_string(fields)}]"
+
+        name_atom?(fields) and Macro.classify_atom(fields) == :identifier ->
+          " - write #{QueryExpression.source_names([fields])}"
+
+        true ->
+          ""
+      end
+
+    QueryExpression.compile_error!(
+      "#{key} takes a list of fields written in place, or a pinned expression when the list comes from the surrounding code, got: #{Macro.to_string(fields)}#{hint}",
+      fields,
+      env
+    )
+  end
+
+  defp field_names(key), do: %{stage: key, names: "a field", spelled: "a bare name"}
 
   # A name is an atom, as an operation is - a bare name is the atom written without its colon. Any
   # other value passes through for the declaration to refuse.
