@@ -207,7 +207,7 @@ defmodule HologramSyncBenchmark.Seed do
   end
 
   defp create_chunk(entities) do
-    {:ok, created} = DB.transaction(fn -> Enum.map(entities, &DB.create!/1) end)
+    {:ok, created} = DB.transaction(fn -> {:ok, Enum.map(entities, &DB.create!/1)} end)
 
     created
   end

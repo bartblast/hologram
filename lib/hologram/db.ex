@@ -509,17 +509,34 @@ defmodule Hologram.DB do
   end
 
   @doc """
-  Runs the given zero-arity function inside a database transaction and returns
-  {:ok, result}, or {:error, reason} when the function aborts the transaction with a reason.
+  Runs the given zero-arity function inside a database transaction and returns what the function
+  returns, which has to be :ok, {:ok, value} or {:error, reason}. :ok and {:ok, value} commit the
+  transaction, {:error, reason} rolls it back. Any other value raises Hologram.MisuseError naming
+  it, and the transaction rolls back.
 
-  A nested call opens a savepoint: its own abort or exception undoes what it wrote and nothing
-  more, and the enclosing transaction continues. The write verbs answer the
-  same way inside a transaction as outside it - a refused write returns {:error,
-  violations} or raises through its bang, and the transaction stays usable. In the browser only
-  the server judges the value a counter move lands on, so a move past a bound still answers :ok,
-  as update/1 says. An exception rolls the transaction back and re-raises. A write verb called
-  inside it is not run again when PostgreSQL aborts the transaction as a deadlock victim - the
-  error propagates, and this transaction is the one to retry.
+  So a `with` over the write verbs is all or nothing - the first refused write falls through
+  as the function's result and undoes the writes before it:
+
+      DB.transaction(fn ->
+        with {:ok, order} <- DB.create(%Order{customer_id: customer.id}),
+             {:ok, _line} <- DB.create(%OrderLine{order_id: order.id, product_id: product.id}) do
+          {:ok, order}
+        end
+      end)
+
+  DB.rollback/1 leaves the transaction from deep inside the function, making it return
+  {:error, reason} just the same.
+
+  A nested call opens a savepoint and follows the same rule for it: its {:error, reason}, abort or
+  exception undoes what it wrote and nothing more, and the enclosing transaction continues. The
+  write verbs answer the same way inside a transaction as outside it - a refused write returns
+  {:error, violations} or raises through its bang, and the transaction stays usable. Only the
+  function's result decides whether the transaction commits, so a refused write the function
+  goes past doesn't undo the writes around it. In the browser only the server judges the value a
+  counter move lands on, so a move past a bound still answers :ok, as update/1 says. An exception
+  rolls the transaction back and re-raises. A write verb called inside it is not run again when
+  PostgreSQL aborts the transaction as a deadlock victim - the error propagates, and this
+  transaction is the one to retry.
 
   The `timeout:` option is the milliseconds from this call until the transaction has to be done,
   the wait for a free connection included, or `:infinity`, and is fifteen seconds by default. Past
@@ -545,8 +562,14 @@ defmodule Hologram.DB do
   that overrides its telemetry event, and a preload of several associations may or may not be
   caught, because Ecto runs it in parallel tasks when more than one association needs a query.
   """
-  @spec transaction((-> any), keyword) :: {:ok, any} | {:error, any}
-  defdelegate transaction(fun, opts \\ []), to: Connection
+  @spec transaction((-> :ok | {:ok, any} | {:error, any}), keyword) ::
+          :ok | {:ok, any} | {:error, any}
+  def transaction(fun, opts \\ []) do
+    case Connection.transaction(fn -> settle_transaction(fun.()) end, opts) do
+      {:ok, result} -> result
+      {:error, _reason} = error -> error
+    end
+  end
 
   @doc """
   Updates the entity of the given type with the given id, setting exactly the changed
@@ -1128,6 +1151,19 @@ defmodule Hologram.DB do
   # the client's certificate, so the server's refusal of it comes as an alert on the first read,
   # as "ssl recv (idle): ...", not on the connect. Postgrex gives the reason only inside the
   # message, as "ssl <action>: <formatted reason> - <inspected reason>", so the match is on that.
+  defp settle_transaction(:ok), do: :ok
+
+  defp settle_transaction({:ok, _value} = result), do: result
+
+  defp settle_transaction({:error, reason}), do: Connection.rollback(reason)
+
+  defp settle_transaction(other) do
+    raise MisuseError,
+          "DB.transaction/2 takes a function that returns :ok, {:ok, value} or {:error, reason} - " <>
+            "{:error, reason} rolls the transaction back and the other two commit it. " <>
+            "The function returned #{inspect(other)}"
+  end
+
   defp tls_misconfiguration?(message) do
     String.starts_with?(message, "ssl ") and
       String.contains?(message, [" - {:tls_alert, ", " - {:options, "])

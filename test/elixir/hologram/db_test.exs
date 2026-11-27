@@ -1153,7 +1153,7 @@ defmodule Hologram.DBTest do
       {:ok, result} =
         transaction(fn ->
           {:ok, _result} = sql("SELECT pg_advisory_xact_lock($1)", [key])
-          sql!(count_statement, [key])
+          {:ok, sql!(count_statement, [key])}
         end)
 
       assert result == %{columns: ["count"], rows: [[1]]}
@@ -1231,7 +1231,136 @@ defmodule Hologram.DBTest do
   end
 
   describe "transaction/2" do
-    test "completes a refused write's map inside a transaction" do
+    test "commits and returns :ok when the function returns :ok" do
+      result =
+        transaction(fn ->
+          {:ok, entity} = create(Module1.new())
+          Process.put(:entity_id, entity.id)
+          :ok
+        end)
+
+      assert result == :ok
+      assert read(Module1, Process.get(:entity_id))
+    end
+
+    test "commits and returns {:ok, value} when the function returns {:ok, value}" do
+      result = transaction(fn -> create(Module1.new()) end)
+
+      assert {:ok, %Module1{id: id}} = result
+      assert read(Module1, id)
+    end
+
+    test "rolls back and returns {:error, reason} when the function returns {:error, reason}" do
+      result =
+        transaction(fn ->
+          {:ok, entity} = create(Module1.new())
+          Process.put(:entity_id, entity.id)
+          {:error, :kept_out}
+        end)
+
+      assert result == {:error, :kept_out}
+      assert read(Module1, Process.get(:entity_id)) == nil
+    end
+
+    test "raises naming the value and rolls back when the function returns another value" do
+      expected_msg =
+        "DB.transaction/2 takes a function that returns :ok, {:ok, value} or {:error, reason} - " <>
+          "{:error, reason} rolls the transaction back and the other two commit it. " <>
+          "The function returned :done"
+
+      assert_error MisuseError, expected_msg, fn ->
+        transaction(fn ->
+          {:ok, entity} = create(Module1.new())
+          Process.put(:entity_id, entity.id)
+          :done
+        end)
+      end
+
+      assert read(Module1, Process.get(:entity_id)) == nil
+    end
+
+    test "raises when the function returns an entity" do
+      assert_raise MisuseError,
+                   ~r/The function returned %Hologram\.Test\.Fixtures\.Entity\.Module1\{/,
+                   fn ->
+                     transaction(fn ->
+                       {:ok, entity} = create(Module1.new())
+                       entity
+                     end)
+                   end
+    end
+
+    test "raises when the function returns a bare :error" do
+      expected_msg =
+        "DB.transaction/2 takes a function that returns :ok, {:ok, value} or {:error, reason} - " <>
+          "{:error, reason} rolls the transaction back and the other two commit it. " <>
+          "The function returned :error"
+
+      assert_error MisuseError, expected_msg, fn ->
+        transaction(fn -> :error end)
+      end
+    end
+
+    test "a nested call returning {:error, reason} undoes only its own write" do
+      result =
+        transaction(fn ->
+          {:ok, outer} = create(Module1.new())
+
+          inner =
+            transaction(fn ->
+              {:ok, entity} = create(Module1.new())
+              Process.put(:inner_id, entity.id)
+              {:error, :kept_out}
+            end)
+
+          {:ok, {inner, outer.id}}
+        end)
+
+      assert {:ok, {{:error, :kept_out}, outer_id}} = result
+      assert read(Module1, outer_id)
+      assert read(Module1, Process.get(:inner_id)) == nil
+    end
+
+    test "rollback/1 rolls back and returns {:error, reason}" do
+      result =
+        transaction(fn ->
+          {:ok, entity} = create(Module1.new())
+          Process.put(:entity_id, entity.id)
+          rollback(:kept_out)
+        end)
+
+      assert result == {:error, :kept_out}
+      assert read(Module1, Process.get(:entity_id)) == nil
+    end
+
+    test "rolls back a write made before a refused write when the function returns {:error, reason}" do
+      {:ok, _entity} =
+        %{slug: "result_decides_held"}
+        |> Module19.new()
+        |> create()
+
+      result =
+        transaction(fn ->
+          {:ok, earlier} =
+            %{slug: "result_decides_earlier"}
+            |> Module19.new()
+            |> create()
+
+          Process.put(:earlier_id, earlier.id)
+
+          {:error, %{slug: [:unique]}} =
+            %{slug: "result_decides_held"}
+            |> Module19.new()
+            |> create()
+
+          {:error, :kept_out}
+        end)
+
+      assert result == {:error, :kept_out}
+      assert read(Module19, Process.get(:earlier_id)) == nil
+    end
+
+    test "rolls back and returns a refused write's completed map returned by the function" do
       {:ok, _entity} =
         %{code: "nested_taken", slug: "nested_taken"}
         |> Module19.new()
@@ -1244,7 +1373,7 @@ defmodule Hologram.DBTest do
           |> create()
         end)
 
-      assert result == {:ok, {:error, %{code: [:unique], slug: [:unique]}}}
+      assert result == {:error, %{code: [:unique], slug: [:unique]}}
     end
 
     test "returns a refused update's violations inside a transaction" do
@@ -1262,7 +1391,7 @@ defmodule Hologram.DBTest do
         transaction(fn ->
           refusal = update(Module19, second.id, slug: first.slug)
 
-          {refusal, update(Module19, second.id, slug: "nested_update_free")}
+          {:ok, {refusal, update(Module19, second.id, slug: "nested_update_free")}}
         end)
 
       assert result == {:ok, {{:error, %{slug: [:unique]}}, :ok}}
@@ -1286,7 +1415,7 @@ defmodule Hologram.DBTest do
             |> Module19.new()
             |> create()
 
-          {refusal, other.id}
+          {:ok, {refusal, other.id}}
         end)
 
       assert {:ok, {{:error, %{slug: [:unique]}}, other_id}} = result
@@ -1305,13 +1434,13 @@ defmodule Hologram.DBTest do
         transaction(fn ->
           refusal = delete(Module1, target.id)
 
-          {refusal, unnumbered(read(Module1, target.id))}
+          {:ok, {refusal, unnumbered(read(Module1, target.id))}}
         end)
 
       assert result == {:ok, {{:error, %{referenced_by: Module3, relationship: :c}}, target}}
     end
 
-    test "returns a value violation inside a transaction" do
+    test "rolls back and returns a value violation returned by the function" do
       result =
         transaction(fn ->
           %{b: "nope"}
@@ -1319,7 +1448,7 @@ defmodule Hologram.DBTest do
           |> create()
         end)
 
-      assert result == {:ok, {:error, %{b: [type: :integer], c: [:required]}}}
+      assert result == {:error, %{b: [type: :integer], c: [:required]}}
     end
 
     test "raises through the bang for a value violation inside a transaction" do
