@@ -32,12 +32,14 @@ defmodule HologramFeatureTests.ActionWritesPage do
       <button $click={action: :add_todo_with_taken_slug}> Add a todo with a taken slug </button>
       <button $click={action: :add_one_todo}> Add one todo </button>
       <button $click={action: :add_two_todos}> Add two todos </button>
+      <button $click={action: :commit_transaction}> Commit a transaction </button>
       <button $click={action: :delete_todo}> Delete the todo </button>
       <button $click={action: :raise_after_adding}> Raise after adding </button>
       <button $click={action: :read_own_write}> Read own write </button>
       <button $click={action: :refuse_empty_title}> Refuse an empty title </button>
       <button $click={action: :rename_todo}> Rename the todo </button>
       <button $click={action: :retract_vote}> Retract a vote </button>
+      <button $click={action: :roll_back_by_result}> Roll back by its result </button>
       <button $click={action: :vote}> Vote </button>
     </p>
     <Todos cid="todos" />
@@ -101,6 +103,17 @@ defmodule HologramFeatureTests.ActionWritesPage do
       |> DB.create()
 
     put_state(component, :result, "created_two")
+  end
+
+  def action(:commit_transaction, _params, component) do
+    {:ok, todo} =
+      DB.transaction(fn ->
+        %{title: "kept"}
+        |> Todo.new()
+        |> DB.create()
+      end)
+
+    put_state(component, :result, "committed_#{todo.title}")
   end
 
   def action(:delete_todo, _params, component) do
@@ -169,6 +182,22 @@ defmodule HologramFeatureTests.ActionWritesPage do
     |> DB.update!()
 
     put_state(component, :result, "retracted_1")
+  end
+
+  # The function's own {:error, reason} rolls the transaction back, so the row it made never
+  # appears and its write is never sent.
+  def action(:roll_back_by_result, _params, component) do
+    result =
+      DB.transaction(fn ->
+        {:ok, _todo} =
+          %{title: "dropped"}
+          |> Todo.new()
+          |> DB.create()
+
+        {:error, :kept_out}
+      end)
+
+    put_state(component, :result, "rolled_back_#{inspect(result)}")
   end
 
   def action(:show_result, params, component) do
