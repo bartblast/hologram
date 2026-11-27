@@ -210,8 +210,14 @@ defmodule Hologram.Entity.ExpressionTest do
 
     test "raises on an improper list" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/channel.ex:12: unique names a field with a bare name, or with a pinned expression when the name comes from the surrounding code, got: :slug | :title - a value from the surrounding code is pinned: ^(:slug | :title)",
+                   "lib/my_app/channel.ex:12: unique takes a proper list of fields, got: [:slug | :title] - a list whose tail comes from the surrounding code is pinned whole: ^[:slug | :title]",
                    fn -> lower_unique("[:slug | :title]") end
+    end
+
+    test "raises on a list with a tail, pinning the whole list with its bare names as atoms" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/channel.ex:12: unique takes a proper list of fields, got: [workspace, ^field | rest] - a list whose tail comes from the surrounding code is pinned whole: ^[:workspace, field | rest]",
+                   fn -> lower_unique("[workspace, ^field | rest]", field: :slug, rest: []) end
     end
 
     test "raises on the module in the list" do

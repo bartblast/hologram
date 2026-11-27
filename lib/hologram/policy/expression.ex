@@ -77,6 +77,9 @@ defmodule Hologram.Policy.Expression do
   defp atom_or_pin?(ast), do: name_atom?(ast) or pinned?(ast)
 
   # __MODULE__ has the shape of a bare name, but it names the module it is written in.
+  # A list written with a tail, `[title | rest]`, whose last element is the `|` node.
+  defp improper_list?(list), do: match?({:|, _meta, [_last, _tail]}, List.last(list))
+
   defp bare_name?({:__MODULE__, _meta, _context}), do: false
 
   defp bare_name?({name, _meta, context}) when is_atom(name) and is_atom(context), do: true
@@ -429,6 +432,9 @@ defmodule Hologram.Policy.Expression do
   # pinned element or a pinned list is the surrounding code's. The list is written in place, a lone
   # name refused with the brackets it lacks, and nil passes through for the declaration to refuse.
   defp field_names!(fields, key, env) when is_list(fields) do
+    if improper_list?(fields),
+      do: QueryExpression.improper_names_error!(fields, Atom.to_string(key), env)
+
     names = field_names(key)
 
     Enum.map(fields, fn

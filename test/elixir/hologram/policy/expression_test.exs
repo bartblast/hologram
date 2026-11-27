@@ -668,6 +668,12 @@ defmodule Hologram.Policy.ExpressionTest do
                    fn -> lower_spec(~s([only: ["topic"]])) end
     end
 
+    test "raises on a field list with a tail, pinning the whole list with its bare names as atoms" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: only takes a proper list of fields, got: [title | ^rest] - a list whose tail comes from the surrounding code is pinned whole: ^[:title | rest]",
+                   fn -> lower_spec("[only: [title | ^rest]]", rest: [:topic]) end
+    end
+
     test "raises on __MODULE__ as a field" do
       assert_error Hologram.CompileError,
                    "lib/my_app/policies.ex:12: only names a field with a bare name, or with a pinned expression when the name comes from the surrounding code, got: __MODULE__",

@@ -70,6 +70,8 @@ defmodule Hologram.Entity.Expression do
   """
   @spec unique_fields(Macro.t(), Macro.Env.t()) :: Macro.t()
   def unique_fields(fields, env) when is_list(fields) do
+    if improper_list?(fields), do: QueryExpression.improper_names_error!(fields, "unique", env)
+
     Enum.map(fields, fn
       {:__MODULE__, _meta, context} = ast when is_atom(context) ->
         QueryExpression.compile_error!(
@@ -133,6 +135,9 @@ defmodule Hologram.Entity.Expression do
 
     opts
   end
+
+  # A list written with a tail, `[title | rest]`, whose last element is the `|` node.
+  defp improper_list?(list), do: match?({:|, _meta, [_last, _tail]}, List.last(list))
 
   defp bare_name?({:__MODULE__, _meta, _context}), do: false
 

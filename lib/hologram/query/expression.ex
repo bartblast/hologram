@@ -290,6 +290,21 @@ defmodule Hologram.Query.Expression do
 
   def source_names(value), do: inspect(value)
 
+  @doc false
+  # Raises Hologram.CompileError, located at the `|`, for a list of names written in place with a
+  # tail (`[title | rest]`), which parses as one element. The hint pins the whole list, its bare
+  # names written as the atoms they lower to, since a pinned list is the surrounding code's.
+  @spec improper_names_error!(list, String.t(), Macro.Env.t()) :: no_return
+  def improper_names_error!(names, stage, env) do
+    pinned = Enum.map(names, &pinned_list_element/1)
+
+    compile_error!(
+      "#{stage} takes a proper list of fields, got: #{Macro.to_string(names)} - a list whose tail comes from the surrounding code is pinned whole: ^#{Macro.to_string(pinned)}",
+      List.last(names),
+      env
+    )
+  end
+
   @doc """
   Returns whether the given node is `new()` of a name or a path, with any names dotted after it.
   """
@@ -2014,6 +2029,24 @@ defmodule Hologram.Query.Expression do
   end
 
   defp source_name(value), do: inspect(value)
+
+  # An element of a list of names as it reads once the whole list is pinned - a bare name as the
+  # atom it lowers to, a pinned expression without its pin, the tail after a `|` as written but
+  # unpinned.
+  defp pinned_list_element({:|, meta, [last, tail]}),
+    do: {:|, meta, [pinned_list_element(last), unpinned(tail)]}
+
+  defp pinned_list_element({:^, _meta, [expr]}), do: expr
+
+  defp pinned_list_element({name, _meta, _context} = ast) when is_atom(name) do
+    if bare_name?(ast), do: name, else: ast
+  end
+
+  defp pinned_list_element(ast), do: ast
+
+  defp unpinned({:^, _meta, [expr]}), do: expr
+
+  defp unpinned(ast), do: ast
 
   # Whether a variable of the surrounding code is bound under the bare name, looked up the way
   # Macro.Env.has_var?/2 keys it - by the counter a macro's hygiene gave it, or else by its context.
