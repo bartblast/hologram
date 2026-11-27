@@ -274,6 +274,26 @@ defmodule HologramFeatureTests.ActionWritesTest do
     assert mutation_record_rows(page_replica_id(session)) == []
   end
 
+  # A batch cut back to nothing is never sent, so the rolled-back action alone leaves nothing to
+  # wait on. The committed one after it is what the test waits for: its batch landing shows the
+  # first one never shipped.
+  feature "rolls back a transaction whose function returns an error", %{session: session} do
+    session = visit(session, ActionWritesPage)
+
+    session
+    |> click(button("Roll back by its result"))
+    |> assert_text(css("#result"), "rolled_back_{:error, :kept_out}")
+    |> click(button("Commit a transaction"))
+    |> assert_text(css("#result"), "committed_kept")
+    |> assert_text(css("#todos"), "kept 0")
+
+    assert [%Todo{title: "kept"}] = await_server_todos(1)
+
+    refute_text(session, css("#todos"), "dropped")
+
+    assert [%{seq: 1}] = mutation_record_rows(page_replica_id(session))
+  end
+
   feature "rolls a refused batch back and keeps what the server said", %{session: session} do
     %{slug: "taken", title: "seeded"}
     |> Todo.new()

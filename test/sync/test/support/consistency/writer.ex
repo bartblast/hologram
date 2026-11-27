@@ -117,12 +117,13 @@ defmodule HologramSyncTests.Consistency.Writer do
 
     before_commit.()
 
-    %{
-      after_lock_at: after_lock_at,
-      lock_order: lock_order,
-      max_seq: max_seq,
-      min_seq: min_seq,
-      state: state
-    }
+    {:ok,
+     %{
+       after_lock_at: after_lock_at,
+       lock_order: lock_order,
+       max_seq: max_seq,
+       min_seq: min_seq,
+       state: state
+     }}
   end
 end

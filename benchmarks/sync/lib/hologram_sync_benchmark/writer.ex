@@ -67,7 +67,7 @@ defmodule HologramSyncBenchmark.Writer do
         _committed_at = update(entity_type, id, attribute, value)
         {:ok, %{rows: [[xid]]}} = Connection.query("SELECT pg_current_xact_id()::text", [])
 
-        String.to_integer(xid)
+        {:ok, String.to_integer(xid)}
       end)
 
     await_edge_past(xid, System.monotonic_time(:millisecond) + @warm_up_wait_ms)

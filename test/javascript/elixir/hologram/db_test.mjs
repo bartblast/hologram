@@ -2537,28 +2537,119 @@ describe("Elixir_Hologram_DB", () => {
     const creating = (title) =>
       create(Model.box(TASK, {done: false, id: ID_1, title}));
 
-    it("answers what the function returned", () => {
+    const misuse = (returned) =>
+      "DB.transaction/2 takes a function that returns :ok, {:ok, value} or {:error, reason} - " +
+      "{:error, reason} rolls the transaction back and the other two commit it. " +
+      `The function returned ${returned}`;
+
+    it("answers :ok when the function returns :ok", () => {
       assert.deepStrictEqual(
         transaction(
-          fun(() => Type.atom("done")),
+          fun(() => Type.atom("ok")),
+          noOpts,
+        ),
+        Type.atom("ok"),
+      );
+    });
+
+    it("answers {:ok, value} when the function returns it", () => {
+      assert.deepStrictEqual(
+        transaction(
+          fun(() => Type.tuple([Type.atom("ok"), Type.atom("done")])),
           noOpts,
         ),
         Type.tuple([Type.atom("ok"), Type.atom("done")]),
       );
     });
 
-    it("keeps the writes made inside it", () => {
+    it("keeps the writes made inside it when the function returns :ok", () => {
       transaction(
         fun(() => {
           creating("alpha");
 
-          return Type.atom("done");
+          return Type.atom("ok");
         }),
         noOpts,
       );
 
       assert.equal(Batches.current().writes.length, 1);
       assert.isNotNull(LocalDatabase.getRow(TASK, ID_1));
+    });
+
+    it("keeps the writes made inside it when the function returns {:ok, value}", () => {
+      transaction(
+        fun(() => {
+          creating("alpha");
+
+          return Type.tuple([Type.atom("ok"), Type.atom("done")]);
+        }),
+        noOpts,
+      );
+
+      assert.equal(Batches.current().writes.length, 1);
+      assert.isNotNull(LocalDatabase.getRow(TASK, ID_1));
+    });
+
+    it("answers {:error, reason} when the function returns it", () => {
+      assert.deepStrictEqual(
+        transaction(
+          fun(() => Type.tuple([Type.atom("error"), Type.atom("nope")])),
+          noOpts,
+        ),
+        Type.tuple([Type.atom("error"), Type.atom("nope")]),
+      );
+    });
+
+    it("takes back the writes when the function returns {:error, reason}", () => {
+      creating("before");
+
+      transaction(
+        fun(() => {
+          create(Model.box(TASK, {done: false, id: ID_2, title: "inside"}));
+
+          return Type.tuple([Type.atom("error"), Type.atom("nope")]);
+        }),
+        noOpts,
+      );
+
+      assert.equal(Batches.current().writes.length, 1);
+      assert.isNotNull(LocalDatabase.getRow(TASK, ID_1));
+      assert.isNull(LocalDatabase.getRow(TASK, ID_2));
+    });
+
+    it("raises for a function returning anything else, and takes back its writes", () => {
+      assertBoxedError(
+        () =>
+          transaction(
+            fun(() => {
+              creating("alpha");
+
+              return Type.tuple([
+                Type.atom("ok"),
+                Type.atom("done"),
+                Type.atom("extra"),
+              ]);
+            }),
+            noOpts,
+          ),
+        "Hologram.MisuseError",
+        misuse("{:ok, :done, :extra}"),
+      );
+
+      assert.deepStrictEqual(Batches.current().writes, []);
+      assert.isNull(LocalDatabase.getRow(TASK, ID_1));
+    });
+
+    it("raises for a function returning a bare :error", () => {
+      assertBoxedError(
+        () =>
+          transaction(
+            fun(() => Type.atom("error")),
+            noOpts,
+          ),
+        "Hologram.MisuseError",
+        misuse(":error"),
+      );
     });
 
     it("answers the reason a rollback named", () => {
@@ -2622,7 +2713,7 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     // A nested rollback stops at its own layer, and the enclosing transaction carries on.
-    it("undoes what a nested transaction wrote and nothing more", () => {
+    it("undoes what a nested rollback wrote and nothing more", () => {
       const result = transaction(
         fun(() => {
           creating("outer");
@@ -2636,7 +2727,7 @@ describe("Elixir_Hologram_DB", () => {
             noOpts,
           );
 
-          return inner;
+          return Type.tuple([Type.atom("ok"), inner]);
         }),
         noOpts,
       );
@@ -2653,11 +2744,76 @@ describe("Elixir_Hologram_DB", () => {
       assert.isNull(LocalDatabase.getRow(TASK, ID_2));
     });
 
+    it("undoes what a nested {:error, reason} wrote and nothing more", () => {
+      const result = transaction(
+        fun(() => {
+          creating("outer");
+
+          const inner = transaction(
+            fun(() => {
+              create(Model.box(TASK, {done: false, id: ID_2, title: "inner"}));
+
+              return Type.tuple([Type.atom("error"), Type.atom("nope")]);
+            }),
+            noOpts,
+          );
+
+          return Type.tuple([Type.atom("ok"), inner]);
+        }),
+        noOpts,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([
+          Type.atom("ok"),
+          Type.tuple([Type.atom("error"), Type.atom("nope")]),
+        ]),
+      );
+
+      assert.equal(Batches.current().writes.length, 1);
+      assert.isNotNull(LocalDatabase.getRow(TASK, ID_1));
+      assert.isNull(LocalDatabase.getRow(TASK, ID_2));
+    });
+
     it("takes the arity-one spelling too", () => {
       assert.deepStrictEqual(
-        Elixir_Hologram_DB["transaction/1"](fun(() => Type.atom("done"))),
+        Elixir_Hologram_DB["transaction/1"](
+          fun(() => Type.tuple([Type.atom("ok"), Type.atom("done")])),
+        ),
         Type.tuple([Type.atom("ok"), Type.atom("done")]),
       );
+    });
+
+    it("applies the result rule to the arity-one spelling too", () => {
+      transaction(
+        fun(() => {
+          creating("before");
+
+          return Type.atom("ok");
+        }),
+        noOpts,
+      );
+
+      assertBoxedError(
+        () => Elixir_Hologram_DB["transaction/1"](fun(() => Type.atom("done"))),
+        "Hologram.MisuseError",
+        misuse(":done"),
+      );
+
+      assert.deepStrictEqual(
+        Elixir_Hologram_DB["transaction/1"](
+          fun(() => {
+            create(Model.box(TASK, {done: false, id: ID_2, title: "inside"}));
+
+            return Type.tuple([Type.atom("error"), Type.atom("nope")]);
+          }),
+        ),
+        Type.tuple([Type.atom("error"), Type.atom("nope")]),
+      );
+
+      assert.equal(Batches.current().writes.length, 1);
+      assert.isNull(LocalDatabase.getRow(TASK, ID_2));
     });
 
     it("raises for a rollback outside a transaction", () => {
@@ -2670,7 +2826,7 @@ describe("Elixir_Hologram_DB", () => {
 
     it("raises for a rollback after its transaction returned", () => {
       transaction(
-        fun(() => Type.atom("done")),
+        fun(() => Type.atom("ok")),
         noOpts,
       );
 

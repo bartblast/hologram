@@ -57,6 +57,36 @@ defmodule Hologram.DB.ConnectionTest do
     :ok
   end
 
+  # DB.transaction/2's own tests run in the sandbox, where the outermost transaction is a
+  # savepoint. These run it on a real outermost transaction, which ends with a commit or a
+  # Postgrex rollback.
+  describe "DB.transaction/2" do
+    test "commits and returns {:ok, value} when the function returns {:ok, value}" do
+      result =
+        DB.transaction(fn ->
+          {:ok, %Postgrex.Result{rows: [[id]]}} = query(@insert_returning_id_sql)
+          {:ok, id}
+        end)
+
+      assert {:ok, inserted_id} = result
+      assert count_by_id(inserted_id) == 1
+
+      delete_by_id(inserted_id)
+    end
+
+    test "rolls back and returns {:error, reason} when the function returns {:error, reason}" do
+      result =
+        DB.transaction(fn ->
+          {:ok, %Postgrex.Result{rows: [[id]]}} = query(@insert_returning_id_sql)
+          Process.put(:inserted_id, id)
+          {:error, :kept_out}
+        end)
+
+      assert result == {:error, :kept_out}
+      assert count_by_id(Process.get(:inserted_id)) == 0
+    end
+  end
+
   describe "in_transaction?/0" do
     test "is false outside a transaction" do
       refute in_transaction?()

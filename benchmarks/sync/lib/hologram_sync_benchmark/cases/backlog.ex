@@ -118,7 +118,7 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
           send(owner, {:write_held, self(), String.to_integer(xid)})
 
           receive do
-            {:commit, from, ref} -> {from, ref}
+            {:commit, from, ref} -> {:ok, {from, ref}}
           end
         end,
         timeout: :infinity
@@ -192,7 +192,7 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
       ref = %{replica_id: replica_id(replica), seq: batch + 1}
       positions = (first_card + offset)..(first_card + offset + @batch_size - 1)
 
-      {:ok, _written} = Ref.with_ref(ref, fn -> write_batch(ids, positions, batch) end)
+      :ok = Ref.with_ref(ref, fn -> write_batch(ids, positions, batch) end)
     end
 
     :ok
