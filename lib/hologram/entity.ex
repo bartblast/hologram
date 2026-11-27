@@ -218,10 +218,12 @@ defmodule Hologram.Entity do
       its other options allow. Several lines of one operation may share a name, and `can?` is true
       when any of them holds. A name can't be a framework operation, and one name can't label lines
       of two operations (`allow :grant_role` and `allow {:grant_role, role}` are one operation).
-    * `only:` / `except:` - on an update line, the fields it covers: `only: [:topic]` covers the
-      listed fields, `except: [:project]` every field but the listed ones, fields added to the
+    * `only:` / `except:` - on an update line, the fields it covers: `only: [topic]` covers the
+      listed fields, `except: [project]` every field but the listed ones, fields added to the
       entity type later included. A field is an attribute or a relationship, a to-one by its
-      relationship name (`:project`, not `:project_id`). An update passes when every field it
+      relationship name (`project`, not `project_id`), written as a bare name - an atom never names
+      a field on an allow line. A list from the surrounding code is pinned (`only: ^fields`), and so
+      is a field name (`only: [title, ^field]`). An update passes when every field it
       changes is covered by some update line that holds - a line without either option covers
       every field. `can?(user, :update, row)` and `via: {:update, relationship}` count only the
       lines without either. A line covering a relationship lets its holders point the row at any
@@ -418,11 +420,12 @@ defmodule Hologram.Entity do
   Declares a key: a set of fields whose values, taken together, no two rows of the entity type
   share.
 
-      unique [:workspace, :slug]
+      unique [workspace, slug]
 
-  The fields are attributes and to-one relationships, two or more, named as they are declared,
-  and an entity type takes any number of keys. A single field is unique through its own option,
-  `attribute :slug, :string, unique: true`.
+  The fields are attributes and to-one relationships, two or more, named as they are declared and
+  written as bare names, and an entity type takes any number of keys. A list from the surrounding
+  code is pinned (`unique ^@key`), and so is a field name (`unique [workspace, ^field]`). A single
+  field is unique through its own option, `attribute :slug, :string, unique: true`.
 
   A create or an update that would leave a row sharing a key with another row is refused, and
   every field of the key carries the reason, `{:unique, fields}`, a to-one named by its
@@ -442,12 +445,13 @@ defmodule Hologram.Entity do
   when the key is taken by then: on the client a row the batch created goes away and one it
   updated goes back to what it held, and the app is told the reason. Two devices creating the same key offline have the second one's batch refused.
   """
-  @spec unique(list(atom)) :: Macro.t()
+  @spec unique(Macro.t()) :: Macro.t()
   defmacro unique(fields) do
     location = {__CALLER__.file, __CALLER__.line}
+    lowered_fields = Expression.unique_fields(fields, __CALLER__)
 
     quote do
-      Module.put_attribute(__MODULE__, :__uniques__, {unquote(fields), unquote(location)})
+      Module.put_attribute(__MODULE__, :__uniques__, {unquote(lowered_fields), unquote(location)})
     end
   end
 

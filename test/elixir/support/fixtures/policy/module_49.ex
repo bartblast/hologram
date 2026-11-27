@@ -17,8 +17,8 @@ defmodule Hologram.Test.Fixtures.Policy.Module49 do
   allow :read, when: workshop.open == true
   allow :update, when: workshop.archived == false
   allow :delete, via: {:update, workshop}
-  allow :update, only: [:label], to: {:editor, bench.workshop}
-  allow :update, only: [:bench], when: any(permit <- permits, permit.approved == true)
+  allow :update, only: [label], to: {:editor, bench.workshop}
+  allow :update, only: [bench], when: any(permit <- permits, permit.approved == true)
   allow :create, when: workshop.archived == false
   allow :create, as: :draft, when: workshop.archived == false
 end

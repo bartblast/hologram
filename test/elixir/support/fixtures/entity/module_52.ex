@@ -9,6 +9,6 @@ defmodule Hologram.Test.Fixtures.Entity.Module52 do
 
   relationship :workspace, Module1, optional: true
 
-  unique [:workspace, :slug]
-  unique [:position, :workspace]
+  unique [workspace, slug]
+  unique [position, workspace]
 end

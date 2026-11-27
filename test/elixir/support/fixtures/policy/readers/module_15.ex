@@ -14,22 +14,22 @@ defmodule Hologram.Test.Fixtures.Policy.Readers.Module15 do
 
   allow :update,
     as: :archive,
-    only: [:name],
+    only: [name],
     when: none(card <- cards, card.author_id == user_id())
 
   allow :update,
     as: :close,
-    only: [:name],
+    only: [name],
     when: any(card <- open_cards, card.author_id == user_id())
 
   allow :delete, when: none(cards)
-  allow :update, as: :hide, only: [:name], when: all(card <- cards, card.author_id != user_id())
+  allow :update, as: :hide, only: [name], when: all(card <- cards, card.author_id != user_id())
 
   allow :update,
     as: :pin,
-    only: [:name],
+    only: [name],
     when: none(card <- cards, card.author_id == user_id() or card.reviewer_id == user_id())
 
-  allow :update, as: :review, only: [:name], when: any(card <- open_cards, card.done == false)
+  allow :update, as: :review, only: [name], when: any(card <- open_cards, card.done == false)
   allow :update, when: none(card <- cards, card.author_id == user_id())
 end

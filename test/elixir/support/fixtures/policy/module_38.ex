@@ -16,8 +16,8 @@ defmodule Hologram.Test.Fixtures.Policy.Module38 do
   relationship :tags, [Module15]
 
   allow :read
-  allow :update, as: :set_topic, only: [:topic, :tags], when: archived == false
-  allow :update, as: :rename, only: [:name, :parent], when: owner_id == user_id()
-  allow :update, except: [:archived, :owner], when: name == "open"
+  allow :update, as: :set_topic, only: [topic, tags], when: archived == false
+  allow :update, as: :rename, only: [name, parent], when: owner_id == user_id()
+  allow :update, except: [archived, owner], when: name == "open"
   allow :update, when: owner_id == user_id() and archived == true
 end

@@ -16,18 +16,18 @@ defmodule Hologram.Test.Fixtures.Policy.Readers.Module17 do
 
   allow :update,
     as: :close,
-    only: [:name],
+    only: [name],
     when: any(card <- open_cards, card.author_id != user_id())
 
   allow :update,
     as: :lock,
-    only: [:name],
+    only: [name],
     when: none(card <- cards, card.done == true or card.author_id == user_id())
 
-  allow :update, as: :move, only: [:name], when: all(card <- cards, card.author_id == user_id())
+  allow :update, as: :move, only: [name], when: all(card <- cards, card.author_id == user_id())
 
   allow :update,
     as: :share,
-    only: [:name],
+    only: [name],
     when: any(card <- open_cards, card.author_id == user_id() or card.done == true)
 end

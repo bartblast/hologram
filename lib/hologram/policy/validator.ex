@@ -5,6 +5,7 @@ defmodule Hologram.Policy.Validator do
   alias Hologram.Entity.Derived
   alias Hologram.MisuseError
   alias Hologram.Policy
+  alias Hologram.Query.Expression, as: QueryExpression
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
@@ -157,7 +158,7 @@ defmodule Hologram.Policy.Validator do
 
     named = if name, do: ", as: #{inspect(name)}", else: ""
 
-    "allow :update#{named}, #{key}: #{inspect(names)}"
+    "allow :update#{named}, #{key}: #{QueryExpression.source_names(names)}"
   end
 
   defp covered_fields(_entity_type, {:only, names}), do: names
@@ -177,14 +178,14 @@ defmodule Hologram.Policy.Validator do
       if name not in update_fields do
         raise Hologram.CompileError,
           message:
-            "invalid #{key} option #{inspect(names)} for #{where} - #{field_reason(entity_type, name, update_fields)}"
+            "invalid #{key} option #{QueryExpression.source_names(names)} for #{where} - #{field_reason(entity_type, name, update_fields)}"
       end
     end)
 
     if covered_fields(entity_type, fields) == [] do
       raise Hologram.CompileError,
         message:
-          "invalid #{key} option #{inspect(names)} for #{where} - it leaves no field of #{inspect(entity_type)} covered"
+          "invalid #{key} option #{QueryExpression.source_names(names)} for #{where} - it leaves no field of #{inspect(entity_type)} covered"
     end
 
     :ok
@@ -200,7 +201,7 @@ defmodule Hologram.Policy.Validator do
       reference_relationship != nil ->
         {relationship_name, _type, _opts} = reference_relationship
 
-        "#{inspect(name)} is the reference field of relationship #{inspect(relationship_name)} - name the relationship: #{inspect(relationship_name)}"
+        "#{inspect(name)} is the reference field of relationship #{inspect(relationship_name)} - name the relationship: #{relationship_name}"
 
       Entity.inverse_relationship(entity_type, name) != nil ->
         "#{inspect(name)} is an inverse relationship, which is written through the relationship it reverses"
@@ -528,7 +529,7 @@ defmodule Hologram.Policy.Validator do
 
       raise Hologram.CompileError,
         message:
-          "#{line_where(entity_type, policy, source)} asks #{describe_key(target_type, operation)} in #{inspect(target_type)} through #{spelled_chain}, whose rules read the row after a change with new(), but nothing changes that row here - give it a line without new() and ask that one, like allow :update, as: :edit, except: [:field], ... with #{asked}"
+          "#{line_where(entity_type, policy, source)} asks #{describe_key(target_type, operation)} in #{inspect(target_type)} through #{spelled_chain}, whose rules read the row after a change with new(), but nothing changes that row here - give it a line without new() and ask that one, like allow :update, as: :edit, except: [field], ... with #{asked}"
     end
   end
 
@@ -773,13 +774,16 @@ defmodule Hologram.Policy.Validator do
 
   # The given line of the given entity type as it was written and where it lives, a named line by
   # its name and a field-limited one with its fields:
-  # allow :update, as: :publish, only: [:published] in MyApp.Post.
+  # allow :update, as: :publish, only: [published] in MyApp.Post.
   defp line_where(
          entity_type,
          {_operation, _to, _via, _predicates, _name, fields} = policy,
          source
        ) do
-    limited = if fields, do: ", #{elem(fields, 0)}: #{inspect(elem(fields, 1))}", else: ""
+    limited =
+      if fields,
+        do: ", #{elem(fields, 0)}: #{QueryExpression.source_names(elem(fields, 1))}",
+        else: ""
 
     "#{written_line(policy)}#{limited} in #{location(entity_type, source)}"
   end

@@ -656,7 +656,7 @@ defmodule Hologram.PolicyTest do
         role :member
 
         allow :read
-        allow :update, to: :member, only: [:topic, :name]
+        allow :update, to: :member, only: [topic, name]
       end
 
       member_rule = %{predicates: [], to: [{:own, [:member]}], via: nil}
@@ -674,7 +674,7 @@ defmodule Hologram.PolicyTest do
 
         attribute :topic, :string
 
-        allow :update, only: [:topic, :topic]
+        allow :update, only: [topic, topic]
       end
 
       assert build(RepeatedFieldFixture) == %{
@@ -692,7 +692,7 @@ defmodule Hologram.PolicyTest do
         relationship :parent, Hologram.Test.Fixtures.Entity.Module1, optional: true
         relationship :tags, [Hologram.Test.Fixtures.Entity.Module2]
 
-        allow :update, except: [:name]
+        allow :update, except: [name]
       end
 
       rule = %{predicates: [], to: nil, via: nil}
@@ -715,7 +715,7 @@ defmodule Hologram.PolicyTest do
         role :owner
 
         allow :update, to: :owner
-        allow :update, as: :set_topic, to: :member, only: [:topic]
+        allow :update, as: :set_topic, to: :member, only: [topic]
       end
 
       owner_rule = %{predicates: [], to: [{:own, [:owner]}], via: nil}
@@ -751,8 +751,8 @@ defmodule Hologram.PolicyTest do
 
       allow :read
       allow :delete, when: code == "x" or label == "x"
-      allow :update, only: [:label], when: code == "x"
-      allow :update, only: [:note]
+      allow :update, only: [label], when: code == "x"
+      allow :update, only: [note]
     end
 
     defmodule ServerOnlyReadsFixture2 do
@@ -801,7 +801,7 @@ defmodule Hologram.PolicyTest do
         allow :update,
           as: :approve,
           to: :manager,
-          only: [:status],
+          only: [status],
           when: status == :pending and new(status) == :approved
       end
 
@@ -1930,11 +1930,11 @@ defmodule Hologram.PolicyTest do
 
       allow :update,
         as: :pin,
-        only: [:pinned],
+        only: [pinned],
         when: none(message <- new(channel.messages), message.pinned == true)
 
-      allow :update, as: :move, only: [:channel], when: new(channel.archived) == false
-      allow :update, as: :retitle, only: [:body], when: new(label) == "x!"
+      allow :update, as: :move, only: [channel], when: new(channel.archived) == false
+      allow :update, as: :retitle, only: [body], when: new(label) == "x!"
     end
 
     setup do
@@ -1999,14 +1999,14 @@ defmodule Hologram.PolicyTest do
       allow :read
 
       allow :update,
-        only: [:project],
+        only: [project],
         when: has_role(:member, new(project)) and can(:edit, new(project))
 
-      allow :update, as: :lead, only: [:title], when: has_role(:lead, new(project.team))
+      allow :update, as: :lead, only: [title], when: has_role(:lead, new(project.team))
 
       allow :update,
         as: :either,
-        only: [:title],
+        only: [title],
         when: has_role(:member, new(project)) or title == "open"
     end
 
@@ -2128,7 +2128,7 @@ defmodule Hologram.PolicyTest do
 
       allow :update,
         as: :archive,
-        only: [:name],
+        only: [name],
         when: any(seat <- seats, none(tag <- seat.tags, tag.name == "x"))
     end
 
@@ -2173,8 +2173,8 @@ defmodule Hologram.PolicyTest do
 
       relationship :owner, Hologram.PolicyTest.LineHeldOwner, optional: true
 
-      allow :update, only: [:title]
-      allow :update, except: [:owner], when: owner.name == "x"
+      allow :update, only: [title]
+      allow :update, except: [owner], when: owner.name == "x"
     end
 
     test "tells apart the lines sharing a field's key" do
@@ -2808,7 +2808,7 @@ defmodule Hologram.PolicyTest do
 
       allow :update,
         as: :archive,
-        only: [:labels],
+        only: [labels],
         when: any(member <- first_members, member.seat == "full")
     end
 
@@ -3116,7 +3116,7 @@ defmodule Hologram.PolicyTest do
 
       relationship :labels, [Hologram.PolicyTest.VerdictLabel]
 
-      allow :update, except: [:name], when: none(labels)
+      allow :update, except: [name], when: none(labels)
     end
 
     defmodule KeyedParcel do
@@ -3222,7 +3222,7 @@ defmodule Hologram.PolicyTest do
     end
 
     test "gives a field of an update a new key when a whole-row update rule changes" do
-      limited_line = "allow :update, only: [:open], when: open == true"
+      limited_line = "allow :update, only: [open], when: open == true"
       open_key = operation_key_with_rules(limited_line, {:update, :open})
 
       assert operation_key_with_rules(
@@ -3287,11 +3287,11 @@ defmodule Hologram.PolicyTest do
       allow :read, when: any(member <- members, member.user_id == user_id())
       allow :update, when: name == "open" or all(member <- members, member.seat == "full")
       allow :delete, when: none(labels)
-      allow :update, as: :archive, only: [:name], when: none(labels)
+      allow :update, as: :archive, only: [name], when: none(labels)
 
       allow :update,
         as: :close,
-        only: [:name],
+        only: [name],
         when: any(member <- members, none(label <- member.project.labels, label.name == "x"))
     end
 
@@ -3346,7 +3346,7 @@ defmodule Hologram.PolicyTest do
       relationship :members, [Hologram.PolicyTest.VerdictMember]
 
       allow :update, when: none(labels)
-      allow :update, only: [:name], when: any(member <- members, member.seat == "x")
+      allow :update, only: [name], when: any(member <- members, member.seat == "x")
     end
 
     # The read rule's any reads no none or all, so the browser answers it from the rows it holds.

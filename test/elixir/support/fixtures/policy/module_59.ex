@@ -23,24 +23,24 @@ defmodule Hologram.Test.Fixtures.Policy.Module59 do
 
   allow :update,
     as: :approve,
-    only: [:status],
+    only: [status],
     to: :admin,
     when: status == :pending and new(status) == :approved
 
   allow :update,
     as: :move,
-    only: [:project],
+    only: [project],
     to: {:member, project},
     when: has_role(:member, new(project))
 
-  allow :update, only: [:code], when: has_role(:member, new(project))
-  allow :update, only: [:count], when: new(count) <= 10
-  allow :update, only: [:note], when: new(project.archived) == false
-  allow :update, only: [:handoff], when: can(:read, new(project))
-  allow :update, only: [:mark], when: new(updated_at) > updated_at
-  allow :update, only: [:labels], when: none(label <- new(labels), label.blocked == true)
+  allow :update, only: [code], when: has_role(:member, new(project))
+  allow :update, only: [count], when: new(count) <= 10
+  allow :update, only: [note], when: new(project.archived) == false
+  allow :update, only: [handoff], when: can(:read, new(project))
+  allow :update, only: [mark], when: new(updated_at) > updated_at
+  allow :update, only: [labels], when: none(label <- new(labels), label.blocked == true)
 
   allow :update,
-    only: [:phase, :signer],
+    only: [phase, signer],
     when: new(phase) != "signed" or new(signer) != nil
 end

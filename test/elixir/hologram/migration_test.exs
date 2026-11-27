@@ -1544,6 +1544,97 @@ defmodule Hologram.MigrationTest do
       end
     end
 
+    test "rejects a bare name naming an attribute op" do
+      body = """
+      change_entity MyApp.Task do
+        delete_attribute status
+      end
+      """
+
+      expected_msg =
+        "app/migrations/20260813091522.ex:5: delete_attribute names a field with an atom, got: status - write :status"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "rejects a bare name naming the new name of a rename" do
+      body = """
+      change_entity MyApp.Task do
+        rename_attribute :name, title
+      end
+      """
+
+      expected_msg =
+        "app/migrations/20260813091522.ex:5: rename_attribute names a field with an atom, got: title - write :title"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "locates a bare name refusal at the bare name" do
+      body = """
+      change_entity MyApp.Task do
+        rename_attribute :name,
+                         title
+      end
+      """
+
+      expected_msg =
+        "app/migrations/20260813091522.ex:6: rename_attribute names a field with an atom, got: title - write :title"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "rejects a bare name naming a relationship op" do
+      body = """
+      change_entity MyApp.Task do
+        add_relationship author, MyApp.User
+      end
+      """
+
+      expected_msg =
+        "app/migrations/20260813091522.ex:5: add_relationship names a field with an atom, got: author - write :author"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "rejects a bare name naming the attribute of an enum value op" do
+      body = """
+      change_entity MyApp.Task do
+        reorder_enum_values status, [:todo, :done]
+      end
+      """
+
+      expected_msg =
+        "app/migrations/20260813091522.ex:5: reorder_enum_values names a field with an atom, got: status - write :status"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "rejects a bare name naming a field of a unique key" do
+      body = """
+      change_entity MyApp.Task do
+        add_unique [workspace, slug]
+      end
+      """
+
+      expected_msg =
+        "app/migrations/20260813091522.ex:5: add_unique names a field with an atom, got: workspace - write :workspace"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
     test "rejects a statement that is not an op call" do
       body = """
       change_entity MyApp.Task do
@@ -1652,6 +1743,21 @@ defmodule Hologram.MigrationTest do
 
       assert [create_op] = result
       assert create_op == %{op: :create_entity, entity: MyApp.Marker, line: 4}
+    end
+
+    test "rejects a bare name where a member op takes a field name" do
+      body = """
+      create_entity MyApp.Task do
+        add_attribute title, :string
+      end
+      """
+
+      expected_msg =
+        "app/migrations/20260813091522.ex:5: add_attribute names a field with an atom, got: title - write :title"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
     end
   end
 

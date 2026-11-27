@@ -5,6 +5,7 @@ defmodule Hologram.DB.Mapper do
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.DB.Codec
   alias Hologram.Entity.Model
+  alias Hologram.Query.Expression, as: QueryExpression
   alias Hologram.Reflection
 
   # Bytes of the digest a shortened identifier carries - each spells as two hex characters.
@@ -460,7 +461,7 @@ defmodule Hologram.DB.Mapper do
 
       {fit_identifier(segments, columns, "$uidx"),
        %{columns: columns, nulls_distinct: true, unique: true},
-       "unique #{inspect(fields)} in #{inspect(entity_type)}"}
+       "unique #{QueryExpression.source_names(fields)} in #{inspect(entity_type)}"}
     end)
   end
 

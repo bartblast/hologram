@@ -10,7 +10,7 @@ defmodule Hologram.Test.Fixtures.Policy.Module28 do
 
   allow :update,
     as: :close,
-    only: [:space],
+    only: [space],
     when: any(comment <- space.comments, comment.flagged == true)
 
   allow :update, when: none(comment <- space.comments, comment.flagged == true)

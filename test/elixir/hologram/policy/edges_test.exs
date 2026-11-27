@@ -325,7 +325,7 @@ defmodule Hologram.Policy.EdgesTest do
       allow :read, when: any(member <- members, member.seat == "full")
       allow :update, when: any(members)
       allow :delete, when: none(label <- labels, label.name == "x")
-      allow :update, as: :archive, only: [:name], when: any(labels)
+      allow :update, as: :archive, only: [name], when: any(labels)
     end
 
     defmodule EdgeMember do
@@ -600,7 +600,7 @@ defmodule Hologram.Policy.EdgesTest do
 
         allow :read, when: reviewed == true
         allow :delete, when: owner_id == user_id() and none(labels)
-        allow :update, only: [:title], when: none(label <- labels, label.name == "x")
+        allow :update, only: [title], when: none(label <- labels, label.name == "x")
         allow :update, when: badge.name == "open"
       end
 

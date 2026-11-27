@@ -13,14 +13,14 @@ defmodule HologramFeatureTests.Entities.Errand do
 
   allow :update,
     as: :approve,
-    only: [:status],
+    only: [status],
     when: status == :pending and new(status) == :approved
 
-  allow :update, as: :archive, only: [:archived], when: new(archived) == true
+  allow :update, as: :archive, only: [archived], when: new(archived) == true
 
   allow :update,
     as: :move,
-    only: [:squad],
+    only: [squad],
     to: {:member, squad},
     when: has_role(:member, new(squad))
 end

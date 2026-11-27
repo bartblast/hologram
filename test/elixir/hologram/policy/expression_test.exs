@@ -588,32 +588,122 @@ defmodule Hologram.Policy.ExpressionTest do
       assert lower_spec("[to: {:moderator, __MODULE__}]") == [to: {:moderator, __MODULE__}]
     end
 
-    test "keeps the fields of an only option" do
-      assert lower_spec("[only: [:topic, :project]]") == [only: [:topic, :project]]
+    test "lowers the bare field names of an only option to atoms" do
+      assert lower_spec("[only: [status, assignee]]") == [only: [:status, :assignee]]
     end
 
-    test "keeps the fields of an except option" do
-      assert lower_spec("[except: [:project]]") == [except: [:project]]
+    test "lowers the bare field names of an except option to atoms" do
+      assert lower_spec("[except: [status, assignee]]") == [except: [:status, :assignee]]
     end
 
     test "lowers a pinned field list to its value" do
       assert lower_spec("[only: ^fields]", fields: [:topic]) == [only: [:topic]]
     end
 
-    test "keeps a field list that is not a list for the declaration to refuse" do
-      assert lower_spec("[only: :topic]") == [only: :topic]
+    test "lowers a pinned field name to its value" do
+      assert lower_spec("[except: [title, ^field]]", field: :topic) == [except: [:title, :topic]]
     end
 
-    test "raises on a field written as a bare name" do
+    test "keeps a nil field option for the declaration to refuse" do
+      assert lower_spec("[only: nil]") == [only: nil]
+    end
+
+    test "raises on a field of an only option written as an atom" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:12: only names a field with an atom, got: topic - write :topic",
-                   fn -> lower_spec("[only: [topic]]") end
+                   "lib/my_app/policies.ex:7: only names a field with a bare name, got: :status - write status",
+                   fn -> lower_spec("[only: [title, :status]]") end
+    end
+
+    test "raises on a field of an except option written as an atom" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: except names a field with a bare name, got: :status - write status",
+                   fn -> lower_spec("[except: [:status]]") end
+    end
+
+    test "raises on a pinned field name no variable holds" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: ^status pins status, which no variable holds here - only names a field with a bare name, without the pin: status",
+                   fn -> lower_spec("[only: [^status]]") end
+    end
+
+    test "raises on a pinned field list no variable holds" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: ^status pins status, which no variable holds here - only names fields with bare names in a list, like only: [status]",
+                   fn -> lower_spec("[only: ^status]") end
+    end
+
+    test "raises on a lone field written as a bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: only takes a list of fields written in place, or a pinned expression when the list comes from the surrounding code, got: status - write [status]",
+                   fn -> lower_spec("[only: status]") end
+    end
+
+    test "raises on a lone field written as an atom" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: except takes a list of fields written in place, or a pinned expression when the list comes from the surrounding code, got: :status - write [status]",
+                   fn -> lower_spec("[except: :status]") end
+    end
+
+    test "gives no bracket hint for a lone atom no bare name spells" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: only takes a list of fields written in place, or a pinned expression when the list comes from the surrounding code, got: :Status",
+                   fn -> lower_spec("[only: :Status]") end
+    end
+
+    test "raises on a field list read from a variable without a pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: only takes a list of fields written in place, or a pinned expression when the list comes from the surrounding code, got: fields - write ^fields",
+                   fn -> lower_spec("[only: fields]", fields: [:topic]) end
+    end
+
+    test "raises on a field option that is no list" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: only takes a list of fields written in place, or a pinned expression when the list comes from the surrounding code, got: true",
+                   fn -> lower_spec("[only: true]") end
+    end
+
+    test "raises on a field written as a string" do
+      assert_error Hologram.CompileError,
+                   ~s(lib/my_app/policies.ex:7: only names a field with a bare name, or with a pinned expression when the name comes from the surrounding code, got: "topic"),
+                   fn -> lower_spec(~s([only: ["topic"]])) end
+    end
+
+    test "raises on a field list with a tail, pinning the whole list with its bare names as atoms" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: only takes a proper list of fields, got: [title | ^rest] - a list whose tail comes from the surrounding code is pinned whole: ^[:title | rest]",
+                   fn -> lower_spec("[only: [title | ^rest]]", rest: [:topic]) end
+    end
+
+    test "raises on __MODULE__ as a field" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: only names a field with a bare name, or with a pinned expression when the name comes from the surrounding code, got: __MODULE__",
+                   fn -> lower_spec("[only: [__MODULE__]]") end
+    end
+
+    test "lowers the bare field names of a line taken from a policy module" do
+      defmodule BareFieldsPolicyFixture do
+        use Hologram.Policy
+
+        allow :update, only: [topic]
+      end
+
+      defmodule BareFieldsEntityFixture do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        policy BareFieldsPolicyFixture
+      end
+
+      assert BareFieldsEntityFixture.__policies__() == [
+               {:update, nil, nil, [], nil, {:only, [:topic]}}
+             ]
     end
 
     test "raises on a repeated except option" do
       assert_error Hologram.CompileError,
                    "lib/my_app/policies.ex:7: allow :update takes the except option once - list the fields in one except option",
-                   fn -> lower_spec("[except: [:a], except: [:b]]") end
+                   fn -> lower_spec("[except: [a], except: [b]]") end
     end
 
     test "keeps a name" do

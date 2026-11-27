@@ -17,6 +17,6 @@ defmodule HologramFeatureTests.Entities.Tool do
   allow :read, when: workshop.open == true
   allow :update, when: workshop.archived == false
   allow :delete, via: {:update, workshop}
-  allow :update, only: [:label], to: {:editor, bench.workshop}
-  allow :update, only: [:bench], when: any(permit <- permits, permit.approved == true)
+  allow :update, only: [label], to: {:editor, bench.workshop}
+  allow :update, only: [bench], when: any(permit <- permits, permit.approved == true)
 end

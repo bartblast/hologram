@@ -19,7 +19,7 @@ defmodule Hologram.Test.Fixtures.Policy.Module40 do
   allow :create, to: :editor
   allow :create, to: {:admin, parent}
   allow :update, to: :owner
-  allow :update, as: :publish, only: [:priority], via: {:publish, parent}
+  allow :update, as: :publish, only: [priority], via: {:publish, parent}
   allow :delete, to: :owner
   allow :revoke_role, to: :owner
 end

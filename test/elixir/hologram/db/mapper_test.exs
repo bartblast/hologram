@@ -908,7 +908,7 @@ defmodule Hologram.DB.MapperTest do
       expected_msg =
         normalize_newlines("""
         colliding derived names - rename the declarations so that every derived name is unique:
-          * index "nonexistent_ghost_name_tag_$uidx" is derived from attribute :tag in Nonexistent.GhostName, unique [:name, :tag] in Nonexistent.Ghost\
+          * index "nonexistent_ghost_name_tag_$uidx" is derived from attribute :tag in Nonexistent.GhostName, unique [name, tag] in Nonexistent.Ghost\
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> derive_from_model!(model) end

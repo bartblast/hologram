@@ -39,7 +39,7 @@ defmodule Hologram.Query.WindowTest do
 
       allow :read
       allow :update, when: any(member <- members, member.seat == "full")
-      allow :update, only: [:labels], when: none(labels)
+      allow :update, only: [labels], when: none(labels)
     end
 
     defmodule WindowMember do
