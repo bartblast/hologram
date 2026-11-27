@@ -89,7 +89,7 @@ defmodule HologramFeatureTests.DataApiPage do
           |> trust()
           |> DB.create!()
 
-        {refusal, other.handle}
+        {:ok, {refusal, other.handle}}
       end)
 
     put_action(server, :show_result,
