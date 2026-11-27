@@ -45,6 +45,21 @@ let openTransactions = 0;
 
 const ROLE_GRANT = "Hologram.Auth.RoleGrant";
 
+// Whether a transaction function's result is {tag, _}, or the bare :ok when the tag is "ok" -
+// the three shapes DB.transaction/2 takes.
+function resultTagged(result, tag) {
+  if (tag === "ok" && Type.isAtom(result) && result.value === "ok") {
+    return true;
+  }
+
+  return (
+    Type.isTuple(result) &&
+    result.data.length === 2 &&
+    Type.isAtom(result.data[0]) &&
+    result.data[0].value === tag
+  );
+}
+
 // A module reaches a verb as an alias, not as a struct - so its name is read off the alias rather
 // than through Model.structTypeName, which answers for a boxed struct.
 function aliasName(value) {
@@ -728,8 +743,6 @@ const Elixir_Hologram_DB = {
   "delete!/2": (entityType, id) =>
     Elixir_Hologram_DB["delete/2"](entityType, id),
 
-  // Aborts the innermost enclosing transaction, making it answer {:error, reason}.
-
   "delete/1": (entity) => {
     const entityType = entityTypeOf(entity, "delete");
 
@@ -777,6 +790,8 @@ const Elixir_Hologram_DB = {
     return Elixir_Hologram_DB["read/1"](query);
   },
 
+  // Aborts the innermost enclosing transaction, making it answer {:error, reason}.
+
   "rollback/1": (reason) => {
     if (openTransactions === 0) {
       Interpreter.raiseMisuseError(
@@ -788,8 +803,8 @@ const Elixir_Hologram_DB = {
   },
 
   // The client has no database transaction to open - an action's writes already ship together -
-  // so what this marks is a position in the batch. A rollback or a raise truncates back to it,
-  // which IS the undo: the overlay folds the batch's writes, so a write removed from that list is
+  // so what this marks is a position in the batch. A rollback, a raise or the function answering
+  // {:error, reason} truncates back to it, which IS the undo: the overlay folds the batch's writes, so a write removed from that list is
   // a write the database no longer shows.
   //
   // The opts are accepted and ignored. Their one intended use is read-set validation, which is
@@ -804,9 +819,19 @@ const Elixir_Hologram_DB = {
     openTransactions += 1;
 
     try {
-      const value = Interpreter.callAnonymousFunction(fun, []);
+      const result = Interpreter.callAnonymousFunction(fun, []);
 
-      return Type.tuple([Type.atom("ok"), value]);
+      if (resultTagged(result, "error")) {
+        batch.writes.length = mark;
+      } else if (!resultTagged(result, "ok")) {
+        Interpreter.raiseMisuseError(
+          "DB.transaction/2 takes a function that returns :ok, {:ok, value} or {:error, reason} - " +
+            "{:error, reason} rolls the transaction back and the other two commit it. " +
+            `The function returned ${Interpreter.inspect(result)}`,
+        );
+      }
+
+      return result;
     } catch (error) {
       batch.writes.length = mark;
 
