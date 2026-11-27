@@ -1279,15 +1279,18 @@ defmodule Hologram.DBTest do
       assert read(Module1, Process.get(:entity_id)) == nil
     end
 
-    test "raises when the function returns an entity" do
+    test "raises and rolls back when the function returns an entity" do
       assert_raise MisuseError,
                    ~r/The function returned %Hologram\.Test\.Fixtures\.Entity\.Module1\{/,
                    fn ->
                      transaction(fn ->
                        {:ok, entity} = create(Module1.new())
+                       Process.put(:entity_id, entity.id)
                        entity
                      end)
                    end
+
+      assert read(Module1, Process.get(:entity_id)) == nil
     end
 
     test "raises when the function returns a bare :error" do

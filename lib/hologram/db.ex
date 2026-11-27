@@ -1151,19 +1151,6 @@ defmodule Hologram.DB do
   # the client's certificate, so the server's refusal of it comes as an alert on the first read,
   # as "ssl recv (idle): ...", not on the connect. Postgrex gives the reason only inside the
   # message, as "ssl <action>: <formatted reason> - <inspected reason>", so the match is on that.
-  defp settle_transaction(:ok), do: :ok
-
-  defp settle_transaction({:ok, _value} = result), do: result
-
-  defp settle_transaction({:error, reason}), do: Connection.rollback(reason)
-
-  defp settle_transaction(other) do
-    raise MisuseError,
-          "DB.transaction/2 takes a function that returns :ok, {:ok, value} or {:error, reason} - " <>
-            "{:error, reason} rolls the transaction back and the other two commit it. " <>
-            "The function returned #{inspect(other)}"
-  end
-
   defp tls_misconfiguration?(message) do
     String.starts_with?(message, "ssl ") and
       String.contains?(message, [" - {:tls_alert, ", " - {:options, "])
@@ -1179,6 +1166,19 @@ defmodule Hologram.DB do
     end
 
     raise error
+  end
+
+  defp settle_transaction(:ok), do: :ok
+
+  defp settle_transaction({:ok, _value} = result), do: result
+
+  defp settle_transaction({:error, reason}), do: Connection.rollback(reason)
+
+  defp settle_transaction(other) do
+    raise MisuseError,
+          "DB.transaction/2 takes a function that returns :ok, {:ok, value} or {:error, reason} - " <>
+            "{:error, reason} rolls the transaction back and the other two commit it. " <>
+            "The function returned #{inspect(other)}"
   end
 
   # A unique field is a declared attribute or the reference field of a unique to-one, and the line

@@ -804,8 +804,8 @@ const Elixir_Hologram_DB = {
 
   // The client has no database transaction to open - an action's writes already ship together -
   // so what this marks is a position in the batch. A rollback, a raise or the function answering
-  // {:error, reason} truncates back to it, which IS the undo: the overlay folds the batch's writes, so a write removed from that list is
-  // a write the database no longer shows.
+  // {:error, reason} truncates back to it, which IS the undo: the overlay folds the batch's
+  // writes, so a write removed from that list is a write the database no longer shows.
   //
   // The opts are accepted and ignored. Their one intended use is read-set validation, which is
   // deferred past v1.
