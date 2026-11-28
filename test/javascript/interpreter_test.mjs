@@ -5578,6 +5578,209 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("mapUpdateOperator()", () => {
+    const callerFrame = () => ({
+      module: "MyModule",
+      function: "my_fun",
+      arityOrArgs: 1,
+      file: "lib/my_module.ex",
+      line: 17,
+      errorInfo: null,
+    });
+
+    const outerFrame = () => ({
+      module: "MyModule",
+      function: "my_outer_fun",
+      arityOrArgs: 0,
+      file: "lib/my_module.ex",
+      line: 5,
+      errorInfo: null,
+    });
+
+    const catchError = (fun) => {
+      try {
+        fun();
+      } catch (error) {
+        return error;
+      }
+    };
+
+    const map = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+      [Type.atom("c"), Type.integer(3)],
+    ]);
+
+    beforeEach(() => {
+      CallStack.reset();
+    });
+
+    afterEach(() => {
+      CallStack.reset();
+    });
+
+    it("updates one key", () => {
+      const result = Interpreter.mapUpdateOperator(map, [
+        [Type.atom("b"), Type.integer(20)],
+      ]);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(20)],
+        [Type.atom("c"), Type.integer(3)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("updates several keys, keeping the rest", () => {
+      const result = Interpreter.mapUpdateOperator(map, [
+        [Type.atom("c"), Type.integer(30)],
+        [Type.atom("a"), Type.integer(10)],
+      ]);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(10)],
+        [Type.atom("b"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(30)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("updates a key that is not an atom", () => {
+      const stringKeyMap = Type.map([[Type.bitstring("a"), Type.integer(1)]]);
+
+      const result = Interpreter.mapUpdateOperator(stringKeyMap, [
+        [Type.bitstring("a"), Type.integer(2)],
+      ]);
+
+      const expected = Type.map([[Type.bitstring("a"), Type.integer(2)]]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("doesn't mutate the given map", () => {
+      const original = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+      Interpreter.mapUpdateOperator(original, [
+        [Type.atom("a"), Type.integer(2)],
+      ]);
+
+      assert.deepStrictEqual(
+        original,
+        Type.map([[Type.atom("a"), Type.integer(1)]]),
+      );
+    });
+
+    it("a later duplicate key wins", () => {
+      const result = Interpreter.mapUpdateOperator(map, [
+        [Type.atom("a"), Type.integer(10)],
+        [Type.atom("a"), Type.integer(100)],
+      ]);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(100)],
+        [Type.atom("b"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(3)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises BadMapError for a term that is not a map", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.mapUpdateOperator(Type.integer(1), [
+            [Type.atom("a"), Type.integer(2)],
+          ]),
+        "BadMapError",
+        "expected a map, got:\n\n    1\n",
+      );
+    });
+
+    it("raises KeyError for a key the map doesn't have", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.mapUpdateOperator(map, [
+            [Type.atom("x"), Type.integer(2)],
+          ]),
+        "KeyError",
+        "key :x not found",
+      );
+    });
+
+    it("names the first missing key in source order", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.mapUpdateOperator(map, [
+            [Type.atom("a"), Type.integer(10)],
+            [Type.atom("z"), Type.integer(2)],
+            [Type.atom("y"), Type.integer(3)],
+          ]),
+        "KeyError",
+        "key :z not found",
+      );
+    });
+
+    it("attributes the error to the function the update sits in", () => {
+      CallStack.push(outerFrame());
+      CallStack.push(callerFrame());
+
+      const caught = catchError(() =>
+        Interpreter.mapUpdateOperator(map, [[Type.atom("x"), Type.integer(2)]]),
+      );
+
+      assert.deepStrictEqual(caught.stacktrace, [callerFrame(), outerFrame()]);
+    });
+
+    it("reports the given line on the frame the update sits in", () => {
+      CallStack.push(outerFrame());
+      CallStack.push(callerFrame());
+
+      const caught = catchError(() =>
+        Interpreter.mapUpdateOperator(
+          map,
+          [[Type.atom("x"), Type.integer(2)]],
+          16,
+        ),
+      );
+
+      assert.deepStrictEqual(caught.stacktrace, [
+        {...callerFrame(), line: 16},
+        outerFrame(),
+      ]);
+    });
+
+    it("reports the given line on the frame for a term that is not a map", () => {
+      CallStack.push(callerFrame());
+
+      const caught = catchError(() =>
+        Interpreter.mapUpdateOperator(
+          Type.integer(1),
+          [[Type.atom("a"), Type.integer(2)]],
+          16,
+        ),
+      );
+
+      assert.deepStrictEqual(caught.stacktrace, [{...callerFrame(), line: 16}]);
+    });
+
+    it("leaves the live frame's line alone", () => {
+      CallStack.push(callerFrame());
+
+      catchError(() =>
+        Interpreter.mapUpdateOperator(
+          map,
+          [[Type.atom("x"), Type.integer(2)]],
+          16,
+        ),
+      );
+
+      assert.equal(CallStack.peek().line, 17);
+    });
+  });
+
   // IMPORTANT!
   // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/match_operator_test.exs
   // Always update both together.
