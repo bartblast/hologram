@@ -853,32 +853,42 @@ export default class Interpreter {
 
   // Updates keys the map already has, which is what %{map | key: value} does,
   // and %Struct{struct | key: value} too, since the BEAM checks no struct
-  // there. pairs is an array of [key, value] pairs in source order - all of
-  // them evaluated already, as the BEAM does before checking the map. A key
-  // the map doesn't have raises KeyError, the first in source order, and a
-  // later duplicate key wins. The update has no frame of its own, so the error
-  // is attributed to the function it sits in, on the given line.
+  // there (as of Elixir 1.20). pairs is an array of [key, value] pairs in
+  // source order - all of them evaluated already, as the BEAM does before
+  // checking the map. The errors carry the BEAM's raw reasons, {:badmap, term}
+  // and {:badkey, key}, which catch clauses match and which normalize to
+  // BadMapError and KeyError. A missing key raises for the first in source
+  // order, and a later duplicate key wins. The update has no frame of its own,
+  // so the error is attributed to the function it sits in, on the given line.
   static mapUpdateOperator(map, pairs, line) {
     if (!Type.isMap(map)) {
-      Interpreter.#raiseOnLine(line, () => Interpreter.raiseBadMapError(map));
+      Interpreter.#raiseOnLine(line, () => {
+        throw new HologramBoxedError(
+          Interpreter.#boxErrorReason(["badmap", map]),
+        );
+      });
     }
 
-    for (const [key] of pairs) {
-      if (!(Type.encodeMapKey(key) in map.data)) {
-        Interpreter.#raiseOnLine(line, () =>
-          Interpreter.#raiseFieldBearingError("KeyError", [
-            [Type.atom("key"), key],
-            [Type.atom("message"), Type.nil()],
-            [Type.atom("term"), Type.nil()],
-          ]),
-        );
+    const encodedPairs = pairs.map(([key, value]) => [
+      Type.encodeMapKey(key),
+      key,
+      value,
+    ]);
+
+    for (const [encodedKey, key] of encodedPairs) {
+      if (!(encodedKey in map.data)) {
+        Interpreter.#raiseOnLine(line, () => {
+          throw new HologramBoxedError(
+            Interpreter.#boxErrorReason(["badkey", key]),
+          );
+        });
       }
     }
 
     const newMap = Type.cloneMap(map);
 
-    for (const [key, value] of pairs) {
-      newMap.data[Type.encodeMapKey(key)] = [key, value];
+    for (const [encodedKey, key, value] of encodedPairs) {
+      newMap.data[encodedKey] = [key, value];
     }
 
     return newMap;
@@ -2726,11 +2736,16 @@ export default class Interpreter {
   // their own line - which is the line the BEAM reports. The captured frames
   // are shared with the live call stack, so the line goes onto a copy - the
   // function may rescue this error and carry on, recording other lines on its
-  // frame.
+  // frame. An error with no stacktrace isn't a boxed error and is rethrown
+  // untouched.
   static #raiseOnLine(line, raise) {
     try {
       raise();
     } catch (error) {
+      if (!error?.stacktrace) {
+        throw error;
+      }
+
       const [enclosingFrame, ...outerFrames] = error.stacktrace;
 
       if (enclosingFrame) {

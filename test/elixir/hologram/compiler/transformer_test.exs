@@ -4817,7 +4817,11 @@ defmodule Hologram.Compiler.TransformerTest do
         }
         """)
 
-      assert %IR.MapUpdateOperator{line: 3} = transform(ast, %Context{})
+      assert transform(ast, %Context{}) == %IR.MapUpdateOperator{
+               map: %IR.Variable{name: :x},
+               data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}],
+               line: 3
+             }
     end
   end
 
@@ -5501,7 +5505,11 @@ defmodule Hologram.Compiler.TransformerTest do
         }
         """)
 
-      assert %IR.MapUpdateOperator{line: 3} = transform(ast, %Context{pattern?: false})
+      assert transform(ast, %Context{pattern?: false}) == %IR.MapUpdateOperator{
+               map: %IR.Variable{name: :x},
+               data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}],
+               line: 3
+             }
     end
 
     # Case not possible, since it wouldn't compile:

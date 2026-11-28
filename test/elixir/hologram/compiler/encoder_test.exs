@@ -3158,6 +3158,53 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) ==
                ~s/Interpreter.mapUpdateOperator(context.vars.x, [[Type.atom("a"), Type.integer(1n)]])/
     end
+
+    test "awaits an async map expression inline" do
+      # %{Aaa.Bbb.some_async(x) | a: 1}
+      ir = %IR.MapUpdateOperator{
+        map: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: Aaa.Bbb},
+          function: :some_async,
+          args: [%IR.Variable{name: :x}]
+        },
+        data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}],
+        line: 123
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      assert encode_ir(ir, context) ==
+               ~s/Interpreter.mapUpdateOperator((await Elixir_Aaa_Bbb["some_async\/1"](context.vars.x)), [[Type.atom("a"), Type.integer(1n)]], 123)/
+    end
+
+    test "awaits an async value inline" do
+      # %{x | a: Aaa.Bbb.some_async(y)}
+      ir = %IR.MapUpdateOperator{
+        map: %IR.Variable{name: :x},
+        data: [
+          {%IR.AtomType{value: :a},
+           %IR.RemoteFunctionCall{
+             module: %IR.AtomType{value: Aaa.Bbb},
+             function: :some_async,
+             args: [%IR.Variable{name: :y}]
+           }}
+        ],
+        line: 123
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      assert encode_ir(ir, context) ==
+               ~s/Interpreter.mapUpdateOperator(context.vars.x, [[Type.atom("a"), (await Elixir_Aaa_Bbb["some_async\/1"](context.vars.y))]], 123)/
+    end
   end
 
   describe "match operator" do

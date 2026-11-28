@@ -5723,6 +5723,51 @@ describe("Interpreter", () => {
       );
     });
 
+    it("throws the raw badkey reason for a key the map doesn't have", () => {
+      const caught = catchError(() =>
+        Interpreter.mapUpdateOperator(map, [[Type.atom("x"), Type.integer(2)]]),
+      );
+
+      assert.deepStrictEqual(
+        caught.value,
+        Type.tuple([Type.atom("badkey"), Type.atom("x")]),
+      );
+    });
+
+    it("normalizes the badkey reason to a KeyError with no term", () => {
+      CallStack.push(callerFrame());
+
+      const caught = catchError(() =>
+        Interpreter.mapUpdateOperator(
+          map,
+          [[Type.atom("x"), Type.integer(2)]],
+          16,
+        ),
+      );
+
+      const expected = Type.struct("KeyError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("key"), Type.atom("x")],
+        [Type.atom("message"), Type.nil()],
+        [Type.atom("term"), Type.nil()],
+      ]);
+
+      assert.deepStrictEqual(caught.struct, expected);
+    });
+
+    it("throws the raw badmap reason for a term that is not a map", () => {
+      const caught = catchError(() =>
+        Interpreter.mapUpdateOperator(Type.integer(1), [
+          [Type.atom("a"), Type.integer(2)],
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        caught.value,
+        Type.tuple([Type.atom("badmap"), Type.integer(1)]),
+      );
+    });
+
     it("attributes the error to the function the update sits in", () => {
       CallStack.push(outerFrame());
       CallStack.push(callerFrame());
