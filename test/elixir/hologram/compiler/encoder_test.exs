@@ -3116,6 +3116,50 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "map update operator" do
+    test "single key" do
+      # %{x | a: 1}
+      ir = %IR.MapUpdateOperator{
+        map: %IR.Variable{name: :x},
+        data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               ~s/Interpreter.mapUpdateOperator(context.vars.x, [[Type.atom("a"), Type.integer(1n)]], 123)/
+    end
+
+    test "keys keep source order" do
+      # %{x | b: 1, a: 2}
+      ir = %IR.MapUpdateOperator{
+        map: %IR.Variable{name: :x},
+        data: [
+          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 1}},
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 2}}
+        ],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               ~s/Interpreter.mapUpdateOperator(context.vars.x, [[Type.atom("b"), Type.integer(1n)], [Type.atom("a"), Type.integer(2n)]], 123)/
+    end
+
+    test "records no line when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      # %{x | a: 1}
+      ir = %IR.MapUpdateOperator{
+        map: %IR.Variable{name: :x},
+        data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               ~s/Interpreter.mapUpdateOperator(context.vars.x, [[Type.atom("a"), Type.integer(1n)]])/
+    end
+  end
+
   describe "match operator" do
     test "literal value on both sides" do
       # 1 = 2

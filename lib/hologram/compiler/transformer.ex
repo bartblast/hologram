@@ -300,17 +300,10 @@ defmodule Hologram.Compiler.Transformer do
     %IR.IgnoredExpression{type: :private_macro_definition}
   end
 
-  # Map with cons operator is transformed to Map.merge/2 remote function call.
-  def transform({:%{}, meta_1, [{:|, _meta_2, [map_1, data_2]}]}, context) do
-    %IR.RemoteFunctionCall{
-      module: %IR.AtomType{value: Map},
-      function: :merge,
-      args: [
-        transform(map_1, context),
-        transform({:%{}, [], data_2}, context)
-      ],
-      line: meta_1[:line]
-    }
+  # Map with cons operator (map update) is transformed to map update operator IR.
+  # The line comes from the | operator, which is the line the BEAM reports.
+  def transform({:%{}, _meta_1, [{:|, meta_2, [map, data]}]}, context) do
+    transform_map_update(map, data, meta_2, context)
   end
 
   def transform({:%{}, _meta, data}, context) do
@@ -374,22 +367,11 @@ defmodule Hologram.Compiler.Transformer do
     %IR.StringType{value: value}
   end
 
-  # Struct with cons operator is transformed to nested Map.merge/2 and __struct__/1 remote function calls.
-  def transform({:%, meta_1, [module, {:%{}, _meta_2, [{:|, _meta_3, [map, data]}]}]}, context) do
-    %IR.RemoteFunctionCall{
-      module: %IR.AtomType{value: Map},
-      function: :merge,
-      args: [
-        transform(map, context),
-        %IR.RemoteFunctionCall{
-          module: transform(module, context),
-          function: :__struct__,
-          args: [transform(data, context)],
-          line: meta_1[:line]
-        }
-      ],
-      line: meta_1[:line]
-    }
+  # Struct with cons operator (struct update) is transformed to map update operator IR,
+  # since the BEAM checks no struct there (as of Elixir 1.20) and Elixir already refuses unknown fields.
+  # The line comes from the | operator, which is the line the BEAM reports.
+  def transform({:%, _meta_1, [_module, {:%{}, _meta_2, [{:|, meta_3, [map, data]}]}]}, context) do
+    transform_map_update(map, data, meta_3, context)
   end
 
   # Struct without cons operator inside a pattern is transformed into map IR in place.
@@ -886,6 +868,19 @@ defmodule Hologram.Compiler.Transformer do
           tail: acc
         }
     end)
+  end
+
+  defp transform_map_update(map, data, meta, context) do
+    data_ir =
+      Enum.map(data, fn {key, value} ->
+        {transform(key, context), transform(value, context)}
+      end)
+
+    %IR.MapUpdateOperator{
+      map: transform(map, context),
+      data: data_ir,
+      line: meta[:line]
+    }
   end
 
   defp transform_remote_function_call(module, function, args, meta, context) do

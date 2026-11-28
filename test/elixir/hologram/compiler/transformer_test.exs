@@ -4777,37 +4777,47 @@ defmodule Hologram.Compiler.TransformerTest do
     test "with cons operator (AST from source code)" do
       ast = ast("%{x | a: 1, b: 2}")
 
-      assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
-               module: %IR.AtomType{value: Map},
-               function: :merge,
-               args: [
-                 %IR.Variable{name: :x},
-                 %IR.MapType{
-                   data: [
-                     {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-                     {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-                   ]
-                 }
+      assert transform(ast, %Context{}) == %IR.MapUpdateOperator{
+               map: %IR.Variable{name: :x},
+               data: [
+                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                ],
                line: 1
              }
     end
 
     test "with cons operator (AST from BEAM file)" do
-      assert transform_module_and_fetch_expr(Module85) == %IR.RemoteFunctionCall{
-               module: %IR.AtomType{value: Map},
-               function: :merge,
-               args: [
-                 %IR.Variable{name: :x, version: 0},
-                 %IR.MapType{
-                   data: [
-                     {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
-                     {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
-                   ]
-                 }
+      assert transform_module_and_fetch_expr(Module85) == %IR.MapUpdateOperator{
+               map: %IR.Variable{name: :x, version: 0},
+               data: [
+                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                ],
                line: 4
              }
+    end
+
+    test "with cons operator and non-atom key" do
+      ast = ast(~s(%{x | "a" => 1}))
+
+      assert transform(ast, %Context{}) == %IR.MapUpdateOperator{
+               map: %IR.Variable{name: :x},
+               data: [{%IR.StringType{value: "a"}, %IR.IntegerType{value: 1}}],
+               line: 1
+             }
+    end
+
+    test "with cons operator, the line comes from the cons operator" do
+      ast =
+        ast("""
+        %{
+          x
+          | a: 1
+        }
+        """)
+
+      assert %IR.MapUpdateOperator{line: 3} = transform(ast, %Context{})
     end
   end
 
@@ -5461,71 +5471,37 @@ defmodule Hologram.Compiler.TransformerTest do
 
       context = %Context{pattern?: false}
 
-      assert transform(ast, context) == %IR.RemoteFunctionCall{
-               module: %IR.AtomType{value: Map},
-               function: :merge,
-               args: [
-                 %IR.Variable{name: :x},
-                 %IR.RemoteFunctionCall{
-                   module: %IR.AtomType{value: Module109},
-                   function: :__struct__,
-                   args: [
-                     %IR.ListType{
-                       data: [
-                         %IR.TupleType{
-                           data: [
-                             %IR.AtomType{value: :a},
-                             %IR.IntegerType{value: 1}
-                           ]
-                         },
-                         %IR.TupleType{
-                           data: [
-                             %IR.AtomType{value: :b},
-                             %IR.IntegerType{value: 2}
-                           ]
-                         }
-                       ]
-                     }
-                   ],
-                   line: 1
-                 }
+      assert transform(ast, context) == %IR.MapUpdateOperator{
+               map: %IR.Variable{name: :x},
+               data: [
+                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                ],
                line: 1
              }
     end
 
     test "with cons operator, not in pattern (AST from BEAM file)" do
-      assert transform_module_and_fetch_expr(Module109) == %IR.RemoteFunctionCall{
-               module: %IR.AtomType{value: Map},
-               function: :merge,
-               args: [
-                 %IR.Variable{name: :x, version: 0},
-                 %IR.RemoteFunctionCall{
-                   module: %IR.AtomType{value: Module109},
-                   function: :__struct__,
-                   args: [
-                     %IR.ListType{
-                       data: [
-                         %IR.TupleType{
-                           data: [
-                             %IR.AtomType{value: :a},
-                             %IR.IntegerType{value: 1}
-                           ]
-                         },
-                         %IR.TupleType{
-                           data: [
-                             %IR.AtomType{value: :b},
-                             %IR.IntegerType{value: 2}
-                           ]
-                         }
-                       ]
-                     }
-                   ],
-                   line: 8
-                 }
+      assert transform_module_and_fetch_expr(Module109) == %IR.MapUpdateOperator{
+               map: %IR.Variable{name: :x, version: 0},
+               data: [
+                 {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                 {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                ],
                line: 8
              }
+    end
+
+    test "with cons operator, not in pattern, the line comes from the cons operator" do
+      ast =
+        ast("""
+        %Hologram.Test.Fixtures.Compiler.Transformer.Module109{
+          x
+          | a: 1
+        }
+        """)
+
+      assert %IR.MapUpdateOperator{line: 3} = transform(ast, %Context{pattern?: false})
     end
 
     # Case not possible, since it wouldn't compile:

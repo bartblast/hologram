@@ -457,6 +457,25 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("Type.map([", "])")
   end
 
+  # Pairs keep source order, which is evaluation order. The line goes to the helper,
+  # not through maybe_encode_frame_line/3, so a value on a later line can't overwrite it.
+  def encode_ir(%IR.MapUpdateOperator{map: map, data: data, line: line}, context) do
+    map_js = encode_ir(map, context)
+
+    pairs_js =
+      data
+      |> Enum.map_join(", ", fn {key, value} ->
+        "[" <> encode_ir(key, context) <> ", " <> encode_ir(value, context) <> "]"
+      end)
+      |> StringUtils.wrap("[", "]")
+
+    if frame_line?(line, context) do
+      "Interpreter.mapUpdateOperator(#{map_js}, #{pairs_js}, #{line})"
+    else
+      "Interpreter.mapUpdateOperator(#{map_js}, #{pairs_js})"
+    end
+  end
+
   # Inside a pattern neither side is a value to match the other against - both
   # constrain the term being matched, and a variable on either side binds to
   # that term. So the match is carried into the pattern, to be matched against
