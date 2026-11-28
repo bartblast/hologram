@@ -3116,6 +3116,97 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "map update operator" do
+    test "single key" do
+      # %{x | a: 1}
+      ir = %IR.MapUpdateOperator{
+        map: %IR.Variable{name: :x},
+        data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               ~s/Interpreter.mapUpdateOperator(context.vars.x, [[Type.atom("a"), Type.integer(1n)]], 123)/
+    end
+
+    test "keys keep source order" do
+      # %{x | b: 1, a: 2}
+      ir = %IR.MapUpdateOperator{
+        map: %IR.Variable{name: :x},
+        data: [
+          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 1}},
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 2}}
+        ],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               ~s/Interpreter.mapUpdateOperator(context.vars.x, [[Type.atom("b"), Type.integer(1n)], [Type.atom("a"), Type.integer(2n)]], 123)/
+    end
+
+    test "records no line when client stacktraces are disabled" do
+      Application.put_env(:hologram, :client_stacktraces, false)
+      on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
+
+      # %{x | a: 1}
+      ir = %IR.MapUpdateOperator{
+        map: %IR.Variable{name: :x},
+        data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}],
+        line: 123
+      }
+
+      assert encode_ir(ir) ==
+               ~s/Interpreter.mapUpdateOperator(context.vars.x, [[Type.atom("a"), Type.integer(1n)]])/
+    end
+
+    test "awaits an async map expression inline" do
+      # %{Aaa.Bbb.some_async(x) | a: 1}
+      ir = %IR.MapUpdateOperator{
+        map: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: Aaa.Bbb},
+          function: :some_async,
+          args: [%IR.Variable{name: :x}]
+        },
+        data: [{%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}}],
+        line: 123
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      assert encode_ir(ir, context) ==
+               ~s/Interpreter.mapUpdateOperator((await Elixir_Aaa_Bbb["some_async\/1"](context.vars.x)), [[Type.atom("a"), Type.integer(1n)]], 123)/
+    end
+
+    test "awaits an async value inline" do
+      # %{x | a: Aaa.Bbb.some_async(y)}
+      ir = %IR.MapUpdateOperator{
+        map: %IR.Variable{name: :x},
+        data: [
+          {%IR.AtomType{value: :a},
+           %IR.RemoteFunctionCall{
+             module: %IR.AtomType{value: Aaa.Bbb},
+             function: :some_async,
+             args: [%IR.Variable{name: :y}]
+           }}
+        ],
+        line: 123
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      assert encode_ir(ir, context) ==
+               ~s/Interpreter.mapUpdateOperator(context.vars.x, [[Type.atom("a"), (await Elixir_Aaa_Bbb["some_async\/1"](context.vars.y))]], 123)/
+    end
+  end
+
   describe "match operator" do
     test "literal value on both sides" do
       # 1 = 2

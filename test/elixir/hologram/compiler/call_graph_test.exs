@@ -2035,7 +2035,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> File.read!()
         |> SerializationUtils.deserialize()
 
-      assert {1, %{graph: ^graph, modules: modules, reach: reach}} = deserialized_state
+      assert {2, %{graph: ^graph, modules: modules, reach: reach}} = deserialized_state
       assert modules == MapSet.new()
       assert reach == reach_state(call_graph)
     end
@@ -2048,7 +2048,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> build(IR.for_module(Module9))
       |> dump(dump_path)
 
-      {1, %{modules: modules}} =
+      {2, %{modules: modules}} =
         dump_path
         |> File.read!()
         |> SerializationUtils.deserialize()
@@ -2068,7 +2068,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              |> Path.dirname()
              |> File.ls!() == [Path.basename(dump_path)]
 
-      assert {1, _state} =
+      assert {2, _state} =
                dump_path
                |> File.read!()
                |> SerializationUtils.deserialize()

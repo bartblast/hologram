@@ -38,6 +38,7 @@ defmodule Hologram.Compiler.IR do
           | IR.ListType.t()
           | IR.LocalFunctionCall.t()
           | IR.MapType.t()
+          | IR.MapUpdateOperator.t()
           | IR.MatchOperator.t()
           | IR.MatchPlaceholder.t()
           | IR.ModuleAttributeOperator.t()
@@ -299,6 +300,16 @@ defmodule Hologram.Compiler.IR do
     defstruct [:data]
 
     @type t :: %__MODULE__{data: list({IR.t(), IR.t()})}
+  end
+
+  defmodule MapUpdateOperator do
+    @moduledoc false
+
+    # data keeps source order, which is evaluation order.
+    # See IR.AnonymousFunctionCall about line.
+    defstruct [:map, :data, :line]
+
+    @type t :: %__MODULE__{map: IR.t(), data: list({IR.t(), IR.t()}), line: integer | nil}
   end
 
   defmodule MatchOperator do

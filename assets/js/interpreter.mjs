@@ -851,6 +851,49 @@ export default class Interpreter {
     return new LiteralSet(build);
   }
 
+  // Updates keys the map already has, which is what %{map | key: value} does,
+  // and %Struct{struct | key: value} too, since the BEAM checks no struct
+  // there (as of Elixir 1.20). pairs is an array of [key, value] pairs in
+  // source order - all of them evaluated already, as the BEAM does before
+  // checking the map. The errors carry the BEAM's raw reasons, {:badmap, term}
+  // and {:badkey, key}, which catch clauses match and which normalize to
+  // BadMapError and KeyError. A missing key raises for the first in source
+  // order, and a later duplicate key wins. The update has no frame of its own,
+  // so the error is attributed to the function it sits in, on the given line.
+  static mapUpdateOperator(map, pairs, line) {
+    if (!Type.isMap(map)) {
+      Interpreter.#raiseOnLine(line, () => {
+        throw new HologramBoxedError(
+          Interpreter.#boxErrorReason(["badmap", map]),
+        );
+      });
+    }
+
+    const encodedPairs = pairs.map(([key, value]) => [
+      Type.encodeMapKey(key),
+      key,
+      value,
+    ]);
+
+    for (const [encodedKey, key] of encodedPairs) {
+      if (!(encodedKey in map.data)) {
+        Interpreter.#raiseOnLine(line, () => {
+          throw new HologramBoxedError(
+            Interpreter.#boxErrorReason(["badkey", key]),
+          );
+        });
+      }
+    }
+
+    const newMap = Type.cloneMap(map);
+
+    for (const [encodedKey, key, value] of encodedPairs) {
+      newMap.data[encodedKey] = [key, value];
+    }
+
+    return newMap;
+  }
+
   // context.vars.__matched__ keeps track of already pattern matched variables,
   // which enables to fail pattern matching if the variables with the same name
   // are being pattern matched to different values
@@ -1349,26 +1392,11 @@ export default class Interpreter {
       if (term.value === "false") return false;
     }
 
-    const error = new HologramBoxedError(
-      Interpreter.#boxErrorReason(["badarg", term]),
-    );
-
-    const [enclosingFrame, ...outerFrames] = error.stacktrace;
-
-    // The captured frames are shared with the live call stack, so the line
-    // goes onto a copy - the function may rescue this error and carry on,
-    // recording other lines on its frame.
-    if (enclosingFrame) {
-      const raisingFrame = {
-        ...enclosingFrame,
-        line: line ?? enclosingFrame.line,
-      };
-
-      error.stacktrace = [raisingFrame, ...outerFrames];
-      error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
-    }
-
-    throw error;
+    Interpreter.#raiseOnLine(line, () => {
+      throw new HologramBoxedError(
+        Interpreter.#boxErrorReason(["badarg", term]),
+      );
+    });
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update asyncTry().
@@ -2701,6 +2729,37 @@ export default class Interpreter {
     ]);
 
     Erlang["error/1"](struct);
+  }
+
+  // Runs the raise and puts the given line on the raising frame of the error
+  // it throws, for constructs that raise from the function they sit in, on
+  // their own line - which is the line the BEAM reports. The captured frames
+  // are shared with the live call stack, so the line goes onto a copy - the
+  // function may rescue this error and carry on, recording other lines on its
+  // frame. An error with no stacktrace isn't a boxed error and is rethrown
+  // untouched.
+  static #raiseOnLine(line, raise) {
+    try {
+      raise();
+    } catch (error) {
+      if (!error?.stacktrace) {
+        throw error;
+      }
+
+      const [enclosingFrame, ...outerFrames] = error.stacktrace;
+
+      if (enclosingFrame) {
+        const raisingFrame = {
+          ...enclosingFrame,
+          line: line ?? enclosingFrame.line,
+        };
+
+        error.stacktrace = [raisingFrame, ...outerFrames];
+        error.rederive(Type.list(error.stacktrace.map(CallStack.boxFrame)));
+      }
+
+      throw error;
+    }
   }
 
   // What the message of an UndefinedFunctionError adds for the given function,

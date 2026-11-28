@@ -92,7 +92,7 @@ defmodule Hologram.Compiler.CallGraph do
   # differs from the one at the last release tag, leave it
   # (`git show <tag>:lib/hologram/compiler/call_graph.ex | grep "@dump_version"`, nothing printed
   # meaning 0).
-  @dump_version 1
+  @dump_version 2
 
   # Edges for dynamic dispatch: the caller reads the callee module from data
   # (e.g. a struct's calendar field), so static IR analysis can't see the
